@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "CampusLink",
+    "slug": "campuslink",
+    "scheme": "campuslink",
+    "userInterfaceStyle": "automatic",
+    "plugins": ["expo-router", "expo-asset"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": false
+    }
+  }
+}
