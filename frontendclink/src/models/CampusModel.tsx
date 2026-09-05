@@ -283,3 +283,8 @@ export function useCampusGLTF() {
   const gltf = useGLTF(modelAsset) as unknown as GLTFResult;
   return gltf;
 }
+
+/** Starts downloading and parsing the campus model before the map is opened. */
+export function preloadCampusGLTF() {
+  useGLTF.preload(modelAsset);
+}

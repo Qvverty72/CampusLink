@@ -9,9 +9,13 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#000' },
+          contentStyle: { backgroundColor: '#071A2B' },
         }}
-      />
+      >
+        <Stack.Screen name="(user)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(map)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(marketplace)" />
+      </Stack>
     </>
   );
 }
