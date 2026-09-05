@@ -22,6 +22,7 @@ import {
 import { Canvas } from '@react-three/fiber/native';
 import { CampusModelScene } from '@/components/map/CampusModel';
 import { CameraController } from '@/components/map/CameraController';
+import { clampCameraPhi } from '@/components/map/cameraConfig';
 
 // ─── Camera Gesture State (shared between RN View and R3F Canvas via ref) ──────
 
@@ -59,8 +60,6 @@ export interface CameraGestureState {
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const ROTATE_SENSITIVITY = 0.008;
-const MIN_PHI = 0.3;        // ~17° from top — prevent looking from below ground
-const MAX_PHI = 1.45;       // ~83° from top — near-horizon limit
 const MIN_RADIUS = 0.08;
 const MAX_RADIUS = 1.5;
 const TAP_MAX_DURATION = 300;  // ms
@@ -167,11 +166,14 @@ export function CampusMap() {
             }
             const dx = touches[0].pageX - gs.lastTouchX;
             const dy = touches[0].pageY - gs.lastTouchY;
+            const nextPhi = gs.phi + dy * ROTATE_SENSITIVITY;
             gs.theta -= dx * ROTATE_SENSITIVITY;
-            gs.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, gs.phi + dy * ROTATE_SENSITIVITY));
+            gs.phi = clampCameraPhi(nextPhi);
             // Store velocity for inertia
             gs.velocityTheta = -dx * ROTATE_SENSITIVITY;
-            gs.velocityPhi = dy * ROTATE_SENSITIVITY * 0.5;
+            gs.velocityPhi = gs.phi === nextPhi
+              ? dy * ROTATE_SENSITIVITY * 0.5
+              : 0;
             gs.lastTouchX = touches[0].pageX;
             gs.lastTouchY = touches[0].pageY;
           }

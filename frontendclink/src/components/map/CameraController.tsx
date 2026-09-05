@@ -21,6 +21,7 @@ import { useMapStore } from '@/store/mapStore';
 import { buildingConfigs, getBuildingForMesh } from '@/data/floors';
 import type { BuildingId } from '@/types/map';
 import type { CameraGestureState } from './CampusMap';
+import { clampCameraPhi } from './cameraConfig';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -32,10 +33,6 @@ const CAMERA_ANIM_SPEED = 4;
 
 /** Inertia decay factor (0-1, lower = more friction) */
 const DAMPING_FACTOR = 0.92;
-
-/** Min/max phi applied during damping */
-const MIN_PHI = 0.3;
-const MAX_PHI = 1.45;
 
 /** Initial camera overview parameters */
 const INITIAL = {
@@ -86,7 +83,7 @@ export function CameraController({ gestureState }: CameraControllerProps) {
       const theta = Math.atan2(offset.x, offset.z);
 
       animRadius.current = r;
-      animPhi.current = phi;
+      animPhi.current = clampCameraPhi(phi);
       animTheta.current = theta;
       animTarget.current.copy(focusTarget);
       isAnimating.current = true;
@@ -119,13 +116,18 @@ export function CameraController({ gestureState }: CameraControllerProps) {
     if (!gs.isGesturing && !isAnimating.current) {
       if (Math.abs(gs.velocityTheta) > 0.0001 || Math.abs(gs.velocityPhi) > 0.0001) {
         gs.theta += gs.velocityTheta;
-        gs.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, gs.phi + gs.velocityPhi));
+        const nextPhi = gs.phi + gs.velocityPhi;
+        gs.phi = clampCameraPhi(nextPhi);
+        if (gs.phi !== nextPhi) gs.velocityPhi = 0;
         gs.velocityTheta *= DAMPING_FACTOR;
         gs.velocityPhi *= DAMPING_FACTOR;
         if (Math.abs(gs.velocityTheta) < 0.00005) gs.velocityTheta = 0;
         if (Math.abs(gs.velocityPhi) < 0.00005) gs.velocityPhi = 0;
       }
     }
+
+    // Absolute safety limit for gestures, inertia and programmatic animations.
+    gs.phi = clampCameraPhi(gs.phi);
 
     // 3. Compute camera position from spherical coordinates
     const sinPhi = Math.sin(gs.phi);
