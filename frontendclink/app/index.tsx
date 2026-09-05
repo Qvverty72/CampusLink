@@ -1,10 +1,19 @@
-import { Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { CampusMap } from '@/components/map/CampusMap';
+import { FloorInfoModal } from '@/components/map/FloorInfoModal';
 
-export default function HomeScreen() {
+export default function MapScreen() {
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-2xl font-bold text-slate-900">CampusLink</Text>
+    <View style={styles.container}>
+      <CampusMap />
+      <FloorInfoModal />
     </View>
   );
 }
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+});
