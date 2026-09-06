@@ -17,10 +17,10 @@
 import React, { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/native';
 import * as THREE from 'three';
-import { useMapStore } from '@/store/mapStore';
-import { buildingConfigs, getBuildingForMesh } from '@/data/floors';
-import type { BuildingId } from '@/types/map';
-import type { CameraGestureState } from './CampusMap';
+import { useMapStore } from '@/three/store/mapStore';
+import { buildingConfigs, getBuildingForMesh } from '@/three/data/floors';
+import type { BuildingId } from '@/three/types/map';
+import type { CameraGestureState } from '@/three/components/CampusMap';
 import { clampCameraPhi } from './cameraConfig';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────

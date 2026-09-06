@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, type Href } from 'expo-router';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { preloadCampusGLTF } from '@/models/CampusModel';
+import { preloadCampusGLTF } from '@/three/models/CampusModel';
 
 export default function WelcomeScreen() {
   useEffect(() => {

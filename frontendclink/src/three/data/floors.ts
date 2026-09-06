@@ -8,7 +8,7 @@
  * UPDATED: Each floor is now a group of sub-meshes (FloorMeshConfig).
  */
 
-import type { BuildingId, BuildingConfig, FloorDefinition, FloorMeshConfig } from '@/types/map';
+import type { BuildingId, BuildingConfig, FloorDefinition, FloorMeshConfig } from '@/three/types/map';
 
 // ─── Building → Floor Names ───────────────────────────────────────────────────
 

@@ -20,9 +20,9 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { Canvas } from '@react-three/fiber/native';
-import { CampusModelScene } from '@/components/map/CampusModel';
-import { CameraController } from '@/components/map/CameraController';
-import { clampCameraPhi } from '@/components/map/cameraConfig';
+import { CampusModelScene } from '@/three/components/CampusModel';
+import { CameraController } from '@/three/controls/CameraController';
+import { clampCameraPhi } from '@/three/controls/cameraConfig';
 
 // ─── Camera Gesture State (shared between RN View and R3F Canvas via ref) ──────
 

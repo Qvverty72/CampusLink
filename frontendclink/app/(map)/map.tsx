@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
-import { CampusMap } from '@/components/map/CampusMap';
-import { FloorInfoModal } from '@/components/map/FloorInfoModal';
+import { CampusMap } from '@/three/components/CampusMap';
+import { FloorInfoModal } from '@/three/components/FloorInfoModal';
 
 export default function MapScreen() {
   return (

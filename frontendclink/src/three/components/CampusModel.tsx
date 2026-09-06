@@ -23,12 +23,12 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber/native';
 import * as THREE from 'three';
-import { useCampusGLTF } from '@/models/CampusModel';
-import { useMapStore } from '@/store/mapStore';
+import { useCampusGLTF } from '@/three/models/CampusModel';
+import { useMapStore } from '@/three/store/mapStore';
 import {
   floorMeshConfigs,
   getFloorIndex,
-} from '@/data/floors';
+} from '@/three/data/floors';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 

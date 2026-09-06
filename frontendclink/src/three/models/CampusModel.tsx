@@ -273,7 +273,7 @@ export type GLTFResult = GLTF & {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const modelAsset = require('../../assets/models/Modeloconmeshjunto.glb');
+const modelAsset = require('../../../assets/models/Modeloconmeshjunto.glb');
 
 /**
  * Hook to load the campus GLTF model.

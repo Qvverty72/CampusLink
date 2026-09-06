@@ -18,8 +18,8 @@ import {
   Modal,
   StyleSheet,
 } from 'react-native';
-import { useMapStore } from '@/store/mapStore';
-import { floorData, buildingConfigs } from '@/data/floors';
+import { useMapStore } from '@/three/store/mapStore';
+import { floorData, buildingConfigs } from '@/three/data/floors';
 
 export function FloorInfoModal() {
   const selectedFloor = useMapStore((s) => s.selectedFloor);

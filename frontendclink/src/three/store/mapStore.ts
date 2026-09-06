@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand';
-import type { BuildingId, MapState } from '@/types/map';
+import type { BuildingId, MapState } from '@/three/types/map';
 
 export const useMapStore = create<MapState>((set) => ({
   // ─── Initial State ─────────────────────────────────────────────────────────
