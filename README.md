@@ -95,30 +95,132 @@ La plataforma busca facilitar que estudiantes de años superiores compartan recu
 └─────────────────────────────────────┘
 ```
 
-### Organización del repositorio
+### Organización actual del repositorio
+
+El proyecto está dividido en dos aplicaciones independientes. El frontend contiene la
+navegación móvil y mantiene todo el dominio del mapa 3D aislado en `src/three`. El
+backend expone actualmente la base de la API REST y crecerá de forma modular.
 
 ```text
 CampusLink/
 ├── frontendclink/
-│   ├── app/
-│   │   ├── (user)/          # Bienvenida, autenticación y perfil
-│   │   ├── (map)/           # Mapa y ubicaciones del campus
-│   │   └── (marketplace)/   # Publicaciones y transacciones
+│   ├── app/                 # Rutas y layouts de Expo Router
 │   ├── assets/models/       # Modelo 3D del campus
 │   └── src/
-│       ├── components/map/  # Escena y controles 3D
-│       ├── data/            # Configuración temporal de edificios
-│       ├── models/          # Carga y tipado del GLB
-│       ├── store/           # Estado global con Zustand
-│       └── types/           # Tipos compartidos del frontend
+│       ├── components/ui/   # Componentes visuales compartidos
+│       ├── features/        # Base para módulos funcionales
+│       ├── hooks/           # Hooks reutilizables
+│       ├── lib/             # Clientes de API y servicios externos
+│       └── three/           # Mapa 3D, controles, datos, estado y tipos
 ├── backendclink/
 │   ├── src/config/          # Configuración y variables de entorno
-│   ├── src/routes/          # Rutas de la API
+│   ├── src/routes/          # Registro actual de rutas de la API
 │   ├── src/app.ts           # Configuración de Express
 │   ├── src/server.ts        # Inicio del servidor
+│   ├── supabase/            # Recursos de persistencia relacional
+│   ├── tests/               # Pruebas del backend
 │   └── Dockerfile
 └── README.md
 ```
+
+### Estructura futura del frontend
+
+El frontend evolucionará hacia una arquitectura organizada por funcionalidades. La
+carpeta `app` seguirá siendo responsable únicamente de las rutas y layouts; la lógica,
+los componentes y el acceso a datos de cada módulo vivirán en `src/features`.
+
+```text
+frontendclink/
+├── app/
+│   ├── (user)/              # Rutas de acceso, perfil y cuenta
+│   ├── (map)/               # Rutas que presentan el mapa
+│   ├── (marketplace)/       # Rutas del marketplace
+│   ├── (resources)/         # Rutas de recursos académicos
+│   └── (admin)/             # Rutas protegidas de administración
+├── assets/
+│   ├── images/              # Imágenes e iconos estáticos
+│   └── models/              # Archivos GLB y recursos del mapa
+└── src/
+    ├── components/
+    │   └── ui/              # Botones, modales y elementos reutilizables
+    ├── features/
+    │   ├── auth/            # Sesión, registro y verificación
+    │   ├── profile/         # Perfil, carrera y preferencias
+    │   ├── campus/          # Información general del campus
+    │   ├── marketplace/     # Publicaciones, reservas y transacciones
+    │   ├── resources/       # Materiales académicos y búsquedas
+    │   ├── activities/      # Eventos y participación de estudiantes
+    │   └── admin/           # Moderación, métricas y reportería
+    ├── three/
+    │   ├── components/      # Escena y componentes renderizados
+    │   ├── controls/        # Cámara, gestos e interacción 3D
+    │   ├── data/            # Configuración de edificios y pisos
+    │   ├── models/          # Carga y tipado de modelos GLB
+    │   ├── store/           # Estado exclusivo del mapa
+    │   └── types/           # Contratos del dominio 3D
+    ├── hooks/               # Hooks compartidos por varios módulos
+    ├── lib/
+    │   ├── api/             # Cliente HTTP y configuración de endpoints
+    │   └── supabase/        # Cliente y utilidades de Supabase
+    ├── store/               # Estado global realmente compartido
+    └── types/               # Tipos comunes de toda la aplicación
+```
+
+Cada carpeta dentro de `features` podrá incorporar sus propios `components`, `hooks`,
+`services`, `store` y `types` cuando el módulo lo necesite. De esta forma, el código
+específico de una funcionalidad permanece junto y solamente los elementos utilizados
+por varios módulos se trasladan a las carpetas compartidas.
+
+`src/three` se mantendrá como una frontera independiente: allí residirá todo lo que
+dependa de Three.js, React Three Fiber o del modelo GLB. Las funcionalidades como
+actividades o información del campus podrán consumir el mapa mediante su interfaz
+pública, pero no mezclarán sus reglas de negocio con el renderizado 3D.
+
+### Estructura futura del backend
+
+El backend crecerá como una API modular por dominios. Cada módulo será responsable de
+su flujo HTTP, validaciones, reglas de negocio y acceso a persistencia. Esto permitirá
+cambiar una base de datos o reutilizar servicios sin acoplarlos directamente a
+Express.
+
+```text
+backendclink/
+├── src/
+│   ├── config/              # Entorno, conexiones y configuración global
+│   ├── middlewares/         # Autenticación, autorización y errores
+│   ├── modules/
+│   │   ├── auth/            # Sesiones y verificación de identidad
+│   │   ├── users/           # Perfiles, roles y reputación
+│   │   ├── resources/       # Recursos académicos y archivos
+│   │   ├── marketplace/     # Publicaciones, reservas y transacciones
+│   │   ├── activities/      # Eventos y puntos asociados al mapa
+│   │   ├── recommendations/ # Reglas de recomendación
+│   │   └── admin/           # Moderación, analítica y reportes
+│   ├── shared/
+│   │   ├── errors/          # Errores comunes de la aplicación
+│   │   ├── types/           # Contratos compartidos
+│   │   └── utils/           # Utilidades sin dependencia de un dominio
+│   ├── routes/              # Composición y versionado de rutas
+│   ├── app.ts               # Creación y configuración de Express
+│   └── server.ts            # Conexiones e inicio del proceso
+├── supabase/
+│   ├── migrations/          # Evolución versionada del esquema PostgreSQL
+│   └── seed/                # Datos iniciales para desarrollo
+├── tests/
+│   ├── unit/                # Pruebas de reglas de negocio
+│   └── integration/         # Pruebas de API y persistencia
+└── Dockerfile
+```
+
+Como convención, un módulo podrá dividirse internamente en `controller`, `service`,
+`repository`, `routes`, `schemas` y `types`. Los controladores traducirán las
+peticiones HTTP, los servicios implementarán las reglas de negocio y los repositorios
+encapsularán el acceso a Supabase/PostgreSQL o MongoDB.
+
+Supabase/PostgreSQL almacenará la información relacional, como usuarios,
+publicaciones y transacciones. MongoDB quedará reservado para la información
+documental vinculada al mapa y sus actividades. Las decisiones definitivas de modelo
+de datos se documentarán antes de implementar cada módulo.
 
 ## Tecnologías
 
@@ -151,7 +253,7 @@ El campus se modela en **Blender** y se exporta en formato **GLB**. Cada edifici
 
 ### Base de datos
 
-La integración actual está preparada para **Supabase**, utilizando **PostgreSQL** como base relacional. **MongoDB** usará para todo lo que tenga que ver con el mapa y sus actividades.
+La integración actual está preparada para **Supabase**, utilizando **PostgreSQL** como base relacional. **MongoDB** se usará para todo lo que tenga que ver con el mapa y sus actividades.
 
 ## Requisitos
 
