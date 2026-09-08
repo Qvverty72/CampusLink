@@ -109,12 +109,17 @@ export function CampusMap() {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // Don't claim on touch start — let taps pass through to Canvas
-        onStartShouldSetPanResponder: () => false,
+        // Claim two-finger gestures immediately; leave one-finger taps to Canvas.
+        onStartShouldSetPanResponder: (evt) => evt.nativeEvent.touches.length >= 2,
 
-        // Only claim after significant movement (drag, not tap)
-        onMoveShouldSetPanResponder: (_, gs) => {
-          if (Math.abs(gs.dx) > TAP_MAX_MOVEMENT || Math.abs(gs.dy) > TAP_MAX_MOVEMENT) {
+        // Pinch gestures are immediate; rotation still waits for drag movement.
+        onMoveShouldSetPanResponder: (evt, gs) => {
+          const isPinching = evt.nativeEvent.touches.length >= 2;
+          if (
+            isPinching ||
+            Math.abs(gs.dx) > TAP_MAX_MOVEMENT ||
+            Math.abs(gs.dy) > TAP_MAX_MOVEMENT
+          ) {
             gestureState.current.hasMoved = true;
             return true;
           }

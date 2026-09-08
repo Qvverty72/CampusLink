@@ -1,11 +1,14 @@
 import { StyleSheet, View } from 'react-native';
-import { CampusMap } from '@/three/components/CampusMap';
+import { CampusMapViewport } from '@/three/components/CampusMapViewport';
 import { FloorInfoModal } from '@/three/components/FloorInfoModal';
+import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 
 export default function MapScreen() {
   return (
     <View style={styles.container}>
-      <CampusMap />
+      <CampusMapViewport />
+
+      <BottomNavigationBar activeItemId="map" />
       <FloorInfoModal />
     </View>
   );
@@ -14,6 +17,5 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
 });

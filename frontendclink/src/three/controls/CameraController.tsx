@@ -5,7 +5,7 @@
  * 1. Read gesture state from shared ref → update camera position (spherical coords)
  * 2. Apply inertia/damping after gesture release
  * 3. Animate camera zoom to selected building
- * 4. Detect zoom-out threshold → trigger building reunification
+ * 4. Animate back to the campus overview when the selection is closed
  * 5. Process pending taps → raycast for mesh selection
  *
  * DESIGN NOTES:
@@ -25,22 +25,11 @@ import { clampCameraPhi } from './cameraConfig';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/** Camera distance at which zooming out exits each building selection. */
-const BUILDING_EXIT_DISTANCE_BY_BUILDING: Record<BuildingId, number> = {
-  cabin01: 0.35,
-  cabin02: 0.35,
-  cabin03: 0.35,
-  dbuilding: 0.65,
-  ebuilding: 0.65,
-  fbuilding: 0.65,
-  gbuilding: 0.65,
-  hbuilding: 0.65,
-  cti: 0.65,
-  gym: 0.65,
-};
-
 /** Speed of programmatic camera animation */
 const CAMERA_ANIM_SPEED = 4;
+
+/** Safety limit so an automatic camera transition can never hold input forever. */
+const MAX_CAMERA_ANIMATION_SECONDS = 2;
 
 /** Inertia decay factor (0-1, lower = more friction) */
 const DAMPING_FACTOR = 0.92;
@@ -52,6 +41,15 @@ const INITIAL = {
   radius: 0.8,
   target: new THREE.Vector3(0.15, 0, 0.2),
 };
+
+/** Returns the equivalent target angle reached through the shortest rotation. */
+function getNearestEquivalentAngle(target: number, current: number): number {
+  const shortestDelta = Math.atan2(
+    Math.sin(target - current),
+    Math.cos(target - current)
+  );
+  return current + shortestDelta;
+}
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +68,6 @@ export function CameraController({ gestureState }: CameraControllerProps) {
   const isFloorModalOpen = useMapStore((s) => s.isFloorModalOpen);
   const selectBuilding = useMapStore((s) => s.selectBuilding);
   const selectFloor = useMapStore((s) => s.selectFloor);
-  const resetBuilding = useMapStore((s) => s.resetBuilding);
 
   // Animation state (all refs — no re-renders)
   const isAnimating = useRef(false);
@@ -78,7 +75,8 @@ export function CameraController({ gestureState }: CameraControllerProps) {
   const animPhi = useRef(INITIAL.phi);
   const animRadius = useRef(INITIAL.radius);
   const animTarget = useRef(INITIAL.target.clone());
-  const prevRadius = useRef<number | null>(null);
+  const animationElapsed = useRef(0);
+  const previousSelectedBuilding = useRef<BuildingId | null>(null);
 
   // ─── Animate to building when selected ──────────────────────────────────
 
@@ -95,11 +93,32 @@ export function CameraController({ gestureState }: CameraControllerProps) {
 
       animRadius.current = r;
       animPhi.current = clampCameraPhi(phi);
-      animTheta.current = theta;
+      animTheta.current = getNearestEquivalentAngle(
+        theta,
+        gestureState.current.theta
+      );
       animTarget.current.copy(focusTarget);
+      animationElapsed.current = 0;
       isAnimating.current = true;
-      prevRadius.current = null;
+    } else if (previousSelectedBuilding.current) {
+      animTheta.current = getNearestEquivalentAngle(
+        INITIAL.theta,
+        gestureState.current.theta
+      );
+      animPhi.current = INITIAL.phi;
+      animRadius.current = INITIAL.radius;
+      animTarget.current.copy(INITIAL.target);
+      animationElapsed.current = 0;
+      isAnimating.current = true;
+
+      gestureState.current.isGesturing = false;
+      gestureState.current.gestureType = 'none';
+      gestureState.current.hasPendingTap = false;
     }
+
+    gestureState.current.velocityTheta = 0;
+    gestureState.current.velocityPhi = 0;
+    previousSelectedBuilding.current = selectedBuilding;
   }, [selectedBuilding]);
 
   // ─── Per-frame update ───────────────────────────────────────────────────
@@ -107,8 +126,15 @@ export function CameraController({ gestureState }: CameraControllerProps) {
   useFrame((_, delta) => {
     const gs = gestureState.current;
 
+    // Manual rotation or zoom always takes priority over an automatic transition.
+    if (gs.isGesturing && isAnimating.current) {
+      isAnimating.current = false;
+      animationElapsed.current = 0;
+    }
+
     // 1. Programmatic camera animation (lerp towards target)
     if (isAnimating.current) {
+      animationElapsed.current += delta;
       const factor = 1 - Math.exp(-CAMERA_ANIM_SPEED * delta);
       gs.theta = THREE.MathUtils.lerp(gs.theta, animTheta.current, factor);
       gs.phi = THREE.MathUtils.lerp(gs.phi, animPhi.current, factor);
@@ -117,8 +143,29 @@ export function CameraController({ gestureState }: CameraControllerProps) {
       gs.targetY = THREE.MathUtils.lerp(gs.targetY, animTarget.current.y, factor);
       gs.targetZ = THREE.MathUtils.lerp(gs.targetZ, animTarget.current.z, factor);
 
-      // Animation complete check
-      if (Math.abs(gs.radius - animRadius.current) < 0.003) {
+      // Animation completes only after the full view reaches its destination.
+      const targetDistance = Math.sqrt(
+        (gs.targetX - animTarget.current.x) ** 2 +
+        (gs.targetY - animTarget.current.y) ** 2 +
+        (gs.targetZ - animTarget.current.z) ** 2
+      );
+      const didConverge =
+        Math.abs(gs.radius - animRadius.current) < 0.003 &&
+        Math.abs(gs.theta - animTheta.current) < 0.003 &&
+        Math.abs(gs.phi - animPhi.current) < 0.003 &&
+        targetDistance < 0.003;
+
+      if (
+        didConverge ||
+        animationElapsed.current >= MAX_CAMERA_ANIMATION_SECONDS
+      ) {
+        gs.theta = animTheta.current;
+        gs.phi = animPhi.current;
+        gs.radius = animRadius.current;
+        gs.targetX = animTarget.current.x;
+        gs.targetY = animTarget.current.y;
+        gs.targetZ = animTarget.current.z;
+        animationElapsed.current = 0;
         isAnimating.current = false;
       }
     }
@@ -176,37 +223,11 @@ export function CameraController({ gestureState }: CameraControllerProps) {
             // No building selected → select this building
             selectBuilding(buildingId);
           }
-          // If another building is selected, ignore (user must zoom out first)
+          // If another building is selected, ignore until the current view is closed.
         }
       }
     }
 
-    // 5. Zoom-out threshold detection
-    if (selectedBuilding && isExploded && !isAnimating.current && !isFloorModalOpen) {
-      const exitDistance = BUILDING_EXIT_DISTANCE_BY_BUILDING[selectedBuilding];
-
-      if (prevRadius.current !== null) {
-        const wasBelow = prevRadius.current < exitDistance;
-        const isAbove = gs.radius >= exitDistance;
-
-        if (wasBelow && isAbove) {
-          // User zoomed out past threshold → reunify building
-          resetBuilding();
-          // Animate back to campus overview
-          animTheta.current = INITIAL.theta;
-          animPhi.current = INITIAL.phi;
-          animRadius.current = INITIAL.radius;
-          animTarget.current.copy(INITIAL.target);
-          isAnimating.current = true;
-        }
-      }
-      prevRadius.current = gs.radius;
-    }
-
-    // Reset distance tracking when no building is selected
-    if (!selectedBuilding) {
-      prevRadius.current = null;
-    }
   });
 
   // This component renders nothing — it only drives the camera

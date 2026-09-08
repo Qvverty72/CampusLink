@@ -51,7 +51,7 @@ export const useMapStore = create<MapState>((set) => ({
 
   /**
    * Reset to campus view.
-   * Triggered when camera zooms out past the exit threshold.
+   * Triggered by the close button shown while a building is selected.
    */
   resetBuilding: () =>
     set({
