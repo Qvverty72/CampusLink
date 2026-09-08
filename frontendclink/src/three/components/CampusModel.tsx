@@ -25,6 +25,7 @@ import { useFrame } from '@react-three/fiber/native';
 import * as THREE from 'three';
 import { useCampusGLTF } from '@/three/models/CampusModel';
 import { useMapStore } from '@/three/store/mapStore';
+import type { BuildingId } from '@/three/types/map';
 import {
   floorMeshConfigs,
   getFloorIndex,
@@ -32,11 +33,22 @@ import {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/** Vertical spacing between exploded floors (world units) */
-const EXPLOSION_SPACING = 0.04;
+/** Vertical spacing between exploded floors for each building (world units). */
+const EXPLOSION_SPACING_BY_BUILDING: Record<BuildingId, number> = {
+  cabin01: 0.02,
+  cabin02: 0.02,
+  cabin03: 0.02,
+  dbuilding: 0.018,
+  ebuilding: 0.018,
+  fbuilding: 0.018,
+  gbuilding: 0.018,
+  hbuilding: 0.018,
+  cti: 0.04,
+  gym: 0.04,
+};
 
-/** Smaller spacing for hbuilding (8 floors) to avoid excessive spread */
-const EXPLOSION_SPACING_HBUILDING = 0.025;
+/** Raises exploded cabins enough for their new ground floor to clear the terrain. */
+const CABIN_EXPLOSION_BASE_LIFT = 0.03;
 
 /** Lerp speed factor (multiplied by delta for frame independence) */
 const LERP_SPEED = 5;
@@ -45,8 +57,10 @@ const LERP_SPEED = 5;
 
 interface FloorGroupProps {
   meshName: string;
-  buildingId: string;
+  buildingId: BuildingId;
   originalPosition: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: number | [number, number, number];
   subMeshNodes: Array<{ name: string; geometry: THREE.BufferGeometry; material: THREE.Material }>;
 }
 
@@ -59,6 +73,8 @@ const FloorGroup = React.memo(function FloorGroup({
   meshName,
   buildingId,
   originalPosition,
+  rotation,
+  scale,
   subMeshNodes,
 }: FloorGroupProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -74,8 +90,9 @@ const FloorGroup = React.memo(function FloorGroup({
     if (!isExploded || selectedBuilding !== buildingId) {
       return originalPosition[1]; // Return to original
     }
-    const spacing = buildingId === 'hbuilding' ? EXPLOSION_SPACING_HBUILDING : EXPLOSION_SPACING;
-    return originalPosition[1] + floorIndex * spacing;
+    const spacing = EXPLOSION_SPACING_BY_BUILDING[buildingId];
+    const baseLift = buildingId.startsWith('cabin') ? CABIN_EXPLOSION_BASE_LIFT : 0;
+    return originalPosition[1] + baseLift + floorIndex * spacing;
   }, [isExploded, selectedBuilding, buildingId, floorIndex, originalPosition]);
 
   // Animate Y position via lerp
@@ -96,6 +113,8 @@ const FloorGroup = React.memo(function FloorGroup({
     <group
       ref={groupRef}
       position={[originalPosition[0], originalPosition[1], originalPosition[2]]}
+      rotation={rotation}
+      scale={scale}
     >
       {subMeshNodes.map(({ name, geometry, material }) => (
         <mesh
@@ -152,6 +171,8 @@ export function CampusModelScene() {
           meshName={floor.meshName}
           buildingId={floor.buildingId}
           originalPosition={floor.position}
+          rotation={floor.rotation}
+          scale={floor.scale}
           subMeshNodes={floor.subMeshNodes}
         />
       ))}
@@ -165,27 +186,9 @@ export function CampusModelScene() {
         <mesh geometry={nodes.cabins_walkway_floor2_Mesh_4.geometry} material={materials.CL_Ribete_chapa} />
       </group>
 
-      {/* ── Road ──────────────────────────────────────────────────────── */}
-      <group
-        position={[0.17052113, -0.00980953, 0.59327275]}
-        rotation={[-Math.PI / 2, -0.00033037, -0.01135986]}
-        scale={[0.02392408, 0.02392408, 0.00039873]}
-      >
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004.geometry} material={materials['Material.005']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_1.geometry} material={materials['Material.006']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_2.geometry} material={materials['Material.002']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_3.geometry} material={materials['Material.001']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_4.geometry} material={materials['Material.003']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_5.geometry} material={materials['Material.004']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_6.geometry} material={materials['Material.007']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_7.geometry} material={materials['Material.008']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_8.geometry} material={materials['Material.018']} />
-        <mesh geometry={nodes.RoadFullNoSideWalks_Material001_0004_9.geometry} material={materials['Material.017']} />
-      </group>
-
       {/* ── Trees ─────────────────────────────────────────────────────── */}
       <group
-        position={[0.29272145, 0.01692664, 0.23237571]}
+        position={[0.12381645, 0.05227022, 0.12459003]}
         rotation={[-Math.PI / 2, -1.2e-7, -Math.PI / 2]}
         scale={0.00199722}
       >
@@ -204,8 +207,8 @@ export function CampusModelScene() {
         <mesh geometry={nodes._9_tree__9_tree_0008_12.geometry} material={materials['3_tree.005']} />
         <mesh geometry={nodes._9_tree__9_tree_0008_13.geometry} material={materials['6_tree.005']} />
         <mesh geometry={nodes._9_tree__9_tree_0008_14.geometry} material={materials['8_tree.004']} />
-        <mesh geometry={nodes._9_tree__9_tree_0008_15.geometry} material={materials['9_tree.002']} />
-        <mesh geometry={nodes._9_tree__9_tree_0008_16.geometry} material={materials['12_tree.002']} />
+        <mesh geometry={nodes._9_tree__9_tree_0008_15.geometry} material={materials['12_tree.002']} />
+        <mesh geometry={nodes._9_tree__9_tree_0008_16.geometry} material={materials['9_tree.002']} />
       </group>
 
       {/* ── Sports field ──────────────────────────────────────────────── */}
@@ -233,14 +236,24 @@ export function CampusModelScene() {
         <mesh geometry={nodes.Curve006_1.geometry} material={materials.Material} />
       </group>
 
-      {/* ── Rock walkway ──────────────────────────────────────────────── */}
-      <mesh
-        geometry={nodes.rockwalk.geometry}
-        material={materials['PathRocks.001']}
-        position={[0.04337397, -0.01008, 0.34504941]}
-        rotation={[-Math.PI, 0.84153697, -Math.PI]}
+      {/* ── Rock walkway / road ───────────────────────────────────────── */}
+      <group
+        position={[0.01802168, -0.00956216, 0.38782692]}
+        rotation={[-Math.PI, 1.46606875, -Math.PI]}
         scale={0.00738812}
-      />
+      >
+        <mesh geometry={nodes.RockPath_Round_Wide013.geometry} material={materials['PathRocks.001']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_1.geometry} material={materials['Material.005']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_2.geometry} material={materials['Material.006']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_3.geometry} material={materials['Material.002']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_4.geometry} material={materials['Material.001']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_5.geometry} material={materials['Material.018']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_6.geometry} material={materials['Material.017']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_7.geometry} material={materials['Material.003']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_8.geometry} material={materials['Material.004']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_9.geometry} material={materials['Material.007']} />
+        <mesh geometry={nodes.RockPath_Round_Wide013_10.geometry} material={materials['Material.008']} />
+      </group>
     </group>
   );
 }

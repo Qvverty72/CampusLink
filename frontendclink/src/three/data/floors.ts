@@ -4,8 +4,8 @@
  * Centralized configuration and mock data.
  * All positions are extracted directly from the gltfjsx output.
  *
- * UPDATED: Cabins split into cabin01, cabin02, cabin03.
- * UPDATED: Each floor is now a group of sub-meshes (FloorMeshConfig).
+ * UPDATED: Cabins now have three selectable floors.
+ * UPDATED: Buildings D, E, F and G are independent selectable buildings.
  */
 
 import type { BuildingId, BuildingConfig, FloorDefinition, FloorMeshConfig } from '@/three/types/map';
@@ -14,15 +14,28 @@ import type { BuildingId, BuildingConfig, FloorDefinition, FloorMeshConfig } fro
 
 /** Maps each building to its ordered list of floor group names */
 export const buildingFloors: Record<BuildingId, string[]> = {
-  cabin01: ['cabin01_floor1', 'cabin01_floor2'],
-  cabin02: ['cabin02_floor1', 'cabin02_floor2'],
-  cabin03: ['cabin03_floor1', 'cabin03_floor2'],
+  cabin01: ['cabin01_floor1', 'cabin01_floor2', 'cabin01_floor3'],
+  cabin02: ['cabin02_floor1', 'cabin02_floor2', 'cabin02_floor3'],
+  cabin03: ['cabin03_floor1', 'cabin03_floor2', 'cabin03_floor3'],
+  dbuilding: ['dbuilding_floor1'],
   ebuilding: [
     'ebuilding_floor1',
     'ebuilding_floor2',
     'ebuilding_floor3',
     'ebuilding_floor4',
     'ebuilding_floor5',
+  ],
+  fbuilding: [
+    'fbuilding_floor1',
+    'fbuilding_floor2',
+    'fbuilding_floor3',
+    'fbuilding_floor4',
+  ],
+  gbuilding: [
+    'gbuilding_floor1',
+    'gbuilding_floor2',
+    'gbuilding_floor3',
+    'gbuilding_floor4',
   ],
   hbuilding: [
     'hbuilding_floor1',
@@ -52,6 +65,15 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
   {
     meshName: 'cabin01_floor1',
     buildingId: 'cabin01',
+    position: [0.09683656, 0.06523443, 0.09987102],
+    subMeshes: [
+      'cabin01_floor1_Mesh001', 'cabin01_floor1_Mesh001_1', 'cabin01_floor1_Mesh001_2',
+      'cabin01_floor1_Mesh001_3', 'cabin01_floor1_Mesh001_4',
+    ],
+  },
+  {
+    meshName: 'cabin01_floor2',
+    buildingId: 'cabin01',
     position: [0.09683656, 0.07815167, 0.09987102],
     subMeshes: [
       'cabin01_floor1_Mesh', 'cabin01_floor1_Mesh_1', 'cabin01_floor1_Mesh_2',
@@ -59,7 +81,7 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
     ],
   },
   {
-    meshName: 'cabin01_floor2',
+    meshName: 'cabin01_floor3',
     buildingId: 'cabin01',
     position: [0.0969923, 0.0954479, 0.10072065],
     subMeshes: [
@@ -72,6 +94,15 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
   {
     meshName: 'cabin02_floor1',
     buildingId: 'cabin02',
+    position: [0.17350294, 0.06532428, 0.06341653],
+    subMeshes: [
+      'cabin02_floor1_Mesh001', 'cabin02_floor1_Mesh001_1', 'cabin02_floor1_Mesh001_2',
+      'cabin02_floor1_Mesh001_3', 'cabin02_floor1_Mesh001_4',
+    ],
+  },
+  {
+    meshName: 'cabin02_floor2',
+    buildingId: 'cabin02',
     position: [0.17350294, 0.0781678, 0.06341653],
     subMeshes: [
       'cabin02_floor1_Mesh', 'cabin02_floor1_Mesh_1', 'cabin02_floor1_Mesh_2',
@@ -79,7 +110,7 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
     ],
   },
   {
-    meshName: 'cabin02_floor2',
+    meshName: 'cabin02_floor3',
     buildingId: 'cabin02',
     position: [0.17356263, 0.09600329, 0.06293174],
     subMeshes: [
@@ -92,6 +123,15 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
   {
     meshName: 'cabin03_floor1',
     buildingId: 'cabin03',
+    position: [0.2185794, 0.0654091, -0.00165834],
+    subMeshes: [
+      'cabin03_floor1_Mesh001', 'cabin03_floor1_Mesh001_1', 'cabin03_floor1_Mesh001_2',
+      'cabin03_floor1_Mesh001_3', 'cabin03_floor1_Mesh001_4',
+    ],
+  },
+  {
+    meshName: 'cabin03_floor2',
+    buildingId: 'cabin03',
     position: [0.2185794, 0.0781755, -0.00165834],
     subMeshes: [
       'cabin03_floor1_Mesh', 'cabin03_floor1_Mesh_1', 'cabin03_floor1_Mesh_2',
@@ -99,9 +139,9 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
     ],
   },
   {
-    meshName: 'cabin03_floor2',
+    meshName: 'cabin03_floor3',
     buildingId: 'cabin03',
-    position: [0.21828733, 0.09617037, -0.0019014],
+    position: [0.21828732, 0.09617037, -0.0019014],
     subMeshes: [
       'cabin03_floor2_Mesh', 'cabin03_floor2_Mesh_1', 'cabin03_floor2_Mesh_2',
       'cabin03_floor2_Mesh_3', 'cabin03_floor2_Mesh_4', 'cabin03_floor2_Mesh_5',
@@ -112,7 +152,9 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
   {
     meshName: 'cti_floor1',
     buildingId: 'cti',
-    position: [-0.09179663, 0.00503575, 0.43425724],
+    position: [-0.09296654, 0.00503574, 0.45533523],
+    rotation: [0, -0.02192614, 0],
+    scale: 1.24738979,
     subMeshes: [
       'cti_floor1_Mesh001', 'cti_floor1_Mesh001_1', 'cti_floor1_Mesh001_2',
       'cti_floor1_Mesh001_3', 'cti_floor1_Mesh001_4', 'cti_floor1_Mesh001_5',
@@ -120,41 +162,52 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
     ],
   },
 
+  // ── D-Building ─────────────────────────────────────────────────────────────
+  {
+    meshName: 'dbuilding_floor1',
+    buildingId: 'dbuilding',
+    position: [0.01693383, 0.09075969, 0.06553093],
+    subMeshes: [
+      'dbuilding_floor1_Mesh', 'dbuilding_floor1_Mesh_1', 'dbuilding_floor1_Mesh_2',
+      'dbuilding_floor1_Mesh_3', 'dbuilding_floor1_Mesh_4', 'dbuilding_floor1_Mesh_5',
+    ],
+  },
+
   // ── E-Building ─────────────────────────────────────────────────────────────
   {
     meshName: 'ebuilding_floor1',
     buildingId: 'ebuilding',
-    position: [0.03902718, 0.09093073, -0.04612058],
+    position: [0.01866287, 0.09097074, -0.071018],
     subMeshes: [
-      'ebuilding_floor1_Mesh', 'ebuilding_floor1_Mesh_1', 'ebuilding_floor1_Mesh_2',
-      'ebuilding_floor1_Mesh_3', 'ebuilding_floor1_Mesh_4',
+      'ebuilding_floor1_Mesh001', 'ebuilding_floor1_Mesh001_1', 'ebuilding_floor1_Mesh001_2',
+      'ebuilding_floor1_Mesh001_3', 'ebuilding_floor1_Mesh001_4', 'ebuilding_floor1_Mesh001_5',
     ],
   },
   {
     meshName: 'ebuilding_floor2',
     buildingId: 'ebuilding',
-    position: [0.04565526, 0.10396966, -0.07957213],
+    position: [0.01889805, 0.10393097, -0.07490823],
     subMeshes: [
-      'ebuilding_floor2_Mesh', 'ebuilding_floor2_Mesh_1', 'ebuilding_floor2_Mesh_2',
-      'ebuilding_floor2_Mesh_3', 'ebuilding_floor2_Mesh_4',
+      'ebuilding_floor2_Mesh001', 'ebuilding_floor2_Mesh001_1', 'ebuilding_floor2_Mesh001_2',
+      'ebuilding_floor2_Mesh001_3', 'ebuilding_floor2_Mesh001_4', 'ebuilding_floor2_Mesh001_5',
     ],
   },
   {
     meshName: 'ebuilding_floor3',
     buildingId: 'ebuilding',
-    position: [0.04565524, 0.11696966, -0.07957213],
+    position: [0.01889805, 0.11693096, -0.07490823],
     subMeshes: [
-      'ebuilding_floor3_Mesh', 'ebuilding_floor3_Mesh_1', 'ebuilding_floor3_Mesh_2',
-      'ebuilding_floor3_Mesh_3', 'ebuilding_floor3_Mesh_4',
+      'ebuilding_floor3_Mesh001', 'ebuilding_floor3_Mesh001_1', 'ebuilding_floor3_Mesh001_2',
+      'ebuilding_floor3_Mesh001_3', 'ebuilding_floor3_Mesh001_4', 'ebuilding_floor3_Mesh001_5',
     ],
   },
   {
     meshName: 'ebuilding_floor4',
     buildingId: 'ebuilding',
-    position: [0.04565525, 0.12996966, -0.07957214],
+    position: [0.01889805, 0.12993096, -0.07490825],
     subMeshes: [
-      'ebuilding_floor4_Mesh', 'ebuilding_floor4_Mesh_1', 'ebuilding_floor4_Mesh_2',
-      'ebuilding_floor4_Mesh_3', 'ebuilding_floor4_Mesh_4',
+      'ebuilding_floor4_Mesh001', 'ebuilding_floor4_Mesh001_1', 'ebuilding_floor4_Mesh001_2',
+      'ebuilding_floor4_Mesh001_3', 'ebuilding_floor4_Mesh001_4', 'ebuilding_floor4_Mesh001_5',
     ],
   },
   {
@@ -162,10 +215,42 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
     buildingId: 'ebuilding',
     position: [0.02078407, 0.14320296, -0.07352281],
     subMeshes: [
-      'ebuilding_floor5_Mesh', 'ebuilding_floor5_Mesh_1', 'ebuilding_floor5_Mesh_2',
-      'ebuilding_floor5_Mesh_3', 'ebuilding_floor5_Mesh_4',
+      'ebuilding_floor5_Mesh001', 'ebuilding_floor5_Mesh001_1', 'ebuilding_floor5_Mesh001_2',
+      'ebuilding_floor5_Mesh001_3', 'ebuilding_floor5_Mesh001_4',
     ],
   },
+
+  // ── F-Building ─────────────────────────────────────────────────────────────
+  ...([
+    [1, [0.07641956, 0.09085523, -0.06767353]],
+    [2, [0.07634686, 0.10385524, -0.06772478]],
+    [3, [0.07634706, 0.11685523, -0.06772464]],
+    [4, [0.07634293, 0.12985523, -0.06772754]],
+  ] as const).map(([level, position]) => ({
+    meshName: `fbuilding_floor${level}`,
+    buildingId: 'fbuilding' as const,
+    position: [...position] as [number, number, number],
+    subMeshes: Array.from(
+      { length: 6 },
+      (_, index) => `fbuilding_floor${level}_Mesh${index === 0 ? '' : `_${index}`}`
+    ),
+  })),
+
+  // ── G-Building ─────────────────────────────────────────────────────────────
+  ...([
+    [1, [0.08372448, 0.09106029, -0.11372714]],
+    [2, [0.08364504, 0.10406029, -0.11378279]],
+    [3, [0.08364525, 0.11706029, -0.11378263]],
+    [4, [0.08364075, 0.13006029, -0.1137858]],
+  ] as const).map(([level, position]) => ({
+    meshName: `gbuilding_floor${level}`,
+    buildingId: 'gbuilding' as const,
+    position: [...position] as [number, number, number],
+    subMeshes: Array.from(
+      { length: 6 },
+      (_, index) => `gbuilding_floor${level}_Mesh${index === 0 ? '' : `_${index}`}`
+    ),
+  })),
 
   // ── Gym ────────────────────────────────────────────────────────────────────
   {
@@ -283,12 +368,33 @@ export const buildingConfigs: Record<BuildingId, BuildingConfig> = {
     focusTarget: [0.218, 0.087, -0.001],
     focusPosition: [0.38, 0.20, 0.15],
   },
+  dbuilding: {
+    id: 'dbuilding',
+    name: 'Edificio D',
+    floors: buildingFloors.dbuilding,
+    focusTarget: [0.017, 0.091, 0.066],
+    focusPosition: [0.28, 0.24, 0.32],
+  },
   ebuilding: {
     id: 'ebuilding',
     name: 'Edificio E',
     floors: buildingFloors.ebuilding,
-    focusTarget: [0.040, 0.115, -0.065],
-    focusPosition: [0.35, 0.30, 0.25],
+    focusTarget: [0.019, 0.117, -0.074],
+    focusPosition: [0.28, 0.30, 0.18],
+  },
+  fbuilding: {
+    id: 'fbuilding',
+    name: 'Edificio F',
+    floors: buildingFloors.fbuilding,
+    focusTarget: [0.076, 0.110, -0.068],
+    focusPosition: [0.34, 0.28, 0.18],
+  },
+  gbuilding: {
+    id: 'gbuilding',
+    name: 'Edificio G',
+    floors: buildingFloors.gbuilding,
+    focusTarget: [0.084, 0.111, -0.114],
+    focusPosition: [0.343, 0.28, 0.103],
   },
   hbuilding: {
     id: 'hbuilding',
@@ -301,8 +407,8 @@ export const buildingConfigs: Record<BuildingId, BuildingConfig> = {
     id: 'cti',
     name: 'CTI',
     floors: buildingFloors.cti,
-    focusTarget: [-0.092, 0.005, 0.434],
-    focusPosition: [0.1, 0.15, 0.6],
+    focusTarget: [-0.093, 0.005, 0.455],
+    focusPosition: [0.099, 0.15, 0.621],
   },
   gym: {
     id: 'gym',
@@ -353,6 +459,14 @@ export const floorData: Record<string, FloorDefinition> = {
     name: 'Cabaña 1 — Piso 2',
     description: 'Segundo piso de la Cabaña 1. Salas de reunión y oficinas.',
   },
+  'cabin01_floor3': {
+    id: 'cabin01_floor3',
+    buildingId: 'cabin01',
+    level: 3,
+    meshName: 'cabin01_floor3',
+    name: 'Cabaña 1 — Piso 3',
+    description: 'Tercer piso de la Cabaña 1.',
+  },
 
   // Cabin 02
   'cabin02_floor1': {
@@ -371,6 +485,14 @@ export const floorData: Record<string, FloorDefinition> = {
     name: 'Cabaña 2 — Piso 2',
     description: 'Segundo piso de la Cabaña 2. Aulas y salas de reunión.',
   },
+  'cabin02_floor3': {
+    id: 'cabin02_floor3',
+    buildingId: 'cabin02',
+    level: 3,
+    meshName: 'cabin02_floor3',
+    name: 'Cabaña 2 — Piso 3',
+    description: 'Tercer piso de la Cabaña 2.',
+  },
 
   // Cabin 03
   'cabin03_floor1': {
@@ -388,6 +510,24 @@ export const floorData: Record<string, FloorDefinition> = {
     meshName: 'cabin03_floor2',
     name: 'Cabaña 3 — Piso 2',
     description: 'Segundo piso de la Cabaña 3. Aulas y salas de reunión.',
+  },
+  'cabin03_floor3': {
+    id: 'cabin03_floor3',
+    buildingId: 'cabin03',
+    level: 3,
+    meshName: 'cabin03_floor3',
+    name: 'Cabaña 3 — Piso 3',
+    description: 'Tercer piso de la Cabaña 3.',
+  },
+
+  // D-Building
+  'dbuilding_floor1': {
+    id: 'dbuilding_floor1',
+    buildingId: 'dbuilding',
+    level: 1,
+    meshName: 'dbuilding_floor1',
+    name: 'Edificio D — Planta Baja',
+    description: 'Planta baja del Edificio D.',
   },
 
   // E-Building
@@ -431,6 +571,36 @@ export const floorData: Record<string, FloorDefinition> = {
     name: 'Edificio E — Piso 5',
     description: 'Quinto piso del Edificio E. Oficinas de profesores y salas de reunión.',
   },
+
+  // F-Building
+  ...Object.fromEntries(
+    [1, 2, 3, 4].map((level) => {
+      const id = `fbuilding_floor${level}`;
+      return [id, {
+        id,
+        buildingId: 'fbuilding' as const,
+        level,
+        meshName: id,
+        name: `Edificio F — ${level === 1 ? 'Planta Baja' : `Piso ${level}`}`,
+        description: `${level === 1 ? 'Planta baja' : `Piso ${level}`} del Edificio F.`,
+      }];
+    })
+  ),
+
+  // G-Building
+  ...Object.fromEntries(
+    [1, 2, 3, 4].map((level) => {
+      const id = `gbuilding_floor${level}`;
+      return [id, {
+        id,
+        buildingId: 'gbuilding' as const,
+        level,
+        meshName: id,
+        name: `Edificio G — ${level === 1 ? 'Planta Baja' : `Piso ${level}`}`,
+        description: `${level === 1 ? 'Planta baja' : `Piso ${level}`} del Edificio G.`,
+      }];
+    })
+  ),
 
   // H-Building
   'hbuilding_floor1': {

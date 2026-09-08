@@ -25,8 +25,19 @@ import { clampCameraPhi } from './cameraConfig';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/** Distance at which zooming out triggers building reunification */
-const BUILDING_EXIT_DISTANCE = 0.65;
+/** Camera distance at which zooming out exits each building selection. */
+const BUILDING_EXIT_DISTANCE_BY_BUILDING: Record<BuildingId, number> = {
+  cabin01: 0.35,
+  cabin02: 0.35,
+  cabin03: 0.35,
+  dbuilding: 0.65,
+  ebuilding: 0.65,
+  fbuilding: 0.65,
+  gbuilding: 0.65,
+  hbuilding: 0.65,
+  cti: 0.65,
+  gym: 0.65,
+};
 
 /** Speed of programmatic camera animation */
 const CAMERA_ANIM_SPEED = 4;
@@ -172,9 +183,11 @@ export function CameraController({ gestureState }: CameraControllerProps) {
 
     // 5. Zoom-out threshold detection
     if (selectedBuilding && isExploded && !isAnimating.current && !isFloorModalOpen) {
+      const exitDistance = BUILDING_EXIT_DISTANCE_BY_BUILDING[selectedBuilding];
+
       if (prevRadius.current !== null) {
-        const wasBelow = prevRadius.current < BUILDING_EXIT_DISTANCE;
-        const isAbove = gs.radius >= BUILDING_EXIT_DISTANCE;
+        const wasBelow = prevRadius.current < exitDistance;
+        const isAbove = gs.radius >= exitDistance;
 
         if (wasBelow && isAbove) {
           // User zoomed out past threshold → reunify building

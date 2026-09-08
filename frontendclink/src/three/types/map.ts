@@ -9,7 +9,10 @@
 
 /** Identifiers for each building in the campus model */
 export type BuildingId =
+  | 'dbuilding'
   | 'ebuilding'
+  | 'fbuilding'
+  | 'gbuilding'
   | 'cabin01'
   | 'cabin02'
   | 'cabin03'
@@ -54,6 +57,10 @@ export interface FloorMeshConfig {
   buildingId: BuildingId;
   /** Original position from the GLB model [x, y, z] */
   position: [number, number, number];
+  /** Optional Euler rotation from the GLB model [x, y, z] */
+  rotation?: [number, number, number];
+  /** Optional uniform or per-axis scale from the GLB model */
+  scale?: number | [number, number, number];
   /** Node names of the sub-meshes that compose this floor */
   subMeshes: string[];
 }
