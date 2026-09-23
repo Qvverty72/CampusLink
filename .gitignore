@@ -10,3 +10,10 @@ coverage/
 
 # Contexto local para agentes (no versionar)
 **/.agents/
+
+# Codex / Agents
+AGENTS.md
+.agents/
+
+# Contexto técnico de tareas
+context/
