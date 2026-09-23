@@ -23,7 +23,7 @@ La plataforma busca facilitar que estudiantes de años superiores compartan recu
 
 - Registro e inicio de sesión.
 - Perfiles asociados a carrera y asignaturas.
-- Roles para estudiantes, dirigentes y administradores.
+- Gestión de roles y permisos para usuarios institucionales verificados, usuarios autorizados y administradores.
 - Verificación en dos pasos para publicar recursos.
 - Reputación basada en transacciones e interacciones completadas.
 
