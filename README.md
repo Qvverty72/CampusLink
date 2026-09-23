@@ -12,7 +12,7 @@ Los estudiantes suelen tener dificultades para encontrar material de estudio rel
 CampusLink centraliza tres experiencias principales:
 
 - **Recursos académicos:** publicación y búsqueda de apuntes, resúmenes y guías creadas por los propios estudiantes, organizadas por carrera y asignatura.
-- **Marketplace estudiantil:** intercambio de libros, calculadoras, guías impresas, materiales de laboratorio, uniformes y otros recursos mediante venta, préstamo o donación.
+- **Marketplace estudiantil:** intercambio de libros, calculadoras, guías impresas, materiales de laboratorio, uniformes y otros recursos mediante venta o donación.
 - **Mapa y comunidad:** visualización de edificios, actividades y puntos de interés mediante un mapa 3D interactivo del campus.
 
 La plataforma busca facilitar que estudiantes de años superiores compartan recursos útiles con quienes recién ingresan, fomentar la reutilización y mejorar el acceso a información relevante para la vida académica.
