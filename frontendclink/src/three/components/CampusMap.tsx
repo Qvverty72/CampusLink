@@ -1,14 +1,9 @@
 /**
- * CampusLink MVP — CampusMap (3D Canvas wrapper)
+ * Contenedor nativo del Canvas y traductor de gestos táctiles.
  *
- * Custom touch-based camera controls using PanResponder + spherical coordinates.
- * - Single finger drag → orbit rotation
- * - Pinch gesture → zoom in/out
- * - Short tap → mesh selection via raycast
- * - Inertia/damping after gesture release
- *
- * The PanResponder only claims the gesture after significant movement (>8px),
- * so quick taps pass through and are handled as mesh selection.
+ * PanResponder interpreta rotación y pinch; los taps se convierten a coordenadas
+ * NDC para que `CameraController` haga raycast. Ambos lados comparten una ref para
+ * mover la cámara por frame sin rerenderizar la jerarquía React Native.
  */
 
 import React, { Suspense, useRef, useMemo, useCallback } from 'react';
@@ -26,6 +21,7 @@ import { clampCameraPhi } from '@/three/controls/cameraConfig';
 
 // ─── Camera Gesture State (shared between RN View and R3F Canvas via ref) ──────
 
+/** Estado mutable que conecta eventos de pantalla con el render loop de R3F. */
 export interface CameraGestureState {
   // Spherical camera parameters
   theta: number;        // azimuthal angle (horizontal rotation around Y)
@@ -77,8 +73,12 @@ function getTouchDistance(touches: { pageX: number; pageY: number }[]): number {
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function CampusMap() {
+  // El layout permite traducir pageX/pageY del touch al rango NDC [-1, 1] que
+  // espera THREE.Raycaster, independientemente del tamaño visible del Canvas.
   const layoutRef = useRef({ x: 0, y: 0, width: 1, height: 1 });
 
+  // Los movimientos continuos no son estado declarativo de UI. Una ref ofrece al
+  // controlador el valor más reciente sin generar renders durante cada gesto.
   const gestureState = useRef<CameraGestureState>({
     // Initial camera: overview of the full campus
     theta: Math.PI / 4,
@@ -104,7 +104,8 @@ export function CampusMap() {
     hasMoved: false,
   });
 
-  // ─── PanResponder (camera rotation & zoom) ────────────────────────────────
+  // PanResponder reclama pinch de inmediato, pero espera movimiento suficiente
+  // para diferenciar un drag de un tap destinado a selección 3D.
 
   const panResponder = useMemo(
     () =>
@@ -197,7 +198,8 @@ export function CampusMap() {
     []
   );
 
-  // ─── Touch event handlers (tap detection) ─────────────────────────────────
+  // La detección de tap permanece en la View nativa; la consulta geométrica se
+  // difiere al siguiente frame, donde ya están disponibles camera y scene.
 
   const handleTouchStart = useCallback((e: GestureResponderEvent) => {
     const touches = e.nativeEvent.touches as unknown as { pageX: number; pageY: number }[];
@@ -219,7 +221,8 @@ export function CampusMap() {
     const elapsed = Date.now() - gs.touchStartTime;
 
     if (!gs.hasMoved && elapsed < TAP_MAX_DURATION) {
-      // Detected a tap → convert screen coords to NDC for raycasting
+      // NDC usa origen central, X hacia la derecha e Y hacia arriba; por eso Y se
+      // invierte respecto de las coordenadas de pantalla de React Native.
       const l = layoutRef.current;
       const canvasX = gs.touchStartX - l.x;
       const canvasY = gs.touchStartY - l.y;
@@ -250,14 +253,15 @@ export function CampusMap() {
         camera={{ fov: 50, near: 0.01, far: 100 }}
         style={styles.canvas}
       >
-        {/* Minimal lighting — no shadows for mobile performance */}
+        {/* Iluminación mínima sin sombras para limitar el costo en GPU móvil. */}
         <ambientLight intensity={0.8} />
         <directionalLight position={[5, 10, 5]} intensity={0.6} />
 
-        {/* Custom camera controller reads gesture state from refs */}
+        {/* El controller consume la ref dentro de useFrame y no renderiza geometría. */}
         <CameraController gestureState={gestureState} />
 
-        {/* Model with async loading */}
+        {/* useGLTF puede suspender mientras carga el asset local; la escena se monta
+            únicamente cuando nodos y materiales ya están disponibles. */}
         <Suspense fallback={null}>
           <CampusModelScene />
         </Suspense>

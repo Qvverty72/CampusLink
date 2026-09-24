@@ -1,18 +1,23 @@
 /**
- * CampusLink MVP — Floor & Building Data
+ * Configuración lógica y metadata local del mapa 3D actual.
  *
- * Centralized configuration and mock data.
- * All positions are extracted directly from the gltfjsx output.
+ * El GLB aporta geometría y materiales; este archivo decide cómo agrupar sus nodos
+ * en edificios/pisos interactivos, qué transforms conservar, cómo enfocar la cámara
+ * y qué texto mostrar. Hoy es la fuente del frontend y del seed MongoDB.
  *
- * UPDATED: Cabins now have three selectable floors.
- * UPDATED: Buildings D, E, F and G are independent selectable buildings.
+ * La integración futura reemplazará estas estructuras productivas con la respuesta
+ * de `GET /api/v1/maps/:campusId/active`. El GLB seguirá siendo un asset local y
+ * `meshName`/`subMeshes` continuarán enlazando la respuesta con sus nodos.
  */
 
 import type { BuildingId, BuildingConfig, FloorDefinition, FloorMeshConfig } from '@/three/types/map';
 
 // ─── Building → Floor Names ───────────────────────────────────────────────────
 
-/** Maps each building to its ordered list of floor group names */
+/**
+ * Ordena los pisos dentro de cada edificio. El orden define tanto el nivel lógico
+ * como el índice usado para separar verticalmente el exploded view.
+ */
 export const buildingFloors: Record<BuildingId, string[]> = {
   cabin01: ['cabin01_floor1', 'cabin01_floor2', 'cabin01_floor3'],
   cabin02: ['cabin02_floor1', 'cabin02_floor2', 'cabin02_floor3'],
@@ -54,11 +59,11 @@ export const buildingFloors: Record<BuildingId, string[]> = {
 // ─── Floor Mesh Configurations (positions + sub-meshes from gltfjsx) ──────────
 
 /**
- * Each floor is a group of sub-meshes. This config maps each floor to:
- * - Its position from the GLB (extracted from gltfjsx output)
- * - The node names of all sub-meshes that compose it
+ * Reconstruye cada piso lógico a partir de varios submeshes del GLB.
  *
- * To update: run gltfjsx on the new GLB and copy positions + node names.
+ * `position`, `rotation` y `scale` provienen de la salida de gltfjsx y colocan el
+ * group en el mismo sistema de coordenadas de la escena. Los submeshes conservan
+ * su geometría/material, mientras el transform y la animación pertenecen al group.
  */
 export const floorMeshConfigs: FloorMeshConfig[] = [
   // ── Cabin 01 ──────────────────────────────────────────────────────────────
@@ -342,9 +347,9 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
 // ─── Building Configurations ───────────────────────────────────────────────────
 
 /**
- * Configuration per building with camera positions for zoom.
- * focusTarget = center of the building in world coords
- * focusPosition = where the camera moves to when zooming in
+ * Metadata por edificio y encuadre de cámara en world space.
+ * `focusTarget` es el punto que mira la cámara y `focusPosition` su destino al hacer
+ * zoom. Ambos deben permanecer coordinados con la escala y ubicación del GLB.
  */
 export const buildingConfigs: Record<BuildingId, BuildingConfig> = {
   cabin01: {
@@ -421,7 +426,7 @@ export const buildingConfigs: Record<BuildingId, BuildingConfig> = {
 
 // ─── Helper: mesh name → BuildingId ────────────────────────────────────────────
 
-/** Reverse lookup from floor group name to BuildingId */
+/** Resuelve el edificio dueño de un meshName sin depender de la geometría Three.js. */
 export function getBuildingForMesh(meshName: string): BuildingId | null {
   for (const [buildingId, floors] of Object.entries(buildingFloors)) {
     if (floors.includes(meshName)) {
@@ -431,7 +436,7 @@ export function getBuildingForMesh(meshName: string): BuildingId | null {
   return null;
 }
 
-/** Get the floor index (0-based) within its building */
+/** Obtiene el orden base cero que determina la separación vertical del piso. */
 export function getFloorIndex(meshName: string): number {
   const buildingId = getBuildingForMesh(meshName);
   if (!buildingId) return 0;
@@ -440,7 +445,10 @@ export function getFloorIndex(meshName: string): number {
 
 // ─── Floor Data (Mock) ─────────────────────────────────────────────────────────
 
-/** Mock data for all floors */
+/**
+ * Metadata mock consumida por el modal. Nombres, descripciones y futuros POI deben
+ * provenir del mapa ACTIVE de la API; no están embebidos en la geometría del GLB.
+ */
 export const floorData: Record<string, FloorDefinition> = {
   // Cabin 01
   'cabin01_floor1': {

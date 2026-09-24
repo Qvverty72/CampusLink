@@ -1,13 +1,9 @@
 /**
- * CampusLink MVP — Floor Info Modal
+ * Overlay React Native que presenta metadata del piso seleccionado.
  *
- * Renders OUTSIDE the Canvas as a React Native overlay.
- * Shows mock information about the selected floor.
- *
- * Architecture:
- * Screen
- * ├── Canvas (3D)
- * └── FloorInfoModal (RN, this component)
+ * Vive fuera del Canvas: no necesita convertir texto/botones a objetos 3D y puede
+ * usar accesibilidad y navegación nativas. Actualmente resuelve el ID del store
+ * contra `floorData`; la integración futura usará la metadata del mapa ACTIVE.
  */
 
 import React from 'react';
@@ -22,11 +18,13 @@ import { useMapStore } from '@/three/store/mapStore';
 import { floorData, buildingConfigs } from '@/three/data/floors';
 
 export function FloorInfoModal() {
+  // El store conserva identificadores y visibilidad, no objetos completos. Así la
+  // fuente de metadata puede cambiar de configuración local a API sin duplicarla.
   const selectedFloor = useMapStore((s) => s.selectedFloor);
   const isFloorModalOpen = useMapStore((s) => s.isFloorModalOpen);
   const closeFloorModal = useMapStore((s) => s.closeFloorModal);
 
-  // Get floor data
+  // `meshName` funciona hoy como clave compartida entre raycast, configuración y UI.
   const floor = selectedFloor ? floorData[selectedFloor] : null;
   const building = floor ? buildingConfigs[floor.buildingId] : null;
 

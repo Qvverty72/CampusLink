@@ -1,19 +1,25 @@
-// CampusLink MongoDB v1 — ejecutar con mongosh.
+// Bootstrap de persistencia documental de CampusLink; se ejecuta manualmente con
+// mongosh y puede repetirse para aplicar los validadores vigentes a colecciones existentes.
+// Los UUID apuntan lógicamente a Supabase; los ObjectId enlazan documentos de MongoDB.
 const targetDbName = process.env.MONGODB_DB_NAME || 'campuslink';
 db = db.getSiblingDB(targetDbName);
 
+// Comparte la misma forma UUID usada por las claves de campus y usuario en Supabase.
 const uuidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$';
 const vector3 = {
     bsonType: 'array', minItems: 3, maxItems: 3,
     items: { bsonType: ['double', 'int', 'long', 'decimal'] }
 };
 
+// Crea la colección en instalaciones nuevas o reemplaza solo su validator cuando
+// ya existe. Así el bootstrap no elimina documentos ni necesita recrear colecciones.
 function recreateValidator(name, validator) {
     const exists = db.getCollectionInfos({ name }).length > 0;
     if (!exists) db.createCollection(name, { validator, validationLevel: 'strict', validationAction: 'error' });
     else db.runCommand({ collMod: name, validator, validationLevel: 'strict', validationAction: 'error' });
 }
 
+// El mapa agrupa edificios, pisos y POIs porque se lee como una unidad por campus.
 recreateValidator('campus_maps', {
     $jsonSchema: {
         bsonType: 'object',
@@ -84,6 +90,8 @@ recreateValidator('campus_maps', {
     }
 });
 
+// Las actividades usan UUID para campus/creador de Supabase y ObjectId para fijar
+// la versión concreta del mapa de MongoDB sobre la que se definió su ubicación.
 recreateValidator('activities', {
     $jsonSchema: {
         bsonType: 'object',
@@ -120,6 +128,8 @@ recreateValidator('activities', {
     }
 });
 
+// Las participaciones relacionan una actividad Mongo con el UUID de identidad de
+// Supabase. La consistencia cruzada debe validarla el backend, no este schema.
 recreateValidator('activity_participations', {
     $jsonSchema: {
         bsonType: 'object',
@@ -135,7 +145,7 @@ recreateValidator('activity_participations', {
     }
 });
 
-// Indexes
+// Estos índices expresan tanto reglas de unicidad como patrones de consulta previstos.
 // Un campus no puede tener dos documentos con la misma versión.
 db.campus_maps.createIndex({ campusId: 1, version: 1 }, { unique: true, name: 'campus_version_uq' });
 // Solo un mapa ACTIVE por campus.
@@ -154,6 +164,8 @@ db.activity_participations.createIndex({ activityId: 1, userId: 1 }, { unique: t
 db.activity_participations.createIndex({ userId: 1, status: 1 }, { name: 'participation_user_status_idx' });
 db.activity_participations.createIndex({ campusId: 1, status: 1 }, { name: 'participation_campus_status_idx' });
 
+// La salida final sirve como verificación operativa después de ejecutar el bootstrap;
+// no forma parte de la lógica de la API ni inserta documentos de negocio.
 print('CampusLink MongoDB collections, validators and indexes ready.');
 
 print('Collections:');

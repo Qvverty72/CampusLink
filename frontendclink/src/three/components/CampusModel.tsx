@@ -1,23 +1,11 @@
 /**
- * CampusLink MVP — CampusModel (3D Scene Component)
+ * Ensambla la escena visible usando geometría/materiales del GLB y configuración
+ * lógica de `floors.ts`.
  *
- * Renders all meshes from the GLB model.
- * Handles:
- * - Multi-mesh floor groups (each floor = N sub-meshes)
- * - Explosion animation (vertical separation of floors)
- * - Dynamic rendering from floorMeshConfigs data
- *
- * Mesh selection is handled via raycast in CameraController, NOT here.
- * Each sub-mesh in a floor group has `userData.isFloor = true`.
- *
- * ARCHITECTURE:
- * - FloorGroup: wraps a floor's sub-meshes, handles Y animation
- * - CampusModelScene: renders all floors + decorative elements
- *
- * CRITICAL RULES:
- * - Never use cumulative offsets (group.position.y += x)
- * - Always compute: originalY + offset
- * - Preserve original positions from GLB
+ * `FloorGroup` convierte varios submeshes en un piso seleccionable y animable.
+ * `CampusModelScene` añade esos pisos junto con terreno y decoración estática.
+ * La selección no ocurre aquí: `CameraController` hace raycast sobre el `userData`
+ * que este componente adjunta a cada mesh interactivo.
  */
 
 import React, { useRef, useMemo } from 'react';
@@ -33,7 +21,7 @@ import {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/** Vertical spacing between exploded floors for each building (world units). */
+/** Separación vertical por edificio en las unidades pequeñas del modelo. */
 const EXPLOSION_SPACING_BY_BUILDING: Record<BuildingId, number> = {
   cabin01: 0.02,
   cabin02: 0.02,
@@ -47,10 +35,10 @@ const EXPLOSION_SPACING_BY_BUILDING: Record<BuildingId, number> = {
   gym: 0.04,
 };
 
-/** Raises exploded cabins enough for their new ground floor to clear the terrain. */
+/** Elevación inicial necesaria para que las cabañas no intersecten el terreno. */
 const CABIN_EXPLOSION_BASE_LIFT = 0.03;
 
-/** Lerp speed factor (multiplied by delta for frame independence) */
+/** Velocidad del lerp; se combina con delta para no depender del framerate. */
 const LERP_SPEED = 5;
 
 // ─── FloorGroup Component ──────────────────────────────────────────────────────
@@ -65,9 +53,11 @@ interface FloorGroupProps {
 }
 
 /**
- * A floor group wraps multiple sub-meshes that together form one floor.
- * It animates the group's Y position for the explosion effect.
- * Each child mesh has userData for raycast selection.
+ * Renderiza un piso como un group compuesto por varios submeshes del GLB.
+ *
+ * El group conserva el transform original y modifica solo su Y durante el
+ * exploded view. Así geometría, materiales y futuros POI del piso se desplazan
+ * como una sola unidad lógica aunque Blender los haya exportado por separado.
  */
 const FloorGroup = React.memo(function FloorGroup({
   meshName,
@@ -79,13 +69,15 @@ const FloorGroup = React.memo(function FloorGroup({
 }: FloorGroupProps) {
   const groupRef = useRef<THREE.Group>(null);
 
-  // Only subscribe to what's needed for animation
+  // Cada piso se suscribe solo a los campos que afectan su posición; el resto del
+  // store no debe provocar rerenders de toda la geometría.
   const selectedBuilding = useMapStore((s) => s.selectedBuilding);
   const isExploded = useMapStore((s) => s.isExploded);
 
   const floorIndex = useMemo(() => getFloorIndex(meshName), [meshName]);
 
-  // Calculate target Y position
+  // El destino siempre se calcula desde el Y original. Evitar offsets acumulativos
+  // impide que abrir/cerrar repetidamente desplace el modelo fuera de su posición.
   const targetY = useMemo(() => {
     if (!isExploded || selectedBuilding !== buildingId) {
       return originalPosition[1]; // Return to original
@@ -95,7 +87,8 @@ const FloorGroup = React.memo(function FloorGroup({
     return originalPosition[1] + baseLift + floorIndex * spacing;
   }, [isExploded, selectedBuilding, buildingId, floorIndex, originalPosition]);
 
-  // Animate Y position via lerp
+  // La interpolación exponencial produce una velocidad consistente entre equipos
+  // con distinto framerate sin guardar la animación en estado React.
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     const currentY = groupRef.current.position.y;
@@ -116,6 +109,8 @@ const FloorGroup = React.memo(function FloorGroup({
       rotation={rotation}
       scale={scale}
     >
+      {/* El transform vive en el group; cada mesh hijo aporta solo su geometría y
+          material. `userData` crea el puente que consume el raycast de selección. */}
       {subMeshNodes.map(({ name, geometry, material }) => (
         <mesh
           key={name}
@@ -130,10 +125,16 @@ const FloorGroup = React.memo(function FloorGroup({
 
 // ─── Main Campus Model ─────────────────────────────────────────────────────────
 
+/**
+ * Resuelve la configuración de pisos contra los nodos cargados del GLB y monta la
+ * escena completa. Los elementos decorativos no reciben `isFloor`, por lo que un
+ * raycast puede atravesarlos pero nunca los convierte en una selección lógica.
+ */
 export function CampusModelScene() {
   const { nodes, materials } = useCampusGLTF();
 
-  // Build floor data from configs + GLB nodes
+  // Convierte nombres de submesh declarados en configuración en referencias reales
+  // de geometry/material. Esta unión separa metadata mutable de geometría local.
   const floors = useMemo(() => {
     return floorMeshConfigs.map((config) => {
       const subMeshNodes = config.subMeshes
@@ -156,6 +157,8 @@ export function CampusModelScene() {
   }, [nodes]);
 
   return (
+    // `dispose={null}` evita liberar recursos compartidos que useGLTF mantiene en
+    // caché y que pueden reutilizarse al salir y volver a entrar a la pantalla.
     <group dispose={null}>
       {/* ── Base terrain (3 sub-meshes, not interactive) ──────────────── */}
       <group position={[0.15574466, 0.00650109, 0.20599128]} scale={0.40954831}>
@@ -164,7 +167,8 @@ export function CampusModelScene() {
         <mesh geometry={nodes.Plane_2.geometry} material={materials.CL_Pavimento} />
       </group>
 
-      {/* ── All floor groups (dynamic from config) ───────────────────── */}
+      {/* Los pisos son dinámicos desde la configuración; terreno y decoración
+          continúan acoplados explícitamente a nodos fijos del GLB local. */}
       {floors.map((floor) => (
         <FloorGroup
           key={floor.meshName}

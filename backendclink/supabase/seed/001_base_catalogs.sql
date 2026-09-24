@@ -18,6 +18,8 @@ set
 
 -- 2) Campus / sede
 -- En una BD vacía quedará con este UUID fijo, útil como campusId en MongoDB.
+-- La relación es lógica: PostgreSQL no puede imponer una foreign key sobre MongoDB,
+-- por lo que el backend debe validar la existencia del campus al escribir documentos.
 insert into
   public.campus (
     id,
