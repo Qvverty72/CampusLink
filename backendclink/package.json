@@ -13,14 +13,14 @@
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
-    "helmet": "latest"
+    "helmet": "latest",
+    "mongodb": "^7.6.0"
   },
   "devDependencies": {
     "@types/cors": "latest",
     "@types/express": "latest",
-    "@types/node": "latest",
+    "@types/node": "^26.6.2",
     "tsx": "latest",
     "typescript": "latest"
   }
 }
-
