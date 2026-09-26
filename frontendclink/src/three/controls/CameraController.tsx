@@ -11,7 +11,7 @@ import React, { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/native';
 import * as THREE from 'three';
 import { useMapStore } from '@/three/store/mapStore';
-import { buildingConfigs, getBuildingForMesh } from '@/three/data/floors';
+import { useMapDataStore } from '@/three/store/mapDataStore';
 import type { BuildingId } from '@/three/types/map';
 import type { CameraGestureState } from '@/three/components/CampusMap';
 import { clampCameraPhi } from './cameraConfig';
@@ -66,6 +66,9 @@ export function CameraController({ gestureState }: CameraControllerProps) {
   const isFloorModalOpen = useMapStore((s) => s.isFloorModalOpen);
   const selectBuilding = useMapStore((s) => s.selectBuilding);
   const selectFloor = useMapStore((s) => s.selectFloor);
+  const buildingConfigs = useMapDataStore(
+    (s) => s.data?.buildingConfigs
+  );
 
   // Destinos y progreso de cámara viven en refs porque cambian dentro de useFrame.
   const isAnimating = useRef(false);
@@ -79,8 +82,11 @@ export function CameraController({ gestureState }: CameraControllerProps) {
   // ─── Animate to building when selected ──────────────────────────────────
 
   useEffect(() => {
-    if (selectedBuilding && buildingConfigs[selectedBuilding]) {
-      const config = buildingConfigs[selectedBuilding];
+    const config = selectedBuilding
+      ? buildingConfigs?.[selectedBuilding]
+      : undefined;
+
+    if (config) {
       const focusPos = new THREE.Vector3(...config.focusPosition);
       const focusTarget = new THREE.Vector3(...config.focusTarget);
       const offset = focusPos.clone().sub(focusTarget);
@@ -123,7 +129,7 @@ export function CameraController({ gestureState }: CameraControllerProps) {
     gestureState.current.velocityTheta = 0;
     gestureState.current.velocityPhi = 0;
     previousSelectedBuilding.current = selectedBuilding;
-  }, [selectedBuilding]);
+  }, [buildingConfigs, gestureState, selectedBuilding]);
 
   // ─── Per-frame update ───────────────────────────────────────────────────
 

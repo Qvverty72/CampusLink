@@ -1,6 +1,6 @@
 /**
  * Ensambla la escena visible usando geometría/materiales del GLB y configuración
- * lógica de `floors.ts`.
+ * lógica del mapa ACTIVE compartida por `mapDataStore`.
  *
  * `FloorGroup` convierte varios submeshes en un piso seleccionable y animable.
  * `CampusModelScene` añade esos pisos junto con terreno y decoración estática.
@@ -12,12 +12,9 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber/native';
 import * as THREE from 'three';
 import { useCampusGLTF } from '@/three/models/CampusModel';
+import { useMapDataStore } from '@/three/store/mapDataStore';
 import { useMapStore } from '@/three/store/mapStore';
 import type { BuildingId } from '@/three/types/map';
-import {
-  floorMeshConfigs,
-  getFloorIndex,
-} from '@/three/data/floors';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +47,7 @@ interface FloorGroupProps {
   rotation?: [number, number, number];
   scale?: number | [number, number, number];
   subMeshNodes: Array<{ name: string; geometry: THREE.BufferGeometry; material: THREE.Material }>;
+  floorIndex: number;
 }
 
 /**
@@ -66,6 +64,7 @@ const FloorGroup = React.memo(function FloorGroup({
   rotation,
   scale,
   subMeshNodes,
+  floorIndex,
 }: FloorGroupProps) {
   const groupRef = useRef<THREE.Group>(null);
 
@@ -73,8 +72,6 @@ const FloorGroup = React.memo(function FloorGroup({
   // store no debe provocar rerenders de toda la geometría.
   const selectedBuilding = useMapStore((s) => s.selectedBuilding);
   const isExploded = useMapStore((s) => s.isExploded);
-
-  const floorIndex = useMemo(() => getFloorIndex(meshName), [meshName]);
 
   // El destino siempre se calcula desde el Y original. Evitar offsets acumulativos
   // impide que abrir/cerrar repetidamente desplace el modelo fuera de su posición.
@@ -132,11 +129,14 @@ const FloorGroup = React.memo(function FloorGroup({
  */
 export function CampusModelScene() {
   const { nodes, materials } = useCampusGLTF();
+  const mapData = useMapDataStore((s) => s.data);
 
   // Convierte nombres de submesh declarados en configuración en referencias reales
   // de geometry/material. Esta unión separa metadata mutable de geometría local.
   const floors = useMemo(() => {
-    return floorMeshConfigs.map((config) => {
+    if (!mapData) return [];
+
+    return mapData.floorMeshConfigs.map((config) => {
       const subMeshNodes = config.subMeshes
         .map((nodeName) => {
           const node = (nodes as Record<string, THREE.Mesh>)[nodeName];
@@ -151,10 +151,13 @@ export function CampusModelScene() {
 
       return {
         ...config,
+        floorIndex: mapData.buildingFloors[config.buildingId].indexOf(
+          config.meshName
+        ),
         subMeshNodes,
       };
     });
-  }, [nodes]);
+  }, [mapData, nodes]);
 
   return (
     // `dispose={null}` evita liberar recursos compartidos que useGLTF mantiene en
@@ -178,6 +181,7 @@ export function CampusModelScene() {
           rotation={floor.rotation}
           scale={floor.scale}
           subMeshNodes={floor.subMeshNodes}
+          floorIndex={floor.floorIndex}
         />
       ))}
 
