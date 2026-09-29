@@ -5,6 +5,8 @@ import { preloadCampusGLTF } from '@/three/models/CampusModel';
 
 export default function WelcomeScreen() {
   useEffect(() => {
+    // Aprovecha el tiempo de la bienvenida para cargar y parsear el GLB local; al
+    // navegar al mapa, useCampusGLTF reutiliza ese resultado desde la caché.
     preloadCampusGLTF();
   }, []);
 

@@ -1,7 +1,11 @@
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
 
-/** Closes the selected building and returns the camera to the campus overview. */
+/**
+ * Control 2D para abandonar la selección actual.
+ * `resetBuilding` colapsa los pisos mediante Zustand y, al mismo tiempo, dispara en
+ * CameraController la transición de regreso al encuadre general.
+ */
 export function BuildingCloseButton() {
   const selectedBuilding = useMapStore((state) => state.selectedBuilding);
   const resetBuilding = useMapStore((state) => state.resetBuilding);

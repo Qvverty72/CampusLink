@@ -1,13 +1,16 @@
 /**
- * CampusLink MVP — Map State (Zustand)
+ * Estado de interacción del mapa compartido por componentes 3D y React Native.
  *
- * Controls the interaction flow:
- * CAMPUS_VIEW → BUILDING_EXPLODED → FLOOR_MODAL → BUILDING_EXPLODED → CAMPUS_VIEW
+ * Zustand evita prop drilling entre Canvas, cámara, modal y controles flotantes.
+ * El flujo esperado es:
+ * CAMPUS_VIEW → BUILDING_EXPLODED → FLOOR_MODAL → BUILDING_EXPLODED → CAMPUS_VIEW.
  */
 
 import { create } from 'zustand';
 import type { BuildingId, MapState } from '@/three/types/map';
 
+// Cada consumidor usa un selector pequeño para rerenderizarse solo cuando cambia
+// la porción de estado que necesita; la animación por frame permanece en refs.
 export const useMapStore = create<MapState>((set) => ({
   // ─── Initial State ─────────────────────────────────────────────────────────
   selectedBuilding: null,
@@ -17,10 +20,7 @@ export const useMapStore = create<MapState>((set) => ({
 
   // ─── Actions ───────────────────────────────────────────────────────────────
 
-  /**
-   * Select a building → zoom + explode
-   * Resets any previously selected floor/modal.
-   */
+  /** Selecciona un edificio y deja el estado listo para zoom + exploded view. */
   selectBuilding: (buildingId: BuildingId) =>
     set({
       selectedBuilding: buildingId,
@@ -29,30 +29,21 @@ export const useMapStore = create<MapState>((set) => ({
       isFloorModalOpen: false,
     }),
 
-  /**
-   * Select a floor → show modal
-   * Only valid when a building is already exploded.
-   */
+  /** Guarda el piso elegido y abre su overlay informativo. */
   selectFloor: (floorId: string) =>
     set({
       selectedFloor: floorId,
       isFloorModalOpen: true,
     }),
 
-  /**
-   * Close the floor modal.
-   * Building stays exploded so user can select another floor.
-   */
+  /** Cierra el modal sin colapsar el edificio, permitiendo elegir otro piso. */
   closeFloorModal: () =>
     set({
       isFloorModalOpen: false,
       selectedFloor: null,
     }),
 
-  /**
-   * Reset to campus view.
-   * Triggered by the close button shown while a building is selected.
-   */
+  /** Restablece en conjunto toda la selección para volver a la vista del campus. */
   resetBuilding: () =>
     set({
       selectedBuilding: null,
