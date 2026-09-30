@@ -26,7 +26,8 @@
     "react-native-web": "^0.21.2",
     "three": "^0.185.0",
     "three-stdlib": "^2.36.0",
-    "zustand": "^5.0.0"
+    "zustand": "^5.0.0",
+    "react-native-safe-area-context": "5.9.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

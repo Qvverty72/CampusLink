@@ -1,3 +1,4 @@
+import { colors } from '@/theme/tokens';
 import { Stack } from 'expo-router';
 
 /** Navigation dedicated to the 3D map and future location detail screens. */
@@ -9,7 +10,7 @@ export default function MapLayout() {
         animation: 'fade',
         gestureEnabled: false,
         fullScreenGestureEnabled: false,
-        contentStyle: { backgroundColor: '#000' },
+        contentStyle: { backgroundColor: colors.background },
       }}
     />
   );

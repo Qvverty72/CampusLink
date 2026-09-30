@@ -1,3 +1,4 @@
+import { colors } from '@/theme/tokens';
 /**
  * Overlay React Native que presenta metadata del piso seleccionado.
  *
@@ -12,6 +13,7 @@ import {
   Text,
   TouchableOpacity,
   Modal,
+  ScrollView,
   StyleSheet,
 } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
@@ -54,6 +56,8 @@ export function FloorInfoModal() {
               <Text style={styles.subtitle}>{building.name}</Text>
             </View>
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar información del piso"
               onPress={closeFloorModal}
               style={styles.closeButton}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -66,7 +70,7 @@ export function FloorInfoModal() {
           <View style={styles.divider} />
 
           {/* Content */}
-          <View style={styles.content}>
+          <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
             <Text style={styles.description}>{floor.description}</Text>
 
             <View style={styles.infoRow}>
@@ -79,14 +83,10 @@ export function FloorInfoModal() {
               <Text style={styles.infoValue}>{building.name}</Text>
             </View>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>ID</Text>
-              <Text style={styles.infoValue}>{floor.meshName}</Text>
-            </View>
-          </View>
+          </ScrollView>
 
           {/* Footer */}
-          <TouchableOpacity onPress={closeFloorModal} style={styles.footerButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={closeFloorModal} style={styles.footerButton}>
             <Text style={styles.footerButtonText}>Cerrar</Text>
           </TouchableOpacity>
         </View>
@@ -100,20 +100,21 @@ export function FloorInfoModal() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     width: '100%',
     maxWidth: 400,
+    maxHeight: '100%',
     paddingVertical: 20,
     paddingHorizontal: 24,
     // Shadow
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 24,
@@ -131,39 +132,42 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1A1A2E',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#4A90D9',
+    color: colors.brandPrimary,
   },
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 48,
+    height: 48,
     borderRadius: 16,
-    backgroundColor: '#F0F0F5',
+    backgroundColor: colors.surfaceElevated,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeIcon: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: colors.textSecondary,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E8E8ED',
+    backgroundColor: colors.border,
     marginVertical: 16,
   },
   content: {
-    marginBottom: 20,
+    flexShrink: 1,
+  },
+  contentInner: {
+    paddingBottom: 20,
   },
   description: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#333',
+    color: colors.textPrimary,
     marginBottom: 16,
   },
   infoRow: {
@@ -172,26 +176,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F5',
+    borderBottomColor: colors.surfaceElevated,
   },
   infoLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#888',
+    color: colors.textSecondary,
   },
   infoValue: {
+    flexShrink: 1,
+    textAlign: 'right',
+    marginLeft: 12,
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A2E',
+    color: colors.textPrimary,
   },
   footerButton: {
-    backgroundColor: '#4A90D9',
+    backgroundColor: colors.brandPrimary,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
   footerButtonText: {
-    color: '#FFFFFF',
+    color: colors.onBrand,
     fontSize: 16,
     fontWeight: '600',
   },

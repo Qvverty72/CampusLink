@@ -1,3 +1,4 @@
+import { colors } from '@/theme/tokens';
 import { Stack } from 'expo-router';
 
 /** Navigation for welcome, authentication, account and profile screens. */
@@ -6,7 +7,7 @@ export default function UserLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#071A2B' },
+        contentStyle: { backgroundColor: colors.background },
       }}
     />
   );

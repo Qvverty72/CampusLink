@@ -1,3 +1,4 @@
+import { colors } from '@/theme/tokens';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
 
@@ -42,11 +43,11 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    backgroundColor: '#0B6E75',
+    borderColor: colors.border,
+    backgroundColor: colors.brandPrimary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
@@ -63,7 +64,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 2.5,
     borderRadius: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.onBrand,
   },
   closeIconLineForward: {
     transform: [{ rotate: '45deg' }],

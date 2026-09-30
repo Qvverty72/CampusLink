@@ -3,7 +3,7 @@
     "name": "CampusLink",
     "slug": "campuslink",
     "scheme": "campuslink",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "plugins": ["expo-router", "expo-asset"],
     "experiments": {
       "typedRoutes": true,

@@ -1,3 +1,4 @@
+import { colors } from '@/theme/tokens';
 /**
  * Contenedor nativo del Canvas y traductor de gestos táctiles.
  *
@@ -12,7 +13,6 @@ import {
   PanResponder,
   StyleSheet,
   type GestureResponderEvent,
-  type LayoutChangeEvent,
 } from 'react-native';
 import { Canvas } from '@react-three/fiber/native';
 import { CampusModelScene } from '@/three/components/CampusModel';
@@ -75,7 +75,7 @@ function getTouchDistance(touches: { pageX: number; pageY: number }[]): number {
 export function CampusMap() {
   // El layout permite traducir pageX/pageY del touch al rango NDC [-1, 1] que
   // espera THREE.Raycaster, independientemente del tamaño visible del Canvas.
-  const layoutRef = useRef({ x: 0, y: 0, width: 1, height: 1 });
+  const viewportRef = useRef<View>(null);
 
   // Los movimientos continuos no son estado declarativo de UI. Una ref ofrece al
   // controlador el valor más reciente sin generar renders durante cada gesto.
@@ -223,20 +223,22 @@ export function CampusMap() {
     if (!gs.hasMoved && elapsed < TAP_MAX_DURATION) {
       // NDC usa origen central, X hacia la derecha e Y hacia arriba; por eso Y se
       // invierte respecto de las coordenadas de pantalla de React Native.
-      const l = layoutRef.current;
-      const canvasX = gs.touchStartX - l.x;
-      const canvasY = gs.touchStartY - l.y;
-      gs.tapX = (canvasX / l.width) * 2 - 1;
-      gs.tapY = -(canvasY / l.height) * 2 + 1;
-      gs.hasPendingTap = true;
+      const { touchStartX, touchStartY } = gs;
+      // measure returns page coordinates, matching the touch coordinates even
+      // below a header/safe area. onLayout x/y are relative to the parent.
+      viewportRef.current?.measure((_x, _y, width, height, pageX, pageY) => {
+        if (width <= 0 || height <= 0) return;
+        const canvasX = touchStartX - pageX;
+        const canvasY = touchStartY - pageY;
+        if (canvasX < 0 || canvasY < 0 || canvasX > width || canvasY > height) return;
+        gs.tapX = (canvasX / width) * 2 - 1;
+        gs.tapY = -(canvasY / height) * 2 + 1;
+        gs.hasPendingTap = true;
+      });
     }
 
     gs.isGesturing = false;
     gs.gestureType = 'none';
-  }, []);
-
-  const handleLayout = useCallback((e: LayoutChangeEvent) => {
-    layoutRef.current = e.nativeEvent.layout;
   }, []);
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -244,7 +246,8 @@ export function CampusMap() {
   return (
     <View
       style={styles.container}
-      onLayout={handleLayout}
+      ref={viewportRef}
+      collapsable={false}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       {...panResponder.panHandlers}
@@ -275,7 +278,7 @@ export function CampusMap() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#87CEEB',
+    backgroundColor: colors.mapBackground,
   },
   canvas: {
     flex: 1,
