@@ -1,14 +1,14 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { router, usePathname, type Href } from 'expo-router';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme/tokens';
 
 export const go = (path: string) => router.push(path as Href);
 export const back = (fallback = '/') => router.canGoBack() ? router.back() : router.replace(fallback as Href);
 
 export function Button({ label, onPress, secondary = false, disabled = false }: { label: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} hitSlop={2} onPress={onPress}
     style={({ pressed }) => [ui.button, secondary && ui.secondaryButton, (pressed || disabled) && ui.dim]}>
     <Text style={[ui.buttonText, secondary && ui.secondaryButtonText]}>{label}</Text>
   </Pressable>;
@@ -30,7 +30,7 @@ export function AppHeader({ title = 'CampusLink', canGoBack = false }: { title?:
 export function Screen({ title, children, canGoBack = true }: { title: string; children: ReactNode; canGoBack?: boolean }) {
   return <KeyboardAvoidingView style={ui.fill} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <AppHeader canGoBack={canGoBack} />
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.page}>
+    <ScrollView style={ui.fill} keyboardShouldPersistTaps="handled" contentContainerStyle={ui.page}>
       <Text accessibilityRole="header" style={ui.title}>{title}</Text>
       {children}
     </ScrollView>
@@ -90,20 +90,23 @@ const ToastContext = createContext<(message: string) => void>(() => {});
 export const useToast = () => useContext(ToastContext);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   // A success from a previous screen must not look like feedback for a new task.
   useEffect(() => { clearTimeout(timer.current); setMessage(''); }, [pathname]);
   const show = (text: string) => { clearTimeout(timer.current); setMessage(text); timer.current = setTimeout(() => setMessage(''), 3500); };
+  const bottomNavigationVisible = !pathname.startsWith('/auth/') && !pathname.startsWith('/create/');
+  const toastBottom = bottomNavigationVisible ? Math.max(insets.bottom, 6) + 66 : Math.max(insets.bottom, 12);
   return <ToastContext.Provider value={show}><View style={ui.fill}>{children}
-    {!!message && <View pointerEvents="none" accessibilityLiveRegion="polite" style={ui.toast}><Text style={ui.toastText}>{message}</Text></View>}
+    {!!message && <View pointerEvents="none" accessibilityLiveRegion="polite" style={[ui.toast, { bottom: toastBottom }]}><Text numberOfLines={3} style={ui.toastText}>{message}</Text></View>}
   </View></ToastContext.Provider>;
 }
 
 export const ui = StyleSheet.create({
   fill: { flex: 1 }, grow: { flex: 1, minWidth: 0 },
-  page: { padding: 20, paddingBottom: 32, gap: 20, width: '100%', maxWidth: 920, alignSelf: 'center' },
+  page: { boxSizing: 'border-box', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 48, gap: 20, width: '100%', maxWidth: 920, alignSelf: 'center' },
   header: { paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   wordmark: { flex: 1, color: colors.brandPrimary, fontSize: 21, fontWeight: '700' },
   title: { color: colors.textPrimary, fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
@@ -114,9 +117,9 @@ export const ui = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
   section: { gap: 12, marginTop: 8 },
   card: { backgroundColor: colors.surface, borderRadius: 14, padding: 18, gap: 12, borderWidth: 1, borderColor: colors.border },
-  button: { minHeight: 48, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: colors.brandPrimary, justifyContent: 'center', alignItems: 'center' },
+  button: { maxWidth: '100%', minHeight: 48, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: colors.brandPrimary, justifyContent: 'center', alignItems: 'center' },
   secondaryButton: { backgroundColor: colors.surfaceElevated },
-  buttonText: { color: colors.onBrand, fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  buttonText: { flexShrink: 1, color: colors.onBrand, fontSize: 15, fontWeight: '600', textAlign: 'center' },
   secondaryButtonText: { color: colors.brandPrimary }, dim: { opacity: 0.55 },
   iconButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.surfaceElevated },
   bell: { width: 24, height: 26, alignItems: 'center' },
@@ -133,6 +136,6 @@ export const ui = StyleSheet.create({
   largePlaceholder: { minHeight: 160 },
   overlay: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.overlay }, sheetOverlay: { justifyContent: 'flex-end' },
   dialog: { width: '100%', maxWidth: 500, maxHeight: '90%', borderRadius: 16, backgroundColor: colors.surface }, sheet: { maxWidth: 680 }, dialogContent: { padding: 20, gap: 18 },
-  toast: { position: 'absolute', bottom: 80, left: 20, right: 20, maxWidth: 600, alignSelf: 'center', padding: 14, borderRadius: 12, backgroundColor: colors.textPrimary },
-  toastText: { color: colors.onBrand, fontSize: 14, textAlign: 'center' },
+  toast: { position: 'absolute', left: 16, right: 16, maxWidth: 480, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.textPrimary },
+  toastText: { color: colors.onBrand, fontSize: 14, lineHeight: 19, textAlign: 'center' },
 });
