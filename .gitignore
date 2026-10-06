@@ -8,8 +8,13 @@ coverage/
 *.log
 .DS_Store
 
-# Contexto local para agentes
-context/
+# Contexto local para agentes (no versionar)
+**/.agents/
+# Codex / Agents
 AGENTS.md
 .agents/
-**/.agents/
+
+# Contexto técnico de tareas
+context/
+**/.context/
+**/context/tasks/
