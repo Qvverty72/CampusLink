@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 
-/** Shared navigation for physical goods and the digital library. */
-export default function MarketplaceLayout() {
+/** Navigation for report listings and future report detail screens. */
+export default function ReportsLayout() {
   return (
     <Stack
       screenOptions={{
@@ -12,9 +12,6 @@ export default function MarketplaceLayout() {
         headerShadowVisible: false,
         contentStyle: { backgroundColor: '#F4F7F9' },
       }}
-    >
-      <Stack.Screen name={'(physicalgoods)'} options={{ animation: 'fade' }} />
-      <Stack.Screen name={'(elibrary)'} options={{ animation: 'fade' }} />
-    </Stack>
+    />
   );
 }
