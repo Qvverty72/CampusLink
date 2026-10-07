@@ -3,7 +3,7 @@ import { Link, type Href } from 'expo-router';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { preloadCampusGLTF } from '@/three/models/CampusModel';
 
-export default function WelcomeScreen() {
+export default function LoginScreen() {
   useEffect(() => {
     // Aprovecha el tiempo de la bienvenida para cargar y parsear el GLB local; al
     // navegar al mapa, useCampusGLTF reutiliza ese resultado desde la caché.

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { router, type Href, usePathname } from 'expo-router';
 import {
   Pressable,
   SafeAreaView,
@@ -10,6 +11,7 @@ import {
 export interface BottomNavigationItem {
   id: string;
   label: string;
+  href?: Href;
   /** Replace this later with the final icon component. */
   icon?: ReactNode;
 }
@@ -21,10 +23,10 @@ interface BottomNavigationBarProps {
 }
 
 export const DEFAULT_BOTTOM_NAVIGATION_ITEMS: BottomNavigationItem[] = [
-  { id: 'home', label: 'Inicio' },
-  { id: 'map', label: 'Mapa' },
-  { id: 'marketplace', label: 'Mercado' },
-  { id: 'profile', label: 'Perfil' },
+  { id: 'home', label: 'Mi Perfil', href: '/profile' },
+  { id: 'map', label: 'Mapa', href: '/map' },
+  { id: 'physicalgoods', label: 'Mercado', href: '/physicalgoods' },
+  { id: 'elibrary', label: 'Biblioteca', href: '/elibrary' },
 ];
 
 /** Horizontal separation between navigation options. */
@@ -36,11 +38,33 @@ export function BottomNavigationBar({
   activeItemId,
   onItemPress,
 }: BottomNavigationBarProps) {
+  const pathname = usePathname();
+  const currentItemId =
+    activeItemId ??
+    items.find(
+      (item) => typeof item.href === 'string' && item.href === pathname,
+    )?.id;
+
+  const handleItemPress = (item: BottomNavigationItem) => {
+    if (typeof item.href === 'string' && item.href === pathname) {
+      return;
+    }
+
+    if (onItemPress) {
+      onItemPress(item.id);
+      return;
+    }
+
+    if (item.href) {
+      router.replace(item.href);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.bar}>
         {items.map((item) => {
-          const isActive = item.id === activeItemId;
+          const isActive = item.id === currentItemId;
 
           return (
             <Pressable
@@ -48,7 +72,7 @@ export function BottomNavigationBar({
               accessibilityRole="button"
               accessibilityLabel={item.label}
               accessibilityState={{ selected: isActive }}
-              onPress={() => onItemPress?.(item.id)}
+              onPress={() => handleItemPress(item)}
               style={({ pressed }) => [
                 styles.item,
                 pressed && styles.itemPressed,

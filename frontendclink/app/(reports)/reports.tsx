@@ -1,14 +1,18 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 
-export default function MarketplaceScreen() {
+export default function ReportsScreen() {
   return (
     <View style={styles.container}>
+      <View style={styles.content}>
       <Text style={styles.eyebrow}>CAMPUSLINK</Text>
-      <Text style={styles.title}>Marketplace</Text>
+      <Text style={styles.title}>Reportes</Text>
       <Text style={styles.description}>
-        Este espacio está preparado para las futuras publicaciones, búsquedas y
-        transacciones de la comunidad.
+        Esta pantalla base está preparada para el futuro historial, detalle y
+        exportación de reportes.
       </Text>
+      </View>
+      <BottomNavigationBar />
     </View>
   );
 }
@@ -16,9 +20,12 @@ export default function MarketplaceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F4F7F9',
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 28,
-    backgroundColor: '#F4F7F9',
   },
   eyebrow: {
     color: '#0B6E75',

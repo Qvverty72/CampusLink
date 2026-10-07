@@ -8,8 +8,8 @@ import {
 
 import { CampusMapViewport } from '@/three/components/CampusMapViewport';
 import { FloorInfoModal } from '@/three/components/FloorInfoModal';
-import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useMapDataStore } from '@/three/store/mapDataStore';
+import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 
 export default function MapScreen() {
   const data = useMapDataStore((state) => state.data);
@@ -22,32 +22,39 @@ export default function MapScreen() {
 
   if (!data) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        {!error ? (
-          <>
-            <ActivityIndicator size="large" />
-            <Text style={styles.statusText}>Cargando mapa del campus...</Text>
-          </>
-        ) : (
-          <Text style={styles.errorText}>
-            {error ?? 'No se pudo cargar el mapa del campus.'}
-          </Text>
-        )}
+      <View style={styles.screen}>
+        <View style={[styles.container, styles.centered]}>
+          {!error ? (
+            <>
+              <ActivityIndicator size={'large'} />
+              <Text style={styles.statusText}>Cargando mapa del campus...</Text>
+            </>
+          ) : (
+            <Text style={styles.errorText}>
+              {error ?? 'No se pudo cargar el mapa del campus.'}
+            </Text>
+          )}
+        </View>
+        <BottomNavigationBar activeItemId={'map'} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <CampusMapViewport />
-
-      <BottomNavigationBar activeItemId="map" />
-      <FloorInfoModal />
+    <View style={styles.screen}>
+      <View style={styles.container}>
+        <CampusMapViewport />
+        <FloorInfoModal />
+      </View>
+      <BottomNavigationBar activeItemId={'map'} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
