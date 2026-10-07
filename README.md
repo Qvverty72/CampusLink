@@ -1,287 +1,551 @@
 # CampusLink
 
-Plataforma móvil para conectar a la comunidad estudiantil mediante el intercambio de recursos académicos, un marketplace entre estudiantes y un mapa 3D de actividades dentro del campus.
+**CampusLink** es una aplicación móvil orientada a la comunidad estudiantil que busca centralizar recursos académicos, intercambio de artículos entre estudiantes, actividades dentro del campus y navegación mediante un mapa 3D interactivo.
 
+El proyecto se desarrolla como **Capstone de Ingeniería en Informática** y actualmente se encuentra en una etapa de construcción e integración progresiva de sus módulos principales.
 
-## El problema
+---
 
-Los estudiantes suelen tener dificultades para encontrar material de estudio relevante, reutilizar recursos académicos y descubrir actividades que ocurren dentro de su institución. La información está dispersa, los recursos dejan de utilizarse y no siempre existe un canal confiable para conectar a estudiantes de distintos niveles.
+## ¿Qué problema busca resolver?
 
-## La propuesta
+La información útil para la vida estudiantil suele encontrarse dispersa entre distintos canales. Esto dificulta:
 
-CampusLink centraliza tres experiencias principales:
+- Encontrar apuntes, guías y material relacionado con una asignatura.
+- Reutilizar recursos físicos entre estudiantes.
+- Descubrir actividades, talleres o grupos de estudio.
+- Ubicar espacios y actividades dentro del campus.
+- Generar confianza durante intercambios entre estudiantes.
 
-- **Recursos académicos:** publicación y búsqueda de apuntes, resúmenes y guías creadas por los propios estudiantes, organizadas por carrera y asignatura.
-- **Marketplace estudiantil:** intercambio de libros, calculadoras, guías impresas, materiales de laboratorio, uniformes y otros recursos mediante venta o donación.
-- **Mapa y comunidad:** visualización de edificios, actividades y puntos de interés mediante un mapa 3D interactivo del campus.
+CampusLink busca reunir estas necesidades dentro de una sola plataforma móvil.
 
-La plataforma busca facilitar que estudiantes de años superiores compartan recursos útiles con quienes recién ingresan, fomentar la reutilización y mejorar el acceso a información relevante para la vida académica.
+---
 
-## Funcionalidades
+## Funcionalidades principales
 
-### Usuarios
+### Recursos académicos
 
-- Registro e inicio de sesión.
-- Perfiles asociados a carrera y asignaturas.
-- Gestión de roles y permisos para usuarios institucionales verificados, usuarios autorizados y administradores.
-- Verificación en dos pasos para publicar recursos.
-- Reputación basada en transacciones e interacciones completadas.
+- Publicación de apuntes, guías y otros recursos digitales.
+- Asociación de recursos a carreras y asignaturas.
+- Búsqueda y filtrado de contenido.
+- Registro de acceso e interacción con recursos.
+- Sistema de reputación y valoraciones.
 
-### Recursos y marketplace
+### Marketplace estudiantil
 
-- Publicación de material digital original creado por estudiantes.
-- Publicación de recursos físicos para venta o donación.
-- Clasificación por carrera, asignatura, tipo de recurso y modalidad.
-- Búsqueda y filtrado de publicaciones.
-- Solicitudes, reservas y confirmación de entrega.
-- Calificación de la experiencia entre participantes.
+- Publicación de recursos físicos.
+- Venta o donación entre estudiantes.
+- Solicitudes y reservas.
+- Confirmación de transacciones.
+- Valoración posterior a los intercambios.
 
-### Recomendaciones de recursos
+CampusLink **no procesa pagos electrónicos**. Los acuerdos económicos se realizan directamente entre los usuarios.
 
-- Sugerencias según carrera y asignaturas cursadas.
-- Priorización según relevancia, reputación e historial de interacción.
+### Mapa 3D del campus
 
-### Mapa y actividades
+- Visualización interactiva del campus.
+- Selección de edificios.
+- Exploración por pisos.
+- Información asociada a cada piso.
+- Soporte para puntos de interés.
+- Datos del mapa obtenidos dinámicamente desde el backend.
 
-- Exploración del campus mediante un modelo 3D en formato GLB.
-- Selección de edificios y visualización interactiva de sus pisos.
-- Creación de grupos de estudio, talleres y actividades deportivas.
-- Consulta de ubicación, fecha, horario y descripción de cada actividad.
-- Participación de estudiantes en eventos.
-- Publicación de eventos y puntos oficiales por usuarios autorizados.
+El modelo visual se maneja desde React Three Fiber y los datos estructurales del mapa se almacenan en MongoDB.
 
-### Administración y analítica
+### Actividades
 
-- Indicadores de usuarios, publicaciones y transacciones.
-- Recursos y asignaturas con mayor demanda.
-- Estadísticas de participación en actividades.
-- Moderación de contenido reportado.
-- Reportes para apoyar la evolución de la plataforma.
+El modelo contempla:
 
-## Estado de implementación
+- Grupos de estudio.
+- Talleres.
+- Actividades deportivas.
+- Actividades comunitarias.
+- Eventos oficiales.
+- Ubicación de actividades dentro de edificios, pisos y puntos de interés.
+- Participación de estudiantes en actividades.
 
-| Módulo | Estado |
+### Recomendaciones
+
+La arquitectura de datos contempla información suficiente para desarrollar recomendaciones considerando, entre otras señales:
+
+- Carrera del estudiante.
+- Asignaturas.
+- Recursos consultados.
+- Interacciones.
+- Historial de acceso.
+- Reputación.
+- Valoraciones.
+- Popularidad y demanda.
+
+El algoritmo de recomendación todavía no se encuentra implementado.
+
+### Administración, moderación y reportería
+
+El alcance contempla:
+
+- Gestión de usuarios y permisos.
+- Moderación de contenido.
+- Reportes y denuncias.
+- Auditoría.
+- Indicadores de uso.
+- Analítica de recursos y transacciones.
+- Información para reportería administrativa.
+
+---
+
+# Estado actual
+
+> Estado general del desarrollo: **en construcción / integración**.
+
+| Área | Estado actual |
 |---|---|
-| Pantalla de bienvenida y navegación | En funcionamiento |
-| Mapa 3D del campus | MVP funcional |
-| Selección de edificios y pisos | MVP funcional |
-| API REST y endpoint de salud | Base funcional |
-| Autenticación y perfiles | Planificado |
-| Marketplace y transacciones | En diseño |
-| Actividades sobre el mapa | Planificado |
-| Recomendaciones | Planificado |
-| Analítica y reportería | Planificado |
+| Navegación principal móvil | ✅ Implementada |
+| Diseño base y componentes UI | ✅ Implementado |
+| Pantallas maestras | 🟡 Implementadas con datos de demostración |
+| Inicio | 🟡 Maqueta funcional |
+| Marketplace | 🟡 Interfaz funcional con mocks |
+| Biblioteca / recursos | 🟡 Interfaz funcional con mocks |
+| Actividades | 🟡 Interfaz y flujo base con mocks |
+| Autenticación | 🟡 Interfaz implementada, autenticación real pendiente |
+| Mapa 3D | ✅ MVP funcional |
+| Edificios y pisos | ✅ Funcionales |
+| Mapa conectado al backend | ✅ Implementado |
+| MongoDB | ✅ Conectado al backend |
+| Endpoint de mapa activo | ✅ Implementado |
+| Esquema MongoDB | ✅ Definido |
+| Esquema Supabase/PostgreSQL | ✅ Definido y versionado |
+| Marketplace backend | ⏳ Pendiente |
+| Recursos académicos backend | ⏳ Pendiente |
+| Actividades backend completas | ⏳ Pendiente |
+| Recomendaciones | ⏳ Pendiente |
+| Moderación | ⏳ Pendiente |
+| Analítica y reportería | ⏳ Pendiente |
+| Deploy de producción | ⏳ Pendiente |
 
-## Arquitectura
+Las pantallas maestras actualmente permiten validar navegación, diseño y experiencia de usuario antes de conectar cada módulo con sus servicios reales.
+
+---
+
+# Arquitectura
+
+CampusLink sigue una arquitectura **Cliente-Servidor**, con separación entre presentación, lógica de aplicación y persistencia.
 
 ```text
-┌─────────────────────────────────────┐
-│ Aplicación móvil                    │
-│ React Native + Expo + Expo Router   │
-│                                     │
-│ Usuario · Mapa 3D · Marketplace     │
-└──────────────────┬──────────────────┘
-                   │ API REST
-┌──────────────────▼──────────────────┐
-│ Backend                             │
-│ Node.js + Express + TypeScript      │
-│ Autenticación · Negocio · Reportes  │
-└──────────────────┬──────────────────┘
-                   │
-┌──────────────────▼──────────────────┐
-│ Persistencia                        │
-│ Supabase / PostgreSQL               │
-│ MongoDB para actividades del mapa   │
-└─────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│              Aplicación móvil              │
+│                                            │
+│   React Native · Expo · Expo Router        │
+│   Zustand · React Three Fiber              │
+│                                            │
+│   Inicio · Mapa · Marketplace · Biblioteca │
+└─────────────────────┬──────────────────────┘
+                      │
+                      │ HTTP / REST
+                      ▼
+┌────────────────────────────────────────────┐
+│                 Backend API                │
+│                                            │
+│       Node.js · Express · TypeScript       │
+│                                            │
+│  Controllers · Services · Repositories     │
+└──────────────┬─────────────────┬───────────┘
+               │                 │
+               ▼                 ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│ Supabase/PostgreSQL  │  │       MongoDB        │
+│                      │  │                      │
+│ Dominio relacional   │  │ Mapa y actividades  │
+│ Usuarios             │  │ Edificios y pisos   │
+│ Recursos             │  │ POIs                 │
+│ Transacciones        │  │ Participaciones      │
+│ Valoraciones         │  │                      │
+│ Reportería           │  │                      │
+└──────────────────────┘  └──────────────────────┘
 ```
 
-### Organización actual del repositorio
+El frontend no accede directamente a MongoDB. Los datos del mapa se solicitan mediante la API REST del backend.
 
-El proyecto está dividido en dos aplicaciones independientes. El frontend contiene la
-navegación móvil y mantiene todo el dominio del mapa 3D aislado en `src/three`. El
-backend expone actualmente la base de la API REST y crecerá de forma modular.
+---
+
+# Persistencia
+
+CampusLink utiliza dos tecnologías de persistencia con responsabilidades diferentes.
+
+## Supabase / PostgreSQL
+
+Supabase contiene el dominio principalmente relacional de la aplicación.
+
+El esquema actual se encuentra versionado mediante:
+
+```text
+backendclink/supabase/migrations/
+└── 20260930183930_campuslink_final_schema.sql
+```
+
+La migración actual contiene **33 tablas**:
+
+```text
+institucion
+campus
+carrera
+asignatura
+campus_carrera
+carrera_asignatura
+
+perfil_usuario
+usuario_carrera
+usuario_asignatura
+
+rol
+permiso
+rol_permiso
+usuario_rol
+usuario_permiso
+
+publicacion_recurso
+recurso_digital
+categoria_recurso_fisico
+recurso_fisico
+archivo_publicacion
+publicacion_carrera
+publicacion_asignatura
+
+mensaje_solicitud
+solicitud_recurso
+transaccion_recurso
+confirmacion_transaccion
+valoracion
+
+acceso_recurso_digital
+notificacion
+interaccion_recurso
+
+reporte_contenido
+auditoria
+reporte
+dominio_institucional
+```
+
+El esquema contempla usuarios, carreras, asignaturas, publicaciones, transacciones, valoraciones, permisos, reportes, auditoría y datos necesarios para futura analítica y recomendaciones.
+
+---
+
+## MongoDB
+
+MongoDB almacena información documental asociada principalmente al mapa y las actividades.
+
+Actualmente se definen las colecciones:
+
+```text
+campus_maps
+activities
+activity_participations
+```
+
+### `campus_maps`
+
+Contiene:
+
+- Campus.
+- Versión del mapa.
+- Estado `DRAFT`, `ACTIVE` o `ARCHIVED`.
+- Modelo 3D asociado.
+- Edificios.
+- Pisos.
+- Transformaciones.
+- Submeshes.
+- Puntos de interés.
+
+Solo puede existir **un mapa ACTIVE por campus**.
+
+### `activities`
+
+Contempla actividades vinculadas a:
+
+- Campus.
+- Usuario creador.
+- Versión del mapa.
+- Edificio.
+- Piso.
+- Punto de interés.
+- Fecha y horario.
+- Tipo de actividad.
+- Estado.
+
+### `activity_participations`
+
+Relaciona usuarios con actividades y registra su participación.
+
+Los identificadores UUID permiten relacionar documentos de MongoDB con entidades almacenadas en Supabase sin duplicar el dominio relacional.
+
+El bootstrap de Mongo se encuentra en:
+
+```text
+backendclink/src/database/mongodb/
+├── client.ts
+└── 001_create_collections.mongosh.js
+```
+
+Este script crea o actualiza:
+
+- Colecciones.
+- Validadores JSON Schema.
+- Restricciones.
+- Índices.
+- Reglas de unicidad.
+
+---
+
+# API REST
+
+La API utiliza el prefijo:
+
+```text
+/api/v1
+```
+
+## Endpoints implementados actualmente
+
+### Health check
+
+```http
+GET /api/v1/health
+```
+
+Respuesta:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### Obtener mapa activo
+
+```http
+GET /api/v1/maps/:campusId/active
+```
+
+Este endpoint obtiene desde MongoDB la versión activa del mapa correspondiente al campus.
+
+El flujo interno sigue:
+
+```text
+Route
+  ↓
+Controller
+  ↓
+Service
+  ↓
+Repository
+  ↓
+MongoDB
+```
+
+El frontend consume este endpoint y adapta la respuesta al formato utilizado por el mapa 3D.
+
+---
+
+# Mapa 3D
+
+El dominio del mapa se mantiene aislado del resto del frontend dentro de:
+
+```text
+frontendclink/src/three/
+```
+
+Actualmente incluye:
+
+```text
+three/
+├── api/          # Comunicación con la API del mapa
+├── components/   # Escena y elementos 3D
+├── controls/     # Cámara e interacción
+├── data/         # Datos auxiliares
+├── models/       # Modelo GLB
+├── store/        # Estado del mapa con Zustand
+└── types/        # Contratos del dominio 3D
+```
+
+El mapa activo se carga mediante:
+
+```text
+MongoDB
+   ↓
+Backend
+   ↓
+GET /api/v1/maps/:campusId/active
+   ↓
+mapApi.ts
+   ↓
+mapDataStore.ts
+   ↓
+Mapa 3D
+```
+
+De esta forma, la configuración de edificios y pisos no necesita permanecer hardcodeada dentro de la aplicación.
+
+---
+
+# Estructura actual del repositorio
 
 ```text
 CampusLink/
+│
 ├── frontendclink/
-│   ├── app/                 # Rutas y layouts de Expo Router
-│   ├── assets/models/       # Modelo 3D del campus
-│   └── src/
-│       ├── components/ui/   # Componentes visuales compartidos
-│       ├── features/        # Base para módulos funcionales
-│       ├── hooks/           # Hooks reutilizables
-│       ├── lib/             # Clientes de API y servicios externos
-│       └── three/           # Mapa 3D, controles, datos, estado y tipos
+│   ├── app/
+│   │   ├── (map)/
+│   │   ├── (marketplace)/
+│   │   ├── (user)/
+│   │   ├── auth/
+│   │   ├── create/
+│   │   ├── detail/
+│   │   └── _layout.tsx
+│   │
+│   ├── assets/
+│   │
+│   ├── src/
+│   │   ├── components/
+│   │   ├── features/
+│   │   ├── hooks/
+│   │   ├── lib/
+│   │   ├── mocks/
+│   │   ├── screens/
+│   │   ├── store/
+│   │   ├── theme/
+│   │   ├── three/
+│   │   └── types/
+│   │
+│   ├── .env.example
+│   └── package.json
+│
 ├── backendclink/
-│   ├── src/config/          # Configuración y variables de entorno
-│   ├── src/routes/          # Registro actual de rutas de la API
-│   ├── src/app.ts           # Configuración de Express
-│   ├── src/server.ts        # Inicio del servidor
-│   ├── supabase/            # Recursos de persistencia relacional
-│   ├── tests/               # Pruebas del backend
-│   └── Dockerfile
+│   ├── src/
+│   │   ├── config/
+│   │   ├── database/
+│   │   │   └── mongodb/
+│   │   ├── middleware/
+│   │   ├── modules/
+│   │   │   ├── auth/
+│   │   │   ├── campus/
+│   │   │   ├── maps/
+│   │   │   └── users/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── types/
+│   │   ├── app.ts
+│   │   └── server.ts
+│   │
+│   ├── supabase/
+│   │   ├── migrations/
+│   │   ├── config.toml
+│   │   └── seed.sql
+│   │
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── .env.example
+│   └── package.json
+│
 └── README.md
 ```
 
-### Estructura futura del frontend
+---
 
-El frontend evolucionará hacia una arquitectura organizada por funcionalidades. La
-carpeta `app` seguirá siendo responsable únicamente de las rutas y layouts; la lógica,
-los componentes y el acceso a datos de cada módulo vivirán en `src/features`.
+# Tecnologías
 
-```text
-frontendclink/
-├── app/
-│   ├── (user)/              # Rutas de acceso, perfil y cuenta
-│   ├── (map)/               # Rutas que presentan el mapa
-│   ├── (marketplace)/       # Rutas del marketplace
-│   ├── (resources)/         # Rutas de recursos académicos
-│   └── (admin)/             # Rutas protegidas de administración
-├── assets/
-│   ├── images/              # Imágenes e iconos estáticos
-│   └── models/              # Archivos GLB y recursos del mapa
-└── src/
-    ├── components/
-    │   └── ui/              # Botones, modales y elementos reutilizables
-    ├── features/
-    │   ├── auth/            # Sesión, registro y verificación
-    │   ├── profile/         # Perfil, carrera y preferencias
-    │   ├── campus/          # Información general del campus
-    │   ├── marketplace/     # Publicaciones, reservas y transacciones
-    │   ├── resources/       # Materiales académicos y búsquedas
-    │   ├── activities/      # Eventos y participación de estudiantes
-    │   └── admin/           # Moderación, métricas y reportería
-    ├── three/
-    │   ├── components/      # Escena y componentes renderizados
-    │   ├── controls/        # Cámara, gestos e interacción 3D
-    │   ├── data/            # Configuración de edificios y pisos
-    │   ├── models/          # Carga y tipado de modelos GLB
-    │   ├── store/           # Estado exclusivo del mapa
-    │   └── types/           # Contratos del dominio 3D
-    ├── hooks/               # Hooks compartidos por varios módulos
-    ├── lib/
-    │   ├── api/             # Cliente HTTP y configuración de endpoints
-    │   └── supabase/        # Cliente y utilidades de Supabase
-    ├── store/               # Estado global realmente compartido
-    └── types/               # Tipos comunes de toda la aplicación
-```
-
-Cada carpeta dentro de `features` podrá incorporar sus propios `components`, `hooks`,
-`services`, `store` y `types` cuando el módulo lo necesite. De esta forma, el código
-específico de una funcionalidad permanece junto y solamente los elementos utilizados
-por varios módulos se trasladan a las carpetas compartidas.
-
-`src/three` se mantendrá como una frontera independiente: allí residirá todo lo que
-dependa de Three.js, React Three Fiber o del modelo GLB. Las funcionalidades como
-actividades o información del campus podrán consumir el mapa mediante su interfaz
-pública, pero no mezclarán sus reglas de negocio con el renderizado 3D.
-
-### Estructura futura del backend
-
-El backend crecerá como una API modular por dominios. Cada módulo será responsable de
-su flujo HTTP, validaciones, reglas de negocio y acceso a persistencia. Esto permitirá
-cambiar una base de datos o reutilizar servicios sin acoplarlos directamente a
-Express.
-
-```text
-backendclink/
-├── src/
-│   ├── config/              # Entorno, conexiones y configuración global
-│   ├── middlewares/         # Autenticación, autorización y errores
-│   ├── modules/
-│   │   ├── auth/            # Sesiones y verificación de identidad
-│   │   ├── users/           # Perfiles, roles y reputación
-│   │   ├── resources/       # Recursos académicos y archivos
-│   │   ├── marketplace/     # Publicaciones, reservas y transacciones
-│   │   ├── activities/      # Eventos y puntos asociados al mapa
-│   │   ├── recommendations/ # Reglas de recomendación
-│   │   └── admin/           # Moderación, analítica y reportes
-│   ├── shared/
-│   │   ├── errors/          # Errores comunes de la aplicación
-│   │   ├── types/           # Contratos compartidos
-│   │   └── utils/           # Utilidades sin dependencia de un dominio
-│   ├── routes/              # Composición y versionado de rutas
-│   ├── app.ts               # Creación y configuración de Express
-│   └── server.ts            # Conexiones e inicio del proceso
-├── supabase/
-│   ├── migrations/          # Evolución versionada del esquema PostgreSQL
-│   └── seed/                # Datos iniciales para desarrollo
-├── tests/
-│   ├── unit/                # Pruebas de reglas de negocio
-│   └── integration/         # Pruebas de API y persistencia
-└── Dockerfile
-```
-
-Como convención, un módulo podrá dividirse internamente en `controller`, `service`,
-`repository`, `routes`, `schemas` y `types`. Los controladores traducirán las
-peticiones HTTP, los servicios implementarán las reglas de negocio y los repositorios
-encapsularán el acceso a Supabase/PostgreSQL o MongoDB.
-
-Supabase/PostgreSQL almacenará la información relacional, como usuarios,
-publicaciones y transacciones. MongoDB quedará reservado para la información
-documental vinculada al mapa y sus actividades. Las decisiones definitivas de modelo
-de datos se documentarán antes de implementar cada módulo.
-
-## Tecnologías
-
-### Frontend
+## Frontend
 
 | Tecnología | Uso |
 |---|---|
-| TypeScript | Tipado estático y mantenibilidad |
-| React Native | Interfaz móvil multiplataforma |
+| React Native | Aplicación móvil |
 | Expo | Entorno de desarrollo y distribución |
 | Expo Router | Navegación basada en archivos |
-| NativeWind / Tailwind CSS | Sistema de estilos |
-| Zustand | Estado global |
-| React Three Fiber | Renderizado 3D declarativo |
-| Drei | Utilidades para Three.js y carga de modelos |
-| gltf.pmnd.rs / gltfjsx | Optimización y generación de componentes desde GLTF/GLB |
+| TypeScript | Tipado estático |
+| NativeWind / Tailwind CSS | Estilos |
+| Zustand | Manejo de estado |
+| Three.js | Renderizado 3D |
+| React Three Fiber | Integración declarativa de Three.js con React |
+| Drei | Utilidades para React Three Fiber |
 
-### Modelado 3D
+Actualmente el proyecto utiliza **Expo 57**, **React Native 0.86** y **React 19**.
 
-El campus se modela en **Blender** y se exporta en formato **GLB**. Cada edificio y piso utiliza nombres identificables para permitir selección, animaciones y asociación con información de la plataforma.
-
-### Backend
+## Backend
 
 | Tecnología | Uso |
 |---|---|
-| TypeScript | Tipado de servicios y reglas de negocio |
-| Node.js | Entorno de ejecución |
+| Node.js 22 | Runtime |
 | Express | API REST |
+| TypeScript | Desarrollo tipado |
+| MongoDB Driver | Acceso a MongoDB |
+| Supabase JS | Integración con Supabase |
+| Helmet | Cabeceras de seguridad |
+| CORS | Control de acceso HTTP |
 | Docker | Construcción y ejecución reproducible |
 
-### Base de datos
+## Persistencia
 
-La integración actual está preparada para **Supabase**, utilizando **PostgreSQL** como base relacional. **MongoDB** se usará para todo lo que tenga que ver con el mapa y sus actividades.
+| Tecnología | Responsabilidad |
+|---|---|
+| PostgreSQL / Supabase | Dominio relacional |
+| MongoDB | Mapa, actividades y participación |
+| Supabase Migrations | Versionamiento del esquema relacional |
+| MongoDB JSON Schema | Validación documental |
 
-## Requisitos
+## Modelado 3D
 
-- Node.js 22 o superior.
+El campus se modela mediante **Blender** y se exporta como **GLB**.
+
+---
+
+# Requisitos
+
+Para trabajar con el proyecto se recomienda:
+
+- Node.js 22.
 - npm.
-- Expo Go o un emulador Android/iOS para probar la aplicación.
-- Docker, opcional, para ejecutar el backend en un contenedor.
-- Un proyecto de Supabase para utilizar persistencia y autenticación reales.
+- Git.
+- Expo Go o emulador Android/iOS.
+- Docker, opcional para el backend.
+- Acceso al proyecto de Supabase.
+- Acceso a MongoDB.
+- Supabase CLI para administrar migraciones.
+- `mongosh` para tareas de configuración de MongoDB.
 
-## Instalación
+---
 
-Clona el repositorio y entra en su directorio:
+# Instalación
+
+## 1. Clonar el repositorio
 
 ```bash
-git clone <URL_DEL_REPOSITORIO>
-cd "Code CampusLink"
+git clone https://github.com/Qvverty72/CampusLink.git
+cd CampusLink
 ```
 
-### Frontend
+---
+
+## 2. Frontend
 
 ```bash
 cd frontendclink
 npm install
-cp .env.example .env
+```
+
+Crear `.env` a partir de `.env.example`.
+
+```env
+EXPO_PUBLIC_API_URL=http://localhost:3000
+
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+Luego:
+
+```bash
 npm run start
 ```
 
-Desde la consola de Expo puedes abrir el proyecto en Expo Go, Android, iOS o web. También están disponibles estos comandos:
+También se encuentran disponibles:
 
 ```bash
 npm run android
@@ -290,87 +554,247 @@ npm run web
 npm run typecheck
 ```
 
-### Backend
+### Probar desde un teléfono físico
 
-En otra terminal:
+`localhost` desde el teléfono apunta al propio teléfono, no al computador.
+
+Para utilizar el backend desde Expo Go se debe configurar la IP local del PC:
+
+```env
+EXPO_PUBLIC_API_URL=http://192.168.X.X:3000
+```
+
+El computador y el dispositivo móvil deben poder comunicarse dentro de la misma red.
+
+---
+
+# Backend
+
+## Ejecución local
 
 ```bash
 cd backendclink
 npm install
-cp .env.example .env
+```
+
+Crear:
+
+```text
+backendclink/.env
+```
+
+Ejemplo:
+
+```env
+MONGODB_URI=mongodb+srv://...
+MONGODB_DB_NAME=campuslink
+
+PORT=3000
+NODE_ENV=development
+```
+
+Después:
+
+```bash
 npm run dev
 ```
 
-La API se inicia por defecto en `http://localhost:3000`. Puedes comprobarla mediante:
+El backend comprobará primero la conexión a MongoDB.
 
-```http
-GET http://localhost:3000/api/v1/health
+Si la conexión falla, el servidor no comienza a aceptar requests.
+
+Con una conexión correcta:
+
+```text
+MongoDB connected to database "campuslink"
+CampusLink API running on port 3000
 ```
-
-Respuesta esperada:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-### Backend con Docker
-
-Desde la raíz del repositorio:
-
-```bash
-docker build -t campuslink-api ./backendclink
-docker run --env-file ./backendclink/.env -p 3000:3000 campuslink-api
-```
-
-## Variables de entorno
-
-### Frontend — `frontendclink/.env`
-
-```env
-EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1
-EXPO_PUBLIC_SUPABASE_URL=
-EXPO_PUBLIC_SUPABASE_ANON_KEY=
-```
-
-### Backend — `backendclink/.env`
-
-```env
-PORT=3000
-NODE_ENV=development
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-```
-
-No deben subirse credenciales reales al repositorio. Las claves de servicio de Supabase solo deben utilizarse en el backend.
-
-## Alcance y responsabilidades
-
-CampusLink facilita el contacto y registra el flujo de intercambio, pero:
-
-- No procesa pagos electrónicos dentro de la plataforma.
-- No verifica físicamente el estado, calidad o disponibilidad de los recursos.
-- No garantiza acuerdos realizados fuera de la aplicación.
-- No permite publicar material de terceros protegido por derechos de autor sin autorización.
-- No realiza seguimiento GPS continuo de los estudiantes.
-- No reemplaza los canales oficiales de comunicación de la institución.
-- No incorpora publicidad comercial pagada en su alcance inicial.
-- No requiere desarrollo nativo específico para cada sistema operativo durante la primera versión; se utiliza Expo y React Native.
-
-Cada usuario es responsable del contenido que publica y de comprobar que posee los derechos necesarios para compartirlo.
-
-## Hoja de ruta
-
-1. Consolidar navegación, diseño visual y mapa 3D.
-2. Implementar autenticación, perfiles, roles y verificación en dos pasos.
-3. Diseñar el modelo de datos definitivo en Supabase/PostgreSQL.
-4. Construir publicaciones, búsqueda y filtros del marketplace.
-5. Implementar solicitudes, reservas, confirmaciones y reputación.
-6. Incorporar actividades y puntos de interés al mapa.
-7. Añadir recomendaciones basadas en reglas e historial de interacción.
-8. Desarrollar moderación, analítica y reportería administrativa.
 
 ---
 
-**CampusLink** busca que los recursos, espacios y oportunidades de la comunidad estudiantil sean más fáciles de descubrir, compartir y reutilizar.
+# Backend con Docker
+
+Desde:
+
+```bash
+cd backendclink
+```
+
+ejecutar:
+
+```bash
+docker compose up --build
+```
+
+Esto construye y ejecuta el backend como:
+
+```text
+campuslink-api
+```
+
+en:
+
+```text
+http://localhost:3000
+```
+
+Para detenerlo:
+
+```bash
+docker compose down
+```
+
+> El `docker-compose.yml` actual dockeriza el **backend**, no Supabase ni MongoDB. El contenedor utiliza la conexión MongoDB indicada mediante `MONGODB_URI`.
+
+---
+
+# Supabase
+
+El esquema relacional se administra mediante migraciones dentro de:
+
+```text
+backendclink/supabase/migrations/
+```
+
+Para comprobar el estado de las migraciones:
+
+```bash
+cd backendclink
+npx supabase migration list
+```
+
+La base remota y el repositorio deben mantener sincronizadas sus migraciones.
+
+Las credenciales privadas o `service_role` nunca deben almacenarse en Git.
+
+---
+
+# MongoDB
+
+La conexión se configura mediante:
+
+```env
+MONGODB_URI=
+MONGODB_DB_NAME=campuslink
+```
+
+El backend mantiene una única configuración centralizada y realiza conexión fail-fast antes de iniciar Express.
+
+La definición de colecciones, validadores e índices se encuentra en:
+
+```text
+backendclink/src/database/mongodb/001_create_collections.mongosh.js
+```
+
+---
+
+# Desarrollo del frontend
+
+La aplicación utiliza actualmente pantallas maestras para avanzar el diseño y la navegación antes de conectar todos los módulos reales.
+
+Entre las vistas existentes se encuentran:
+
+- Inicio.
+- Marketplace.
+- Biblioteca.
+- Actividades.
+- Detalle de contenido.
+- Creación de actividades.
+- Login.
+- Registro.
+- Recuperación de contraseña.
+- Verificación.
+- Mapa 3D.
+
+Parte del contenido todavía utiliza datos almacenados en:
+
+```text
+frontendclink/src/mocks/
+```
+
+Por lo tanto, visualizar una funcionalidad en la interfaz **no significa necesariamente que su backend ya esté implementado**.
+
+---
+
+# Convenciones de desarrollo
+
+Se busca mantener responsabilidades separadas entre:
+
+```text
+UI
+↓
+Lógica de aplicación
+↓
+Servicios / API
+↓
+Backend
+↓
+Persistencia
+```
+
+En el backend, los módulos implementados progresivamente siguen la separación:
+
+```text
+route
+controller
+service
+repository
+```
+
+La lógica de negocio no debe quedar acoplada directamente a Express ni a una base de datos concreta.
+
+El mapa 3D mantiene además su propia frontera dentro de `src/three` para evitar mezclar lógica de Three.js con el resto del dominio de CampusLink.
+
+---
+
+# Alcance y restricciones
+
+CampusLink:
+
+- No procesa pagos electrónicos.
+- No garantiza acuerdos realizados fuera de la aplicación.
+- No verifica físicamente los artículos intercambiados.
+- No permite compartir material protegido por derechos de autor sin autorización.
+- No realiza seguimiento GPS continuo de estudiantes.
+- No reemplaza los canales oficiales de la institución.
+- No contempla publicidad comercial pagada dentro de su alcance inicial.
+- Utiliza React Native y Expo para compartir la mayor cantidad posible de código entre Android e iOS.
+
+Cada usuario es responsable del contenido que publica y de los acuerdos que realiza con otros usuarios.
+
+---
+
+# Próximos pasos
+
+El desarrollo continuará principalmente en:
+
+1. Consolidar las pantallas maestras y navegación móvil.
+2. Integrar autenticación real con Supabase.
+3. Conectar perfiles, carreras, asignaturas y roles con PostgreSQL.
+4. Implementar servicios y endpoints de recursos académicos.
+5. Implementar marketplace, solicitudes y transacciones.
+6. Implementar creación y participación real en actividades.
+7. Representar actividades y puntos de interés sobre el mapa.
+8. Implementar reputación y valoraciones.
+9. Construir el sistema de recomendaciones.
+10. Incorporar moderación, reportería y analítica.
+11. Añadir pruebas de integración y validaciones de calidad.
+12. Preparar estrategia de despliegue y distribución para la entrega final.
+
+---
+
+## Estado del proyecto
+
+CampusLink ya dispone de una base técnica funcional compuesta por:
+
+- Aplicación React Native / Expo.
+- Navegación y pantallas maestras.
+- Mapa 3D interactivo.
+- API REST en Node.js y Express.
+- Comunicación frontend → backend para el mapa.
+- Persistencia documental MongoDB.
+- Esquema relacional PostgreSQL/Supabase de 33 tablas.
+- Migraciones versionadas.
+- Backend preparado para ejecución mediante Docker.
+
+El trabajo actual se concentra en transformar esta base y las maquetas de interfaz en **flujos completos conectados a datos reales y reglas de negocio**.
