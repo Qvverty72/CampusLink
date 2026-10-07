@@ -1,24 +1,17 @@
 /**
- * CampusLink MVP — Camera Controller
+ * Controla cámara y selección dentro del Canvas de React Three Fiber.
  *
- * Runs inside the R3F Canvas. Responsibilities:
- * 1. Read gesture state from shared ref → update camera position (spherical coords)
- * 2. Apply inertia/damping after gesture release
- * 3. Animate camera zoom to selected building
- * 4. Animate back to the campus overview when the selection is closed
- * 5. Process pending taps → raycast for mesh selection
- *
- * DESIGN NOTES:
- * - Camera position is computed from spherical coordinates every frame
- * - All state is in refs (no React state updates in the render loop)
- * - Mesh selection is done via manual raycasting, not onPointerDown
+ * Consume gestos escritos por React Native en una ref compartida, calcula la cámara
+ * en coordenadas esféricas, aplica inercia/transiciones y procesa taps con raycast.
+ * Las refs evitan provocar renders React a 60 FPS; Zustand se usa solo para cambios
+ * semánticos como seleccionar un edificio o abrir un piso.
  */
 
 import React, { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber/native';
 import * as THREE from 'three';
 import { useMapStore } from '@/three/store/mapStore';
-import { buildingConfigs, getBuildingForMesh } from '@/three/data/floors';
+import { useMapDataStore } from '@/three/store/mapDataStore';
 import type { BuildingId } from '@/three/types/map';
 import type { CameraGestureState } from '@/three/components/CampusMap';
 import { clampCameraPhi } from './cameraConfig';
@@ -57,19 +50,27 @@ interface CameraControllerProps {
   gestureState: React.MutableRefObject<CameraGestureState>;
 }
 
+/**
+ * Adaptador entre la interacción 2D de la pantalla y la escena 3D.
+ * No renderiza objetos: muta la cámara activa y publica selecciones en el store.
+ */
 export function CameraController({ gestureState }: CameraControllerProps) {
   const { camera, scene } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
   const ndcVec = useRef(new THREE.Vector2());
 
-  // Zustand selectors
+  // Selectores independientes mantienen separada la interacción semántica del
+  // mapa de la información de alta frecuencia guardada en `gestureState`.
   const selectedBuilding = useMapStore((s) => s.selectedBuilding);
   const isExploded = useMapStore((s) => s.isExploded);
   const isFloorModalOpen = useMapStore((s) => s.isFloorModalOpen);
   const selectBuilding = useMapStore((s) => s.selectBuilding);
   const selectFloor = useMapStore((s) => s.selectFloor);
+  const buildingConfigs = useMapDataStore(
+    (s) => s.data?.buildingConfigs
+  );
 
-  // Animation state (all refs — no re-renders)
+  // Destinos y progreso de cámara viven en refs porque cambian dentro de useFrame.
   const isAnimating = useRef(false);
   const animTheta = useRef(INITIAL.theta);
   const animPhi = useRef(INITIAL.phi);
@@ -81,18 +82,25 @@ export function CameraController({ gestureState }: CameraControllerProps) {
   // ─── Animate to building when selected ──────────────────────────────────
 
   useEffect(() => {
-    if (selectedBuilding && buildingConfigs[selectedBuilding]) {
-      const config = buildingConfigs[selectedBuilding];
+    const config = selectedBuilding
+      ? buildingConfigs?.[selectedBuilding]
+      : undefined;
+
+    if (config) {
       const focusPos = new THREE.Vector3(...config.focusPosition);
       const focusTarget = new THREE.Vector3(...config.focusTarget);
       const offset = focusPos.clone().sub(focusTarget);
 
+      // La configuración expresa posición/target cartesianos en world space. Se
+      // convierten a radio/phi/theta porque ese es el modelo que usan los gestos.
       const r = offset.length();
       const phi = Math.acos(Math.max(-1, Math.min(1, offset.y / r)));
       const theta = Math.atan2(offset.x, offset.z);
 
       animRadius.current = r;
       animPhi.current = clampCameraPhi(phi);
+      // Dos ángulos separados por 2π representan la misma vista; elegir el más
+      // cercano evita que la cámara dé una vuelta completa al enfocar.
       animTheta.current = getNearestEquivalentAngle(
         theta,
         gestureState.current.theta
@@ -116,23 +124,26 @@ export function CameraController({ gestureState }: CameraControllerProps) {
       gestureState.current.hasPendingTap = false;
     }
 
+    // Una transición programática cancela la inercia anterior para que no compita
+    // con el nuevo destino de cámara.
     gestureState.current.velocityTheta = 0;
     gestureState.current.velocityPhi = 0;
     previousSelectedBuilding.current = selectedBuilding;
-  }, [selectedBuilding]);
+  }, [buildingConfigs, gestureState, selectedBuilding]);
 
   // ─── Per-frame update ───────────────────────────────────────────────────
 
   useFrame((_, delta) => {
     const gs = gestureState.current;
 
-    // Manual rotation or zoom always takes priority over an automatic transition.
+    // Un gesto manual siempre tiene prioridad y toma control desde la posición
+    // interpolada actual, evitando saltos al interrumpir una transición.
     if (gs.isGesturing && isAnimating.current) {
       isAnimating.current = false;
       animationElapsed.current = 0;
     }
 
-    // 1. Programmatic camera animation (lerp towards target)
+    // 1. Interpola todos los componentes de la vista, incluido el look-at target.
     if (isAnimating.current) {
       animationElapsed.current += delta;
       const factor = 1 - Math.exp(-CAMERA_ANIM_SPEED * delta);
@@ -143,7 +154,8 @@ export function CameraController({ gestureState }: CameraControllerProps) {
       gs.targetY = THREE.MathUtils.lerp(gs.targetY, animTarget.current.y, factor);
       gs.targetZ = THREE.MathUtils.lerp(gs.targetZ, animTarget.current.z, factor);
 
-      // Animation completes only after the full view reaches its destination.
+      // Radio, orientación y target deben converger juntos. El timeout impide que
+      // errores de precisión mantengan la interacción bloqueada indefinidamente.
       const targetDistance = Math.sqrt(
         (gs.targetX - animTarget.current.x) ** 2 +
         (gs.targetY - animTarget.current.y) ** 2 +
@@ -170,7 +182,7 @@ export function CameraController({ gestureState }: CameraControllerProps) {
       }
     }
 
-    // 2. Apply inertia damping when not actively gesturing or animating
+    // 2. Continúa brevemente el movimiento al soltar y reduce su velocidad por frame.
     if (!gs.isGesturing && !isAnimating.current) {
       if (Math.abs(gs.velocityTheta) > 0.0001 || Math.abs(gs.velocityPhi) > 0.0001) {
         gs.theta += gs.velocityTheta;
@@ -184,10 +196,10 @@ export function CameraController({ gestureState }: CameraControllerProps) {
       }
     }
 
-    // Absolute safety limit for gestures, inertia and programmatic animations.
+    // El clamp final cubre todas las fuentes de cambio y evita cruzar bajo el terreno.
     gs.phi = clampCameraPhi(gs.phi);
 
-    // 3. Compute camera position from spherical coordinates
+    // 3. Convierte radio/phi/theta a world space alrededor del target actual.
     const sinPhi = Math.sin(gs.phi);
     const cosPhi = Math.cos(gs.phi);
     const sinTheta = Math.sin(gs.theta);
@@ -198,7 +210,8 @@ export function CameraController({ gestureState }: CameraControllerProps) {
     camera.position.z = gs.targetZ + gs.radius * sinPhi * cosTheta;
     camera.lookAt(gs.targetX, gs.targetY, gs.targetZ);
 
-    // 4. Process pending tap → raycast for mesh selection
+    // 4. Convierte el tap NDC en un rayo desde la cámara y busca el primer mesh
+    // interactivo. FloorGroup marca esos meshes mediante `userData.isFloor`.
     if (gs.hasPendingTap) {
       gs.hasPendingTap = false;
 
@@ -223,13 +236,14 @@ export function CameraController({ gestureState }: CameraControllerProps) {
             // No building selected → select this building
             selectBuilding(buildingId);
           }
-          // If another building is selected, ignore until the current view is closed.
+          // Si hay otro edificio activo se ignora el hit: primero debe cerrarse la
+          // vista actual para mantener una única selección/explosión consistente.
         }
       }
     }
 
   });
 
-  // This component renders nothing — it only drives the camera
+  // Es un componente de control dentro del render loop; no agrega geometría al scene.
   return null;
 }
