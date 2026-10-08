@@ -1,0 +1,63 @@
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500 | 503;
+
+export type ApiErrorCode =
+  | 'BAD_REQUEST'
+  | 'VALIDATION_ERROR'
+  | 'UNAUTHENTICATED'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'RATE_LIMIT_EXCEEDED'
+  | 'INTERNAL_SERVER_ERROR'
+  | 'SERVICE_UNAVAILABLE';
+
+export type ApiErrorCodeForStatus = {
+  400: 'BAD_REQUEST' | 'VALIDATION_ERROR';
+  401: 'UNAUTHENTICATED';
+  403: 'FORBIDDEN';
+  404: 'NOT_FOUND';
+  409: 'CONFLICT';
+  429: 'RATE_LIMIT_EXCEEDED';
+  500: 'INTERNAL_SERVER_ERROR';
+  503: 'SERVICE_UNAVAILABLE';
+};
+
+export interface ApiErrorDetail {
+  field: string;
+  message: string;
+}
+
+export interface ApiErrorBody {
+  error: {
+    code: ApiErrorCode;
+    message: string;
+    details?: ApiErrorDetail[];
+  };
+}
+
+export type ApiSuccessBody<T, Meta extends object = Record<string, unknown>> = {
+  data: T;
+  meta?: Meta;
+};
+
+export interface PaginationParams {
+  page: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export type ValidationResult<T> =
+  | { success: true; data: T }
+  | { success: false; issues: ApiErrorDetail[] };
+
+export type RequestSection = 'params' | 'query' | 'body';
+
+export type RequestParser = (input: unknown) => ValidationResult<unknown>;
+
+export type ValidatedRequest = Partial<Record<RequestSection, unknown>>;

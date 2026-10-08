@@ -1,9 +1,20 @@
 import { Router } from 'express';
 
-import { getActiveMapController } from './map.controller.js';
+import { validateRequest } from '../../middleware/validateRequest.js';
+import { createGetActiveMapController } from './map.controller.js';
+import type { ActiveMapLookup } from './map.service.js';
+import { parseActiveMapParams } from './map.validation.js';
 
-// Este router solo declara transporte HTTP. La validación y la consulta quedan
-// delegadas para mantener el flujo route → controller → service → repository.
-export const mapRouter = Router();
+export function createMapRouter(lookup?: ActiveMapLookup): Router {
+  const mapRouter = Router();
 
-mapRouter.get('/:campusId/active', getActiveMapController);
+  mapRouter.get(
+    '/:campusId/active',
+    validateRequest({ params: parseActiveMapParams }),
+    createGetActiveMapController(lookup),
+  );
+
+  return mapRouter;
+}
+
+export const mapRouter = createMapRouter();

@@ -45,6 +45,36 @@ interface ActiveCampusMapResponse {
   buildings: ApiBuilding[];
 }
 
+interface ApiSuccessResponse<T> {
+  data: T;
+  meta?: Record<string, unknown>;
+}
+
+interface ApiErrorDetail {
+  field: string;
+  message: string;
+}
+
+interface ApiErrorResponse {
+  error: {
+    code: string;
+    message: string;
+    details?: ApiErrorDetail[];
+  };
+}
+
+export class ApiClientError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly details?: ApiErrorDetail[],
+  ) {
+    super(message);
+    this.name = 'ApiClientError';
+  }
+}
+
 export interface RuntimeMapData {
   campusId: string;
   version: number;
@@ -52,6 +82,44 @@ export interface RuntimeMapData {
   buildingConfigs: Record<BuildingId, BuildingConfig>;
   floorMeshConfigs: FloorMeshConfig[];
   floorData: Record<string, FloorDefinition>;
+}
+
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  if (typeof value !== 'object' || value === null || !('error' in value)) {
+    return false;
+  }
+
+  const error = value.error;
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  );
+}
+
+async function toApiClientError(response: Response): Promise<ApiClientError> {
+  try {
+    const payload: unknown = await response.json();
+    if (isApiErrorResponse(payload)) {
+      return new ApiClientError(
+        response.status,
+        payload.error.code,
+        payload.error.message,
+        payload.error.details,
+      );
+    }
+  } catch {
+    // Preserve a stable fallback if a proxy or an older backend returns no JSON.
+  }
+
+  return new ApiClientError(
+    response.status,
+    'UNKNOWN_API_ERROR',
+    `Request failed with status ${response.status}.`,
+  );
 }
 
 // The active document currently serializes vectors as arrays, while older or
@@ -77,12 +145,11 @@ export async function fetchActiveCampusMap(): Promise<RuntimeMapData> {
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Unable to load active campus map (${response.status})`
-    );
+    throw await toApiClientError(response);
   }
 
-  const map = (await response.json()) as ActiveCampusMapResponse;
+  const envelope = (await response.json()) as ApiSuccessResponse<ActiveCampusMapResponse>;
+  const map = envelope.data;
 
   const buildingFloors = {} as Record<BuildingId, string[]>;
   const buildingConfigs = {} as Record<BuildingId, BuildingConfig>;

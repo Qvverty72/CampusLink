@@ -1,4 +1,8 @@
-import { findActiveMapByCampusId } from './map.repository.js';
+import type { CampusMapDocument } from './map.types.js';
+
+export type ActiveMapLookup = (
+  campusId: string,
+) => Promise<CampusMapDocument | null>;
 
 /**
  * Caso de uso para obtener el mapa activo de un campus.
@@ -8,5 +12,7 @@ import { findActiveMapByCampusId } from './map.repository.js';
  * MongoDB sin mezclar esas decisiones con HTTP ni con queries.
  */
 export function getActiveMap(campusId: string) {
-  return findActiveMapByCampusId(campusId);
+  return import('./map.repository.js').then(({ findActiveMapByCampusId }) =>
+    findActiveMapByCampusId(campusId),
+  );
 }

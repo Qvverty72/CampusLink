@@ -1,18 +1,27 @@
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
+import type { Express } from 'express';
 
-import { apiRouter } from './routes/index.js';
+import { apiErrorHandler } from './middleware/apiErrorHandler.js';
+import { createApiRouter } from './routes/index.js';
+import type { ActiveMapLookup } from './modules/maps/map.service.js';
 
-// Este archivo compone la aplicación HTTP, pero no abre el puerto. Separar `app`
-// de `server.ts` permite reutilizar Express en pruebas sin iniciar el proceso completo.
-export const app = express();
+export interface AppDependencies {
+  getActiveMap?: ActiveMapLookup;
+}
 
-// Los middlewares transversales se ejecutan antes de cualquier endpoint versionado:
-// Helmet agrega cabeceras defensivas, CORS queda habilitado con sus defaults y `express.json`
-// deja el body disponible para los futuros controllers que reciban JSON.
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
-app.use('/api/v1', apiRouter);
+/** Builds the HTTP application separately from the process and database bootstrap. */
+export function createApp(dependencies: AppDependencies = {}): Express {
+  const app = express();
 
+  app.use(helmet());
+  app.use(cors());
+  app.use(express.json());
+  app.use('/api/v1', createApiRouter(dependencies.getActiveMap));
+  app.use(apiErrorHandler);
+
+  return app;
+}
+
+export const app = createApp();
