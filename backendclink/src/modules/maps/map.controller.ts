@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 
-import { getActiveMap } from './map.service.js';
+import { getActiveMap, getMapHealth } from './map.service.js';
+import { sendModuleHealth } from '../../services/health-response.js';
 
 // Replica la forma UUID admitida por los validadores Mongo. Rechazar valores
 // malformados aquí evita ejecutar queries que nunca podrían representar un campus.
@@ -39,4 +40,8 @@ export const getActiveMapController: RequestHandler<{
     });
     response.status(500).json({ error: 'Internal server error' });
   }
+};
+
+export const getMapHealthController: RequestHandler = async (_request, response) => {
+  sendModuleHealth(response, await getMapHealth());
 };
