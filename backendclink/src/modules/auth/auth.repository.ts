@@ -1,5 +1,5 @@
 import { createUserSupabaseClient, supabaseAuth } from '../../database/supabase/client.js';
-import type { AuthProfile } from './auth.types.js';
+import type { AuthAssignmentRow, AuthProfile } from './auth.types.js';
 import { inspectDependencies } from '../../database/health.js';
 import { probeSupabaseTables } from '../../database/supabase/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
@@ -16,5 +16,18 @@ export async function findAuthUser(accessToken: string) {
 }
 export async function findAuthProfile(accessToken: string, userId: string) {
   return createUserSupabaseClient(accessToken).from('perfil_usuario')
-    .select('id,campus_id,estado_cuenta,deleted_at').eq('id', userId).maybeSingle<AuthProfile>();
+    .select('id,institucion_id,campus_id,nombre_completo,foto_path,verificado_en,estado_cuenta,deleted_at')
+    .eq('id', userId).maybeSingle<AuthProfile>();
+}
+
+export async function findAuthRoles(accessToken: string, userId: string) {
+  return createUserSupabaseClient(accessToken).from('usuario_rol')
+    .select('campus_id,rol:rol_id(id,nombre)')
+    .eq('perfil_usuario_id', userId).is('revocado_en', null).returns<AuthAssignmentRow[]>();
+}
+
+export async function findAuthPermissions(accessToken: string, userId: string) {
+  return createUserSupabaseClient(accessToken).from('usuario_permiso')
+    .select('campus_id,permiso:permiso_id(id,nombre)')
+    .eq('perfil_usuario_id', userId).is('revocado_en', null).returns<AuthAssignmentRow[]>();
 }

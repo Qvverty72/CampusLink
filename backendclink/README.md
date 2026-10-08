@@ -205,9 +205,17 @@ El cliente técnico es compartido y nunca recibe una sesión de usuario. Si hay 
 
 createUserSupabaseClient crea un contexto independiente con la clave pública y el Bearer del usuario. Antes de utilizarlo en futuras rutas protegidas se debe validar el JWT y los permisos vigentes; crear este cliente no verifica la identidad ni autoriza la acción.
 
-El servicio verifyAuthConnection(accessToken) del módulo auth valida la identidad con getUser(token) y consulta el perfil bajo RLS. Rechaza tokens inválidos y perfiles ausentes, suspendidos, desactivados o eliminados lógicamente. No tiene un endpoint propio.
+F2.3-01 conecta `verifyAuthConnection(accessToken)` con `requireAuthentication` y `GET /api/v1/auth/me`. El middleware acepta un único header `Authorization: Bearer <access_token>`, verifica identidad en Supabase mediante `getUser(token)` y luego consulta perfil y asignaciones vigentes bajo RLS. No utiliza metadatos del JWT para conceder capacidades ni cachea estado, campus o permisos.
 
-Este helper no implementa autorización por rol/campus, ni flujos de registro/login/recuperación. Corresponden a F2.3-01/F2.3-03/F2.3-06. La ruta actual del mapa conserva su acceso existente; F2.2-07/F2.2-10 deberán protegerla antes de un lanzamiento con datos institucionales.
+`/me` responde con `{ data: { userId, campusId, profile, roles, permissions } }`. `profile` contiene únicamente `id`, `institucion_id`, `campus_id`, `nombre_completo`, `foto_path`, `verificado_en`, `estado_cuenta` y `deleted_at`. Cada rol o permiso tiene `{ id, name, campusId }`, conserva el campus de su asignación y excluye registros revocados. Los permisos explícitos se devuelven separados de los roles; el catálogo y la herencia de capacidades siguen pendientes de resolución en F2.2-10/F2.3-05. El endpoint no recibe un UUID del cliente ni devuelve tokens.
+
+Credenciales ausentes, malformadas, inválidas o vencidas producen 401 `UNAUTHENTICATED` y `WWW-Authenticate: Bearer`. Un perfil ausente, suspendido, desactivado o eliminado produce 403 `FORBIDDEN`; fallos de Auth/PostgreSQL producen 503 `DEPENDENCY_UNAVAILABLE` sin detalles del proveedor. La respuesta incluye `Cache-Control: no-store`, también ante errores. En nuevas rutas, colocar `requireAuthentication` antes de la autorización por operación y la lógica de negocio; el contexto verificado queda en `response.locals.auth`.
+
+Aplicar `src/database/supabase/migrations/20261008_auth_context_rls.sql` mediante una conexión de propietario, después de las tablas relacionales existentes. Es una migración versionada, no un script de arranque ni el snapshot `CampusLink_Schema.sql`. Habilita RLS en perfil, asignaciones y sus catálogos; permite exclusivamente lecturas propias a `authenticated` y retira los privilegios directos de escritura de `anon`/`authenticated` para impedir autoasignaciones o cambios de estado. Incluye políticas restrictivas para que una política SELECT permisiva anterior no amplíe ese acceso. Flujos administrativos y de actualización de perfil futuros deberán definir sus contratos de escritura explícitos. No usa el secreto técnico del servidor para eludir estas políticas.
+
+Expo incorpora `AuthProvider`, `useAuth()` y `getSupabaseClient()` bajo `src/features/auth`. Configurar `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o el alias legado `EXPO_PUBLIC_SUPABASE_ANON_KEY`) y `EXPO_PUBLIC_API_URL` en `frontendclink/.env`. El cliente rechaza claves secret/service_role; un secreto nunca debe introducirse en una variable `EXPO_PUBLIC_*`, pues Expo la incluye en el bundle. Usa persistencia AsyncStorage en dispositivos, persistencia web del SDK y renovación mientras la aplicación está activa; restaura la sesión y consulta `/me` al cambiar la sesión o volver al primer plano. Las consultas canceladas no pueden restaurar un contexto anterior al cierre/cambio de sesión. `authenticatedRequest` adjunta el token actual únicamente a rutas relativas `/api/v1/` del backend configurado.
+
+`useAuth()` expone `session`, `identity`, `status`, `error` y `refreshIdentity()`. Solo `status === 'ready'` ofrece un contexto de perfil utilizable; una sesión local por sí sola no autoriza operaciones. Los estados son `loading`, `signedOut`, `ready`, `forbidden`, `error` y `unconfigured`. `refreshIdentity()` descarta inmediatamente el contexto previo y repite la consulta. El SDK queda disponible para los flujos de registro/login/recuperación de F2.3-02/F2.3-03. La bienvenida y la ruta actual de mapa conservan su acceso existente hasta las tareas de autorización F2.2-07/F2.2-10/F2.3-06.
 
 Decisión del usuario (2026-10-08): el administrador hereda funciones institucionales. Falta sincronizar F2.2-10 y cerrar el catálogo de roles fijos; no se implementó una matriz de permisos provisional.
 
@@ -221,7 +229,7 @@ Las sondas Mongo usan filtros exactos por nombre en listCollections: Atlas recha
 
 ## Verificación manual
 
-npm run typecheck valida únicamente src; npm run build genera el artefacto en dist. El arranque conserva las comprobaciones de dependencias antes de abrir el puerto.
+npm run typecheck valida únicamente src; npm run build genera el artefacto en dist. `npm test` ejecuta las pruebas HTTP de Auth con un proveedor simulado y las políticas RLS en PostgreSQL embebido (PGlite), usando las tablas relevantes del snapshot como fixture. Comprueba rechazo antes de consultar perfil, suspensión con el mismo token, revocaciones, separación por campus, fallos de dependencias y prevención de escrituras/lecturas ajenas. No modifica servicios externos. El arranque conserva las comprobaciones de dependencias antes de abrir el puerto.
 
 Para comprobar los endpoints, iniciar el backend con NODE_ENV=development y HEALTH_DIAGNOSTICS_ENABLED=true y ejecutar:
 
@@ -244,4 +252,4 @@ Las colecciones esperadas del modelo actual son campus_maps, activities, activit
 
 ## Referencias técnicas
 
-[Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).
+[Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).
