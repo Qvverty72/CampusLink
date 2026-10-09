@@ -4,6 +4,8 @@ Base API REST de F2.2-03 (GitHub #50). Node.js 22, TypeScript, Express 5, Supaba
 
 Inicio/cierre/recuperación de sesión F2.3-03: [contratos, permisos, plantilla y configuración de Supabase](docs/session-login-recovery.md).
 
+Perfil académico F2.3-04: [API, validaciones, guardado transaccional y migración necesaria en Supabase](docs/academic-profile.md).
+
 ## Ejecución local
 
 Desde backendclink, instalar con npm ci y completar .env a partir de .env.example. No sobrescribir un .env existente.
@@ -20,6 +22,7 @@ Desde backendclink, instalar con npm ci y completar .env a partir de .env.exampl
 | SUPABASE_PUBLISHABLE_KEY | Clave pública del proyecto, obligatoria |
 | SUPABASE_SECRET_KEY | Clave opcional exclusiva del servidor para diagnósticos y referencias de campus |
 | SUPABASE_SERVICE_ROLE_KEY | Alias legacy de la clave de servidor; SECRET_KEY tiene preferencia |
+| SUPABASE_DB_URL | URL PostgreSQL/pooler exclusiva del backend para guardar el perfil académico en una transacción; usa contraseña DB y TLS verificado |
 | DATABASE_TIMEOUT_MS | Límite por operación/sonda, 5000 ms por defecto, rango 100–60000 |
 | HEALTH_DIAGNOSTICS_ENABLED | true para registrar diagnósticos detallados solo en development; false por defecto |
 | HEALTH_CACHE_TTL_MS | Caché de sondas, 5000 ms por defecto; 0 desactiva caché entre solicitudes |

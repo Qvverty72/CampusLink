@@ -41,6 +41,19 @@ export function loadEnv(input: Environment) {
   if (!['true', 'false'].includes(diagnostics)) {
     throw new Error('HEALTH_DIAGNOSTICS_ENABLED must be true or false');
   }
+  const supabaseDatabaseUrl = input.SUPABASE_DB_URL?.trim() || undefined;
+  if (supabaseDatabaseUrl) {
+    let databaseUrl: URL;
+    try { databaseUrl = new URL(supabaseDatabaseUrl); } catch { throw new Error('SUPABASE_DB_URL must be a PostgreSQL connection URL'); }
+    if (!['postgres:', 'postgresql:'].includes(databaseUrl.protocol) || !databaseUrl.hostname || !databaseUrl.username || databaseUrl.hash) {
+      throw new Error('SUPABASE_DB_URL must be a PostgreSQL connection URL');
+    }
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(databaseUrl.hostname);
+    if (!local && ((databaseUrl.searchParams.has('ssl') && databaseUrl.searchParams.get('ssl') !== 'true')
+      || (databaseUrl.searchParams.has('sslmode') && databaseUrl.searchParams.get('sslmode') !== 'verify-full'))) {
+      throw new Error('SUPABASE_DB_URL must use verified TLS for remote connections');
+    }
+  }
   return {
     mongodbUri,
     mongodbDnsServers,
@@ -48,6 +61,7 @@ export function loadEnv(input: Environment) {
     supabaseUrl: url.origin,
     supabasePublishableKey: required(input, 'SUPABASE_PUBLISHABLE_KEY'),
     supabaseSecretKey: input.SUPABASE_SECRET_KEY?.trim() || input.SUPABASE_SERVICE_ROLE_KEY?.trim() || undefined,
+    supabaseDatabaseUrl,
     nodeEnv,
     port: integer(input, 'PORT', 3000, 1, 65535),
     databaseTimeoutMs: integer(input, 'DATABASE_TIMEOUT_MS', 5000, 100, 60000),
