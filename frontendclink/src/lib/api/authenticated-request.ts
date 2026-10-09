@@ -8,6 +8,10 @@ export class AuthApiError extends Error {
 }
 
 export async function authenticatedRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return (await authenticatedEnvelopeRequest<T>(path, init)).data;
+}
+
+export async function authenticatedEnvelopeRequest<T, Meta = never>(path: string, init: RequestInit = {}, query?: URLSearchParams): Promise<{ data: T; meta: Meta }> {
   // Only relative API paths may receive the bearer token.
   if (!path.startsWith('/api/v1/') || /[\\?#]/.test(path) || path.includes('..')) {
     throw new Error('A relative versioned API path is required');
@@ -21,8 +25,8 @@ export async function authenticatedRequest<T>(path: string, init: RequestInit = 
   if (error || !data.session) throw new AuthApiError(401);
   const headers = new Headers(init.headers);
   headers.set('Authorization', 'Bearer ' + data.session.access_token);
-  const response = await fetch(baseUrl + path, { ...init, headers, cache: 'no-store', redirect: 'error' });
+  const search = query?.toString();
+  const response = await fetch(baseUrl + path + (search ? '?' + search : ''), { ...init, headers, cache: 'no-store', redirect: 'error' });
   if (!response.ok) throw new AuthApiError(response.status);
-  const body = await response.json() as { data: T };
-  return body.data;
+  return await response.json() as { data: T; meta: Meta };
 }

@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { AcademicProfileSection } from '@/features/users/AcademicProfile';
+import { canManageAccess } from '@/features/users/access';
 
 export default function ProfileScreen() {
   const auth = useAuth();
@@ -41,6 +42,11 @@ export default function ProfileScreen() {
         {identity?.capabilities.general && <AcademicProfileSection key={`${identity.userId}:${identity.campusId}`} />}
 
         <View style={styles.moduleLinks}>
+          {canManageAccess(identity?.roles ?? []) && <Link href="/access" asChild>
+            <Pressable accessibilityRole="button" style={styles.moduleLink}>
+              <Text style={styles.moduleLinkText}>Administrar roles y permisos</Text>
+            </Pressable>
+          </Link>}
           {identity?.capabilities.reports && <Link href={'/reports'} asChild>
             <Pressable
               accessibilityRole={'button'}

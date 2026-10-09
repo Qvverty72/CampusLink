@@ -6,6 +6,8 @@ Inicio/cierre/recuperación de sesión F2.3-03: [contratos, permisos, plantilla 
 
 Perfil académico F2.3-04: [API, validaciones, guardado transaccional y migración necesaria en Supabase](docs/academic-profile.md).
 
+Roles y permisos por campus F2.3-05: administración mediante `/api/v1/users/access`, con alcance vigente, listado paginado y auditoría atómica. Requiere `SUPABASE_DB_URL`, administrador previamente incorporado y `src/database/supabase/migrations/f2_3_05_roles_permisos.sql`. [Guía local](docs/campus-role-permissions.md).
+
 ## Ejecución local
 
 Desde backendclink, instalar con npm ci y completar .env a partir de .env.example. No sobrescribir un .env existente.
