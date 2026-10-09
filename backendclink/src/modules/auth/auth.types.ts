@@ -24,3 +24,38 @@ export interface VerifiedAuthConnection {
   permissions: AuthAssignment[];
 }
 export interface AuthLocals { auth: VerifiedAuthConnection }
+export interface VerifiedIdentity {
+  userId: string;
+  email: string;
+  emailConfirmedAt: string;
+  registration: { fullName: unknown; campusId: unknown };
+}
+export interface IdentityLocals { identity: VerifiedIdentity }
+export interface RegistrationInput {
+  email: string;
+  password: string;
+  fullName: string;
+  campusId: string;
+}
+
+export interface RegistrationOption {
+  dominio: string;
+  institucion_id: string;
+  institucion_nombre: string;
+  campus_id: string;
+  campus_nombre: string;
+}
+export interface RegistrationDomainRow {
+  dominio: string;
+  institucion_id: string;
+  activo: boolean;
+  institucion: { nombre: string } | null;
+}
+export interface RegistrationCampusRow {
+  id: string;
+  institucion_id: string;
+  nombre: string;
+  activo: boolean;
+}
+export type NewAuthProfile = Pick<AuthProfile,
+  'id' | 'institucion_id' | 'campus_id' | 'nombre_completo' | 'verificado_en' | 'estado_cuenta'>;

@@ -16,6 +16,7 @@ let failTable: string | undefined;
 let missingProfile: boolean;
 let profile: Record<string, unknown>;
 let permissionRows: unknown[];
+let emailConfirmed: boolean;
 
 before(async () => {
   Object.assign(process.env, {
@@ -31,7 +32,7 @@ before(async () => {
     assert.equal(headers.get('authorization'), 'Bearer ' + token);
     calls.push(url);
     if (url.pathname === '/auth/v1/user') {
-      return new Response(JSON.stringify(authStatus === 200 ? { id: userId } : {
+      return new Response(JSON.stringify(authStatus === 200 ? { id: userId, email: 'user@duocuc.cl', email_confirmed_at: emailConfirmed ? '2026-10-08T12:00:00Z' : null } : {
         msg: 'provider private details ' + token, code: 'bad_jwt',
       }), { status: authStatus, headers: { 'Content-Type': 'application/json' } });
     }
@@ -58,6 +59,7 @@ before(async () => {
 
 beforeEach(() => {
   calls = []; authStatus = 200; failTable = undefined; missingProfile = false;
+  emailConfirmed = true;
   profile = { id: userId, campus_id: campusId, institucion_id: 'institution-id',
     nombre_completo: 'Test User', foto_path: null, verificado_en: null, estado_cuenta: 'ACTIVA', deleted_at: null };
   permissionRows = [{ campus_id: otherCampus, permiso: { id: 'permission-id', nombre: 'PUBLICAR_EVENTO' } }];
@@ -73,6 +75,12 @@ async function me(authorization: string | undefined = 'Bearer ' + token) {
     headers: authorization === undefined ? {} : { Authorization: authorization },
   });
 }
+
+test('unverified Auth email cannot use even an existing legacy profile', async () => {
+  emailConfirmed = false;
+  assert.equal((await me()).status, 403);
+  assert.deepEqual(calls.map(url => url.pathname), ['/auth/v1/user']);
+});
 
 test('rejects missing and malformed credentials before any dependency query', async () => {
   for (const header of ['', 'Basic credentials', 'Bearer', 'Bearer token extra', 'Bearer a, Bearer b']) {

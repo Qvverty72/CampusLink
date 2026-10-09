@@ -29,7 +29,7 @@ before(async () => {
   }
   // The new restrictive boundary must also resist an older permissive read policy.
   await db.exec('alter table perfil_usuario enable row level security; create policy older_open_read on perfil_usuario for select to authenticated using (true);');
-  await db.exec(await readFile('src/database/supabase/migrations/20261008_auth_context_rls.sql', 'utf8'));
+  await db.exec(await readFile('src/database/supabase/migrations/f2_3_01_autenticacion.sql', 'utf8'));
   await db.exec(`
     insert into auth.users values ('${alice}'), ('${bob}');
     insert into institucion (id,nombre) values ('${institution}', 'Test');
