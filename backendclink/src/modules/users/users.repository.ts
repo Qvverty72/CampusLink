@@ -4,6 +4,7 @@ import type { DependencyChecks } from '../../types/api.types.js';
 import { createServerSupabaseClient } from '../../database/supabase/client.js';
 import type { AcademicOption, AcademicProfileRow, AcademicProfileTransaction, LockedAcademicProfile } from './users.types.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
+import type { AuthAssignment } from '../auth/auth.types.js';
 
 export function findAcademicProfile(userId: string) {
   return createServerSupabaseClient().from('perfil_usuario')
@@ -30,6 +31,10 @@ export function withAcademicProfileTransaction<T>(operation: (repository: Academ
          FROM public.perfil_usuario WHERE id = $1 FOR UPDATE`, [userId, updatedAt]);
       return result.rows[0] ?? null;
     },
+    lockRoles: async userId => (await client.query<AuthAssignment>(
+      `SELECT r.id, r.nombre AS name, ur.campus_id AS "campusId" FROM public.usuario_rol ur
+       JOIN public.rol r ON r.id=ur.rol_id WHERE ur.perfil_usuario_id=$1 AND ur.revocado_en IS NULL
+       ORDER BY ur.id FOR SHARE OF ur,r`, [userId])).rows,
     lockCampus: async campusId => {
       const result = await client.query<AcademicOption>(
         'SELECT id, nombre, institucion_id, activo FROM public.campus WHERE id = $1 FOR SHARE', [campusId]);

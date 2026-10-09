@@ -1,5 +1,5 @@
 import type { ModuleHealth } from '../../types/api.types.js';
-import type { AuthProfile } from '../auth/auth.types.js';
+import type { AuthAssignment, AuthProfile } from '../auth/auth.types.js';
 
 export type UsersHealth = ModuleHealth<'users'>;
 
@@ -18,6 +18,7 @@ export interface LockedAcademicProfile extends Pick<AuthProfile,
 }
 export interface AcademicProfileTransaction {
   lockProfile: (userId: string, updatedAt: string) => Promise<LockedAcademicProfile | null>;
+  lockRoles: (userId: string) => Promise<AuthAssignment[]>;
   lockCampus: (campusId: string) => Promise<AcademicOption | null>;
   lockCareers: (campusId: string, careerIds: string[]) => Promise<{ careers: AcademicOption[]; offeredCareerIds: string[] }>;
   save: (userId: string, input: ProfileUpdate) => Promise<string>;

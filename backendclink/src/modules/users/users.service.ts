@@ -3,14 +3,14 @@ import { probeUsersDependencies } from './users.repository.js';
 import type { UsersHealth } from './users.types.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import type { ProfileUpdate } from './users.types.js';
-import { accountCapabilities } from '../auth/auth.service.js';
+import { requireCampusCapability, requireResourceOwner } from '../auth/auth.authorization.js';
 import { ApiError } from '../../services/api-response.js';
 import { findAcademicProfile, findAcademicOptions, withAcademicProfileTransaction } from './users.repository.js';
 
 const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'El perfil académico no está disponible. Inténtalo nuevamente.');
 const invalid = (message: string) => new ApiError(400, 'VALIDATION_ERROR', message);
 function authorize(auth: VerifiedAuthConnection) {
-  if (!accountCapabilities(auth).general) throw new ApiError(403, 'FORBIDDEN', 'Se requiere acceso institucional.');
+  requireCampusCapability(auth, auth.campusId, 'general');
 }
 async function dependency<T>(operation: () => PromiseLike<T>): Promise<T> {
   try { return await operation(); } catch (error) {
@@ -27,6 +27,7 @@ export async function getAcademicProfile(auth: VerifiedAuthConnection) {
   if (!row || row.estado_cuenta !== 'ACTIVA' || row.deleted_at || row.institucion_id !== auth.profile.institucion_id) {
     throw new ApiError(403, 'FORBIDDEN', 'La cuenta no está disponible.');
   }
+  requireResourceOwner(auth, row.id);
   return { fullName: row.nombre_completo, campusId: row.campus_id, campusName: row.campus?.nombre ?? '',
     careers: row.usuario_carrera.flatMap(link => link.carrera ? [link.carrera] : []), updatedAt: row.updated_at };
 }
@@ -65,7 +66,10 @@ export async function updateAcademicProfile(auth: VerifiedAuthConnection, body: 
     if (!profile || profile.estado_cuenta !== 'ACTIVA' || profile.deleted_at || profile.institucion_id !== auth.profile.institucion_id) {
       throw new ApiError(403, 'FORBIDDEN', 'La cuenta no está disponible.');
     }
-    authorize({ ...auth, campusId: profile.campus_id, profile: { ...auth.profile, ...profile } });
+    const roles = await repository.lockRoles(auth.userId);
+    const current = { ...auth, roles, campusId: profile.campus_id, profile: { ...auth.profile, ...profile } };
+    requireResourceOwner(current, profile.id);
+    authorize(current);
     if (!profile.version_matches) throw new ApiError(409, 'CONFLICT', 'El perfil cambió. Recárgalo antes de guardar.');
     const campus = await repository.lockCampus(input.campusId);
     if (!campus?.activo || campus.institucion_id !== profile.institucion_id) throw invalid('El campus debe estar activo y pertenecer a tu institución.');

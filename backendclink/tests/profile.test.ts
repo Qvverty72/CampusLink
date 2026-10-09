@@ -20,6 +20,7 @@ let server: Server, base: string;
 let profile: Record<string, unknown>, calls: URL[], writes: Record<string, unknown>[];
 let transactionError: boolean, lockedChange: string | undefined, failedTable: string | undefined, authInvalid: boolean;
 let catalogInactive: boolean;
+let serverProfileWrong = false;
 let releaseCount = 0, rollbackCount = 0;
 let closePostgres: () => Promise<void>;
 before(async () => {
@@ -38,6 +39,7 @@ before(async () => {
         return { rows: [{ ...profile, version_matches: params[1] === profile.updated_at && lockedChange !== 'version',
           ...(lockedChange === 'account' ? { estado_cuenta: 'SUSPENDIDA' } : {}) }] };
       }
+      if (sql.includes('FROM public.usuario_rol')) return { rows: lockedChange === 'roles' ? [] : [{ id: 'role', name: 'ADMINISTRADOR', campusId: campus }] };
       if (sql.includes('FROM public.campus WHERE')) return { rows: [{ id: params[0], institucion_id: params[0] === foreignCampus ? foreignCampus : institution, activo: !catalogInactive }] };
       if (sql.includes('FROM public.carrera')) {
         if (failedTable === 'carrera') throw new Error('private database details');
@@ -74,7 +76,7 @@ before(async () => {
     if (table === 'perfil_usuario') {
       assert.equal(url.searchParams.get('id'), 'eq.' + user);
       if (secret) assert.ok(url.searchParams.get('select')?.includes('campus!perfil_usuario_campus_id_fkey'));
-      return Response.json([profile]);
+      return Response.json([{ ...profile, ...(secret && serverProfileWrong ? { id: foreignCampus } : {}) }]);
     }
     if (table === 'usuario_rol' || table === 'usuario_permiso') {
       assert.equal(secret, false); assert.equal(url.searchParams.get('perfil_usuario_id'), 'eq.' + user);
@@ -105,11 +107,21 @@ before(async () => {
   base = 'http://127.0.0.1:' + (server.address() as AddressInfo).port;
 });
 beforeEach(() => {
+  serverProfileWrong = false;
   calls = []; writes = []; transactionError = false; lockedChange = undefined; failedTable = undefined; authInvalid = false; catalogInactive = false;
   releaseCount = 0; rollbackCount = 0;
   profile = { id: user, campus_id: campus, institucion_id: institution, nombre_completo: 'Before', foto_path: null,
     estado_cuenta: 'ACTIVA', deleted_at: null, verificado_en: timestamp, updated_at: timestamp,
     campus: { id: campus, nombre: 'Old' }, usuario_carrera: [{ carrera: { id: career, nombre: 'First' } }] };
+});
+test('server profile response must belong to the authenticated owner', async () => {
+  serverProfileWrong = true;
+  assert.equal((await request()).status, 403);
+});
+test('cached administrator role cannot authorize an unverified profile after transactional revocation', async () => {
+  profile.verificado_en = null; lockedChange = 'roles';
+  assert.equal((await request(undefined, payload())).status, 403);
+  assert.equal(writes.length, 0); assert.equal(rollbackCount, 1);
 });
 after(async () => { globalThis.fetch = originalFetch; await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); await closePostgres(); mock.restoreAll(); });
 const payload = () => ({ fullName: ' After ', campusId: nextCampus, careerIds: [career, secondCareer], updatedAt: timestamp });

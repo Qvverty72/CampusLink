@@ -1,7 +1,7 @@
 import type { WithId } from 'mongodb';
 import { inspectDependencies } from '../../database/health.js';
 import { probeSupabaseTables } from '../../database/supabase/health.js';
-import { supabaseTechnical } from '../../database/supabase/client.js';
+import { createServerSupabaseClient } from '../../database/supabase/client.js';
 import { probeMongoCollections } from '../../database/mongodb/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
 
@@ -34,7 +34,7 @@ export function probeMapDependencies(): Promise<DependencyChecks> {
 
 // Technical reference check only: this is not authorization by campus.
 export async function isActiveCampus(campusId: string): Promise<boolean> {
-  const { data, error } = await supabaseTechnical.from('campus')
+  const { data, error } = await createServerSupabaseClient().from('campus')
     .select('id').eq('id', campusId).eq('activo', true).limit(1);
   if (error) throw new Error('Unable to verify campus reference');
   return Boolean(data?.length);

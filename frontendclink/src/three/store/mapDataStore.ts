@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   fetchActiveCampusMap,
+  ApiClientError,
   type RuntimeMapData,
 } from '../api/mapApi';
 
@@ -8,7 +9,8 @@ interface MapDataState {
   data: RuntimeMapData | null;
   isLoading: boolean;
   error: string | null;
-  loadMap: (campusId: string) => Promise<void>;
+  loadMap: (campusId: string, accessToken: string) => Promise<void>;
+  clearMap: () => void;
 }
 
 let pending: { campusId: string; abort: AbortController } | null = null;
@@ -18,7 +20,17 @@ export const useMapDataStore = create<MapDataState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  loadMap: async (campusId) => {
+  clearMap: () => {
+    pending?.abort.abort();
+    pending = null;
+    set({ data: null, isLoading: false, error: null });
+  },
+
+  loadMap: async (campusId, accessToken) => {
+    if (!accessToken?.trim()) {
+      get().clearMap();
+      throw new ApiClientError(401, 'UNAUTHENTICATED', 'Inicia sesión para consultar el mapa.');
+    }
     if (get().data?.campusId === campusId || pending?.campusId === campusId) {
       return;
     }
@@ -33,7 +45,7 @@ export const useMapDataStore = create<MapDataState>((set, get) => ({
     });
 
     try {
-      const data = await fetchActiveCampusMap(campusId, abort.signal);
+      const data = await fetchActiveCampusMap(campusId, accessToken, abort.signal);
       if (abort.signal.aborted) return;
 
       set({
@@ -51,6 +63,7 @@ export const useMapDataStore = create<MapDataState>((set, get) => ({
             ? error.message
             : 'Unable to load campus map',
       });
+      if (error instanceof ApiClientError && [401, 403].includes(error.status)) throw error;
     } finally { if (pending?.abort === abort) pending = null; }
   },
 }));

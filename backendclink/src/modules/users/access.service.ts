@@ -4,6 +4,7 @@ import { createPaginatedResult, parsePaginationQuery } from '../../services/pagi
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { withAccessTransaction, type accessRepository } from './access.repository.js';
 import type { AccessProfile, AccessSnapshot, AccessUpdate } from './access.types.js';
+import { requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
 
 const ROLE_NAMES = ['ADMINISTRADOR', 'USUARIO_AUTORIZADO'];
 const PERMISSION_NAMES = ['PUBLICAR_EVENTO', 'ACCEDER_ANALITICA', 'ACCEDER_REPORTERIA'];
@@ -17,11 +18,12 @@ function uuid(value: unknown): string {
 }
 function requireActiveActor(rows: AccessProfile[], auth: VerifiedAuthConnection) {
   const actor = rows.find(row => row.id === auth.userId);
-  if (!actor || actor.estado_cuenta !== 'ACTIVA' || actor.deleted_at) throw forbidden();
+  if (!actor) throw forbidden();
+  requireActiveAccount(actor, auth.userId);
 }
 async function authorizedCampus(repository: Repository, auth: VerifiedAuthConnection, campusId: string) {
   const assignments = await repository.adminAssignments(auth.userId);
-  if (!assignments.some(row => row.campus_id === campusId)) throw forbidden();
+  requireCampusCapability({ ...auth, roles: assignments }, campusId, 'administration');
   const campus = await repository.lockCampus(campusId);
   if (!campus?.activo) throw forbidden();
   return campus;
@@ -58,7 +60,7 @@ export async function getAccessCampuses(auth: VerifiedAuthConnection) {
     requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
     const assignments = await repository.adminAssignments(auth.userId);
     if (!assignments.length) throw forbidden();
-    return (await repository.campuses(assignments.map(row => row.campus_id))).filter(row => row.activo)
+    return (await repository.campuses(assignments.map(row => row.campusId))).filter(row => row.activo)
       .map(row => ({ id: row.id, name: row.nombre }));
   });
 }

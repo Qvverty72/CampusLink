@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
-import { before, test } from 'node:test';
+import { after, before, test } from 'node:test';
 
 import express, { type Express } from 'express';
 import { ObjectId } from 'mongodb';
@@ -16,6 +16,8 @@ import type { RequestParser } from '../src/types/api.js';
 import { ApiClientError, fetchActiveCampusMap } from '../../frontendclink/src/three/api/mapApi.js';
 
 const CAMPUS_ID = '22222222-2222-4222-8222-222222222222';
+const originalNetworkFetch = globalThis.fetch;
+const authHeaders = { headers: { Authorization: 'Bearer api.test.token' } };
 let createApp: typeof import('../src/app.js').createApp;
 
 before(async () => {
@@ -26,7 +28,18 @@ before(async () => {
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
   });
   ({ createApp } = await import('../src/app.js'));
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.origin !== 'https://api-test.invalid') return originalNetworkFetch(input, init);
+    assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer api.test.token');
+    const id = '11111111-1111-4111-8111-111111111111';
+    if (url.pathname === '/auth/v1/user') return Response.json({ id, email: 'qa@duocuc.cl', email_confirmed_at: '2026-10-09T12:00:00Z' });
+    if (url.pathname.endsWith('/perfil_usuario')) return Response.json([{ id, campus_id: CAMPUS_ID, institucion_id: CAMPUS_ID,
+      nombre_completo: 'QA', foto_path: null, estado_cuenta: 'ACTIVA', deleted_at: null, verificado_en: '2026-10-09T12:00:00Z' }]);
+    return Response.json([]);
+  };
 });
+after(() => { globalThis.fetch = originalNetworkFetch; });
 
 async function withServer(
   app: Express,
@@ -140,7 +153,7 @@ test('returns a success envelope for the active map and the frontend still parse
   const app = createApp({ getActiveMap: async () => campusMap });
 
   await withServer(app, async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/v1/maps/${CAMPUS_ID}/active`);
+    const response = await fetch(`${baseUrl}/api/v1/maps/${CAMPUS_ID}/active`, authHeaders);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       data: {
@@ -188,7 +201,7 @@ test('returns a success envelope for the active map and the frontend still parse
   );
 
   try {
-    const runtimeMap = await fetchActiveCampusMap(CAMPUS_ID);
+    const runtimeMap = await fetchActiveCampusMap(CAMPUS_ID, 'api.test.token');
     assert.equal(runtimeMap.version, 7);
     assert.equal(runtimeMap.campusId, CAMPUS_ID);
     assert.deepEqual(runtimeMap.buildingFloors.A, ['A_1']);
@@ -208,7 +221,7 @@ test('rejects a malformed campus ID before calling the map service', async () =>
   });
 
   await withServer(app, async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/v1/maps/not-a-uuid/active`);
+    const response = await fetch(`${baseUrl}/api/v1/maps/not-a-uuid/active`, authHeaders);
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), {
       error: {
@@ -228,7 +241,7 @@ test('returns a common 404 error when the active map does not exist', async () =
   const app = createApp({ getActiveMap: async () => null });
 
   await withServer(app, async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/v1/maps/${CAMPUS_ID}/active`);
+    const response = await fetch(`${baseUrl}/api/v1/maps/${CAMPUS_ID}/active`, authHeaders);
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), {
       error: {
@@ -250,7 +263,7 @@ test('sanitizes errors raised by the active map service', async () => {
 
   try {
     await withServer(app, async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/api/v1/maps/${CAMPUS_ID}/active`);
+      const response = await fetch(`${baseUrl}/api/v1/maps/${CAMPUS_ID}/active`, authHeaders);
       assert.equal(response.status, 500);
       const body = await response.text();
       assert.equal(body.includes('private-host'), false);
@@ -438,7 +451,7 @@ test('frontend exposes backend validation details as an API client error', async
   );
 
   try {
-    await assert.rejects(fetchActiveCampusMap(CAMPUS_ID), (error: unknown) => {
+    await assert.rejects(fetchActiveCampusMap(CAMPUS_ID, 'api.test.token'), (error: unknown) => {
       assert.ok(error instanceof ApiClientError);
       assert.equal(error.status, 400);
       assert.equal(error.code, 'VALIDATION_ERROR');

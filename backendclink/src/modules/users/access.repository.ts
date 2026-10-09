@@ -1,5 +1,6 @@
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import type { AccessAssignment, AccessCampus, AccessCatalogItem, AccessConnection, AccessKind, AccessProfile, AccessSnapshot } from './access.types.js';
+import type { AuthAssignment } from '../auth/auth.types.js';
 
 export function withAccessTransaction<T>(operation: (repository: ReturnType<typeof accessRepository>) => Promise<T>) {
   return withPostgresTransaction(client => operation(accessRepository(client)));
@@ -13,8 +14,8 @@ export function accessRepository(client: AccessConnection) {
        FROM public.perfil_usuario WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`, [ids])).rows,
     lockCampus: async (id: string) => (await client.query<AccessCampus>(
       'SELECT id, nombre, institucion_id, activo FROM public.campus WHERE id=$1 FOR SHARE', [id])).rows[0],
-    adminAssignments: async (userId: string) => (await client.query<{ campus_id: string }>(
-      `SELECT ur.campus_id FROM public.usuario_rol ur JOIN public.rol r ON r.id=ur.rol_id
+    adminAssignments: async (userId: string) => (await client.query<AuthAssignment>(
+      `SELECT r.id,r.nombre AS name,ur.campus_id AS "campusId" FROM public.usuario_rol ur JOIN public.rol r ON r.id=ur.rol_id
        WHERE ur.perfil_usuario_id=$1 AND ur.revocado_en IS NULL AND r.nombre='ADMINISTRADOR'
        ORDER BY ur.id FOR SHARE OF ur, r`, [userId])).rows,
     campuses: async (ids: string[]) => (await client.query<AccessCampus>(

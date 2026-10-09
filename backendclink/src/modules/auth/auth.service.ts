@@ -5,6 +5,7 @@ import type { AuthAssignment, AuthAssignmentRow, VerifiedAuthConnection } from '
 import type { AuthHealth } from './auth.types.js';
 import type { AuthProfile, RegistrationInput, RegistrationOption, VerifiedIdentity } from './auth.types.js';
 import type { User } from '@supabase/supabase-js';
+import { requireActiveAccount } from './auth.authorization.js';
 
 function credentials(body: unknown, recovery = false) {
   const invalid = () => new ApiError(400, 'VALIDATION_ERROR', 'Revisa el correo, la contraseña y el código cuando corresponda.');
@@ -76,21 +77,8 @@ export async function resetAccountPassword(body: unknown) {
   }
 }
 
-// Names for the existing catalog, not new roles or database attributes.
-// User-approved matrix: admin has all functions, authorized permissions stay independent.
-export function accountCapabilities(context: VerifiedAuthConnection) {
-  const localRoles = context.roles.filter(role => role.campusId === context.campusId);
-  const admin = localRoles.some(role => role.name === 'ADMINISTRADOR');
-  const authorized = localRoles.some(role => role.name === 'USUARIO_AUTORIZADO');
-  const has = (name: string) => admin || (authorized && context.permissions.some(permission =>
-    permission.campusId === context.campusId && permission.name === name));
-  return {
-    general: admin || authorized || Boolean(context.profile.verificado_en),
-    officialActivities: has('PUBLICAR_EVENTO'),
-    analytics: has('ACCEDER_ANALITICA'),
-    reports: has('ACCEDER_REPORTERIA'),
-  };
-}
+// Preserve the existing export and /me contract; services share the same matrix.
+export { accountCapabilities } from './auth.authorization.js';
 
 function providerIdentity(user: User | null): VerifiedIdentity {
   if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'A valid access token is required');
@@ -218,9 +206,7 @@ export async function verifyAuthIdentity(accessToken: string): Promise<VerifiedI
 }
 
 function requireActiveProfile(profile: AuthProfile, userId: string) {
-  if (profile.id !== userId || profile.estado_cuenta !== 'ACTIVA' || profile.deleted_at) {
-    throw new ApiError(403, 'FORBIDDEN', 'An active account profile is required');
-  }
+  requireActiveAccount(profile, userId);
 }
 
 function registrationDetails(identity: VerifiedIdentity) {

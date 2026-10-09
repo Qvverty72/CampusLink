@@ -3,6 +3,7 @@ import { validateRequest } from '../../middleware/validateRequest.js';
 import { createGetActiveMapController, getMapHealthController } from './map.controller.js';
 import type { ActiveMapLookup } from './map.service.js';
 import { parseActiveMapParams } from './map.validation.js';
+import { requireAuthentication } from '../auth/auth.middleware.js';
 
 export interface MapRouterOptions {
   lookup?: ActiveMapLookup;
@@ -18,6 +19,7 @@ export function createMapRouter(options: MapRouterOptions = {}): Router {
 
   mapRouter.get(
     '/:campusId/active',
+    requireAuthentication,
     validateRequest({ params: parseActiveMapParams }),
     createGetActiveMapController(options.lookup),
   );

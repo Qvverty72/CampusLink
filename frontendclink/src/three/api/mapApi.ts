@@ -138,10 +138,14 @@ function parseVector3(value: ApiVector3, fieldName: string): Vector3 {
   return [values[0], values[1], values[2]];
 }
 
-export async function fetchActiveCampusMap(campusId: string, signal?: AbortSignal): Promise<RuntimeMapData> {
+export async function fetchActiveCampusMap(campusId: string, accessToken: string, signal?: AbortSignal): Promise<RuntimeMapData> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campusId)) throw new Error('Invalid campus');
+  if (!accessToken?.trim()) throw new ApiClientError(401, 'UNAUTHENTICATED', 'Inicia sesión para consultar el mapa.');
+  // Token comes from the current SDK session, never from persisted map data.
   const response = await fetch(
-    `${API_BASE_URL}/api/v1/maps/${campusId}/active`, { signal }
+    `${API_BASE_URL}/api/v1/maps/${campusId}/active`, {
+      signal, headers: { Authorization: 'Bearer ' + accessToken }, cache: 'no-store', redirect: 'error',
+    }
   );
 
   if (!response.ok) {

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -12,17 +13,27 @@ import { useMapDataStore } from '@/three/store/mapDataStore';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useMapStore } from '@/three/store/mapStore';
+import { ApiClientError } from '@/three/api/mapApi';
 
 export default function MapScreen() {
-  const campusId = useAuth().identity?.campusId;
+  const auth = useAuth();
+  const campusId = auth.identity?.campusId;
+  const accessToken = auth.session?.access_token;
   const data = useMapDataStore((state) => state.data);
   const error = useMapDataStore((state) => state.error);
   const loadMap = useMapDataStore((state) => state.loadMap);
+  const clearMap = useMapDataStore((state) => state.clearMap);
+  const load = () => {
+    if (campusId && accessToken) void loadMap(campusId, accessToken).catch(reason => {
+      if (reason instanceof ApiClientError && [401, 403].includes(reason.status)) auth.refreshIdentity();
+    });
+  };
 
   useEffect(() => {
     useMapStore.getState().resetBuilding();
-    if (campusId) void loadMap(campusId);
-  }, [loadMap, campusId]);
+    load();
+    return clearMap;
+  }, [loadMap, clearMap, campusId, accessToken, auth.refreshIdentity]);
 
   if (!data || data.campusId !== campusId) {
     return (
@@ -34,9 +45,12 @@ export default function MapScreen() {
               <Text style={styles.statusText}>Cargando mapa del campus...</Text>
             </>
           ) : (
-            <Text style={styles.errorText}>
-              {error ?? 'No se pudo cargar el mapa del campus.'}
-            </Text>
+            <>
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable accessibilityRole="button" onPress={load} style={styles.retry}>
+                <Text style={styles.retryText}>Reintentar</Text>
+              </Pressable>
+            </>
           )}
         </View>
         <BottomNavigationBar activeItemId={'map'} />
@@ -75,5 +89,8 @@ const styles = StyleSheet.create({
 
   errorText: {
     textAlign: 'center',
+    color: '#FFB4AB',
   },
+  retry: { marginTop: 16, padding: 16, backgroundColor: '#FFFFFF', borderRadius: 12 },
+  retryText: { color: '#09243A', fontWeight: '700' },
 });

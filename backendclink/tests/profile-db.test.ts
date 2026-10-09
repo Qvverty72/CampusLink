@@ -150,3 +150,22 @@ test('version checks preserve microseconds and connections are released after fa
   assert.match(saved.updatedAt, /\.\d{6}Z$/);
   assert.equal(releaseCount, previousReleases + 2);
 });
+
+test('real SQL rechecks privileged roles in the current profile campus before a write', async () => {
+  const user = await fixture();
+  const roleId = randomUUID();
+  await db.query("insert into rol(id,nombre) values ($1,'ADMINISTRADOR') on conflict(nombre) do nothing", [roleId]);
+  const catalogId = (await db.query<{ id: string }>("select id from rol where nombre='ADMINISTRADOR'")).rows[0].id;
+  await db.query('update perfil_usuario set verificado_en=null where id=$1', [user]);
+  await db.query('insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) values ($1,$2,$3)', [user,catalogId,campus]);
+  const auth: VerifiedAuthConnection = { userId:user,campusId:campus,roles:[{id:catalogId,name:'ADMINISTRADOR',campusId:campus}],permissions:[],
+    profile:{id:user,institucion_id:institution,campus_id:campus,nombre_completo:'Before',foto_path:null,verificado_en:null,estado_cuenta:'ACTIVA',deleted_at:null} };
+  const body = { fullName:'After',campusId:campus,careerIds:[],updatedAt:await version(user) };
+  await db.query('update usuario_rol set revocado_en=now() where perfil_usuario_id=$1', [user]);
+  await assert.rejects(updateAcademicProfile(auth,body), { status:403 });
+  assert.equal((await db.query('select nombre_completo from perfil_usuario where id=$1',[user])).rows[0].nombre_completo,'Before');
+  await db.query('update usuario_rol set revocado_en=null where perfil_usuario_id=$1', [user]);
+  await db.query('update perfil_usuario set campus_id=$1 where id=$2',[nextCampus,user]);
+  await assert.rejects(updateAcademicProfile(auth,body), { status:403 });
+  assert.equal((await db.query('select nombre_completo from perfil_usuario where id=$1',[user])).rows[0].nombre_completo,'Before');
+});

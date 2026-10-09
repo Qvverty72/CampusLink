@@ -8,6 +8,8 @@ Perfil académico F2.3-04: [API, validaciones, guardado transaccional y migraci�
 
 Roles y permisos por campus F2.3-05: administración mediante `/api/v1/users/access`, con alcance vigente, listado paginado y auditoría atómica. Requiere `SUPABASE_DB_URL`, administrador previamente incorporado y `src/database/supabase/migrations/f2_3_05_roles_permisos.sql`. [Guía local](docs/campus-role-permissions.md).
 
+Autorización F2.3-06: [políticas por ruta, comprobaciones de permiso/campus/propietario y guía para servicios futuros](docs/campus-authorization.md). El mapa ahora exige Bearer y campus vigente. No requiere SQL nuevo.
+
 ## Ejecución local
 
 Desde backendclink, instalar con npm ci y completar .env a partir de .env.example. No sobrescribir un .env existente.
@@ -22,7 +24,7 @@ Desde backendclink, instalar con npm ci y completar .env a partir de .env.exampl
 | MONGODB_DB_NAME | Base documental; campuslink por defecto |
 | SUPABASE_URL | Origen HTTP(S) del proyecto Supabase, obligatorio |
 | SUPABASE_PUBLISHABLE_KEY | Clave pública del proyecto, obligatoria |
-| SUPABASE_SECRET_KEY | Clave opcional exclusiva del servidor para diagnósticos y referencias de campus |
+| SUPABASE_SECRET_KEY | Clave exclusiva del servidor requerida por registro, lecturas de perfil y referencia del campus del mapa; opcional solo para las sondas técnicas |
 | SUPABASE_SERVICE_ROLE_KEY | Alias legacy de la clave de servidor; SECRET_KEY tiene preferencia |
 | SUPABASE_DB_URL | URL PostgreSQL/pooler exclusiva del backend para guardar el perfil académico en una transacción; usa contraseña DB y TLS verificado |
 | DATABASE_TIMEOUT_MS | Límite por operación/sonda, 5000 ms por defecto, rango 100–60000 |
@@ -69,7 +71,7 @@ Copy-Item .env.example .env
 cp .env.example .env
 ~~~
 
-Completar .env localmente con MONGODB_URI, MONGODB_DB_NAME, SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY. Configurar SUPABASE_SECRET_KEY solo si las sondas/referencias necesitan la clave técnica del servidor. Obtener estos valores por el canal privado del equipo: no están en la imagen ni en el repositorio.
+Completar .env localmente con MONGODB_URI, MONGODB_DB_NAME, SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY. Configurar SUPABASE_SECRET_KEY para las operaciones de negocio que consultan referencias mediante el cliente de servidor y SUPABASE_DB_URL para escrituras transaccionales. Obtener estos valores por el canal privado del equipo: no están en la imagen ni en el repositorio.
 
 Construir e iniciar:
 
@@ -179,9 +181,9 @@ Las rutas usan `{ error: { code, message, details? } }` para errores y `{ data, 
 
 ## Contrato de mapas y Expo
 
-GET /api/v1/maps/:campusId/active responde `200` con `{ data: <mapa> }`. Dentro de `data`, `buildings` permanece en la raíz del documento, el ObjectId se serializa como string y las fechas como ISO. Los errores utilizan el sobre común; un UUID inválido devuelve `400 VALIDATION_ERROR` con el campo afectado y un mapa/campus inexistente devuelve `404 NOT_FOUND`.
+GET /api/v1/maps/:campusId/active exige `Authorization: Bearer <access_token>`, perfil vigente y capacidad general en el campus actual. Responde `200` con `{ data: <mapa> }`. Dentro de `data`, `buildings` permanece en la raíz del documento, el ObjectId se serializa como string y las fechas como ISO. Los errores utilizan el sobre común: sin sesión válida 401; campus distinto o acceso insuficiente 403; UUID inválido con sesión válida 400; mapa/campus vigente inexistente 404. Las respuestas no se cachean.
 
-Ahora consulta primero public.campus por id y activo=true; solo después consulta el mapa ACTIVE. Un campus de Mongo sin referencia relacional válida no se entrega. Esta comprobación usa el cliente técnico y no constituye autorización del solicitante.
+Después de autorizar al solicitante, consulta public.campus por id y activo=true mediante el cliente de servidor; solo después consulta el mapa ACTIVE. El servicio comprueba también el campus y estado del documento devuelto. Un campus de Mongo sin referencia relacional válida no se entrega.
 
 `frontendclink/src/three/api/mapApi.ts` desenvuelve `data` y expone errores con status, code y details para conservar el uso del documento por la escena 3D. El cliente autenticado también consume respuestas con `data`.
 
@@ -189,7 +191,7 @@ El servidor no utiliza CAMPUS_ID, MAP_VERSION ni MAP_STATUS en el .env: eran par
 
 ## Diagnosticar un mapa que no carga
 
-La ruta del mapa activo exige dos datos compatibles:
+La ruta del mapa activo exige sesión autorizada en el campus vigente y dos datos compatibles:
 
 1. Un registro en public.campus de Supabase con el UUID solicitado y activo=true.
 2. Un documento en campus_maps de MongoDB con el mismo campusId y status=ACTIVE.
@@ -199,12 +201,12 @@ GET /api/v1/maps/:campusId/active devuelve 404 si falta cualquiera de esas refer
 Para el mapa actual:
 
 ~~~sh
-curl http://localhost:3000/api/v1/maps/22222222-2222-4222-8222-222222222222/active
+curl -H "Authorization: Bearer <access_token>" http://localhost:3000/api/v1/maps/22222222-2222-4222-8222-222222222222/active
 ~~~
 
 El campus San Andres está vinculado a DUOC UC en el proyecto Supabase configurado. La referencia se creó el 2026-10-08 para el UUID que ya usaba el mapa; no es una migración ni se crea automáticamente al arrancar. Si se cambia de proyecto Supabase/Atlas, preparar sus referencias válidas antes de consultar el mapa. El backend conserva el documento bajo `data`, el cliente Expo lo desenvuelve y la comprobación del campus debe mantenerse.
 
-El frontend consume EXPO_PUBLIC_API_URL desde su propio entorno y utiliza el campus configurado en mapApi.ts. En un teléfono, la URL debe ser accesible desde ese dispositivo; localhost apunta al teléfono. Después de corregir un fallo de carga, recargar la pantalla para repetir la solicitud.
+El frontend consume EXPO_PUBLIC_API_URL desde su propio entorno y utiliza el campus vigente de `/auth/me` y el token de la sesión. En un teléfono, la URL debe ser accesible desde ese dispositivo; localhost apunta al teléfono. Después de corregir un fallo de carga, usar Reintentar. Un 401/403 actualiza la identidad y los accesos visibles.
 
 ## Supabase y autenticación
 
@@ -216,7 +218,7 @@ createUserSupabaseClient crea un contexto independiente con la clave pública y 
 
 F2.3-01 conecta `verifyAuthConnection(accessToken)` con `requireAuthentication` y `GET /api/v1/auth/me`. El middleware acepta un único header `Authorization: Bearer <access_token>`, verifica identidad en Supabase mediante `getUser(token)` y luego consulta perfil y asignaciones vigentes bajo RLS. No utiliza metadatos del JWT para conceder capacidades ni cachea estado, campus o permisos.
 
-`/me` responde con `{ data: { userId, campusId, profile, roles, permissions } }`. `profile` contiene únicamente `id`, `institucion_id`, `campus_id`, `nombre_completo`, `foto_path`, `verificado_en`, `estado_cuenta` y `deleted_at`. Cada rol o permiso tiene `{ id, name, campusId }`, conserva el campus de su asignación y excluye registros revocados. Los permisos explícitos se devuelven separados de los roles; el catálogo y la herencia de capacidades siguen pendientes de resolución en F2.2-10/F2.3-05. El endpoint no recibe un UUID del cliente ni devuelve tokens.
+`/me` responde con `{ data: { userId, campusId, profile, roles, permissions, capabilities } }`. `profile` contiene únicamente `id`, `institucion_id`, `campus_id`, `nombre_completo`, `foto_path`, `verificado_en`, `estado_cuenta` y `deleted_at`. Cada rol o permiso tiene `{ id, name, campusId }`, conserva el campus de su asignación y excluye registros revocados. Los permisos explícitos se devuelven separados de los roles; `capabilities` conserva las cuatro opciones definidas en F2.3-03. La matriz aprobada y aplicada en F2.3-05/F2.3-06 se documenta en la guía de autorización. El endpoint no recibe un UUID del cliente ni devuelve tokens.
 
 Credenciales ausentes, malformadas, inválidas o vencidas producen 401 `UNAUTHENTICATED` y `WWW-Authenticate: Bearer`. Un perfil ausente, suspendido, desactivado o eliminado produce 403 `FORBIDDEN`; fallos de Auth/PostgreSQL producen 503 `DEPENDENCY_UNAVAILABLE` sin detalles del proveedor. La respuesta incluye `Cache-Control: no-store`, también ante errores. En nuevas rutas, colocar `requireAuthentication` antes de la autorización por operación y la lógica de negocio; el contexto verificado queda en `response.locals.auth`.
 
@@ -224,9 +226,9 @@ Aplicar `src/database/supabase/migrations/f2_3_01_autenticacion.sql` mediante un
 
 Expo incorpora `AuthProvider`, `useAuth()` y `getSupabaseClient()` bajo `src/features/auth`. Configurar `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o el alias legado `EXPO_PUBLIC_SUPABASE_ANON_KEY`) y `EXPO_PUBLIC_API_URL` en `frontendclink/.env`. El cliente rechaza claves secret/service_role; un secreto nunca debe introducirse en una variable `EXPO_PUBLIC_*`, pues Expo la incluye en el bundle. Usa persistencia AsyncStorage en dispositivos, persistencia web del SDK y renovación mientras la aplicación está activa; restaura la sesión y consulta `/me` al cambiar la sesión o volver al primer plano. Las consultas canceladas no pueden restaurar un contexto anterior al cierre/cambio de sesión. `authenticatedRequest` adjunta el token actual únicamente a rutas relativas `/api/v1/` del backend configurado.
 
-`useAuth()` expone `session`, `identity`, `status`, `error` y `refreshIdentity()`. Solo `status === 'ready'` ofrece un contexto de perfil utilizable; una sesión local por sí sola no autoriza operaciones. Los estados son `loading`, `signedOut`, `ready`, `forbidden`, `error` y `unconfigured`. `refreshIdentity()` descarta inmediatamente el contexto previo y repite la consulta. El SDK queda disponible para los flujos de registro/login/recuperación de F2.3-02/F2.3-03. La bienvenida y la ruta actual de mapa conservan su acceso existente hasta las tareas de autorización F2.2-07/F2.2-10/F2.3-06.
+`useAuth()` expone `session`, `identity`, `status`, `error` y `refreshIdentity()`. Solo `status === 'ready'` ofrece un contexto de perfil utilizable; una sesión local por sí sola no autoriza operaciones. Los estados son `loading`, `signedOut`, `ready`, `forbidden`, `error` y `unconfigured`. `refreshIdentity()` descarta inmediatamente el contexto previo y repite la consulta. El SDK queda disponible para los flujos de registro/login/recuperación de F2.3-02/F2.3-03. La navegación protegida usa las capacidades actuales y el mapa también las exige en Express.
 
-Decisión del usuario (2026-10-08): el administrador hereda funciones institucionales. Falta sincronizar F2.2-10 y cerrar el catálogo de roles fijos; no se implementó una matriz de permisos provisional.
+Decisión explícita del usuario (2026-10-08, GH-59/GH-61): ADMINISTRADOR tiene todas las capacidades en su campus asignado; USUARIO_AUTORIZADO tiene generales y los tres permisos adicionales independientes. El institucional verificado tiene generales en su campus vigente. Falta sincronizar el texto pendiente de F2.2-10/F2.3-05 con esta aprobación.
 
 ## Esquemas y verificaciones
 
@@ -254,7 +256,7 @@ Las colecciones esperadas del modelo actual son campus_maps, activities, activit
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
-- Completar aislamiento, catálogo de roles, RLS y pruebas permitidas/prohibidas de acceso por campus.
+- Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
 - Completar idempotencia/historial de eventos para KPI; el health no demuestra cobertura analítica.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
 - Incorporar actividades como módulo futuro con las mismas cinco capas.
