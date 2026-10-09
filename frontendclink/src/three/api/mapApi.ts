@@ -5,7 +5,6 @@ import type {
   FloorMeshConfig,
 } from '@/three/types/map';
 
-const CAMPUS_ID = '22222222-2222-4222-8222-222222222222';
 
 const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
@@ -139,9 +138,10 @@ function parseVector3(value: ApiVector3, fieldName: string): Vector3 {
   return [values[0], values[1], values[2]];
 }
 
-export async function fetchActiveCampusMap(): Promise<RuntimeMapData> {
+export async function fetchActiveCampusMap(campusId: string, signal?: AbortSignal): Promise<RuntimeMapData> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campusId)) throw new Error('Invalid campus');
   const response = await fetch(
-    `${API_BASE_URL}/api/v1/maps/${CAMPUS_ID}/active`
+    `${API_BASE_URL}/api/v1/maps/${campusId}/active`, { signal }
   );
 
   if (!response.ok) {
@@ -150,6 +150,7 @@ export async function fetchActiveCampusMap(): Promise<RuntimeMapData> {
 
   const envelope = (await response.json()) as ApiSuccessResponse<ActiveCampusMapResponse>;
   const map = envelope.data;
+  if (map.campusId.toLowerCase() !== campusId.toLowerCase()) throw new Error('El mapa recibido no corresponde a tu campus.');
 
   const buildingFloors = {} as Record<BuildingId, string[]>;
   const buildingConfigs = {} as Record<BuildingId, BuildingConfig>;

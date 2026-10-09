@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { AcademicProfileSection } from '@/features/users/AcademicProfile';
 
 export default function ProfileScreen() {
   const auth = useAuth();
@@ -17,7 +18,7 @@ export default function ProfileScreen() {
     identity.capabilities.reports && 'Reportería'].filter(Boolean).join(' · ') : '';
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>CL</Text>
         </View>
@@ -36,6 +37,8 @@ export default function ProfileScreen() {
           <Text style={styles.placeholderDescription}>{roleLabel}</Text>
           <Text style={styles.placeholderDescription}>Acceso en tu campus: {functions || 'Solo tu cuenta'}</Text>
         </View>
+
+        {identity?.capabilities.general && <AcademicProfileSection key={`${identity.userId}:${identity.campusId}`} />}
 
         <View style={styles.moduleLinks}>
           {identity?.capabilities.reports && <Link href={'/reports'} asChild>

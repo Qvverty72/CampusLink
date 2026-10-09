@@ -10,17 +10,21 @@ import { CampusMapViewport } from '@/three/components/CampusMapViewport';
 import { FloorInfoModal } from '@/three/components/FloorInfoModal';
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
+import { useAuth } from '@/features/auth/AuthProvider';
+import { useMapStore } from '@/three/store/mapStore';
 
 export default function MapScreen() {
+  const campusId = useAuth().identity?.campusId;
   const data = useMapDataStore((state) => state.data);
   const error = useMapDataStore((state) => state.error);
   const loadMap = useMapDataStore((state) => state.loadMap);
 
   useEffect(() => {
-    void loadMap();
-  }, [loadMap]);
+    useMapStore.getState().resetBuilding();
+    if (campusId) void loadMap(campusId);
+  }, [loadMap, campusId]);
 
-  if (!data) {
+  if (!data || data.campusId !== campusId) {
     return (
       <View style={styles.screen}>
         <View style={[styles.container, styles.centered]}>

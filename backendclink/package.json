@@ -10,7 +10,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --project tsconfig.check.json",
-    "test": "tsx --test test/api.test.ts tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
@@ -18,13 +18,15 @@
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",
-    "mongodb": "^7.6.0"
+    "mongodb": "^7.6.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@types/cors": "latest",
     "@types/express": "latest",
     "@types/node": "^22",
+    "@types/pg": "^8.23.1",
     "tsx": "latest",
     "typescript": "latest"
   }

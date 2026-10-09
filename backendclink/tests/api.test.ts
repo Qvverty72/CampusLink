@@ -188,7 +188,7 @@ test('returns a success envelope for the active map and the frontend still parse
   );
 
   try {
-    const runtimeMap = await fetchActiveCampusMap();
+    const runtimeMap = await fetchActiveCampusMap(CAMPUS_ID);
     assert.equal(runtimeMap.version, 7);
     assert.equal(runtimeMap.campusId, CAMPUS_ID);
     assert.deepEqual(runtimeMap.buildingFloors.A, ['A_1']);
@@ -438,7 +438,7 @@ test('frontend exposes backend validation details as an API client error', async
   );
 
   try {
-    await assert.rejects(fetchActiveCampusMap(), (error: unknown) => {
+    await assert.rejects(fetchActiveCampusMap(CAMPUS_ID), (error: unknown) => {
       assert.ok(error instanceof ApiClientError);
       assert.equal(error.status, 400);
       assert.equal(error.code, 'VALIDATION_ERROR');
