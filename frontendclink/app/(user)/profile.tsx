@@ -1,11 +1,23 @@
 import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 export default function ProfileScreen() {
+  const auth = useAuth();
+  const [closing, setClosing] = useState(false);
+  const identity = auth.identity;
+  const localRoles = identity?.roles.filter(role => role.campusId === identity.campusId) ?? [];
+  const roleLabel = localRoles.some(role => role.name === 'ADMINISTRADOR') ? 'Administrador'
+    : localRoles.some(role => role.name === 'USUARIO_AUTORIZADO') ? 'Usuario autorizado'
+    : identity?.profile.verificado_en ? 'Usuario institucional verificado' : 'Cuenta';
+  const functions = identity ? [identity.capabilities.general && 'Funciones generales',
+    identity.capabilities.officialActivities && 'Actividades oficiales', identity.capabilities.analytics && 'Analítica',
+    identity.capabilities.reports && 'Reportería'].filter(Boolean).join(' · ') : '';
   return (
     <View style={styles.screen}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>CL</Text>
         </View>
@@ -13,19 +25,20 @@ export default function ProfileScreen() {
         <Text style={styles.eyebrow}>CUENTA</Text>
         <Text style={styles.title}>Mi perfil</Text>
         <Text style={styles.description}>
-          Esta pantalla base está preparada para mostrar la información de tu
-          perfil.
+          {identity?.profile.nombre_completo}
         </Text>
 
         <View style={styles.placeholder}>
           <Text style={styles.placeholderTitle}>Información personal</Text>
           <Text style={styles.placeholderDescription}>
-            Aquí se agregarán los datos y opciones de la cuenta.
+            {auth.session?.user.email}
           </Text>
+          <Text style={styles.placeholderDescription}>{roleLabel}</Text>
+          <Text style={styles.placeholderDescription}>Acceso en tu campus: {functions || 'Solo tu cuenta'}</Text>
         </View>
 
         <View style={styles.moduleLinks}>
-          <Link href={'/reports'} asChild>
+          {identity?.capabilities.reports && <Link href={'/reports'} asChild>
             <Pressable
               accessibilityRole={'button'}
               accessibilityLabel={'Ir a Reportes'}
@@ -37,9 +50,9 @@ export default function ProfileScreen() {
               <Text style={styles.moduleLinkText}>Reportes</Text>
               <Text style={styles.moduleLinkArrow}>→</Text>
             </Pressable>
-          </Link>
+          </Link>}
 
-          <Link href={'/analytics'} asChild>
+          {identity?.capabilities.analytics && <Link href={'/analytics'} asChild>
             <Pressable
               accessibilityRole={'button'}
               accessibilityLabel={'Ir a Analítica'}
@@ -51,9 +64,13 @@ export default function ProfileScreen() {
               <Text style={styles.moduleLinkText}>Analítica</Text>
               <Text style={styles.moduleLinkArrow}>→</Text>
             </Pressable>
-          </Link>
+          </Link>}
+          <Pressable accessibilityRole="button" disabled={closing} style={styles.moduleLink} onPress={async () => {
+            if (closing) return; setClosing(true); await auth.signOut(); setClosing(false);
+          }}><Text style={styles.moduleLinkText}>{closing ? 'Cerrando sesión…' : 'Cerrar sesión'}</Text></Pressable>
+          {auth.error && <Text accessibilityRole="alert" style={styles.placeholderDescription}>{auth.error}</Text>}
         </View>
-      </View>
+      </ScrollView>
       <BottomNavigationBar activeItemId={'home'} />
     </View>
   );
@@ -65,9 +82,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#071A2B',
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 28,
+    paddingVertical: 28,
   },
   avatar: {
     width: 54,

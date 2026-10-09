@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { router, type Href, usePathname } from 'expo-router';
 import {
   Pressable,
@@ -38,6 +39,8 @@ export function BottomNavigationBar({
   activeItemId,
   onItemPress,
 }: BottomNavigationBarProps) {
+  const auth = useAuth();
+  items = items.filter(item => item.id === 'home' || (auth.status === 'ready' && auth.identity?.capabilities.general));
   const pathname = usePathname();
   const currentItemId =
     activeItemId ??

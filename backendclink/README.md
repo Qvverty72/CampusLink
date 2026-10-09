@@ -2,6 +2,8 @@
 
 Base API REST de F2.2-03 (GitHub #50). Node.js 22, TypeScript, Express 5, Supabase JS y driver oficial MongoDB. Las rutas se montan en /api/v1.
 
+Inicio/cierre/recuperación de sesión F2.3-03: [contratos, permisos, plantilla y configuración de Supabase](docs/session-login-recovery.md).
+
 ## Ejecución local
 
 Desde backendclink, instalar con npm ci y completar .env a partir de .env.example. No sobrescribir un .env existente.

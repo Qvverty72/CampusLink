@@ -4,6 +4,7 @@ import { inspectDependencies } from '../../database/health.js';
 import { probeSupabaseTables } from '../../database/supabase/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
 import type { NewAuthProfile, RegistrationCampusRow, RegistrationDomainRow, RegistrationInput } from './auth.types.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export async function findRegistrationDomains() {
   return createServerSupabaseClient().from('dominio_institucional')
@@ -34,6 +35,27 @@ export async function verifyInstitutionalOtp(email: string, token: string) {
 }
 export async function resendInstitutionalOtp(email: string) {
   return createPublicSupabaseClient().auth.resend({ type: 'signup', email });
+}
+
+export async function signInAuthUser(email: string, password: string) {
+  return createPublicSupabaseClient().auth.signInWithPassword({ email, password });
+}
+
+export async function requestPasswordRecovery(email: string) {
+  return createPublicSupabaseClient().auth.resetPasswordForEmail(email);
+}
+
+export async function verifyPasswordRecovery(email: string, token: string) {
+  const client = createPublicSupabaseClient();
+  return { client, ...await client.auth.verifyOtp({ email, token, type: 'recovery' }) };
+}
+
+export function updateRecoveredPassword(client: SupabaseClient, password: string) {
+  return client.auth.updateUser({ password });
+}
+
+export function closeRecoverySession(client: SupabaseClient) {
+  return client.auth.signOut({ scope: 'local' });
 }
 
 export function probeAuthDependencies(): Promise<DependencyChecks> {

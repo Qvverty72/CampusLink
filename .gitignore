@@ -18,3 +18,5 @@ Contexto técnico de tareas
 context/
 **/.context/
 **/context/tasks/
+
+/backend/docs/

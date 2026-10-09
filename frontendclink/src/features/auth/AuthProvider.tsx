@@ -12,6 +12,7 @@ interface AuthContextValue {
   status: AuthStatus;
   error: string | null;
   refreshIdentity: () => void;
+  signOut: () => Promise<void>;
 }
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -23,6 +24,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [restored, setRestored] = useState(false);
   const [revision, setRevision] = useState(0);
   const pendingRequest = useRef<AbortController | null>(null);
+  const signOut = useCallback(async () => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) throw new Error();
+      const result = await client.auth.signOut({ scope: 'local' });
+      if (result.error) {
+        const { data } = await client.auth.getSession();
+        setError(data.session ? 'No se pudo cerrar la sesión. Revisa tu conexión e inténtalo nuevamente.'
+          : 'La sesión se retiró del dispositivo, pero no se pudo confirmar el cierre remoto. Revisa tu conexión.');
+      }
+    } catch {
+      setError('No se pudo cerrar la sesión. Revisa tu conexión e inténtalo nuevamente.');
+    }
+  }, []);
   const refreshIdentity = useCallback(() => {
     pendingRequest.current?.abort();
     setIdentity(null);
@@ -92,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => abort.abort();
   }, [session, restored, revision]);
 
-  return <AuthContext.Provider value={{ session, identity, status, error, refreshIdentity }}>
+  return <AuthContext.Provider value={{ session, identity, status, error, refreshIdentity, signOut }}>
     {children}
   </AuthContext.Provider>;
 }

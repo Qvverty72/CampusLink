@@ -1,175 +1,64 @@
-import { useEffect } from 'react';
-import { Link, type Href } from 'expo-router';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { preloadCampusGLTF } from '@/three/models/CampusModel';
+﻿import { useState } from 'react';
+import { Link, Redirect } from 'expo-router';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput } from 'react-native';
+import { useAuth } from '@/features/auth/AuthProvider';
+import { loginAccount } from '@/features/auth/session';
+import { authStyles as styles } from '@/features/auth/form.styles';
 
 export default function LoginScreen() {
-  useEffect(() => {
-    // Aprovecha el tiempo de la bienvenida para cargar y parsear el GLB local; al
-    // navegar al mapa, useCampusGLTF reutiliza ese resultado desde la caché.
-    preloadCampusGLTF();
-  }, []);
+  const auth = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={[styles.glow, styles.glowTop]} />
-        <View style={[styles.glow, styles.glowBottom]} />
+  async function submit() {
+    if (busy || auth.status === 'loading') return;
+    setError(null);
+    const address = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || !password) {
+      setError('Ingresa tu correo y contraseña.'); return;
+    }
+    setBusy(true);
+    try { await loginAccount(address, password); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo iniciar sesión.'); }
+    finally { setPassword(''); setBusy(false); }
+  }
 
-        <View style={styles.brand}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>CL</Text>
-          </View>
-          <Text style={styles.brandName}>CampusLink</Text>
-        </View>
-
-        <View style={styles.hero}>
-          <Text style={styles.eyebrow}>TU CAMPUS, MÁS CERCA</Text>
-          <Text style={styles.title}>Bienvenido a{`\n`}CampusLink</Text>
-          <Text style={styles.description}>
-            Explora el campus, encuentra edificios y descubre cada espacio desde
-            un mapa interactivo.
-          </Text>
-        </View>
-
-        <View style={styles.footer}>
-          <Link href={'/register' as Href} asChild>
-            <Pressable accessibilityRole="button" style={styles.button}>
-              <Text style={styles.buttonText}>Crear cuenta institucional</Text>
-              <Text style={styles.buttonArrow}>+</Text>
-            </Pressable>
-          </Link>
-          <Link href={'/map' as Href} prefetch replace asChild>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Iniciar sesión"
-              style={({ pressed }) => [
-                styles.button,
-                pressed && styles.buttonPressed,
-              ]}
-            >
-              <Text style={styles.buttonText}>Iniciar sesión</Text>
-              <Text style={styles.buttonArrow}>→</Text>
-            </Pressable>
-          </Link>
-          <Text style={styles.helperText}>
-            Por ahora puedes ingresar sin una cuenta.
-          </Text>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
+  if (auth.status === 'ready') return <Redirect href="/profile" />;
+  const loading = auth.status === 'loading';
+  return <SafeAreaView style={styles.page}>
+    <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.brand}>CampusLink</Text>
+        <Text style={styles.title}>Iniciar sesión</Text>
+        <Text style={styles.description}>Ingresa con el correo y la contraseña de tu cuenta.</Text>
+        {loading ? <ActivityIndicator color="#74C69D" accessibilityLabel="Consultando tu cuenta" />
+          : auth.session ? <>
+            <Text style={styles.description}>{auth.status === 'forbidden'
+              ? 'Tu cuenta no tiene acceso o falta completar tu registro.'
+              : 'No se pudo validar el acceso de tu cuenta.'}</Text>
+            <Pressable accessibilityRole="button" onPress={auth.refreshIdentity} style={styles.button}><Text style={styles.buttonText}>Reintentar consulta</Text></Pressable>
+            {auth.status === 'forbidden' && <Link href="/register" style={styles.link}>Completar registro institucional</Link>}
+            <Pressable accessibilityRole="button" disabled={busy} onPress={async () => {
+              if (busy) return; setBusy(true); await auth.signOut(); setBusy(false);
+            }}><Text style={styles.link}>Cerrar sesión</Text></Pressable>
+          </> : <>
+            <Text style={styles.label}>Correo</Text>
+            <TextInput accessibilityLabel="Correo" style={styles.input} value={email} onChangeText={setEmail}
+              keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} editable={!busy} />
+            <Text style={styles.label}>Contraseña</Text>
+            <TextInput accessibilityLabel="Contraseña" style={styles.input} value={password} onChangeText={setPassword}
+              secureTextEntry autoComplete="current-password" maxLength={4096} editable={!busy} onSubmitEditing={submit} />
+            <Pressable accessibilityRole="button" disabled={busy || auth.status === 'unconfigured'} onPress={submit}
+              style={[styles.button, (busy || auth.status === 'unconfigured') && styles.disabled]}><Text style={styles.buttonText}>Iniciar sesión</Text></Pressable>
+            <Link href="/recover" style={styles.link}>Olvidé mi contraseña</Link>
+            <Link href="/register" style={styles.link}>Crear cuenta institucional</Link>
+          </>}
+        {busy && <ActivityIndicator color="#74C69D" accessibilityLabel="Procesando" />}
+        {(error || auth.error) && <Text accessibilityRole="alert" style={styles.error}>{error || auth.error}</Text>}
+        {auth.status === 'unconfigured' && <Text style={styles.error}>La autenticación no está configurada.</Text>}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  </SafeAreaView>;
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#071A2B',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#071A2B',
-    paddingHorizontal: 28,
-    paddingVertical: 24,
-    overflow: 'hidden',
-  },
-  glow: {
-    position: 'absolute',
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: '#168AAD',
-    opacity: 0.16,
-  },
-  glowTop: {
-    top: -160,
-    right: -120,
-  },
-  glowBottom: {
-    bottom: -190,
-    left: -150,
-    backgroundColor: '#52B788',
-  },
-  brand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  logo: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  logoText: {
-    color: '#0B6E75',
-    fontSize: 17,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  brandName: {
-    color: '#FFFFFF',
-    fontSize: 21,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-  },
-  hero: {
-    flex: 1,
-    justifyContent: 'center',
-    maxWidth: 540,
-  },
-  eyebrow: {
-    color: '#74C69D',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 2.2,
-    marginBottom: 18,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 47,
-    lineHeight: 52,
-    fontWeight: '800',
-    letterSpacing: -1.8,
-  },
-  description: {
-    color: '#B9CAD6',
-    fontSize: 17,
-    lineHeight: 26,
-    marginTop: 22,
-    maxWidth: 430,
-  },
-  footer: {
-    gap: 14,
-  },
-  button: {
-    minHeight: 58,
-    borderRadius: 18,
-    paddingHorizontal: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-  },
-  buttonPressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.99 }],
-  },
-  buttonText: {
-    color: '#09243A',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  buttonArrow: {
-    color: '#0B6E75',
-    fontSize: 25,
-    fontWeight: '600',
-  },
-  helperText: {
-    color: '#8198A8',
-    fontSize: 12,
-    textAlign: 'center',
-  },
-});

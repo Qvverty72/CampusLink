@@ -1,10 +1,96 @@
 import { createModuleHealthCheck } from '../../services/module-health.js';
-import { findAuthPermissions, findAuthProfile, findAuthRoles, findAuthUser, findRegistrationCampuses, findRegistrationDomains, findServerAuthProfile, insertInstitutionalProfile, resendInstitutionalOtp, signUpInstitutionalUser, verifyInstitutionalOtp, probeAuthDependencies } from './auth.repository.js';
+import { findAuthPermissions, findAuthProfile, findAuthRoles, findAuthUser, findRegistrationCampuses, findRegistrationDomains, findServerAuthProfile, insertInstitutionalProfile, resendInstitutionalOtp, signUpInstitutionalUser, verifyInstitutionalOtp, probeAuthDependencies, signInAuthUser, requestPasswordRecovery, verifyPasswordRecovery, updateRecoveredPassword, closeRecoverySession } from './auth.repository.js';
 import { ApiError } from '../../services/api-response.js';
 import type { AuthAssignment, AuthAssignmentRow, VerifiedAuthConnection } from './auth.types.js';
 import type { AuthHealth } from './auth.types.js';
 import type { AuthProfile, RegistrationInput, RegistrationOption, VerifiedIdentity } from './auth.types.js';
 import type { User } from '@supabase/supabase-js';
+
+function credentials(body: unknown, recovery = false) {
+  const invalid = () => new ApiError(400, 'VALIDATION_ERROR', 'Revisa el correo, la contraseña y el código cuando corresponda.');
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid();
+  const values = body as Record<string, unknown>;
+  const keys = recovery ? ['email', 'password', 'code'] : ['email', 'password'];
+  if (Object.keys(values).some(key => !keys.includes(key)) || keys.some(key => typeof values[key] !== 'string')) throw invalid();
+  const email = (values.email as string).trim().toLowerCase();
+  const password = values.password as string;
+  const code = recovery ? (values.code as string).trim() : '';
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password || password.length > 4096
+    || (recovery && !/^\d{6,10}$/.test(code))) throw invalid();
+  return { email, password, code };
+}
+
+function authFailure(error: { status?: number; code?: string }, recovery = false): ApiError {
+  if (error.status === 429) return new ApiError(429, 'RATE_LIMITED', 'Espera antes de volver a intentarlo.', { retryAfterSeconds: 60 });
+  if (!error.status || error.status >= 500) return new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'La autenticación no está disponible. Inténtalo nuevamente.');
+  return recovery
+    ? new ApiError(400, 'INVALID_VERIFICATION', 'No se pudo recuperar la cuenta. Solicita un código nuevo y revisa la política de contraseña.')
+    : new ApiError(401, 'UNAUTHENTICATED', 'No se pudo iniciar sesión. Revisa tus credenciales y la verificación del correo.');
+}
+
+export async function loginAccount(body: unknown) {
+  const { email, password } = credentials(body);
+  try {
+    const { data, error } = await signInAuthUser(email, password);
+    if (error) throw authFailure(error);
+    if (!data.session || !data.user?.email_confirmed_at || data.user.email?.toLowerCase() !== email) {
+      throw authFailure({ status: 401 });
+    }
+    // Session transport only. /me checks the current profile and campus assignments.
+    return { session: { access_token: data.session.access_token, refresh_token: data.session.refresh_token } };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw authFailure({ status: 503 });
+  }
+}
+
+export async function recoverAccount(body: unknown) {
+  const { email } = emailRequest(body);
+  // Keep every provider outcome identical, including account-specific delivery/rate errors.
+  // 202 acknowledges the request; it does not promise that an email was delivered.
+  try { await requestPasswordRecovery(email); } catch { /* No account enumeration. */ }
+  return { status: 'recovery_requested' as const };
+}
+
+export async function resetAccountPassword(body: unknown) {
+  const { email, code, password } = credentials(body, true);
+  let recoveryClient: Awaited<ReturnType<typeof verifyPasswordRecovery>>['client'] | undefined;
+  try {
+    const result = await verifyPasswordRecovery(email, code);
+    recoveryClient = result.client;
+    if (result.error) throw authFailure(result.error, true);
+    if (!result.data.session || result.data.user?.email?.toLowerCase() !== email) {
+      throw authFailure({ status: 400 }, true);
+    }
+    // Only the session just established by Auth's recovery OTP may change this credential.
+    const updated = await updateRecoveredPassword(recoveryClient, password);
+    if (updated.error) throw authFailure(updated.error, true);
+    if (updated.data.user?.id !== result.data.user.id) throw authFailure({ status: 503 }, true);
+    return { status: 'password_updated' as const };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw authFailure({ status: 503 }, true);
+  } finally {
+    // Recovery tokens are never returned or persisted. Revoke their renewal when possible.
+    if (recoveryClient) await closeRecoverySession(recoveryClient).catch(() => undefined);
+  }
+}
+
+// Names for the existing catalog, not new roles or database attributes.
+// User-approved matrix: admin has all functions, authorized permissions stay independent.
+export function accountCapabilities(context: VerifiedAuthConnection) {
+  const localRoles = context.roles.filter(role => role.campusId === context.campusId);
+  const admin = localRoles.some(role => role.name === 'ADMINISTRADOR');
+  const authorized = localRoles.some(role => role.name === 'USUARIO_AUTORIZADO');
+  const has = (name: string) => admin || (authorized && context.permissions.some(permission =>
+    permission.campusId === context.campusId && permission.name === name));
+  return {
+    general: admin || authorized || Boolean(context.profile.verificado_en),
+    officialActivities: has('PUBLICAR_EVENTO'),
+    analytics: has('ACCEDER_ANALITICA'),
+    reports: has('ACCEDER_REPORTERIA'),
+  };
+}
 
 function providerIdentity(user: User | null): VerifiedIdentity {
   if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'A valid access token is required');

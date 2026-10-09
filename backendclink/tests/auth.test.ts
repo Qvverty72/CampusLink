@@ -16,6 +16,7 @@ let failTable: string | undefined;
 let missingProfile: boolean;
 let profile: Record<string, unknown>;
 let permissionRows: unknown[];
+let roleRows: unknown[];
 let emailConfirmed: boolean;
 
 before(async () => {
@@ -46,8 +47,7 @@ before(async () => {
     } else {
       assert.equal(url.searchParams.get('perfil_usuario_id'), 'eq.' + userId);
       assert.equal(url.searchParams.get('revocado_en'), 'is.null');
-      rows = table === 'usuario_rol' ? [{ campus_id: campusId, rol: { id: 'role-id', nombre: 'ADMINISTRADOR' } }]
-        : permissionRows;
+      rows = table === 'usuario_rol' ? roleRows : permissionRows;
     }
     return new Response(JSON.stringify(rows), { headers: { 'Content-Type': 'application/json' } });
   };
@@ -63,6 +63,7 @@ beforeEach(() => {
   profile = { id: userId, campus_id: campusId, institucion_id: 'institution-id',
     nombre_completo: 'Test User', foto_path: null, verificado_en: null, estado_cuenta: 'ACTIVA', deleted_at: null };
   permissionRows = [{ campus_id: otherCampus, permiso: { id: 'permission-id', nombre: 'PUBLICAR_EVENTO' } }];
+  roleRows = [{ campus_id: campusId, rol: { id: 'role-id', nombre: 'ADMINISTRADOR' } }];
 });
 
 after(async () => {
@@ -159,11 +160,46 @@ test('the same device token sees current campus, permission revocation and suspe
   assert.equal(calls.length, 2);
 });
 
-test('no permission is inferred from the administrator role', async () => {
+test('administrator capabilities use the approved matrix without manufacturing permission assignments', async () => {
   permissionRows = [];
   const { data } = await (await me()).json();
   assert.equal(data.roles.length, 1);
   assert.deepEqual(data.permissions, []);
+  assert.deepEqual(data.capabilities, { general: true, officialActivities: true, analytics: true, reports: true });
+});
+
+test('verified institutional users have general functions without special privileges or metadata claims', async () => {
+  roleRows = []; profile.verificado_en = '2026-10-08T12:00:00Z';
+  permissionRows = ['PUBLICAR_EVENTO', 'ACCEDER_ANALITICA', 'ACCEDER_REPORTERIA'].map(name =>
+    ({ campus_id: campusId, permiso: { id: name, nombre: name } }));
+  const { data } = await (await me()).json();
+  assert.deepEqual(data.capabilities, { general: true, officialActivities: false, analytics: false, reports: false });
+});
+
+test('all eight authorized combinations keep the three campus permissions independent', async () => {
+  roleRows = [{ campus_id: campusId, rol: { id: 'authorized', nombre: 'USUARIO_AUTORIZADO' } }];
+  const names = ['PUBLICAR_EVENTO', 'ACCEDER_ANALITICA', 'ACCEDER_REPORTERIA'];
+  for (let mask = 0; mask < 8; mask++) {
+    permissionRows = names.filter((_name, index) => mask & (1 << index)).map(name =>
+      ({ campus_id: campusId, permiso: { id: name, nombre: name } }));
+    const { data } = await (await me()).json();
+    assert.deepEqual(data.capabilities, { general: true, officialActivities: Boolean(mask & 1), analytics: Boolean(mask & 2), reports: Boolean(mask & 4) });
+  }
+});
+
+test('foreign-campus roles/permissions and revocations never enable a privileged screen', async () => {
+  profile.verificado_en = '2026-10-08T12:00:00Z';
+  roleRows = [{ campus_id: otherCampus, rol: { id: 'admin', nombre: 'ADMINISTRADOR' } }];
+  permissionRows = [{ campus_id: otherCampus, permiso: { id: 'analytics', nombre: 'ACCEDER_ANALITICA' } }];
+  assert.equal((await (await me()).json()).data.capabilities.analytics, false);
+  roleRows = [{ campus_id: campusId, rol: { id: 'authorized', nombre: 'USUARIO_AUTORIZADO' } }];
+  assert.equal((await (await me()).json()).data.capabilities.analytics, false);
+  permissionRows = [{ campus_id: campusId, permiso: { id: 'analytics', nombre: 'ACCEDER_ANALITICA' } }];
+  assert.equal((await (await me()).json()).data.capabilities.analytics, true);
+  permissionRows = [];
+  assert.equal((await (await me()).json()).data.capabilities.analytics, false);
+  profile.campus_id = otherCampus;
+  assert.equal((await (await me()).json()).data.capabilities.reports, false);
 });
 
 test('dependency failures deny access with sanitized 503 errors', async () => {

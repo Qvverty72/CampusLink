@@ -16,4 +16,10 @@ export interface AuthIdentity {
   };
   roles: AuthAssignment[];
   permissions: AuthAssignment[];
+  capabilities: {
+    general: boolean;
+    officialActivities: boolean;
+    analytics: boolean;
+    reports: boolean;
+  };
 }

@@ -1,8 +1,21 @@
 import type { RequestHandler } from 'express';
 import { sendModuleHealth } from '../../services/health-response.js';
-import { completeInstitutionalRegistration, confirmInstitutionalRegistration, getAuthHealth, getRegistrationOptions, registerInstitutionalAccount, resendInstitutionalConfirmation } from './auth.service.js';
+import { accountCapabilities, loginAccount, recoverAccount, resetAccountPassword, completeInstitutionalRegistration, confirmInstitutionalRegistration, getAuthHealth, getRegistrationOptions, registerInstitutionalAccount, resendInstitutionalConfirmation } from './auth.service.js';
 import { ApiError, sendSuccess } from '../../services/api-response.js';
 import type { AuthLocals, IdentityLocals } from './auth.types.js';
+
+export const loginAccountController: RequestHandler = async (request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  sendSuccess(response, await loginAccount(request.body));
+};
+export const recoverAccountController: RequestHandler = async (request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  sendSuccess(response, await recoverAccount(request.body), 202);
+};
+export const resetAccountPasswordController: RequestHandler = async (request, response) => {
+  response.setHeader('Cache-Control', 'no-store');
+  sendSuccess(response, await resetAccountPassword(request.body));
+};
 
 export const confirmInstitutionalRegistrationController: RequestHandler = async (request, response) => {
   response.setHeader('Cache-Control', 'no-store');
@@ -36,5 +49,5 @@ export const getAuthHealthController: RequestHandler = async (_request, response
 
 export const getAuthIdentityController: RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> =
   (_request, response) => {
-    sendSuccess(response, response.locals.auth);
+    sendSuccess(response, { ...response.locals.auth, capabilities: accountCapabilities(response.locals.auth) });
   };
