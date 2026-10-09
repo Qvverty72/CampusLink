@@ -3,7 +3,7 @@ import { ApiError } from '../../services/api-response.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../services/pagination.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { withAccessTransaction, type accessRepository } from './access.repository.js';
-import type { AccessProfile, AccessSnapshot, AccessUpdate } from './access.types.js';
+import type { AccessProfile, AccessSnapshot, AccessUpdate, AccountStateUpdate } from './access.types.js';
 import { requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
 
 const ROLE_NAMES = ['ADMINISTRADOR', 'USUARIO_AUTORIZADO'];
@@ -34,13 +34,14 @@ async function transaction<T>(operation: (repository: Repository) => Promise<T>)
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo consultar o guardar los accesos. Inténtalo nuevamente.');
   }
 }
-function version(snapshot: AccessSnapshot) {
-  return createHash('sha256').update(JSON.stringify({ roles: snapshot.roles.map(row => row.id).sort(),
+function version(profile: AccessProfile, snapshot: AccessSnapshot) {
+  return createHash('sha256').update(JSON.stringify({ userId: profile.id, campusId: profile.campus_id,
+    accountState: profile.estado_cuenta, updatedAt: profile.updated_at, roles: snapshot.roles.map(row => row.id).sort(),
     permissions: snapshot.permissions.map(row => row.id).sort() })).digest('hex');
 }
 function detail(profile: AccessProfile, campusId: string, snapshot: AccessSnapshot) {
   return { userId: profile.id, fullName: profile.nombre_completo, accountState: profile.estado_cuenta,
-    campusId, roles: snapshot.roles, permissions: snapshot.permissions, version: version(snapshot) };
+    campusId, roles: snapshot.roles, permissions: snapshot.permissions, version: version(profile, snapshot) };
 }
 export function parseAccessUpdate(body: unknown): AccessUpdate {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('Revisa los roles y permisos.');
@@ -115,7 +116,7 @@ export async function updateUserAccess(auth: VerifiedAuthConnection, rawCampusId
     const { campus, profile } = await target(repository, auth, campusId, userId);
     const available = await catalog(repository);
     const before = await repository.snapshot(userId, campusId);
-    if (version(before) !== input.version) throw new ApiError(409, 'CONFLICT', 'Los accesos cambiaron. Recárgalos antes de guardar.');
+    if (version(profile, before) !== input.version) throw new ApiError(409, 'CONFLICT', 'El usuario o sus accesos cambiaron. Recarga antes de guardar.');
     const changes: { action: string; assignmentId: string; catalogId: string }[] = [];
     for (const [kind, selected, choices] of [['roles', input.roleIds, available.roles], ['permissions', input.permissionIds, available.permissions]] as const) {
       const current = before[kind];
@@ -133,5 +134,37 @@ export async function updateUserAccess(auth: VerifiedAuthConnection, rawCampusId
     const after = await repository.snapshot(userId, campusId);
     for (const change of changes) await repository.audit(auth.userId, campus, userId, change.action, before, after, change);
     return detail(profile, campusId, after);
+  });
+}
+
+export function parseAccountStateUpdate(body: unknown): AccountStateUpdate {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('Revisa la acción de cuenta.');
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).length !== 2 || Object.keys(input).some(key => !['accountState','version'].includes(key))
+    || !['SUSPENDIDA','DESACTIVADA'].includes(input.accountState as string)
+    || typeof input.version !== 'string' || !/^[0-9a-f]{64}$/.test(input.version)) {
+    throw invalid('Selecciona suspender o desactivar y recarga el usuario antes de confirmar.');
+  }
+  return { accountState: input.accountState as AccountStateUpdate['accountState'], version: input.version };
+}
+
+export async function updateAccountState(auth: VerifiedAuthConnection, rawCampusId: unknown, rawUserId: unknown, body: unknown) {
+  const campusId = uuid(rawCampusId), userId = uuid(rawUserId), input = parseAccountStateUpdate(body);
+  return transaction(async repository => {
+    const { campus, profile } = await target(repository, auth, campusId, userId);
+    const snapshot = await repository.snapshot(userId, campusId);
+    if (version(profile, snapshot) !== input.version) throw new ApiError(409, 'CONFLICT', 'El usuario o sus accesos cambiaron. Recarga antes de confirmar.');
+    if (profile.estado_cuenta === input.accountState) return detail(profile, campusId, snapshot);
+    if (profile.estado_cuenta === 'DESACTIVADA') throw new ApiError(409, 'CONFLICT', 'La cuenta ya está desactivada. Recarga el usuario.');
+    // Include previous-campus publications: disabling an account applies to its
+    // active physical listings globally, while their campus and history stay intact.
+    const publications = input.accountState === 'DESACTIVADA'
+      ? (await repository.lockPhysicalPublications(userId)).filter(row => ['DISPONIBLE','RESERVADO','OCULTO'].includes(row.estado_publicacion)) : [];
+    const changedAt = await repository.setAccountState(userId, input.accountState);
+    const after = { ...profile, estado_cuenta: input.accountState, updated_at: changedAt };
+    const retired = publications.length ? await repository.retirePhysicalPublications(publications.map(row => row.id), changedAt) : [];
+    await repository.auditAccountState(auth.userId, campus, userId,
+      input.accountState === 'SUSPENDIDA' ? 'SUSPENDER_CUENTA' : 'DESACTIVAR_CUENTA', profile, after, publications, retired);
+    return detail(after, campusId, snapshot);
   });
 }

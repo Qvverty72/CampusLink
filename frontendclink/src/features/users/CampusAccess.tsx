@@ -4,8 +4,8 @@ import { Link } from 'expo-router';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { authStyles as styles } from '@/features/auth/form.styles';
-import { accessLabels, loadAccessCampuses, loadAccessCatalog, loadAccessUsers, loadUserAccess, saveUserAccess,
-  type AccessCatalog, type AccessUser, type UserAccess } from './access';
+import { accessLabels, loadAccessCampuses, loadAccessCatalog, loadAccessUsers, loadUserAccess, saveUserAccess, saveAccountState,
+  type AccessCatalog, type AccessUser, type UserAccess, type AccountStateAction } from './access';
 
 export function CampusAccessScreen() {
   const auth = useAuth();
@@ -20,16 +20,17 @@ export function CampusAccessScreen() {
   const [permissionIds, setPermissionIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [accountAction, setAccountAction] = useState<AccountStateAction | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reload, setReload] = useState(0);
   const pending = useRef<AbortController | null>(null);
   const selectedId = useRef<string | null>(null);
   function fail(reason: unknown) {
-    setError(reason instanceof AuthApiError && reason.status === 409 ? 'Los accesos cambiaron. Recarga el usuario antes de guardar.'
+    setError(reason instanceof AuthApiError && reason.status === 409 ? 'El usuario o sus accesos cambiaron. Recarga antes de confirmar.'
       : reason instanceof AuthApiError && reason.status === 403 ? 'Tu acceso a este campus ya no está disponible.'
       : reason instanceof AuthApiError && reason.status === 404 ? 'El usuario ya no está disponible en este campus.'
-      : reason instanceof AuthApiError && reason.status === 400 ? 'Revisa los roles y permisos seleccionados.'
+      : reason instanceof AuthApiError && reason.status === 400 ? 'Revisa la acción y los accesos seleccionados.'
       : reason instanceof AuthApiError && reason.status === 401 ? 'Tu sesión venció. Inicia sesión nuevamente.'
       : 'No se pudieron cargar o guardar los accesos. Inténtalo nuevamente.');
     if (reason instanceof AuthApiError && [401,403].includes(reason.status)) auth.refreshIdentity();
@@ -49,7 +50,7 @@ export function CampusAccessScreen() {
     if (!campusId) return;
     const controller = new AbortController();
     pending.current?.abort(); pending.current = controller;
-    setLoading(true); setError(''); setSelected(null); selectedId.current = null; setCatalog(null); setUsers([]); setNotice('');
+    setLoading(true); setError(''); setSelected(null); setAccountAction(null); selectedId.current = null; setCatalog(null); setUsers([]); setNotice('');
     void Promise.all([loadAccessCatalog(campusId, controller.signal), loadAccessUsers(campusId, page, controller.signal)])
       .then(([options, result]) => {
         if (controller.signal.aborted) return;
@@ -61,7 +62,7 @@ export function CampusAccessScreen() {
   const selectUser = async (userId: string) => {
     pending.current?.abort();
     const controller = new AbortController(); pending.current = controller;
-    selectedId.current = userId; setSelected(null); setError(''); setNotice(''); setLoading(true);
+    selectedId.current = userId; setSelected(null); setAccountAction(null); setError(''); setNotice(''); setLoading(true);
     try {
       const detail = await loadUserAccess(campusId, userId, controller.signal);
       if (controller.signal.aborted) return;
@@ -82,6 +83,22 @@ export function CampusAccessScreen() {
     } catch (reason) { if (!controller.signal.aborted) fail(reason); }
     finally { if (!controller.signal.aborted) setSaving(false); }
   };
+  const confirmAccountAction = async () => {
+    if (!selected || !accountAction || saving || error) return;
+    const controller = new AbortController(); pending.current?.abort(); pending.current = controller;
+    setSaving(true); setError(''); setNotice('');
+    try {
+      const detail = await saveAccountState(campusId, selected.userId, accountAction, selected.version, controller.signal);
+      if (controller.signal.aborted) return;
+      setSelected(detail); setAccountAction(null);
+      setRoleIds(detail.roles.map(row => row.catalog_id)); setPermissionIds(detail.permissions.map(row => row.catalog_id));
+      setUsers(rows => rows.map(row => row.userId === detail.userId ? { ...row, accountState: detail.accountState } : row));
+      setNotice(detail.accountState === 'SUSPENDIDA' ? 'Cuenta suspendida. Ya no puede ejecutar operaciones protegidas.'
+        : 'Cuenta desactivada. Sus publicaciones físicas activas fueron retiradas.');
+      if (selected.userId === auth.identity?.userId) auth.refreshIdentity();
+    } catch (reason) { if (!controller.signal.aborted) { setAccountAction(null); fail(reason); } }
+    finally { if (!controller.signal.aborted) setSaving(false); }
+  };
   const choices = (kind: 'roles' | 'permissions') => {
     const ids = kind === 'roles' ? roleIds : permissionIds;
     const setIds = kind === 'roles' ? setRoleIds : setPermissionIds;
@@ -89,7 +106,7 @@ export function CampusAccessScreen() {
       <Text style={styles.label}>{kind === 'roles' ? 'Roles' : 'Permisos independientes'}</Text>
       {catalog?.[kind].map(row => <View key={row.id} style={local.choice}>
         <Text style={[styles.description, local.choiceLabel]}>{accessLabels[row.nombre] ?? row.nombre}</Text>
-        <Switch accessibilityLabel={accessLabels[row.nombre] ?? row.nombre} disabled={saving} value={ids.includes(row.id)}
+        <Switch accessibilityLabel={accessLabels[row.nombre] ?? row.nombre} disabled={saving || Boolean(accountAction)} value={ids.includes(row.id)}
           onValueChange={() => setIds(toggle(ids, row.id))} trackColor={{ false: '#486476', true: '#0B6E75' }} />
       </View>)}
       {selected?.[kind].filter(row => !catalog?.[kind].some(item => item.id === row.catalog_id)).map(row =>
@@ -99,8 +116,8 @@ export function CampusAccessScreen() {
   return <ScrollView style={styles.page} contentContainerStyle={styles.container}>
     <Link href="/profile" style={styles.link}>← Volver a mi perfil</Link>
     <Text style={styles.brand}>ADMINISTRACIÓN</Text>
-    <Text style={styles.title}>Roles y permisos</Text>
-    <Text style={styles.description}>Administra los accesos de los usuarios de cada campus a tu cargo.</Text>
+    <Text style={styles.title}>Usuarios y accesos</Text>
+    <Text style={styles.description}>Administra cuentas, roles y permisos de cada campus a tu cargo.</Text>
     <Text style={styles.label}>Campus</Text>
     <View style={local.campuses}>{campuses.map(row => <Pressable key={row.id} accessibilityRole="button"
       accessibilityState={{ selected: row.id === campusId, disabled: saving }} disabled={saving}
@@ -130,10 +147,31 @@ export function CampusAccessScreen() {
       <Text style={styles.label}>{selected.fullName} · {selected.accountState}</Text>
       <Text style={styles.description}>Los permisos especiales requieren el rol Usuario autorizado. Administrador tiene todas las funciones en esta sede. Sin roles especiales, una cuenta institucional verificada conserva sus funciones generales.</Text>
       {choices('roles')}{choices('permissions')}
-      <Pressable accessibilityRole="button" disabled={saving || Boolean(error)} style={[styles.button, (saving || Boolean(error)) && styles.disabled]} onPress={() => void save()}>
+      <Pressable accessibilityRole="button" disabled={saving || Boolean(error) || Boolean(accountAction)} style={[styles.button, (saving || Boolean(error) || Boolean(accountAction)) && styles.disabled]} onPress={() => void save()}>
         <Text style={styles.buttonText}>{saving ? 'Guardando…' : 'Guardar accesos'}</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" disabled={saving} onPress={() => { setSelected(null); selectedId.current = null; setError(''); setNotice(''); }}>
+      <View style={local.card}>
+        <Text style={styles.label}>Estado de la cuenta</Text>
+        {accountAction ? <>
+          <Text style={styles.label}>{accountAction === 'SUSPENDIDA' ? '¿Suspender' : '¿Desactivar'} a {selected.fullName}?</Text>
+          <Text style={styles.description}>{accountAction === 'SUSPENDIDA'
+            ? 'La cuenta perderá acceso a las operaciones protegidas, incluso con una sesión iniciada.'
+            : 'La cuenta perderá acceso y se retirarán sus publicaciones físicas activas de todas las sedes. Se conservarán su historial y los recursos digitales adquiridos por otras personas.'}</Text>
+          <Text style={styles.description}>Los roles y permisos se conservarán.</Text>
+          {selected.userId === auth.identity?.userId && <Text style={styles.error}>Estás actuando sobre tu propia cuenta y perderás tu acceso.</Text>}
+          <Pressable accessibilityRole="button" disabled={saving} style={[styles.button, saving && styles.disabled]} onPress={() => void confirmAccountAction()}>
+            <Text style={styles.buttonText}>{saving ? 'Aplicando…' : accountAction === 'SUSPENDIDA' ? 'Confirmar suspensión' : 'Confirmar desactivación'}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={saving} onPress={() => setAccountAction(null)}><Text style={styles.link}>Cancelar acción</Text></Pressable>
+        </> : <>
+          {selected.accountState === 'ACTIVA' && <Pressable accessibilityRole="button" disabled={saving || Boolean(error)} style={[styles.button, (saving || Boolean(error)) && styles.disabled]}
+            onPress={() => { setNotice(''); setAccountAction('SUSPENDIDA'); }}><Text style={styles.buttonText}>Suspender cuenta</Text></Pressable>}
+          {selected.accountState !== 'DESACTIVADA' && <Pressable accessibilityRole="button" disabled={saving || Boolean(error)} style={[styles.button, (saving || Boolean(error)) && styles.disabled]}
+            onPress={() => { setNotice(''); setAccountAction('DESACTIVADA'); }}><Text style={styles.buttonText}>Desactivar cuenta</Text></Pressable>}
+          {selected.accountState === 'DESACTIVADA' && <Text style={styles.description}>Esta cuenta está desactivada.</Text>}
+        </>}
+      </View>
+      <Pressable accessibilityRole="button" disabled={saving} onPress={() => { setSelected(null); setAccountAction(null); selectedId.current = null; setError(''); setNotice(''); }}>
         <Text style={styles.link}>Cancelar / volver al listado</Text>
       </Pressable>
     </>}

@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import type { AuthLocals } from '../auth/auth.types.js';
 import { sendSuccess } from '../../services/apiResponse.js';
-import { getAccessCampuses, getAccessCatalog, listAccessUsers, getUserAccess, updateUserAccess } from './access.service.js';
+import { getAccessCampuses, getAccessCatalog, listAccessUsers, getUserAccess, updateUserAccess, updateAccountState } from './access.service.js';
 
 type Handler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, unknown>, AuthLocals>;
 export const getAccessCampusesController: Handler = async (_request, response) => {
@@ -19,4 +19,7 @@ export const getUserAccessController: Handler = async (request, response) => {
 };
 export const updateUserAccessController: Handler = async (request, response) => {
   sendSuccess(response, await updateUserAccess(response.locals.auth, request.params.campusId, request.params.userId, request.body));
+};
+export const updateAccountStateController: Handler = async (request, response) => {
+  sendSuccess(response, await updateAccountState(response.locals.auth, request.params.campusId, request.params.userId, request.body));
 };

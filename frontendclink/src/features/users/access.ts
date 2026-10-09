@@ -16,6 +16,10 @@ export const loadUserAccess = (campusId: string, userId: string, signal: AbortSi
 export const saveUserAccess = (campusId: string, userId: string, input: AccessInput, signal: AbortSignal) =>
   authenticatedRequest<UserAccess>(campusPath(campusId) + '/users/' + encodeURIComponent(userId), { signal, method: 'PATCH',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+export type AccountStateAction = 'SUSPENDIDA' | 'DESACTIVADA';
+export const saveAccountState = (campusId: string, userId: string, accountState: AccountStateAction, version: string, signal: AbortSignal) =>
+  authenticatedRequest<UserAccess>(campusPath(campusId) + '/users/' + encodeURIComponent(userId) + '/state', { signal, method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountState, version }) });
 export const accessLabels: Record<string, string> = {
   ADMINISTRADOR: 'Administrador', USUARIO_AUTORIZADO: 'Usuario autorizado',
   PUBLICAR_EVENTO: 'Publicar actividades oficiales', ACCEDER_ANALITICA: 'Acceder a Analítica', ACCEDER_REPORTERIA: 'Acceder a Reportería',

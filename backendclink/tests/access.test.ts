@@ -28,7 +28,8 @@ before(async () => {
   }, release: () => {} }; });
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql as $$select current_setting('test.user',true)::uuid$$; grant usage on schema public,auth to anon,authenticated,service_role; grant execute on function auth.uid() to authenticated;");
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
-  for (const name of ['institucion','campus','perfil_usuario','rol','permiso','rol_permiso','usuario_rol','usuario_permiso','auditoria']) {
+  for (const name of ['institucion','campus','perfil_usuario','rol','permiso','rol_permiso','usuario_rol','usuario_permiso',
+    'publicacion_recurso','recurso_digital','archivo_publicacion','mensaje_solicitud','solicitud_recurso','transaccion_recurso','acceso_recurso_digital','auditoria']) {
     let sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name);
     // Report moderation is outside this fixture; audit columns and other constraints stay exact.
@@ -38,6 +39,8 @@ before(async () => {
   await db.exec(await readFile('src/database/supabase/migrations/f2_3_01_autenticacion.sql', 'utf8'));
   await db.exec('grant all on auditoria,rol_permiso,usuario_rol,usuario_permiso,rol,permiso to anon,authenticated');
   await db.exec(await migration());
+  await db.exec('grant all on publicacion_recurso to anon,authenticated');
+  await db.exec(await readFile('src/database/supabase/migrations/f2_3_07_estado_cuenta.sql','utf8'));
   await db.query('insert into institucion(id,nombre) values ($1,$2)', [institution, 'Test']);
   await db.query('insert into campus(id,institucion_id,nombre) values ($1,$2,$3),($4,$2,$5)', [campus,institution,'Home',otherCampus,'Other']);
   roles = Object.fromEntries((await db.query<{id:string;nombre:string}>('select id,nombre from rol')).rows.map(row => [row.nombre,row.id]));
@@ -60,6 +63,184 @@ before(async () => {
   server = createApp().listen(0,'127.0.0.1');
   await new Promise<void>(resolve => server.once('listening',resolve));
   base = 'http://127.0.0.1:' + (server.address() as AddressInfo).port + '/api/v1';
+});
+
+const stateBody = (version: string, accountState = 'SUSPENDIDA') => ({accountState,version});
+const stateRoute = (user: string, at = campus) => route(user,at) + '/state';
+async function publication(user: string, type = 'FISICO', state = 'DISPONIBLE', at = campus) {
+  const id=randomUUID();
+  await db.query(`insert into publicacion_recurso(id,campus_id,propietario_id,tipo_recurso,titulo,modalidad,estado_publicacion)
+    values ($1,$2,$3,$4,'Original title','DONACION',$5)`,[id,at,user,type,state]);
+  return id;
+}
+async function acquisition(owner: string, receptor: string, mode: string) {
+  const publicationId=await publication(owner,'DIGITAL'),requestId=randomUUID(),transactionId=randomUUID(),code=randomUUID();
+  await db.query('insert into recurso_digital values ($1)',[publicationId]);
+  await db.query("insert into archivo_publicacion(publicacion_id,bucket_id,storage_path,nombre_original,mime_type,tamano_bytes,tipo_archivo) values ($1,'private','original.pdf','Original.pdf','application/pdf',1024,'RECURSO')",[publicationId]);
+  await db.query("insert into mensaje_solicitud(codigo,descripcion) values ($1,'Original message')",[code]);
+  await db.query("insert into solicitud_recurso(id,publicacion_id,solicitante_id,codigo_mensaje,estado_solicitud) values ($1,$2,$3,$4,'ACEPTADA')",[requestId,publicationId,receptor,code]);
+  await db.query(`insert into transaccion_recurso(id,solicitud_id,publicacion_id,propietario_id,receptor_id,modalidad_acordada,estado_transaccion,completada_en)
+    values ($1,$2,$3,$4,$5,$6,'COMPLETADA',now())`,[transactionId,requestId,publicationId,owner,receptor,mode]);
+  await db.query('insert into acceso_recurso_digital(transaccion_id,publicacion_id,receptor_id) values ($1,$2,$3)',[transactionId,publicationId,receptor]);
+}
+async function retainedHistory() {
+  const snapshot: Record<string,unknown>={};
+  for(const table of ['solicitud_recurso','transaccion_recurso','acceso_recurso_digital','archivo_publicacion','recurso_digital'])
+    snapshot[table]=(await db.query('select * from '+table+' order by '+(table==='recurso_digital'?'publicacion_id':'id'))).rows;
+  snapshot.digital=(await db.query("select * from publicacion_recurso where tipo_recurso='DIGITAL' order by id")).rows;
+  snapshot.roles=(await db.query('select * from usuario_rol order by id')).rows;
+  snapshot.permissions=(await db.query('select * from usuario_permiso order by id')).rows;
+  return snapshot;
+}
+
+test('account state HTTP rejects missing session, non-administrator and foreign campus/target',async()=>{
+  const {user}=await fixture(),current=await detail(user);
+  assert.equal((await request(stateRoute(user),stateBody(current.version),'')).status,401);
+  assert.equal((await request(stateRoute(user,otherCampus),stateBody(current.version))).status,403);
+  const outsider=await profile(otherCampus);
+  assert.equal((await request(stateRoute(outsider),stateBody(current.version))).status,404);
+  assert.equal((await request(stateRoute(randomUUID()),stateBody(current.version))).status,404);
+  authUser=user;assert.equal((await request(stateRoute(user),stateBody(current.version))).status,403);
+});
+test('suspension retains physical publications/profile and audits exact state, actor and change time',async()=>{
+  const {actor,user}=await fixture(),id=await publication(user),current=await detail(user);
+  const before=(await db.query('select * from publicacion_recurso where id=$1',[id])).rows;
+  const response=await request(stateRoute(user),stateBody(current.version));assert.equal(response.status,200);
+  assert.equal(response.headers.get('cache-control'),'no-store');const next=(await response.json()).data;
+  assert.equal(next.accountState,'SUSPENDIDA');assert.notEqual(next.version,current.version);
+  assert.deepEqual((await db.query('select * from publicacion_recurso where id=$1',[id])).rows,before);
+  const profileRow=(await db.query('select * from perfil_usuario where id=$1',[user])).rows[0];assert.equal(profileRow.deleted_at,null);
+  const audit=(await db.query('select * from auditoria where entidad_id=$1',[user])).rows[0];
+  assert.equal(audit.accion,'SUSPENDER_CUENTA');assert.equal(audit.actor_usuario_id,actor);assert.equal(audit.campus_id,campus);
+  assert.equal(audit.datos_antes.estado_cuenta,'ACTIVA');assert.equal(audit.datos_despues.estado_cuenta,'SUSPENDIDA');
+  assert.equal(new Date(audit.created_at).getTime(),new Date(profileRow.updated_at).getTime());
+});
+test('deactivation retires active physical listings including previous campuses, preserving all acquired digital data',async()=>{
+  const {user}=await fixture(),receiver=await profile(),outsider=await profile();
+  const active=[];
+  for(const state of ['DISPONIBLE','RESERVADO','OCULTO'])active.push(await publication(user,'FISICO',state));
+  active.push(await publication(user,'FISICO','DISPONIBLE',otherCampus));
+  const completed=await publication(user,'FISICO','FINALIZADO'),cancelled=await publication(user,'FISICO','CANCELADO');
+  const deleted=await publication(user),foreign=await publication(outsider);
+  await db.query('update publicacion_recurso set deleted_at=now() where id=$1',[deleted]);
+  await acquisition(user,receiver,'VENTA');await acquisition(user,receiver,'DONACION');
+  const history=await retainedHistory();const before=(await db.query('select * from publicacion_recurso order by id')).rows;
+  const current=await detail(user);const response=await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'));
+  assert.equal(response.status,200);assert.equal((await response.json()).data.accountState,'DESACTIVADA');
+  assert.deepEqual(await retainedHistory(),history);
+  for(const row of (await db.query('select * from publicacion_recurso order by id')).rows){
+    const original=before.find(previous=>previous.id===row.id)!;
+    if(active.includes(row.id as string)){
+      assert.ok(row.deleted_at);assert.deepEqual({...row,deleted_at:original.deleted_at,updated_at:original.updated_at},original);
+    }else assert.deepEqual(row,original);
+  }
+  assert.ok([completed,cancelled,deleted,foreign].every(id=>!active.includes(id)));
+  const audit=(await db.query('select * from auditoria where entidad_id=$1',[user])).rows[0];
+  assert.equal(audit.accion,'DESACTIVAR_CUENTA');assert.equal(audit.datos_antes.publicacion_recurso.length,4);
+  assert.ok(audit.datos_despues.publicacion_recurso.every((row:{deleted_at:unknown})=>row.deleted_at));
+  assert.equal((await db.query('select deleted_at from perfil_usuario where id=$1',[user])).rows[0].deleted_at,null);
+});
+test('same old token cannot reach protected operations after suspension or deactivation',async()=>{
+  for(const state of ['SUSPENDIDA','DESACTIVADA']){
+    const {user}=await fixture(),current=await detail(user);
+    assert.equal((await request(stateRoute(user),stateBody(current.version,state))).status,200);authUser=user;
+    for(const path of ['/auth/me','/users/me/profile','/users/me/profile-options','/users/access/campuses','/maps/'+campus+'/active'])
+      assert.equal((await request(path)).status,403);
+    assert.equal((await request('/users/me/profile',{fullName:'Bypass'})).status,403);
+  }
+});
+test('suspended account can be deactivated; repeated confirmed state creates no extra audit or retirement',async()=>{
+  const {user}=await fixture();let current=await detail(user);
+  let response=await request(stateRoute(user),stateBody(current.version));current=(await response.json()).data;
+  response=await request(stateRoute(user),stateBody(current.version));assert.equal(response.status,200);
+  assert.equal((await response.json()).data.version,current.version);
+  response=await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'));assert.equal(response.status,200);current=(await response.json()).data;
+  assert.equal((await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'))).status,200);
+  assert.equal((await request(stateRoute(user),stateBody(current.version))).status,409);
+  assert.equal((await db.query('select count(*)::int as count from auditoria where entidad_id=$1',[user])).rows[0].count,2);
+});
+test('stale account state, microsecond profile edit or role edit conflicts before account writes',async()=>{
+  const {user}=await fixture();let current=await detail(user);
+  await db.query("update perfil_usuario set updated_at=updated_at + interval '1 microsecond' where id=$1",[user]);
+  assert.equal((await request(stateRoute(user),stateBody(current.version))).status,409);
+  current=await detail(user);const original=current;
+  await request(route(user),payload(current.version,[roles.USUARIO_AUTORIZADO],[]));
+  assert.equal((await request(stateRoute(user),stateBody(current.version))).status,409);
+  current=await detail(user);assert.equal((await request(stateRoute(user),stateBody(current.version))).status,200);
+  assert.equal((await request(route(user),payload(current.version,[],[]))).status,409);
+  assert.equal((await request(stateRoute(user),stateBody(original.version,'DESACTIVADA'))).status,409);
+});
+test('strict account body cannot reactivate, change identity, choose publications or assign privileges',async()=>{
+  const {user}=await fixture(),current=await detail(user);
+  for(const body of [null,[],{},stateBody('bad'),stateBody(current.version,'ACTIVA'),stateBody(current.version,'DELETED'),
+    {...stateBody(current.version),actorId:authUser},{...stateBody(current.version),deleted_at:'now'},
+    {...stateBody(current.version),roleIds:[roles.ADMINISTRADOR]},{...stateBody(current.version),campusId:otherCampus},
+    {...stateBody(current.version),publicationIds:[]}])assert.equal((await request(stateRoute(user),body)).status,400);
+  assert.equal((await detail(user)).version,current.version);
+});
+test('actor revocation, suspension and target move/deletion between middleware and transaction deny account update',async()=>{
+  const {actor,user}=await fixture(),current=await detail(user);
+  beforeTransaction=()=>db.query('update usuario_rol set revocado_en=now() where perfil_usuario_id=$1',[actor]).then(()=>{});
+  assert.equal((await request(stateRoute(user),stateBody(current.version))).status,403);
+  await db.query('update usuario_rol set revocado_en=null where perfil_usuario_id=$1',[actor]);
+  beforeTransaction=()=>db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[actor]).then(()=>{});
+  assert.equal((await request(stateRoute(user),stateBody(current.version))).status,403);
+  await db.query("update perfil_usuario set estado_cuenta='ACTIVA' where id=$1",[actor]);
+  beforeTransaction=()=>db.query('update perfil_usuario set campus_id=$1 where id=$2',[otherCampus,user]).then(()=>{});
+  assert.equal((await request(stateRoute(user),stateBody(current.version))).status,404);
+  await db.query('update perfil_usuario set campus_id=$1,deleted_at=now() where id=$2',[campus,user]);
+  assert.equal((await request(stateRoute(user),stateBody(current.version))).status,404);
+  assert.equal((await db.query('select estado_cuenta from perfil_usuario where id=$1',[user])).rows[0].estado_cuenta,'ACTIVA');
+});
+test('audit failure rolls back account and publication retirement together, without exposing secrets',async()=>{
+  const {user}=await fixture();await publication(user);const current=await detail(user);
+  const before=(await db.query('select * from publicacion_recurso where propietario_id=$1 order by id',[user])).rows;
+  await db.exec("create function fail_state_audit() returns trigger language plpgsql as $$begin raise exception 'private password secret'; end$$; create trigger fail_state_audit before insert on auditoria for each row execute function fail_state_audit();");
+  try{
+    const response=await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'));assert.equal(response.status,503);
+    assert.doesNotMatch(await response.text(),/private|secret|password/);assert.equal((await detail(user)).version,current.version);
+    assert.deepEqual((await db.query('select * from publicacion_recurso where propietario_id=$1 order by id',[user])).rows,before);
+  }finally{await db.exec('drop trigger fail_state_audit on auditoria;drop function fail_state_audit()');}
+});
+test('publication write failure rolls back the account state and creates no audit',async()=>{
+  const {user}=await fixture();await publication(user);const current=await detail(user);
+  await db.exec("create function fail_retirement() returns trigger language plpgsql as $$begin raise exception 'private publication secret'; end$$; create trigger fail_retirement before update on publicacion_recurso for each row execute function fail_retirement();");
+  try{
+    const response=await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'));assert.equal(response.status,503);
+    assert.doesNotMatch(await response.text(),/private|secret/);assert.equal((await detail(user)).version,current.version);
+    assert.equal((await db.query('select count(*)::int as count from auditoria where entidad_id=$1',[user])).rows[0].count,0);
+  }finally{await db.exec('drop trigger fail_retirement on publicacion_recurso;drop function fail_retirement()');}
+});
+test('self-suspension is explicit and the same administrator token loses protected access afterward',async()=>{
+  const {actor}=await fixture(),current=await detail(actor);
+  assert.equal((await request(stateRoute(actor),stateBody(current.version))).status,200);
+  assert.equal((await request('/auth/me')).status,403);
+  assert.equal((await request(route())).status,403);
+});
+test('account-state migration repeats with no schema/data changes and blocks direct client retirement reversal',async()=>{
+  const {user}=await fixture();const id=await publication(user),current=await detail(user);
+  await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'));
+  const columns=(await db.query("select table_name,column_name from information_schema.columns where table_schema='public' order by table_name,ordinal_position")).rows;
+  const data=(await db.query('select * from publicacion_recurso order by id')).rows;
+  await db.exec(await readFile('src/database/supabase/migrations/f2_3_07_estado_cuenta.sql','utf8'));
+  assert.deepEqual((await db.query("select table_name,column_name from information_schema.columns where table_schema='public' order by table_name,ordinal_position")).rows,columns);
+  assert.deepEqual((await db.query('select * from publicacion_recurso order by id')).rows,data);
+  for(const role of ['anon','authenticated']){
+    await db.exec('set role '+role);
+    try{
+      await assert.rejects(db.query('update publicacion_recurso set deleted_at=null where id=$1',[id]),/permission denied/);
+      await assert.rejects(db.query('delete from publicacion_recurso where id=$1',[id]),/permission denied/);
+      await assert.rejects(db.query("update perfil_usuario set estado_cuenta='ACTIVA' where id=$1",[user]),/permission denied/);
+    }finally{await db.exec('reset role');}
+  }
+});
+test('existing trusted server privileges can lock and retire publications after the minimal migration',async()=>{
+  const {user}=await fixture();const id=await publication(user),current=await detail(user);
+  await db.exec('set role service_role');
+  try{
+    const response=await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'));
+    assert.equal(response.status,200);assert.ok((await db.query('select deleted_at from publicacion_recurso where id=$1',[id])).rows[0].deleted_at);
+  }finally{await db.exec('reset role');}
 });
 after(async () => {
   globalThis.fetch = originalFetch; await new Promise<void>((resolve,reject) => server.close(error => error ? reject(error) : resolve()));

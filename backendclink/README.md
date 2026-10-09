@@ -10,6 +10,8 @@ Roles y permisos por campus F2.3-05: administración mediante `/api/v1/users/acc
 
 Autorización F2.3-06: [políticas por ruta, comprobaciones de permiso/campus/propietario y guía para servicios futuros](docs/campus-authorization.md). El mapa ahora exige Bearer y campus vigente. No requiere SQL nuevo.
 
+Suspensión/desactivación F2.3-07: [acciones de cuenta, auditoría, retirada física y conservación digital](docs/account-state.md). Desde Administrar cuentas y accesos; PATCH dedicado `/users/access/campuses/:campusId/users/:userId/state`. Aplicar `src/database/supabase/migrations/f2_3_07_estado_cuenta.sql`: solo permisos/RLS sobre publicaciones existentes, sin tablas/columnas nuevas. El guardado revalida al administrador bajo transacción.
+
 ## Ejecución local
 
 Desde backendclink, instalar con npm ci y completar .env a partir de .env.example. No sobrescribir un .env existente.

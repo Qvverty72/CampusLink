@@ -44,7 +44,7 @@ export default function ProfileScreen() {
         <View style={styles.moduleLinks}>
           {canManageAccess(identity?.roles ?? []) && <Link href="/access" asChild>
             <Pressable accessibilityRole="button" style={styles.moduleLink}>
-              <Text style={styles.moduleLinkText}>Administrar roles y permisos</Text>
+              <Text style={styles.moduleLinkText}>Administrar cuentas y accesos</Text>
             </Pressable>
           </Link>}
           {identity?.capabilities.reports && <Link href={'/reports'} asChild>
