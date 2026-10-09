@@ -2,32 +2,39 @@ import { create } from 'zustand';
 import {
   fetchActiveCampusMap,
   type RuntimeMapData,
-} from '@/three/api/mapApi';
+} from '../api/mapApi';
 
 interface MapDataState {
   data: RuntimeMapData | null;
   isLoading: boolean;
   error: string | null;
-  loadMap: () => Promise<void>;
+  loadMap: (campusId: string) => Promise<void>;
 }
+
+let pending: { campusId: string; abort: AbortController } | null = null;
 
 export const useMapDataStore = create<MapDataState>((set, get) => ({
   data: null,
   isLoading: false,
   error: null,
 
-  loadMap: async () => {
-    if (get().data || get().isLoading) {
+  loadMap: async (campusId) => {
+    if (get().data?.campusId === campusId || pending?.campusId === campusId) {
       return;
     }
 
+    pending?.abort.abort();
+    const abort = new AbortController();
+    pending = { campusId, abort };
     set({
+      data: null,
       isLoading: true,
       error: null,
     });
 
     try {
-      const data = await fetchActiveCampusMap();
+      const data = await fetchActiveCampusMap(campusId, abort.signal);
+      if (abort.signal.aborted) return;
 
       set({
         data,
@@ -35,6 +42,7 @@ export const useMapDataStore = create<MapDataState>((set, get) => ({
         error: null,
       });
     } catch (error) {
+      if (abort.signal.aborted) return;
       set({
         data: null,
         isLoading: false,
@@ -43,6 +51,6 @@ export const useMapDataStore = create<MapDataState>((set, get) => ({
             ? error.message
             : 'Unable to load campus map',
       });
-    }
+    } finally { if (pending?.abort === abort) pending = null; }
   },
 }));
