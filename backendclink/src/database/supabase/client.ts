@@ -25,6 +25,17 @@ export const supabaseTechnical = createClient(
 // Authentication calls use the public project key, never the technical secret.
 export const supabaseAuth = createClient(env.supabaseUrl, env.supabasePublishableKey, options);
 
+// Signup may set a session. Isolate it from shared clients and other requests.
+export function createPublicSupabaseClient() {
+  return createClient(env.supabaseUrl, env.supabasePublishableKey, options);
+}
+
+// Server-owned persistence: no fallback to public privileges, and never sign in users here.
+export function createServerSupabaseClient() {
+  if (!env.supabaseSecretKey) throw new Error('A server Supabase key is required');
+  return createClient(env.supabaseUrl, env.supabaseSecretKey, options);
+}
+
 // Callers must validate the JWT before using this client for protected business operations.
 export function createUserSupabaseClient(accessToken: string) {
   if (!accessToken.trim()) throw new Error('An access token is required');
