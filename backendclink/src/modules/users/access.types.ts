@@ -18,3 +18,12 @@ export interface PhysicalPublication {
 }
 export type AccessKind = 'roles' | 'permissions';
 export type AccessConnection = Pick<PoolClient, 'query'>;
+
+export interface AuditEntry {
+  id: string; actor_usuario_id: string | null; institucion_id: string; campus_id: string;
+  entidad_tipo: string; entidad_id: string; accion: string; created_at: string;
+}
+export interface AuditDetail extends AuditEntry {
+  justificacion_accion: string | null; reporte_contenido_id: string | null;
+  datos_antes: unknown; datos_despues: unknown;
+}

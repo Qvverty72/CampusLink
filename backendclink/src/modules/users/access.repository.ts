@@ -1,6 +1,10 @@
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import type { AccessAssignment, AccessCampus, AccessCatalogItem, AccessConnection, AccessKind, AccessProfile, AccessSnapshot, AccountStateUpdate, PhysicalPublication } from './access.types.js';
 import type { AuthAssignment } from '../auth/auth.types.js';
+import type { AuditEntry, AuditDetail } from './access.types.js';
+
+const auditColumns = `id,actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion,
+  to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at`;
 
 export function withAccessTransaction<T>(operation: (repository: ReturnType<typeof accessRepository>) => Promise<T>) {
   return withPostgresTransaction(client => operation(accessRepository(client)));
@@ -9,6 +13,12 @@ export function withAccessTransaction<T>(operation: (repository: ReturnType<type
 // SQL and locks only. Authorization, desired state and audit decisions belong to the service.
 export function accessRepository(client: AccessConnection) {
   return {
+    auditEntries: async (campus: AccessCampus, limit: number, offset: number) => (await client.query<AuditEntry>(
+      `SELECT ${auditColumns} FROM public.auditoria WHERE campus_id=$1 AND institucion_id=$2
+       ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4`, [campus.id,campus.institucion_id,limit,offset])).rows,
+    auditEntry: async (campus: AccessCampus, id: string) => (await client.query<AuditDetail>(
+      `SELECT ${auditColumns},justificacion_accion,reporte_contenido_id,datos_antes,datos_despues
+       FROM public.auditoria WHERE campus_id=$1 AND institucion_id=$2 AND id=$3`, [campus.id,campus.institucion_id,id])).rows[0],
     lockProfiles: async (ids: string[]) => (await client.query<AccessProfile>(
       `SELECT id, institucion_id, campus_id, nombre_completo, estado_cuenta, deleted_at,
         to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at

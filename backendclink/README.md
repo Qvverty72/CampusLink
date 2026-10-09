@@ -12,6 +12,8 @@ Autorización F2.3-06: [políticas por ruta, comprobaciones de permiso/campus/pr
 
 Suspensión/desactivación F2.3-07: [acciones de cuenta, auditoría, retirada física y conservación digital](docs/account-state.md). Desde Administrar cuentas y accesos; PATCH dedicado `/users/access/campuses/:campusId/users/:userId/state`. Aplicar `src/database/supabase/migrations/f2_3_07_estado_cuenta.sql`: solo permisos/RLS sobre publicaciones existentes, sin tablas/columnas nuevas. El guardado revalida al administrador bajo transacción.
 
+Auditoría F2.3-08: [consulta del historial administrativo por campus](docs/administrative-audit.md). Desde Mi perfil → Historial administrativo; GET `/users/access/campuses/:campusId/audit` y `/audit/:auditId`. Aplicar `src/database/supabase/migrations/f2_3_08_auditoria.sql` después de F2.3-05: lectura/inserción del servidor y bloqueo de acceso directo cliente sobre `auditoria` existente. Sin tablas ni columnas nuevas.
+
 ## Ejecución local
 
 Desde backendclink, instalar con npm ci y completar .env a partir de .env.example. No sobrescribir un .env existente.

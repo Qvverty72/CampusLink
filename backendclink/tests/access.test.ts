@@ -29,11 +29,9 @@ before(async () => {
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql as $$select current_setting('test.user',true)::uuid$$; grant usage on schema public,auth to anon,authenticated,service_role; grant execute on function auth.uid() to authenticated;");
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion','campus','perfil_usuario','rol','permiso','rol_permiso','usuario_rol','usuario_permiso',
-    'publicacion_recurso','recurso_digital','archivo_publicacion','mensaje_solicitud','solicitud_recurso','transaccion_recurso','acceso_recurso_digital','auditoria']) {
+    'publicacion_recurso','recurso_digital','archivo_publicacion','mensaje_solicitud','solicitud_recurso','transaccion_recurso','acceso_recurso_digital','reporte_contenido','auditoria']) {
     let sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name);
-    // Report moderation is outside this fixture; audit columns and other constraints stay exact.
-    if (name === 'auditoria') sql = sql.replace(/  CONSTRAINT auditoria_reporte_contenido_id_fkey[^\n]*\n/, '');
     await db.exec(sql);
   }
   await db.exec(await readFile('src/database/supabase/migrations/f2_3_01_autenticacion.sql', 'utf8'));
@@ -41,6 +39,7 @@ before(async () => {
   await db.exec(await migration());
   await db.exec('grant all on publicacion_recurso to anon,authenticated');
   await db.exec(await readFile('src/database/supabase/migrations/f2_3_07_estado_cuenta.sql','utf8'));
+  await db.exec(await readFile('src/database/supabase/migrations/f2_3_08_auditoria.sql','utf8'));
   await db.query('insert into institucion(id,nombre) values ($1,$2)', [institution, 'Test']);
   await db.query('insert into campus(id,institucion_id,nombre) values ($1,$2,$3),($4,$2,$5)', [campus,institution,'Home',otherCampus,'Other']);
   roles = Object.fromEntries((await db.query<{id:string;nombre:string}>('select id,nombre from rol')).rows.map(row => [row.nombre,row.id]));
@@ -443,6 +442,185 @@ test('anonymous/authenticated cannot bypass Express and own RLS excludes histori
         const rows=(await db.query('select * from usuario_rol')).rows;
         assert.equal(rows.length,1); assert.equal(rows[0].perfil_usuario_id,actor);
       }
+    } finally { await db.exec('reset role'); }
+  }
+});
+
+const auditRoute = (id?: string, at = campus) => '/users/access/campuses/' + at + '/audit' + (id ? '/' + id : '');
+async function seedAudit(actor: string | null, entity: string, at: string | null = campus, before: unknown = null, after: unknown = null) {
+  const id = randomUUID();
+  await db.query(`insert into auditoria(id,actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion,datos_antes,datos_despues)
+    values ($1,$2,$3,$4,'perfil_usuario',$5,'SUSPENDER_CUENTA',$6::jsonb,$7::jsonb)`,
+    [id,actor,institution,at,entity,JSON.stringify(before),JSON.stringify(after)]);
+  return id;
+}
+async function auditDetail(id: string, at = campus) {
+  const response = await request(auditRoute(id,at)); assert.equal(response.status,200);
+  assert.equal(response.headers.get('cache-control'),'no-store'); return (await response.json()).data;
+}
+
+test('audit requires session and current administrator scope for both list and detail', async () => {
+  const {actor,user} = await fixture(), id = await seedAudit(actor,user);
+  for (const path of [auditRoute(),auditRoute(id)]) {
+    assert.equal((await request(path,undefined,'')).status,401);
+    invalidAuth=true; try { assert.equal((await request(path)).status,401); } finally { invalidAuth=false; }
+    authUser=user; assert.equal((await request(path)).status,403); authUser=actor;
+  }
+  await db.query('insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) values ($1,$2,$3)',[user,roles.USUARIO_AUTORIZADO,campus]);
+  await db.query('insert into usuario_permiso(perfil_usuario_id,permiso_id,campus_id) values ($1,$2,$3)',[user,permissions.ACCEDER_REPORTERIA,campus]);
+  authUser=user;
+  for (const path of [auditRoute(),auditRoute(id)]) assert.equal((await request(path)).status,403);
+});
+
+test('audit hides foreign UUIDs, institution mismatches and campusless records without trusting query campus', async () => {
+  const {actor,user} = await fixture(), foreign=await seedAudit(actor,user,otherCampus), global=await seedAudit(actor,user,null);
+  assert.equal((await request(auditRoute(undefined,otherCampus))).status,403);
+  assert.equal((await request(auditRoute(foreign,otherCampus))).status,403);
+  const missing=await request(auditRoute(randomUUID()));
+  for(const id of [foreign,global]) {
+    const response=await request(auditRoute(id)); assert.equal(response.status,404);
+    assert.deepEqual(await response.json(),await missing.clone().json());
+  }
+  const wrongInstitution=randomUUID(), mismatch=await seedAudit(actor,user);
+  await db.query("insert into institucion(id,nombre) values ($1,'Other institution')",[wrongInstitution]);
+  await db.query('update auditoria set institucion_id=$1 where id=$2',[wrongInstitution,mismatch]);
+  assert.equal((await request(auditRoute(mismatch))).status,404);
+  const response=await request(auditRoute()+'?campusId='+otherCampus+'&limit=100'); assert.equal(response.status,200);
+  const body=await response.json();assert.ok(body.data.every((row:{campus_id:string;institucion_id:string})=>row.campus_id===campus && row.institucion_id===institution));
+  assert.ok(body.data.every((row:{id:string})=>![foreign,global,mismatch].includes(row.id)));
+});
+
+test('audit pagination is bounded and ordered by original microsecond time then UUID', async () => {
+  const {actor,user} = await fixture(), scoped=randomUUID();
+  await db.query("insert into campus(id,institucion_id,nombre) values ($1,$2,'History')",[scoped,institution]);
+  await db.query('insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) values ($1,$2,$3)',[actor,roles.ADMINISTRADOR,scoped]);
+  const ids=[];
+  for(let i=0;i<3;i++) ids.push(await seedAudit(actor,user,scoped));
+  await db.query("update auditoria set created_at='2026-10-09T10:00:00.123456Z' where id=any($1::uuid[])",[ids]);
+  ids.sort().reverse();
+  const first=await request(auditRoute(undefined,scoped)+'?page=1&limit=2');assert.equal(first.status,200);
+  assert.equal(first.headers.get('cache-control'),'no-store');const one=await first.json();
+  assert.deepEqual(one.data.map((row:{id:string})=>row.id),ids.slice(0,2));assert.deepEqual(one.meta,{page:1,limit:2,hasMore:true});
+  assert.ok(one.data.every((row:{created_at:string})=>row.created_at==='2026-10-09T10:00:00.123456Z'));
+  assert.ok(one.data.every((row:object)=>!Object.hasOwn(row,'datos_antes')));
+  const two=await (await request(auditRoute(undefined,scoped)+'?page=2&limit=2')).json();
+  assert.deepEqual(two.data.map((row:{id:string})=>row.id),ids.slice(2));assert.equal(two.meta.hasMore,false);
+  const empty=await (await request(auditRoute(undefined,scoped)+'?page=3&limit=2')).json();assert.deepEqual(empty.data,[]);
+  for(const query of ['?page=0','?limit=101','?page=1&page=2','?limit=1.5','?page=999999999999999999999'])
+    assert.equal((await request(auditRoute(undefined,scoped)+query)).status,400);
+  assert.equal((await request('/users/access/campuses/bad/audit')).status,400);
+  assert.equal((await request(auditRoute('bad'))).status,400);
+});
+
+test('audit shows original role snapshots after catalog edits, target move/deletion and historical actor deactivation', async () => {
+  const {actor,user}=await fixture(); let current=await detail(user);
+  const response=await request(route(user),payload(current.version,[roles.USUARIO_AUTORIZADO],[]));assert.equal(response.status,200);
+  const stored=(await db.query('select * from auditoria where entidad_id=$1',[user])).rows[0];
+  current=(await response.json()).data;
+  await request(route(user),payload(current.version,[],[]));
+  await db.query('update perfil_usuario set campus_id=$1,deleted_at=now() where id=$2',[otherCampus,user]);
+  const reader=await profile();await db.query('insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) values ($1,$2,$3)',[reader,roles.ADMINISTRADOR,campus]);
+  await db.query("update perfil_usuario set estado_cuenta='DESACTIVADA',deleted_at=now() where id=$1",[actor]);authUser=reader;
+  await db.query("update rol set nombre='CHANGED_CATALOG' where id=$1",[roles.USUARIO_AUTORIZADO]);
+  try {
+    const record=await auditDetail(stored.id as string);assert.equal(record.actor_usuario_id,actor);assert.equal(record.entidad_id,user);
+    assert.deepEqual(record.datos_antes,stored.datos_antes);assert.deepEqual(record.datos_despues,stored.datos_despues);
+    assert.equal(record.datos_despues.roles[0].nombre,'USUARIO_AUTORIZADO');
+    assert.ok((await (await request(auditRoute()+'?limit=100')).json()).data.some((row:{id:string})=>row.id===stored.id));
+  } finally { await db.query("update rol set nombre='USUARIO_AUTORIZADO' where id=$1",[roles.USUARIO_AUTORIZADO]); }
+});
+
+test('audit reads real suspension/deactivation snapshots even after physical publications retire', async () => {
+  const {actor,user}=await fixture(),publicationId=await publication(user);let current=await detail(user);
+  const suspended=await request(stateRoute(user),stateBody(current.version));assert.equal(suspended.status,200);current=(await suspended.json()).data;
+  assert.equal((await request(stateRoute(user),stateBody(current.version,'DESACTIVADA'))).status,200);
+  const stored=(await db.query('select * from auditoria where entidad_id=$1 order by created_at,id',[user])).rows;
+  assert.equal(stored.length,2);
+  for(const row of stored) {
+    const record=await auditDetail(row.id as string);assert.equal(record.actor_usuario_id,actor);
+    assert.deepEqual(record.datos_antes,row.datos_antes);assert.deepEqual(record.datos_despues,row.datos_despues);
+  }
+  const retired=await auditDetail(stored[1].id as string);
+  assert.equal(retired.datos_antes.publicacion_recurso[0].id,publicationId);
+  assert.equal(retired.datos_antes.publicacion_recurso[0].deleted_at,null);assert.ok(retired.datos_despues.publicacion_recurso[0].deleted_at);
+});
+
+test('audit reads recorded moderation decisions without reconstructing current report or publication', async () => {
+  const {actor,user}=await fixture(),publicationId=await publication(user), reportId=randomUUID();
+  await db.query(`insert into reporte_contenido(id,reportante_id,campus_id,entidad_tipo,entidad_id,motivo)
+    values ($1,$2,$3,'PUBLICACION_FISICA',$4,'Original reason')`,[reportId,user,campus,publicationId]);
+  const before={estado_reporte:'PENDIENTE',motivo:'Original reason',estado_publicacion:'DISPONIBLE'};
+  const after={estado_reporte:'RESUELTO',fundamento_resolucion:'Original decision',medida_aplicada:'OCULTAR_PUBLICACION',estado_publicacion:'OCULTO'};
+  const id=await seedAudit(actor,publicationId,campus,before,after);
+  await db.query(`update auditoria set accion='RESOLVER_DENUNCIA',entidad_tipo='publicacion_recurso',
+    justificacion_accion='Original decision',reporte_contenido_id=$1 where id=$2`,[reportId,id]);
+  await db.query("update reporte_contenido set motivo='Later reason',fundamento_resolucion='Later decision' where id=$1",[reportId]);
+  await db.query("update publicacion_recurso set titulo='Later title',deleted_at=now() where id=$1",[publicationId]);
+  const record=await auditDetail(id);assert.equal(record.reporte_contenido_id,reportId);assert.equal(record.justificacion_accion,'Original decision');
+  assert.deepEqual(record.datos_antes,before);assert.deepEqual(record.datos_despues,after);
+});
+
+test('audit never forwards arbitrary JSON secrets or nested session/storage payloads', async () => {
+  const {actor,user}=await fixture();
+  const id=await seedAudit(actor,user,campus,{password:'hidden password',access_token:'hidden access',refresh_token:'hidden refresh',
+    credentials:{secret:'hidden credential'},nombre_completo:{password:'hidden wrong shape'},estado_cuenta:'ACTIVA',
+    roles:[{id:'assignment',nombre:'USUARIO_AUTORIZADO',campus_id:campus,session:'hidden session',nested:{api_key:'hidden key'}}],
+    permissions:[],publicacion_recurso:[{id:'publication',deleted_at:null,storage_path:'hidden storage',signed_url:'hidden url'}]},
+    {estado_cuenta:'SUSPENDIDA',auth:{private_key:'hidden private'}});
+  const response=await request(auditRoute(id));assert.equal(response.status,200);const serialized=await response.text();
+  assert.doesNotMatch(serialized,/hidden|password|access_token|refresh_token|credentials|session|private_key|signed_url|storage_path/);
+  const record=JSON.parse(serialized).data;assert.equal(record.datos_antes.estado_cuenta,'ACTIVA');
+  assert.deepEqual(record.datos_antes.roles,[{id:'assignment',nombre:'USUARIO_AUTORIZADO',campus_id:campus}]);
+  const absent=await seedAudit(null,user);const empty=await auditDetail(absent);
+  assert.equal(empty.actor_usuario_id,null);assert.equal(empty.datos_antes,null);assert.equal(empty.datos_despues,null);
+});
+
+test('audit rechecks actor revocation/state and campus activity after middleware', async () => {
+  const {actor,user}=await fixture(),id=await seedAudit(actor,user);
+  beforeTransaction=()=>db.query('update usuario_rol set revocado_en=now() where perfil_usuario_id=$1',[actor]).then(()=>{});
+  assert.equal((await request(auditRoute())).status,403);
+  await db.query('update usuario_rol set revocado_en=null where perfil_usuario_id=$1',[actor]);
+  beforeTransaction=()=>db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[actor]).then(()=>{});
+  assert.equal((await request(auditRoute(id))).status,403);
+  for(const state of ['SUSPENDIDA','DESACTIVADA']) {
+    await db.query('update perfil_usuario set estado_cuenta=$1 where id=$2',[state,actor]);
+    for(const path of [auditRoute(),auditRoute(id)]) assert.equal((await request(path)).status,403);
+  }
+  await db.query("update perfil_usuario set estado_cuenta='ACTIVA' where id=$1",[actor]);
+  beforeTransaction=()=>db.query('update campus set activo=false where id=$1',[campus]).then(()=>{});
+  try { assert.equal((await request(auditRoute())).status,403); } finally { await db.query('update campus set activo=true where id=$1',[campus]); }
+});
+
+test('audit database failure is sanitized and HTTP provides no history mutation route', async () => {
+  const {actor,user}=await fixture(),id=await seedAudit(actor,user);
+  dbFailure=true;
+  try { const response=await request(auditRoute(id));assert.equal(response.status,503);assert.doesNotMatch(await response.text(),/private|password|secret/); }
+  finally { dbFailure=false; }
+  for(const method of ['POST','PATCH','DELETE']) {
+    const response=await originalFetch(base+auditRoute(id),{method,headers:{authorization:'Bearer '+token}});assert.equal(response.status,404);
+  }
+});
+
+test('audit migration preserves schema/history, denies clients and permits server read/append only', async () => {
+  const {actor,user}=await fixture();await seedAudit(actor,user);
+  const columns=(await db.query("select table_name,column_name from information_schema.columns where table_schema='public' order by table_name,ordinal_position")).rows;
+  const history=(await db.query('select * from auditoria order by id')).rows;
+  const sql=await readFile('src/database/supabase/migrations/f2_3_08_auditoria.sql','utf8');
+  await db.exec(sql);await db.exec(sql);
+  assert.deepEqual((await db.query("select table_name,column_name from information_schema.columns where table_schema='public' order by table_name,ordinal_position")).rows,columns);
+  assert.deepEqual((await db.query('select * from auditoria order by id')).rows,history);
+  for(const role of ['anon','authenticated','service_role']) {
+    await db.exec('set role '+role);
+    try {
+      if(role==='service_role') {
+        assert.deepEqual((await db.query('select * from auditoria order by id')).rows,history);
+        await seedAudit(actor,user);
+      } else {
+        await assert.rejects(db.query('select * from auditoria'),/permission denied/);
+        await assert.rejects(seedAudit(actor,user),/permission denied/);
+      }
+      for(const command of ["update auditoria set accion='DESACTIVAR_CUENTA'",'delete from auditoria','truncate auditoria'])
+        await assert.rejects(db.exec(command),/permission denied/);
     } finally { await db.exec('reset role'); }
   }
 });

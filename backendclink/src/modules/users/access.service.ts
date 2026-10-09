@@ -5,6 +5,7 @@ import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { withAccessTransaction, type accessRepository } from './access.repository.js';
 import type { AccessProfile, AccessSnapshot, AccessUpdate, AccountStateUpdate } from './access.types.js';
 import { requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
+import { auditSnapshot } from './audit.snapshot.js';
 
 const ROLE_NAMES = ['ADMINISTRADOR', 'USUARIO_AUTORIZADO'];
 const PERMISSION_NAMES = ['PUBLICAR_EVENTO', 'ACCEDER_ANALITICA', 'ACCEDER_REPORTERIA'];
@@ -91,6 +92,26 @@ export async function listAccessUsers(auth: VerifiedAuthConnection, rawCampusId:
     await authorizedCampus(repository, auth, campusId);
     const users = await repository.users(campusId, pagination.data.limit + 1, pagination.data.offset);
     return createPaginatedResult(users.map(row => ({ userId: row.id, fullName: row.nombre_completo, accountState: row.estado_cuenta, campusId })), pagination.data);
+  });
+}
+export async function listAuditEntries(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown) {
+  const campusId = uuid(rawCampusId);
+  const pagination = parsePaginationQuery(query);
+  if (!pagination.success) throw invalid('Revisa la página y el tamaño del historial.');
+  return transaction(async repository => {
+    requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
+    const campus = await authorizedCampus(repository, auth, campusId);
+    return createPaginatedResult(await repository.auditEntries(campus, pagination.data.limit + 1, pagination.data.offset), pagination.data);
+  });
+}
+export async function getAuditEntry(auth: VerifiedAuthConnection, rawCampusId: unknown, rawAuditId: unknown) {
+  const campusId = uuid(rawCampusId), auditId = uuid(rawAuditId);
+  return transaction(async repository => {
+    requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
+    const campus = await authorizedCampus(repository, auth, campusId);
+    const entry = await repository.auditEntry(campus,auditId);
+    if (!entry) throw new ApiError(404, 'NOT_FOUND', 'El registro no está disponible en este campus.');
+    return { ...entry, datos_antes: auditSnapshot(entry.datos_antes), datos_despues: auditSnapshot(entry.datos_despues) };
   });
 }
 async function target(repository: Repository, auth: VerifiedAuthConnection, campusId: string, userId: string) {
