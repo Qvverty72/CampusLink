@@ -246,6 +246,10 @@ Las colecciones esperadas del modelo actual son campus_maps, activities, activit
 
 ## Trabajo posterior
 
+F2.2-06 incorpora validaciones reutilizables de referencias y servicios internos de mapas en `src/services/references.ts`, `src/database/supabase/references.repository.ts` y `src/modules/maps/map.service.ts`. `createMapService()` expone `getActiveMap`, `createMap` y `updateMap`; admite repositories/validadores inyectados para pruebas. Las escrituras conservan ObjectId, UUID de campus y fechas del servidor; las ediciones no pueden reasignar campus, versión, `_id` ni fecha de creación. La consulta activa comprueba el campus antes y después de leer MongoDB y mantiene `{ data }`/404; fallos de PostgreSQL o MongoDB responden 503 sanitizado. No se agregan rutas públicas de escritura de mapas.
+
+El modelo de los servicios internos de actividades y participaciones está pendiente de confirmar: Atlas contiene `activities` y `activity_participation` vacías sin validadores, mientras el bootstrap histórico usa otros campos y el nombre plural. No se aplicó ese bootstrap ni se modificaron esquemas/datos para resolver la discrepancia. Los endpoints funcionales y la autorización de actividades siguen siendo trabajo de F2.6/F2.2-07.
+
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Completar aislamiento, catálogo de roles, RLS y pruebas permitidas/prohibidas de acceso por campus.
 - Completar idempotencia/historial de eventos para KPI; el health no demuestra cobertura analítica.

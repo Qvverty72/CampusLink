@@ -15,6 +15,21 @@ Los archivos `*.service.ts` dentro de `src/modules` coordinan cada módulo. Los 
 | [module-health.ts](module-health.ts) | Coordinar y almacenar brevemente las comprobaciones de dependencias. | `createModuleHealthCheck` |
 | [readiness.ts](readiness.ts) | Reunir los diagnósticos de los siete módulos. | `getReadiness` |
 | [deadline.ts](deadline.ts) | Limitar cuánto se espera una operación asíncrona. | `withDeadline` |
+| [references.ts](references.ts) | Comprobar UUID, vigencia y campus de referencias relacionales. | `createReferenceValidator`, `referenceUuid`, `dependencyOperation`, `UUID_PATTERN` |
+| [document-references.ts](document-references.ts) | Comprobar ObjectId y traducir fallos de persistencia documental. | `documentObjectId`, `documentOperation` |
+
+## Referencias entre bases (F2.2-06)
+
+`createReferenceValidator()` consulta proyecciones mínimas desde `database/supabase/references.repository.ts`: campus activo y, para cada usuario, perfil `ACTIVA`, sin `deleted_at`, del mismo campus e institución. Valida todos los UUID antes de consultar y normaliza a minúsculas. No copia los perfiles a MongoDB ni almacena resultados entre operaciones.
+
+- `assertReferences({ campusId, users?: [{ id, field }] })`: rechaza UUID inválidos con 400 y referencias inexistentes, inactivas o inconsistentes con 409; devuelve las referencias normalizadas.
+- `areReferencesCurrent(...)`: retorna false únicamente para referencias inválidas. Un fallo de dependencia se propaga como 503, nunca como ausencia de datos.
+- El repository usa la conexión técnica existente para campus y `createServerSupabaseClient()` para perfiles. Validar otro usuario requiere `SUPABASE_SECRET_KEY` (o su alias servidor existente); no se recurre a privilegios públicos si falta la clave.
+- `documentOperation` convierte fallos del driver a 503, duplicados a 409 y rechazo de un validador MongoDB a 400, sin revelar mensajes del proveedor.
+
+Estos mecanismos comprueban integridad; no autentican ni conceden permisos. Cada futuro servicio debe recibir el campus vigente determinado por una capa autorizada, declarar todas sus referencias y esperar `assertReferences` inmediatamente antes de escribir. Las lecturas operacionales deben ocultar las referencias inválidas y propagar indisponibilidad. Los datos históricos no se borran por el fallo de una referencia; su acceso requiere un flujo autorizado separado.
+
+Los servicios no repiten escrituras ni aplican rollback distribuido. Un timeout MongoDB puede tener resultado incierto: se devuelve 503 y nunca se confirma éxito. El caller debe verificar el resultado antes de volver a crear el documento. Se conservan las opciones y garantías del cliente MongoDB compartido; las operaciones no escriben PostgreSQL.
 
 ## api-response.ts
 

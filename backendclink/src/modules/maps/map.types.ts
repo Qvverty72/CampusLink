@@ -21,6 +21,32 @@ export interface CampusMapDocument {
   buildings: unknown[];
   createdAt: Date;
   updatedAt: Date;
+  schemaVersion?: number;
+  model?: CampusMapModel;
+  activatedAt?: Date | null;
+  archivedAt?: Date | null;
+}
+
+export interface CampusMapModel {
+  key: string;
+  assetPath: string;
+  dataSource: string;
+  sourceHash: string;
+}
+
+/** Full write contract from the existing campus_maps bootstrap, with server-owned dates/id. */
+export type NewCampusMap = Omit<CampusMapDocument, '_id' | 'createdAt' | 'updatedAt'> & {
+  schemaVersion: number;
+  model: CampusMapModel;
+};
+export type CampusMapChanges = Partial<Pick<CampusMapDocument,
+  'status' | 'buildings' | 'model' | 'activatedAt' | 'archivedAt'>>;
+
+export interface MapRepository {
+  findActiveMapByCampusId(campusId: string): Promise<CampusMapDocument | null>;
+  findMapById(id: ObjectId, campusId: string): Promise<CampusMapDocument | null>;
+  insertMap(document: Omit<CampusMapDocument, '_id'>): Promise<CampusMapDocument>;
+  updateMap(id: ObjectId, campusId: string, changes: CampusMapChanges & { updatedAt: Date }): Promise<CampusMapDocument | null>;
 }
 
 import type { ModuleHealth } from '../../types/api.types.js';
