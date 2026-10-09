@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
-import { test } from 'node:test';
+import { before, test } from 'node:test';
 
 import express, { type Express } from 'express';
 import { ObjectId } from 'mongodb';
 
-import { createApp } from '../src/app.js';
 import { apiErrorHandler } from '../src/middleware/apiErrorHandler.js';
 import { getValidatedRequest, validateRequest } from '../src/middleware/validateRequest.js';
 import { parseActiveMapParams } from '../src/modules/maps/map.validation.js';
@@ -17,6 +16,17 @@ import type { RequestParser } from '../src/types/api.js';
 import { ApiClientError, fetchActiveCampusMap } from '../../frontendclink/src/three/api/mapApi.js';
 
 const CAMPUS_ID = '22222222-2222-4222-8222-222222222222';
+let createApp: typeof import('../src/app.js').createApp;
+
+before(async () => {
+  Object.assign(process.env, {
+    NODE_ENV: 'test',
+    MONGODB_URI: 'mongodb://127.0.0.1:27017',
+    SUPABASE_URL: 'https://api-test.invalid',
+    SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
+  });
+  ({ createApp } = await import('../src/app.js'));
+});
 
 async function withServer(
   app: Express,

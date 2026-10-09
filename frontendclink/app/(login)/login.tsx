@@ -33,6 +33,12 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.footer}>
+          <Link href={'/register' as Href} asChild>
+            <Pressable accessibilityRole="button" style={styles.button}>
+              <Text style={styles.buttonText}>Crear cuenta institucional</Text>
+              <Text style={styles.buttonArrow}>+</Text>
+            </Pressable>
+          </Link>
           <Link href={'/map' as Href} prefetch replace asChild>
             <Pressable
               accessibilityRole="button"

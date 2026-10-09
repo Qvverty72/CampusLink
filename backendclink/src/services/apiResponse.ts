@@ -1,9 +1,15 @@
 import type { Response } from 'express';
 
-import type { ApiSuccessBody } from '../types/api.js';
+import type {
+  ApiErrorBody,
+  ApiErrorCode,
+  ApiErrorDetail,
+  ApiErrorStatus,
+  ApiSuccessBody,
+} from '../types/api.js';
 
 export interface SuccessResponseOptions<Meta extends object> {
-  status?: 200 | 201 | 204;
+  status?: 200 | 201 | 202 | 204;
   meta?: Meta;
 }
 
@@ -24,4 +30,16 @@ export function sendSuccess<T, Meta extends object = Record<string, unknown>>(
     : { data, meta: options.meta };
 
   return response.status(status).json(body);
+}
+
+/** Sends an API error envelope shared by application errors and diagnostics. */
+export function sendApiError(
+  response: Response,
+  status: ApiErrorStatus,
+  code: ApiErrorCode,
+  message: string,
+  details?: ApiErrorDetail[],
+): Response<ApiErrorBody> {
+  const error = details === undefined ? { code, message } : { code, message, details };
+  return response.status(status).json({ error });
 }

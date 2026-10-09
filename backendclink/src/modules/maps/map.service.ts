@@ -1,18 +1,21 @@
-import type { CampusMapDocument } from './map.types.js';
+import { createModuleHealthCheck } from '../../services/module-health.js';
+import type { DependencyChecks } from '../../types/api.types.js';
+import type { CampusMapDocument, MapHealth } from './map.types.js';
 
 export type ActiveMapLookup = (
   campusId: string,
 ) => Promise<CampusMapDocument | null>;
 
-/**
- * Caso de uso para obtener el mapa activo de un campus.
- *
- * Hoy delega directamente porque aún no existen reglas adicionales. Mantener esta
- * capa deja un punto explícito para autorización o validación entre Supabase y
- * MongoDB sin mezclar esas decisiones con HTTP ni con queries.
- */
-export function getActiveMap(campusId: string) {
-  return import('./map.repository.js').then(({ findActiveMapByCampusId }) =>
-    findActiveMapByCampusId(campusId),
-  );
+async function probeMapDependencies(): Promise<DependencyChecks> {
+  const { probeMapDependencies: probe } = await import('./map.repository.js');
+  return probe();
+}
+
+export const getMapHealth: () => Promise<MapHealth> = createModuleHealthCheck('maps', probeMapDependencies);
+
+// Preserve the active-map DTO; do not expose a map with an absent/inactive campus reference.
+export async function getActiveMap(campusId: string) {
+  const { findActiveMapByCampusId, isActiveCampus } = await import('./map.repository.js');
+  if (!await isActiveCampus(campusId)) return null;
+  return findActiveMapByCampusId(campusId);
 }

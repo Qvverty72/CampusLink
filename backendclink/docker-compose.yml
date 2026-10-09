@@ -3,9 +3,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: campuslink-api
     env_file:
       - .env
+    # Development runtime; diagnostic opt-in is read from .env.
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-3000}:3000"
+    init: true
+    # HTTP drain and Mongo cleanup can each take DATABASE_TIMEOUT_MS.
+    stop_grace_period: 130s
     restart: unless-stopped

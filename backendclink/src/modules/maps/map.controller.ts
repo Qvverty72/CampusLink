@@ -6,6 +6,8 @@ import { getValidatedRequest } from '../../middleware/validateRequest.js';
 import { getActiveMap } from './map.service.js';
 import type { ActiveMapLookup } from './map.service.js';
 import type { ActiveMapRouteParams } from './map.validation.js';
+import { sendModuleHealth } from '../../services/health-response.js';
+import { getMapHealth } from './map.service.js';
 
 export function createGetActiveMapController(
   lookup: ActiveMapLookup = getActiveMap,
@@ -23,3 +25,7 @@ export function createGetActiveMapController(
 }
 
 export const getActiveMapController = createGetActiveMapController();
+
+export const getMapHealthController: RequestHandler = async (_request, response) => {
+  sendModuleHealth(response, await getMapHealth());
+};

@@ -1,7 +1,7 @@
-import type { ErrorRequestHandler, Response } from 'express';
+import type { ErrorRequestHandler } from 'express';
 
 import { ApiError } from '../services/apiError.js';
-import type { ApiErrorBody, ApiErrorCode, ApiErrorStatus } from '../types/api.js';
+import { sendApiError } from '../services/apiResponse.js';
 
 interface BodyParserError extends Error {
   type?: string;
@@ -19,18 +19,8 @@ function getErrorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
 }
 
-function sendError(
-  response: Response,
-  status: ApiErrorStatus,
-  code: ApiErrorCode,
-  message: string,
-  details?: ApiErrorBody['error']['details'],
-): void {
-  const error = details === undefined
-    ? { code, message }
-    : { code, message, details };
-
-  response.status(status).json({ error });
+function isPayloadTooLarge(error: unknown): error is BodyParserError {
+  return error instanceof Error && 'type' in error && error.type === 'entity.too.large';
 }
 
 /** Converts thrown application and parser errors to the public API contract. */
@@ -46,9 +36,14 @@ export const apiErrorHandler: ErrorRequestHandler = (
   }
 
   if (isInvalidJson(error)) {
-    sendError(response, 400, 'VALIDATION_ERROR', 'Request validation failed.', [
+    sendApiError(response, 400, 'VALIDATION_ERROR', 'Request validation failed.', [
       { field: 'body', message: 'Request body must contain valid JSON.' },
     ]);
+    return;
+  }
+
+  if (isPayloadTooLarge(error)) {
+    sendApiError(response, 413, 'PAYLOAD_TOO_LARGE', 'Request body exceeds the size limit.');
     return;
   }
 
@@ -59,7 +54,7 @@ export const apiErrorHandler: ErrorRequestHandler = (
 
     if (error.status === 500) {
       console.error('Unhandled API error', { errorName: getErrorName(error) });
-      sendError(
+      sendApiError(
         response,
         500,
         'INTERNAL_SERVER_ERROR',
@@ -69,21 +64,21 @@ export const apiErrorHandler: ErrorRequestHandler = (
     }
 
     if (error.status === 503) {
-      sendError(
+      sendApiError(
         response,
         503,
-        'SERVICE_UNAVAILABLE',
+        error.code,
         'Service temporarily unavailable.',
       );
       return;
     }
 
-    sendError(response, error.status, error.code, error.message, error.details);
+    sendApiError(response, error.status, error.code, error.message, error.details);
     return;
   }
 
   console.error('Unhandled API error', { errorName: getErrorName(error) });
-  sendError(
+  sendApiError(
     response,
     500,
     'INTERNAL_SERVER_ERROR',

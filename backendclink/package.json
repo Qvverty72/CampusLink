@@ -9,8 +9,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/api.test.ts"
+    "typecheck": "tsc --project tsconfig.check.json",
+    "test": "tsx --test test/api.test.ts tests/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
@@ -21,6 +21,7 @@
     "mongodb": "^7.6.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/cors": "latest",
     "@types/express": "latest",
     "@types/node": "^22",
