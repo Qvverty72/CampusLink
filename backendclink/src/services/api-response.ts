@@ -1,15 +1,24 @@
 import type { Response } from 'express';
-import type { ApiErrorResponse, ApiSuccess } from '../types/api.types.js';
+import { ApiError } from './apiError.js';
+import { sendApiError, sendSuccess as sendApiSuccess } from './apiResponse.js';
+import type { ApiErrorCode, ApiErrorStatus } from '../types/api.js';
 
-export class ApiError extends Error {
-  constructor(public readonly status: number, public readonly code: string, message: string) {
-    super(message);
-    this.name = 'ApiError';
-  }
+export { ApiError };
+
+/** Compatibility facade for existing modules; all responses use the shared F2.2-04 helpers. */
+export function sendSuccess<T>(
+  response: Response,
+  data: T,
+  status: 200 | 201 | 202 | 204 = 200,
+): void {
+  sendApiSuccess(response, data, { status });
 }
-export function sendSuccess<T>(response: Response, data: T, status = 200): void {
-  response.status(status).json({ data } satisfies ApiSuccess<T>);
-}
-export function sendError(response: Response, status: number, code: string, message: string): void {
-  response.status(status).json({ error: { code, message } } satisfies ApiErrorResponse);
+
+export function sendError(
+  response: Response,
+  status: ApiErrorStatus,
+  code: ApiErrorCode,
+  message: string,
+): void {
+  sendApiError(response, status, code, message);
 }

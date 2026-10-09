@@ -9,13 +9,26 @@ import { createReportsRouter } from '../modules/reports/reports.routes.js';
 import { createUsersRouter } from '../modules/users/users.routes.js';
 import { getReadiness } from '../services/readiness.js';
 import { sendError, sendSuccess } from '../services/api-response.js';
+import { ApiError } from '../services/apiError.js';
+import type { ActiveMapLookup } from '../modules/maps/map.service.js';
 
-export function createApiRouter(diagnosticsEnabled = env.healthDiagnosticsEnabled): Router {
-  const router = Router();
-  // Even an explicit override cannot enable detailed diagnostics in production/test.
+export interface ApiRouterOptions {
+  getActiveMap?: ActiveMapLookup;
+  diagnosticsEnabled?: boolean;
+}
+
+export function createApiRouter(options: ApiRouterOptions = {}): Router {
+  const apiRouter = Router();
+  const diagnosticsEnabled = options.diagnosticsEnabled ?? env.healthDiagnosticsEnabled;
+  // Even an explicit override cannot enable detailed diagnostics outside development.
   const diagnostics = env.nodeEnv === 'development' && diagnosticsEnabled;
-  router.get('/health', (_request, response) => { response.json({ status: 'ok' }); });
-  if (diagnostics) router.get('/ready', async (_request, response) => {
+
+  // Keep the existing health contract stable while other routes use envelopes.
+  apiRouter.get('/health', (_request, response) => {
+    response.json({ status: 'ok' });
+  });
+
+  if (diagnostics) apiRouter.get('/ready', async (_request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     const readiness = await getReadiness();
     if (readiness.status === 'unavailable') {
@@ -24,12 +37,22 @@ export function createApiRouter(diagnosticsEnabled = env.healthDiagnosticsEnable
     }
     sendSuccess(response, readiness);
   });
-  router.use('/users', createUsersRouter(diagnostics));
-  router.use('/auth', createAuthRouter(diagnostics));
-  router.use('/maps', createMapRouter(diagnostics));
-  router.use('/marketplace/physicalgoods', createPhysicalgoodsRouter(diagnostics));
-  router.use('/marketplace/elibrary', createElibraryRouter(diagnostics));
-  router.use('/reports', createReportsRouter(diagnostics));
-  router.use('/analytics', createAnalyticsRouter(diagnostics));
-  return router;
+
+  apiRouter.use('/users', createUsersRouter(diagnostics));
+  apiRouter.use('/auth', createAuthRouter(diagnostics));
+  apiRouter.use('/maps', createMapRouter({
+    lookup: options.getActiveMap,
+    diagnosticsEnabled: diagnostics,
+  }));
+  apiRouter.use('/marketplace/physicalgoods', createPhysicalgoodsRouter(diagnostics));
+  apiRouter.use('/marketplace/elibrary', createElibraryRouter(diagnostics));
+  apiRouter.use('/reports', createReportsRouter(diagnostics));
+  apiRouter.use('/analytics', createAnalyticsRouter(diagnostics));
+  apiRouter.use((_request, _response, next) => {
+    next(new ApiError(404, 'NOT_FOUND', 'API endpoint not found.'));
+  });
+
+  return apiRouter;
 }
+
+export const apiRouter = createApiRouter();

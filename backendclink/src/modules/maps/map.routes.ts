@@ -1,10 +1,28 @@
 import { Router } from 'express';
-import { getActiveMapController, getMapHealthController } from './map.controller.js';
+import { validateRequest } from '../../middleware/validateRequest.js';
+import { createGetActiveMapController, getMapHealthController } from './map.controller.js';
+import type { ActiveMapLookup } from './map.service.js';
+import { parseActiveMapParams } from './map.validation.js';
 
-export function createMapRouter(diagnosticsEnabled: boolean): Router {
-  const router = Router();
-  if (diagnosticsEnabled) router.get('/health', getMapHealthController);
-  // Legacy read contract retained for Expo. Full access control belongs to F2.2-07/F2.2-10/F2.3-06.
-  router.get('/:campusId/active', getActiveMapController);
-  return router;
+export interface MapRouterOptions {
+  lookup?: ActiveMapLookup;
+  diagnosticsEnabled?: boolean;
 }
+
+export function createMapRouter(options: MapRouterOptions = {}): Router {
+  const mapRouter = Router();
+
+  if (options.diagnosticsEnabled) {
+    mapRouter.get('/health', getMapHealthController);
+  }
+
+  mapRouter.get(
+    '/:campusId/active',
+    validateRequest({ params: parseActiveMapParams }),
+    createGetActiveMapController(options.lookup),
+  );
+
+  return mapRouter;
+}
+
+export const mapRouter = createMapRouter();

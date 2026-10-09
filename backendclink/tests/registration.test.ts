@@ -168,6 +168,7 @@ test('password policy, rate limit and catalog errors are sanitized', async () =>
   for (const [status, code, expected] of [[422, 'weak_password', 400], [429, 'over_email_send_rate_limit', 429], [500, 'unexpected_failure', 503]] as const) {
     signupStatus = status; signupCode = code;
     const response = await register(); assert.equal(response.status, expected);
+    if (status === 429) assert.equal(response.headers.get('retry-after'), '60');
     assert.ok(!JSON.stringify(await response.json()).includes('private'));
   }
   signupStatus = 200; catalogFails = true; calls = [];

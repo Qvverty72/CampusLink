@@ -168,15 +168,15 @@ Fallo de dependencia (503):
 
 Ready devuelve data.status y data.modules con las siete sondas cuando todas están disponibles; ante cualquier fallo devuelve el error genérico 503. Las respuestas llevan Cache-Control: no-store; la caché interna breve comparte comprobaciones concurrentes y limita la carga.
 
-Los errores nuevos usan error.code y error.message: 404 NOT_FOUND, 400 INVALID_JSON, 413 PAYLOAD_TOO_LARGE y 500 INTERNAL_ERROR. Una ruta no implementada no se convierte en un CRUD público. F2.2-04 completará validaciones de dominio y paginación al incorporar operaciones/listados.
+Las rutas usan `{ error: { code, message, details? } }` para errores y `{ data, meta? }` para éxitos. El manejador común normaliza JSON inválido, cuerpos demasiado grandes y excepciones; no devuelve detalles de bases de datos. F2.2-04 incorpora validadores reutilizables, errores tipados y utilidades de paginación (`page` desde 1, `limit` por defecto 20 y máximo 100). Los listados deben validar los parámetros y calcular `hasMore` leyendo hasta `limit + 1` elementos.
 
 ## Contrato de mapas y Expo
 
-GET /api/v1/maps/:campusId/active conserva el documento directo con buildings en la raíz, ObjectId serializado como string y fechas ISO. También conserva errores legacy { error: '...' } con 400 por UUID inválido, 404 por mapa inexistente o campus ausente/inactivo y 500 genérico por fallo de dependencia.
+GET /api/v1/maps/:campusId/active responde `200` con `{ data: <mapa> }`. Dentro de `data`, `buildings` permanece en la raíz del documento, el ObjectId se serializa como string y las fechas como ISO. Los errores utilizan el sobre común; un UUID inválido devuelve `400 VALIDATION_ERROR` con el campo afectado y un mapa/campus inexistente devuelve `404 NOT_FOUND`.
 
 Ahora consulta primero public.campus por id y activo=true; solo después consulta el mapa ACTIVE. Un campus de Mongo sin referencia relacional válida no se entrega. Esta comprobación usa el cliente técnico y no constituye autorización del solicitante.
 
-frontendclink/src/three/api/mapApi.ts continúa consumiendo el contrato original. Un cambio incompatible deberá coordinar el consumidor o introducir otra versión; no envolver silenciosamente el mapa con data.
+`frontendclink/src/three/api/mapApi.ts` desenvuelve `data` y expone errores con status, code y details para conservar el uso del documento por la escena 3D. El cliente autenticado también consume respuestas con `data`.
 
 El servidor no utiliza CAMPUS_ID, MAP_VERSION ni MAP_STATUS en el .env: eran parámetros del script de carga inicial eliminado. El campus solicitado llega en /api/v1/maps/:campusId/active, el repository filtra status=ACTIVE y la versión devuelta pertenece al documento almacenado en MongoDB. La misma API puede resolver distintos campus válidos sin cambiar el entorno del proceso.
 
@@ -195,7 +195,7 @@ Para el mapa actual:
 curl http://localhost:3000/api/v1/maps/22222222-2222-4222-8222-222222222222/active
 ~~~
 
-El campus San Andres está vinculado a DUOC UC en el proyecto Supabase configurado. La referencia se creó el 2026-10-08 para el UUID que ya usaba el mapa; no es una migración ni se crea automáticamente al arrancar. Si se cambia de proyecto Supabase/Atlas, preparar sus referencias válidas antes de consultar el mapa. Conservar el documento directo que consume Expo y no retirar la comprobación del campus para ocultar un problema de datos.
+El campus San Andres está vinculado a DUOC UC en el proyecto Supabase configurado. La referencia se creó el 2026-10-08 para el UUID que ya usaba el mapa; no es una migración ni se crea automáticamente al arrancar. Si se cambia de proyecto Supabase/Atlas, preparar sus referencias válidas antes de consultar el mapa. El backend conserva el documento bajo `data`, el cliente Expo lo desenvuelve y la comprobación del campus debe mantenerse.
 
 El frontend consume EXPO_PUBLIC_API_URL desde su propio entorno y utiliza el campus configurado en mapApi.ts. En un teléfono, la URL debe ser accesible desde ese dispositivo; localhost apunta al teléfono. Después de corregir un fallo de carga, recargar la pantalla para repetir la solicitud.
 

@@ -8,7 +8,9 @@ Los archivos `*.service.ts` dentro de `src/modules` coordinan cada módulo. Los 
 
 | Archivo | Responsabilidad | Exportaciones |
 | --- | --- | --- |
-| [api-response.ts](api-response.ts) | Construir respuestas correctas y errores HTTP. | `ApiError`, `sendSuccess`, `sendError` |
+| [api-response.ts](api-response.ts) | Fachada compatible para los módulos existentes; delega en los helpers comunes. | `ApiError`, `sendSuccess`, `sendError` |
+| [apiResponse.ts](apiResponse.ts) | Emitir sobres comunes de éxito y error. | `sendSuccess`, `sendApiError` |
+| [apiError.ts](apiError.ts) | Representar errores esperados con status y códigos estables. | `ApiError` |
 | [health-response.ts](health-response.ts) | Convertir el diagnóstico de un módulo en una respuesta HTTP. | `sendModuleHealth` |
 | [module-health.ts](module-health.ts) | Coordinar y almacenar brevemente las comprobaciones de dependencias. | `createModuleHealthCheck` |
 | [readiness.ts](readiness.ts) | Reunir los diagnósticos de los siete módulos. | `getReadiness` |
@@ -16,9 +18,9 @@ Los archivos `*.service.ts` dentro de `src/modules` coordinan cada módulo. Los 
 
 ## api-response.ts
 
-- `sendSuccess(response, data, status = 200)` envía el código HTTP indicado y un JSON con `data`.
-- `sendError(response, status, code, message)` envía el código HTTP indicado y un JSON con `error.code` y `error.message`.
-- `ApiError(status, code, message)` representa un error previsto. El middleware [error-handler.ts](../middleware/error-handler.ts) reconoce esta clase y utiliza sus valores para responder.
+- `sendSuccess(response, data, status = 200)` emite `{ data }` para 200, 201 o 202; con 204 termina la respuesta sin cuerpo.
+- `sendError(response, status, code, message)` emite `{ error: { code, message } }` mediante el helper común.
+- `ApiError(status, code, message, options?)` representa un error esperado. La fachada exporta la misma clase que usa F2.2-04, así el manejador reconoce errores de mapas y de auth con un único `instanceof`.
 
 Ejemplo de éxito:
 
@@ -32,11 +34,11 @@ Ejemplo de error:
 {"error":{"code":"DEPENDENCY_UNAVAILABLE","message":"A required dependency is unavailable"}}
 ~~~
 
-Los consumidores principales son el router, los controladores de diagnóstico y el middleware de errores. Los tipos están en [api.types.ts](../types/api.types.ts).
+Los consumidores principales son el router, los controladores de diagnóstico y auth. Los tipos compartidos están en [api.ts](../types/api.ts); `api.types.ts` reutiliza esos contratos para health.
 
 Estos helpers formatean la respuesta; no validan datos, autentican al solicitante ni limpian automáticamente el mensaje proporcionado. Usar mensajes aptos para el cliente, sin credenciales, consultas ni errores internos del proveedor.
 
-Las rutas históricas `/health` y `/maps/:campusId/active` conservan sus contratos propios para mantener compatibilidad con Expo.
+`/health` mantiene su contrato histórico `{ status: "ok" }`. El mapa activo devuelve `{ data }`; Expo desenvuelve ese campo en `mapApi.ts`.
 
 ## health-response.ts
 

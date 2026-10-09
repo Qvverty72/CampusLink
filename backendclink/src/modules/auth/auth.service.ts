@@ -60,7 +60,11 @@ export async function registerInstitutionalAccount(body: unknown) {
     if (error) {
       // Supabase may obfuscate existing accounts; keep the same response for duplicates.
       if (['user_already_exists', 'email_exists'].includes(error.code ?? '')) return { status: 'verification_required' as const };
-      if (error.status === 429) throw new ApiError(429, 'RATE_LIMITED', 'Espera antes de volver a solicitar el registro.');
+      if (error.status === 429) {
+        throw new ApiError(429, 'RATE_LIMITED', 'Espera antes de volver a solicitar el registro.', {
+          retryAfterSeconds: 60,
+        });
+      }
       if (['weak_password', 'validation_failed', 'email_address_invalid'].includes(error.code ?? '')) {
         throw new ApiError(400, 'INVALID_REGISTRATION', 'Revisa los datos y utiliza una contraseña que cumpla la política de seguridad.');
       }
@@ -98,8 +102,12 @@ export async function resendInstitutionalConfirmation(body: unknown) {
   try {
     const { error } = await resendInstitutionalOtp(email);
     if (error && !['user_not_found', 'email_not_confirmed', 'email_already_confirmed'].includes(error.code ?? '')) {
-      throw new ApiError(error.status === 429 ? 429 : 503, error.status === 429 ? 'RATE_LIMITED' : 'DEPENDENCY_UNAVAILABLE',
-        'No se pudo reenviar el código. Inténtalo nuevamente.');
+      if (error.status === 429) {
+        throw new ApiError(429, 'RATE_LIMITED', 'No se pudo reenviar el código. Inténtalo nuevamente.', {
+          retryAfterSeconds: 60,
+        });
+      }
+      throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo reenviar el código. Inténtalo nuevamente.');
     }
     return { status: 'verification_required' as const };
   } catch (error) {
@@ -178,8 +186,15 @@ export async function confirmInstitutionalRegistration(body: unknown) {
   try {
     const { data, error } = await verifyInstitutionalOtp(email, code!);
     if (error || !data.session) {
-      throw new ApiError(error?.status === 429 ? 429 : error && [0, 500, 502, 503, 504].includes(error.status ?? 0) ? 503 : 400,
-        error?.status === 429 ? 'RATE_LIMITED' : 'INVALID_VERIFICATION', 'No se pudo verificar. Revisa el código o solicita uno nuevo.');
+      if (error?.status === 429) {
+        throw new ApiError(429, 'RATE_LIMITED', 'No se pudo verificar. Revisa el código o solicita uno nuevo.', {
+          retryAfterSeconds: 60,
+        });
+      }
+      if (error && [0, 500, 502, 503, 504].includes(error.status ?? 0)) {
+        throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo verificar el correo.');
+      }
+      throw new ApiError(400, 'INVALID_VERIFICATION', 'No se pudo verificar. Revisa el código o solicita uno nuevo.');
     }
     // verifyOtp validates the code with Auth. Avoid a second Auth call after consuming it.
     const identity = providerIdentity(data.user);

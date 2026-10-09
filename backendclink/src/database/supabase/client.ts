@@ -29,7 +29,6 @@ export const supabaseAuth = createClient(env.supabaseUrl, env.supabasePublishabl
 export function createPublicSupabaseClient() {
   return createClient(env.supabaseUrl, env.supabasePublishableKey, options);
 }
-
 // Server-owned persistence: no fallback to public privileges, and never sign in users here.
 export function createServerSupabaseClient() {
   if (!env.supabaseSecretKey) throw new Error('A server Supabase key is required');
@@ -44,4 +43,3 @@ export function createUserSupabaseClient(accessToken: string) {
     global: { ...options.global, headers: { Authorization: 'Bearer ' + accessToken } },
   });
 }
-
