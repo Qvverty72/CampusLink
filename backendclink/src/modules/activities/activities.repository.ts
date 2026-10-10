@@ -1,13 +1,9 @@
-import type { Filter } from 'mongodb';
 import { getMongoDb } from '../../config/mongodb.js';
+import { visibleActivityFilter } from './activities.policy.js';
 import type { ActivityDocument, ActivityQuery } from './activities.types.js';
 
 export async function findVisibleActivities(campusId: string, query: ActivityQuery, now: Date): Promise<ActivityDocument[]> {
-  const filter: Filter<ActivityDocument> = {
-    campusId, status: 'ACTIVE', visibility: 'PUBLIC',
-    type: { $in: ['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'] },
-    endAt: { $gt: now },
-  };
+  const filter = visibleActivityFilter(campusId, now);
   if (query.buildingKey) filter['location.buildingKey'] = query.buildingKey;
   if (query.floorKey) filter['location.floorKey'] = query.floorKey;
   if (query.poiKey) filter['location.poiKey'] = query.poiKey;

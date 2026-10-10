@@ -20,6 +20,13 @@ export interface Activity {
 }
 
 export interface ActivityLocationQuery { buildingKey?: string; floorKey?: string; poiKey?: string }
+export interface ActivityDetail extends Activity {
+  organizer: { name: string } | null;
+  participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean };
+  bannerUrl?: string;
+  category?: string;
+  tags?: string[];
+}
 export const ACTIVITY_COLORS = { OFFICIAL_EVENT: '#2563EB', COMMUNITY_ACTIVITY: '#B45309' };
 export const ACTIVITY_LABELS = { OFFICIAL_EVENT: 'Evento oficial', COMMUNITY_ACTIVITY: 'Actividad comunitaria' };
 

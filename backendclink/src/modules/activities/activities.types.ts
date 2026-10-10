@@ -13,6 +13,8 @@ export interface ActivityDocument {
   startAt: Date;
   endAt: Date;
   bannerUrl?: string | null;
+  category?: string | null;
+  tags?: string[];
   location: {
     buildingKey: string;
     floorKey: string;
@@ -51,4 +53,22 @@ export interface ActivityDto {
     poiName?: string;
     customLabel?: string;
   };
+}
+
+export interface ActivityParticipationDocument {
+  _id?: ObjectId;
+  activityId: ObjectId;
+  userId: string;
+  campusId: string;
+  status: 'JOINED' | 'LEFT';
+  joinedAt: Date;
+  updatedAt: Date;
+}
+
+export interface ActivityDetailDto extends ActivityDto {
+  organizer: { name: string } | null;
+  participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean };
+  bannerUrl?: string;
+  category?: string;
+  tags?: string[];
 }

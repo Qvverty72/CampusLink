@@ -3,11 +3,14 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import type { ActivitiesState } from '../hooks/useLocationActivities';
 import { ACTIVITY_COLORS, filterLocationActivities, type Activity, type ActivityLocationQuery } from '../types/activity';
 import { ActivityCard } from './ActivityCard';
+import { ActivityDetail } from './ActivityDetail';
 
 export function LocationActivities({ state, query = {}, onExplore }: {
   state: ActivitiesState; query?: ActivityLocationQuery; onExplore?: (activity: Activity) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  if (selectedId) return <ActivityDetail key={selectedId} activityId={selectedId}
+    onBack={() => setSelectedId(null)} onExplore={onExplore} />;
   if (state.isLoading) return <View style={styles.section}><ActivityIndicator /><Text style={styles.text}>Cargando actividades…</Text></View>;
   if (state.error) return <View style={styles.section}>
     <Text accessibilityRole="alert" style={styles.text}>{state.error}</Text>
@@ -23,8 +26,7 @@ export function LocationActivities({ state, query = {}, onExplore }: {
           {type === 'OFFICIAL_EVENT' ? 'Eventos oficiales' : 'Actividades comunitarias'} ({entries.length})
         </Text>
         {entries.length ? entries.map(activity => <ActivityCard key={activity.id} activity={activity}
-          expanded={selectedId === activity.id} onPress={() => setSelectedId(selectedId === activity.id ? null : activity.id)}
-          onExplore={onExplore ? () => onExplore(activity) : undefined} />)
+          onPress={() => setSelectedId(activity.id)} />)
           : <Text style={styles.text}>{type === 'OFFICIAL_EVENT' ? 'No hay eventos oficiales vigentes en este lugar.' : 'No hay actividades comunitarias vigentes en este lugar.'}</Text>}
       </View>;
     })}

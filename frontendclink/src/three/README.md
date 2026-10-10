@@ -18,6 +18,10 @@ explorar su piso. Los estados de carga/error se muestran sin conteos engañosos.
 `FloorInfoModal` presenta las
 actividades del piso en secciones independientes para oficiales y comunitarias.
 Las tarjetas y fichas detalladas se muestran dentro de los modales.
+`ActivityDetail` consulta la ficha por ID, muestra organizador y participación propia
+y permite inscribirse. «Volver a las actividades» conserva la selección del mapa.
+El hook cancela consultas obsoletas y revalida al vencer la actividad; cerrar el
+modal desmonta la ficha. La inscripción usa `activity_participation` con JOINED/LEFT.
 Las actividades nunca se representan como puntos, marcadores ni
 geometría en el mapa 3D; `CampusMap` y `CampusModelScene` no reciben esos datos.
 

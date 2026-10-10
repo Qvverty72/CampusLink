@@ -28,3 +28,18 @@ export const parseActivityQuery: RequestParser = (input: unknown): ValidationRes
   }
   return issues.length ? { success: false, issues } : { success: true, data };
 };
+
+export const parseActivityId: RequestParser = (input: unknown) => {
+  const id = typeof input === 'object' && input !== null ? (input as Record<string, unknown>).activityId : undefined;
+  return typeof id === 'string' && /^[0-9a-f]{24}$/i.test(id)
+    ? { success: true, data: { activityId: id.toLowerCase() } }
+    : { success: false, issues: [{ field: 'activityId', message: 'A 24-character ObjectId is required.' }] };
+};
+
+/** Identity, campus and desired participation state are owned by the server. */
+export const parseEmptyActivityInput: RequestParser = (input: unknown) => {
+  if (input === undefined || (typeof input === 'object' && input !== null && !Array.isArray(input) && Object.keys(input).length === 0)) {
+    return { success: true, data: {} };
+  }
+  return { success: false, issues: [{ field: 'request', message: 'No activity overrides are accepted.' }] };
+};

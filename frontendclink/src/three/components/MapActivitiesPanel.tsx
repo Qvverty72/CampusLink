@@ -45,7 +45,8 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
           {buildingKey ? map.buildingConfigs[buildingKey]?.name : 'Actividades del campus'}
         </Text>
         <ScrollView style={styles.scroll}>
-          <LocationActivities key={buildingKey ?? 'campus'} state={state} query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} />
+          {open ? <LocationActivities key={buildingKey ?? 'campus'} state={state}
+            query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} /> : null}
         </ScrollView>
         <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.close}><Text style={styles.title}>Volver al mapa</Text></Pressable>
       </View></View>
