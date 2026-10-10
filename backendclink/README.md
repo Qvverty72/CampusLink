@@ -1,5 +1,7 @@
 # CampusLink Backend
 
+Denuncias F2.6-09: [API, persistencia común y QA manual](docs/activities-reports.md). `POST /api/v1/reports/activities/:activityId` guarda PENDIENTE en `reporte_contenido`, con motivo libre, descripción opcional y copia del contenido; no modifica actividades ni inscripciones. Revisión administrativa corresponde a F2.6-10. Sin migraciones ni colecciones nuevas.
+
 Base API REST de F2.2-03 (GitHub #50). Node.js 22, TypeScript, Express 5, Supabase JS y driver oficial MongoDB. Las rutas se montan en /api/v1.
 
 Actividades del mapa F2.6-01: `GET /api/v1/activities` requiere Bearer y autorización general del campus vigente. Admite `buildingKey`, `floorKey` y `poiKey` como filtros de la jerarquía; un filtro de piso requiere edificio y un filtro de POI requiere piso. No acepta campus, tipo, estado o visibilidad enviados por el cliente. Responde `{ data: ActivityDto[] }`, con fechas ISO y nombres de ubicación resueltos desde el mapa activo.
@@ -7,6 +9,8 @@ Actividades del mapa F2.6-01: `GET /api/v1/activities` requiere Bearer y autoriz
 Detalle F2.6-02 y participación mínima: [endpoints, contrato JOINED/LEFT, índice único y transacción](docs/activities-detail.md). `GET /api/v1/activities/:activityId` añade organizador y participación propia; `PUT /api/v1/activities/:activityId/participation` inscribe sin cuerpo ni identidad del cliente.
 
 Participación F2.6-07: [inscripción, retiro y consulta propia](docs/activities-participation.md). GET/DELETE en `/:activityId/participation` consultan el estado o retiran al usuario autenticado, incluso después del término. El retiro guarda LEFT y descuenta el contador una sola vez; la reinscripción vigente conserva el mismo registro. Sin nuevas colecciones.
+
+Notificaciones F2.6-08: [entrega durable y bandeja propia](docs/activities-notifications.md). Eventos pendientes embebidos en activities y entrega idempotente a notificacion existente; avisos oficiales por campus y cambios a participantes. Bandeja GET/PUT lectura/DELETE bajo `/api/v1/users/me/notifications`; aplicar migración aditiva `f2_6_08_notificaciones.sql`. Sin nuevas colecciones ni cambios de RLS/permisos existentes.
 
 Creación F2.6-03: [contrato comunitario](docs/activities-create.md), `POST /api/v1/activities`. Publicación F2.6-04: [contrato oficial y autorización por campus](docs/activities-official.md), `POST /api/v1/activities/official`. Ambas comparten validación/ubicación/transacción e inscriben al creador JOINED; el servidor fija el tipo. USUARIO_AUTORIZADO necesita PUBLICAR_EVENTO del campus vigente para publicar oficialmente; ADMINISTRADOR conserva acceso automático aprobado.
 

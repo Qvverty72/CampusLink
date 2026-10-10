@@ -6,6 +6,7 @@ import type { CampusMapDocument } from '../maps/map.types.js';
 import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity, visibleActivityFilter } from './activities.policy.js';
 import { requireParticipationIndex } from './activities.participation-index.js';
+import { publicationNotifications } from './activities.notifications.js';
 import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivitySeriesDocument } from './activities.types.js';
 
 export async function insertActivitySeries(series: ActivitySeriesDocument, documents: ActivityDocument[]): Promise<ActivityDto[]> {
@@ -25,6 +26,7 @@ export async function insertActivitySeries(series: ActivitySeriesDocument, docum
     if (!documents.length || occurrences.some(value => !value)) throw new ApiError(400, 'VALIDATION_ERROR', 'Las fechas o la ubicación ya no están disponibles. Revisa la vista previa.');
     if (documents.filter(document => document.occurrenceIndex === 1).length !== 1) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'La primera ocurrencia no está disponible.');
     await transactionDb.collection<ActivityDocument>('activities').insertMany(documents.map(document => ({ ...document, createdAt: now, updatedAt: now,
+      notificationEvents: publicationNotifications(document, now),
       ...(document.occurrenceIndex === 1 ? { seriesDefinition: { ...series, createdAt: now, updatedAt: now } } : {}) })), { session });
     await transactionDb.collection<ActivityParticipationDocument>('activity_participation').insertMany(documents.map(document => ({
       activityId: document._id, campusId: series.campusId, userId: series.createdByUserId, status: 'JOINED' as const,

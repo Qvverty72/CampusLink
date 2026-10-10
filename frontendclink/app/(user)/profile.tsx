@@ -42,6 +42,11 @@ export default function ProfileScreen() {
         {identity?.capabilities.general && <AcademicProfileSection key={`${identity.userId}:${identity.campusId}`} />}
 
         <View style={styles.moduleLinks}>
+          {identity?.capabilities.general && <Link href="/notifications" asChild>
+            <Pressable accessibilityRole="button" style={styles.moduleLink}>
+              <Text style={styles.moduleLinkText}>Notificaciones</Text>
+            </Pressable>
+          </Link>}
           {canManageAccess(identity?.roles ?? []) && <Link href="/audit" asChild>
             <Pressable accessibilityRole="button" style={styles.moduleLink}>
               <Text style={styles.moduleLinkText}>Historial administrativo</Text>

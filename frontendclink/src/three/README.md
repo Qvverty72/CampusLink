@@ -67,7 +67,8 @@ histórica; el listado muestra las fechas reales editadas de cada ocurrencia.
 
 Guardar refresca ficha y consulta compartida del campus, incluidos los resúmenes
 por edificio. No modifica la selección, las geometrías ni los stores 3D.
-La API conserva historial para F2.6-08; todavía no envía notificaciones.
+F2.6-08 usa el historial y eventos embebidos para notificaciones in-app; la bandeja
+se abre desde Mi perfil y reutiliza ActivityDetail en modal. No crea puntos 3D.
 Ese historial está embebido en `activities.changeHistory`; la definición original
 de serie está en `seriesDefinition` de la primera ocurrencia. No se crean nuevas
 colecciones MongoDB ni se cambia el contrato usado por los modales.

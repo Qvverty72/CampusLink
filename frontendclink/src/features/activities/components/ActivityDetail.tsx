@@ -5,6 +5,7 @@ import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity, type ActivityDetail as
 import { ActivitySeriesView } from './ActivitySeriesView';
 import type { ActivityLocationOption } from '../types/creation';
 import { EditActivityForm } from './EditActivityForm';
+import { ReportActivityForm } from '@/features/reports/components/ReportActivityForm';
 
 /** Renders inside the current native modal; returning never changes map selection. */
 export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurrence, locations, onEdited }: {
@@ -19,6 +20,9 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   const [failedBanner, setFailedBanner] = useState<string | null>(null);
   const [showSeries, setShowSeries] = useState(false);
   const [editing, setEditing] = useState<ActivityDetailData | null>(null);
+  const [reporting, setReporting] = useState<{ id: string; title: string } | null>(null);
+  if (reporting?.id === activityId) return <ReportActivityForm key={activityId} activityId={activityId}
+    title={reporting.title} onBack={() => { setReporting(null); refresh(); }} />;
   if (editing && locations) return <EditActivityForm activity={editing} locations={locations}
     onCancel={() => { setEditing(null); refresh(); }} onSaved={count => { setEditing(null); onEdited?.(count); refresh(); }} />;
   if (showSeries && detail?.series && onSelectOccurrence) return <ActivitySeriesView seriesId={detail.series.id}
@@ -65,6 +69,10 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
         {detail.editing && locations?.length ? <Pressable disabled={isUpdatingParticipation} accessibilityRole="button" onPress={() => setEditing(detail)} style={styles.action}>
           <Text style={styles.link}>Editar {detail.series ? 'ocurrencia o próximas' : 'actividad'}</Text>
         </Pressable> : null}
+        <Pressable accessibilityRole="button" disabled={isUpdatingParticipation}
+          onPress={() => setReporting({ id: detail.id, title: detail.title })} style={styles.action}>
+          <Text style={styles.link}>Denunciar actividad</Text>
+        </Pressable>
         <Pressable accessibilityRole="button" onPress={refresh} disabled={isUpdatingParticipation} style={styles.action}>
           <Text style={styles.link}>Actualizar ficha</Text>
         </Pressable>

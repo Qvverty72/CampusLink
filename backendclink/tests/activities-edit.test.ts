@@ -125,8 +125,14 @@ test('edit and immutable history commit together; stale snapshot, location loss 
   const session = { withTransaction: async (operation: () => Promise<unknown>) => { staged = []; try { const result = await operation(); committed.push(...staged); return result; } finally { staged = []; } } };
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: (session: typeof session) => Promise<unknown>) => operation(session));
   const collectionMock = mock.method(Db.prototype, 'collection', (name: string) => {
-    assert.ok(['activities', 'campus_maps'].includes(name), 'Only existing collections allowed');
+    assert.ok(['activities', 'campus_maps', 'activity_participation'].includes(name), 'Only existing collections allowed');
     return {
+      find: (filter: { campusId: string; activityId: { $in: ObjectId[] } }, options: { session: unknown }) => ({ toArray: async () => {
+        assert.equal(options.session, session); assert.equal(filter.campusId, campusId);
+        assert.deepEqual(filter.activityId.$in, [current._id]);
+        return [{ activityId: current._id, userId: other, status: 'JOINED' },
+          { activityId: new ObjectId(), userId: '55555555-5555-4555-8555-555555555555', status: 'JOINED' }];
+      } }),
       findOne: async (_filter: unknown, options: { session: unknown }) => { assert.equal(options.session, session); return name === 'campus_maps' ? activeMap : current; },
       bulkWrite: async (operations: any[], options: { session: unknown }) => { assert.equal(options.session, session); staged.push({ name, data: operations }); if (fail) throw new Error('Embedded history failed'); return { matchedCount: conflict ? 0 : operations.length }; },
     };
@@ -140,6 +146,8 @@ test('edit and immutable history commit together; stale snapshot, location loss 
     assert.equal(history.before.title, 'Original'); assert.equal(history.after.title, 'Editada');
     assert.equal(history.actorUserId, userId); assert.equal(history.revision, 1);
     assert.deepEqual(history.notificationReasons, ['DATES_CHANGED', 'LOCATION_CHANGED', 'CONTENT_CHANGED']);
+    const event = committed[0].data[0].updateOne.update.$push.notificationEvents;
+    assert.equal(event.key, `activity:${id}:revision:1`); assert.deepEqual(event.recipientIds.sort(), [userId, other].sort());
     assert.equal(committed[0].data[0].updateOne.update.$set.participantCount, undefined); assert.equal(committed[0].data[0].updateOne.update.$set.createdByUserId, undefined);
     fail = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), /Embedded history failed/); assert.equal(committed.length, 1);
     fail = false; conflict = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), { status: 409 });

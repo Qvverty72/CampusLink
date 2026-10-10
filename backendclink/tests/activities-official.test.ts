@@ -138,6 +138,8 @@ test('official transaction commits type/count/creator JOINED together and aborts
     assert.equal(committed.length, 2);
     const activity = committed[0].document as ActivityDocument; const own = committed[1].document as ActivityParticipationDocument;
     assert.equal(activity.type, 'OFFICIAL_EVENT'); assert.equal(activity.participantCount, 1); assert.equal(activity._id.toHexString(), detail.id);
+    assert.equal(activity.notificationEvents?.[0].key, `activity:${detail.id}:published`);
+    assert.equal(activity.notificationEvents?.[0].status, 'PENDING');
     assert.deepEqual(own.activityId, activity._id); assert.equal(own.userId, userId); assert.equal(own.campusId, campusId);
     assert.equal(own.status, 'JOINED'); assert.deepEqual(own.joinedAt, activity.createdAt);
     fail = true; await assert.rejects(createOfficialEvent(context(), parsed(), deps), /Creator enrollment failed/);

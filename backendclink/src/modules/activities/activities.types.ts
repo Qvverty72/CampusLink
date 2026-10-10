@@ -1,5 +1,6 @@
 import type { ObjectId } from 'mongodb';
 import type { ActivityChangeDocument } from './activities.edit.types.js';
+import type { ActivityNotificationEvent } from './activities.notifications.js';
 
 /** Current activities document supplied by the project owner, not the legacy bootstrap. */
 export interface ActivityDocument {
@@ -32,6 +33,7 @@ export interface ActivityDocument {
   originalStartAt?: Date;
   editRevision?: number;
   changeHistory?: ActivityChangeDocument[];
+  notificationEvents?: ActivityNotificationEvent[];
   /** Canonical creation template, embedded only in occurrence 1. */
   seriesDefinition?: ActivitySeriesDocument;
 }

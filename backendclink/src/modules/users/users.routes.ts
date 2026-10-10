@@ -4,10 +4,12 @@ import { getAcademicProfileController, getAcademicOptionsController, updateAcade
 import { requireAuthentication } from '../auth/auth.middleware.js';
 import { getAccessCampusesController, getAccessCatalogController, listAccessUsersController, getUserAccessController, updateUserAccessController, updateAccountStateController } from './access.controller.js';
 import { listAuditEntriesController, getAuditEntryController } from './access.controller.js';
+import { createNotificationsRouter } from './notifications.routes.js';
 
 // Technical diagnostics only; business routes must declare authentication/authorization.
 export function createUsersRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
+  router.use('/me/notifications', createNotificationsRouter());
   if (diagnosticsEnabled) router.get('/health', getUsersHealthController);
   router.get('/me/profile', requireAuthentication, getAcademicProfileController);
   router.get('/me/profile-options', requireAuthentication, getAcademicOptionsController);
