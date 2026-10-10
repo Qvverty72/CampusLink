@@ -13,6 +13,7 @@ export interface ActivityDependencies {
   findParticipation?: (campusId: string, activityId: string, userId: string) => Promise<ActivityParticipationDocument | null>;
   findOrganizer?: (userId: string) => Promise<{ name: string } | null>;
   registerParticipation?: (campusId: string, activityId: string, userId: string, now: Date) => Promise<void>;
+  createActivity?: (document: ActivityDocument) => Promise<ActivityDto>;
 }
 
 export async function getActivities(auth: VerifiedAuthConnection, query: ActivityQuery, dependencies: ActivityDependencies = {}): Promise<ActivityDto[]> {

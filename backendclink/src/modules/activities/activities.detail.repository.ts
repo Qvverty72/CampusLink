@@ -7,6 +7,7 @@ import type { CampusMapDocument } from '../maps/map.types.js';
 import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity, visibleActivityFilter } from './activities.policy.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
+import { requireParticipationIndex } from './activities.participation-index.js';
 
 export function findVisibleActivity(campusId: string, activityId: string, now: Date): Promise<ActivityDocument | null> {
   return getMongoDb().collection<ActivityDocument>('activities')
@@ -30,11 +31,7 @@ export async function findActivityOrganizer(userId: string): Promise<{ name: str
 export async function registerActivityParticipation(campusId: string, activityId: string, userId: string, now: Date): Promise<void> {
   const db = getMongoDb();
   const participations = db.collection<ActivityParticipationDocument>('activity_participation');
-  const indexes = await participations.indexes();
-  if (!indexes.some(index => index.unique && Object.keys(index.key).length === 2
-    && index.key.activityId === 1 && index.key.userId === 1 && !index.partialFilterExpression && !index.sparse)) {
-    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Activity participation uniqueness is not configured.');
-  }
+  await requireParticipationIndex(db);
   const _id = new ObjectId(activityId);
   const register = () => mongoClient.withSession(session => session.withTransaction(async () => {
     const transactionNow = new Date(Math.max(now.getTime(), Date.now()));

@@ -19,6 +19,7 @@ import { useMapStore } from '@/three/store/mapStore';
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { LocationActivities } from '@/features/activities/components/LocationActivities';
 import type { ActivitiesState } from '@/features/activities/hooks/useLocationActivities';
+import { activityLocations } from '../api/activityLocations';
 
 const POI_TYPE_LABELS: Record<string, string> = {
   AUDITORIUM: 'Auditorio',
@@ -87,7 +88,7 @@ export function FloorInfoModal({ activities }: { activities: ActivitiesState }) 
           <View style={styles.divider} />
 
           {/* Content */}
-          <ScrollView style={styles.scrollContent} contentContainerStyle={styles.content}>
+          <ScrollView style={styles.scrollContent} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <Text style={styles.description}>{floor.description}</Text>
 
             <View style={styles.infoRow}>
@@ -128,7 +129,7 @@ export function FloorInfoModal({ activities }: { activities: ActivitiesState }) 
               )}
             </View>
             <LocationActivities key={floor.id} state={activities}
-              query={{ buildingKey: floor.buildingId, floorKey: floor.id }} />
+              query={{ buildingKey: floor.buildingId, floorKey: floor.id }} locations={mapData ? activityLocations(mapData) : undefined} />
           </ScrollView>
 
           {/* Footer */}

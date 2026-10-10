@@ -33,6 +33,14 @@ export interface ActivityQuery {
   poiKey?: string;
 }
 
+export interface CreateCommunityActivityInput {
+  title: string;
+  description: string;
+  startAt: Date;
+  endAt: Date;
+  location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };
+}
+
 export type ActivityType = 'COMMUNITY_ACTIVITY' | 'OFFICIAL_EVENT';
 
 export interface ActivityDto {

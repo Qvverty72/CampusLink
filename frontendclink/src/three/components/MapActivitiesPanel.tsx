@@ -5,6 +5,7 @@ import { LocationActivities } from '@/features/activities/components/LocationAct
 import { ACTIVITY_COLORS, filterLocationActivities, type Activity } from '@/features/activities/types/activity';
 import { useMapDataStore } from '../store/mapDataStore';
 import { useMapStore } from '../store/mapStore';
+import { activityLocations } from '../api/activityLocations';
 
 /** Native browser bridges domain locations to map selection; it never guesses a GLB node. */
 export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
@@ -44,9 +45,9 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
         <Text accessibilityRole="header" style={styles.title}>
           {buildingKey ? map.buildingConfigs[buildingKey]?.name : 'Actividades del campus'}
         </Text>
-        <ScrollView style={styles.scroll}>
+        <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
           {open ? <LocationActivities key={buildingKey ?? 'campus'} state={state}
-            query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} /> : null}
+            query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} locations={activityLocations(map)} /> : null}
         </ScrollView>
         <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.close}><Text style={styles.title}>Volver al mapa</Text></Pressable>
       </View></View>

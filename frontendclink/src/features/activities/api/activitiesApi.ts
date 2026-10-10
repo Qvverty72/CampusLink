@@ -1,5 +1,17 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 import type { Activity, ActivityDetail, ActivityLocationQuery } from '../types/activity';
+import type { CreateCommunityActivityInput } from '../types/creation';
+
+export async function createCommunityActivity(campusId: string, input: CreateCommunityActivityInput, signal?: AbortSignal): Promise<ActivityDetail> {
+  const response = await authenticatedEnvelopeRequest<ActivityDetail>('/api/v1/activities', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+  });
+  if (!response.data || response.data.campusId !== campusId || response.data.type !== 'COMMUNITY_ACTIVITY'
+    || !/^[0-9a-f]{24}$/.test(response.data.id) || response.data.participation.status !== 'JOINED') {
+    throw new Error('No se pudo confirmar la actividad publicada.');
+  }
+  return response.data;
+}
 
 export async function fetchLocationActivities(campusId: string, query: ActivityLocationQuery, signal?: AbortSignal): Promise<Activity[]> {
   const search = new URLSearchParams();

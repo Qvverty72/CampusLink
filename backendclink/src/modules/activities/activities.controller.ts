@@ -5,6 +5,15 @@ import { sendSuccess } from '../../services/apiResponse.js';
 import { getActivities, type ActivityDependencies } from './activities.service.js';
 import type { ActivityQuery } from './activities.types.js';
 import { getActivityDetail, joinActivity } from './activities.detail.service.js';
+import { createCommunityActivity } from './activities.create.service.js';
+import type { CreateCommunityActivityInput } from './activities.types.js';
+
+export function createCommunityActivityController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { body } = getValidatedRequest<{ body: CreateCommunityActivityInput }>(response);
+    sendSuccess(response, await createCommunityActivity(response.locals.auth, body, dependencies), { status: 201 });
+  };
+}
 
 export function createActivitiesController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
