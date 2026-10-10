@@ -119,3 +119,14 @@ export interface ActivityDetailDto extends ActivityDto {
   category?: string;
   tags?: string[];
 }
+
+/** Own participation only; does not expose an ended or hidden activity's content. */
+export interface ActivityParticipationDto {
+  activityId: string;
+  campusId: string;
+  status: 'JOINED' | 'LEFT' | 'NOT_JOINED';
+  joinedAt?: string;
+  updatedAt?: string;
+}
+
+export type ActivityCreatorRecord = Pick<ActivityDocument, '_id' | 'campusId' | 'createdByUserId' | 'createdAt'>;

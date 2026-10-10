@@ -5,6 +5,9 @@ import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
 import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto } from './activities.types.js';
+import type { ActivityParticipationDto } from './activities.types.js';
+import { requireCampusCapability } from '../auth/auth.authorization.js';
+import { participationDto } from './activities.participation.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -58,4 +61,34 @@ export async function joinActivity(auth: VerifiedAuthConnection, activityId: str
   await register(auth.campusId, detail.id, auth.userId, dependencies.now?.() ?? new Date());
   // Return server-owned participation, never an optimistic client-supplied state.
   return getActivityDetail(auth, detail.id, dependencies);
+}
+
+function authorizeParticipation(auth: VerifiedAuthConnection, activityId: string): string {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'A valid activity ID is required.');
+  requireCampusCapability(auth, auth.campusId, 'general');
+  return activityId.toLowerCase();
+}
+
+export async function getOwnActivityParticipation(auth: VerifiedAuthConnection, activityId: string,
+  dependencies: ActivityDependencies = {}): Promise<ActivityParticipationDto> {
+  const id = authorizeParticipation(auth, activityId);
+  const find = dependencies.findParticipation ?? (await import('./activities.detail.repository.js')).findOwnParticipation;
+  const current = await find(auth.campusId, id, auth.userId);
+  if (current) return participationDto(current, auth.campusId, id, auth.userId);
+  // Older activities count the creator even when they have no explicit participation row.
+  const findCreated = dependencies.findCreatedActivity ?? (await import('./activities.detail.repository.js')).findCreatedActivity;
+  const activity = await findCreated(auth.campusId, id, auth.userId);
+  if (activity) {
+    return participationDto({ campusId: activity.campusId, activityId: activity._id,
+      userId: activity.createdByUserId, status: 'JOINED', joinedAt: activity.createdAt, updatedAt: activity.createdAt },
+    auth.campusId, id, auth.userId);
+  }
+  return { campusId: auth.campusId, activityId: id, status: 'NOT_JOINED' };
+}
+
+export async function leaveActivity(auth: VerifiedAuthConnection, activityId: string,
+  dependencies: ActivityDependencies = {}): Promise<ActivityParticipationDto> {
+  const id = authorizeParticipation(auth, activityId);
+  const withdraw = dependencies.withdrawParticipation ?? (await import('./activities.detail.repository.js')).withdrawActivityParticipation;
+  return withdraw(auth.campusId, id, auth.userId, dependencies.now?.() ?? new Date());
 }

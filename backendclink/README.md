@@ -6,6 +6,8 @@ Actividades del mapa F2.6-01: `GET /api/v1/activities` requiere Bearer y autoriz
 
 Detalle F2.6-02 y participación mínima: [endpoints, contrato JOINED/LEFT, índice único y transacción](docs/activities-detail.md). `GET /api/v1/activities/:activityId` añade organizador y participación propia; `PUT /api/v1/activities/:activityId/participation` inscribe sin cuerpo ni identidad del cliente.
 
+Participación F2.6-07: [inscripción, retiro y consulta propia](docs/activities-participation.md). GET/DELETE en `/:activityId/participation` consultan el estado o retiran al usuario autenticado, incluso después del término. El retiro guarda LEFT y descuenta el contador una sola vez; la reinscripción vigente conserva el mismo registro. Sin nuevas colecciones.
+
 Creación F2.6-03: [contrato comunitario](docs/activities-create.md), `POST /api/v1/activities`. Publicación F2.6-04: [contrato oficial y autorización por campus](docs/activities-official.md), `POST /api/v1/activities/official`. Ambas comparten validación/ubicación/transacción e inscriben al creador JOINED; el servidor fija el tipo. USUARIO_AUTORIZADO necesita PUBLICAR_EVENTO del campus vigente para publicar oficialmente; ADMINISTRADOR conserva acceso automático aprobado.
 
 Recurrencia F2.6-05: [vista previa, calendario, API e índice de ocurrencias](docs/activities-recurrence.md). Repetición diaria/semanal/mensual con fecha final y exclusiones, preservando hora local. La definición de serie queda en `activities.seriesDefinition` de la primera ocurrencia; publicar inserta actividades y creador JOINED en una transacción. `003_activity_series.mongosh.js` configura únicamente el índice existente de ocurrencias; no crea colecciones ni se ejecuta al arrancar.
@@ -275,7 +277,6 @@ Las colecciones esperadas del modelo actual son campus_maps, activities, activit
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
 - Completar idempotencia/historial de eventos para KPI; el health no demuestra cobertura analítica.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
-- Completar retirada de actividades y los demás flujos de F2.6-07 sobre el módulo activities.
 
 ## Referencias técnicas
 

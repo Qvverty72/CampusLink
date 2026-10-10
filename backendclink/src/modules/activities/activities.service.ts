@@ -3,7 +3,7 @@ import { getAuthorizedActiveMap, type ActiveMapLookup } from '../maps/map.servic
 import { ApiError } from '../../services/apiError.js';
 import { hasActivityLocation, spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
-import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivityQuery, ActivitySeriesDocument } from './activities.types.js';
+import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivityParticipationDto, ActivityCreatorRecord, ActivityQuery, ActivitySeriesDocument } from './activities.types.js';
 
 export interface ActivityDependencies {
   getActiveMap?: ActiveMapLookup;
@@ -13,6 +13,8 @@ export interface ActivityDependencies {
   findParticipation?: (campusId: string, activityId: string, userId: string) => Promise<ActivityParticipationDocument | null>;
   findOrganizer?: (userId: string) => Promise<{ name: string } | null>;
   registerParticipation?: (campusId: string, activityId: string, userId: string, now: Date) => Promise<void>;
+  findCreatedActivity?: (campusId: string, activityId: string, userId: string) => Promise<ActivityCreatorRecord | null>;
+  withdrawParticipation?: (campusId: string, activityId: string, userId: string, now: Date) => Promise<ActivityParticipationDto>;
   createActivity?: (document: ActivityDocument) => Promise<ActivityDto>;
   createSeries?: (series: ActivitySeriesDocument, documents: ActivityDocument[]) => Promise<ActivityDto[]>;
   findSeries?: (campusId: string, seriesId: string) => Promise<ActivitySeriesDocument | null>;

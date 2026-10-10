@@ -11,7 +11,11 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   activityId: string; onBack: () => void; onExplore?: (activity: Activity) => void; onSelectOccurrence?: (activityId: string) => void;
   locations?: ActivityLocationOption[]; onEdited?: (count: number) => void;
 }) {
-  const { detail, isLoading, error, refresh, join, isJoining, joinError } = useActivityDetail(activityId);
+  const { detail, ownParticipation, isLoading, error, refresh, join, leave, isUpdatingParticipation,
+    pendingParticipation, participationError } = useActivityDetail(activityId);
+  const participationControls = (status: ActivityDetailData['participation']['status'], canJoin: boolean) =>
+    <ParticipationControls status={status} canJoin={canJoin} pending={pendingParticipation}
+      error={participationError} onJoin={join} onLeave={leave} />;
   const [failedBanner, setFailedBanner] = useState<string | null>(null);
   const [showSeries, setShowSeries] = useState(false);
   const [editing, setEditing] = useState<ActivityDetailData | null>(null);
@@ -27,7 +31,8 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
     {isLoading ? <><ActivityIndicator /><Text>Cargando ficha…</Text></>
       : error ? <>
         <Text accessibilityRole="alert" style={styles.text}>{error}</Text>
-        <Pressable accessibilityRole="button" onPress={refresh} style={styles.action}><Text style={styles.link}>Reintentar</Text></Pressable>
+        {ownParticipation ? participationControls(ownParticipation.status, false) : null}
+        <Pressable accessibilityRole="button" disabled={isUpdatingParticipation} onPress={refresh} style={styles.action}><Text style={styles.link}>Actualizar ficha</Text></Pressable>
       </> : detail ? <>
         <Text style={[styles.type, { color: ACTIVITY_COLORS[detail.type] }]}>{ACTIVITY_LABELS[detail.type]}</Text>
         <Text accessibilityRole="header" style={styles.title}>{detail.title}</Text>
@@ -53,27 +58,40 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
         {detail.location.customLabel ? <Text style={styles.text}>{detail.location.customLabel}</Text> : null}
         {detail.category ? <Text style={styles.text}>Categoría: {detail.category}</Text> : null}
         {detail.tags?.length ? <Text style={styles.text}>Etiquetas: {detail.tags.join(', ')}</Text> : null}
-        <Text accessibilityLiveRegion="polite" style={styles.heading}>
-          {detail.participation.status === 'JOINED' ? 'Estás inscrito en esta actividad.'
-            : detail.participation.status === 'LEFT' ? 'Te retiraste de esta actividad.' : 'No estás inscrito en esta actividad.'}
-        </Text>
-        {joinError ? <Text accessibilityRole="alert" style={styles.text}>{joinError}</Text> : null}
-        {detail.participation.canJoin ? <Pressable accessibilityRole="button" disabled={isJoining}
-          accessibilityState={{ disabled: isJoining, busy: isJoining }} onPress={() => { void join(); }}
-          style={[styles.join, isJoining && styles.disabled]}>
-          <Text style={styles.joinText}>{isJoining ? 'Confirmando inscripción…' : 'Inscribirme'}</Text>
-        </Pressable> : null}
+        {participationControls(detail.participation.status, detail.participation.canJoin)}
         {onExplore ? <Pressable accessibilityRole="button" onPress={() => onExplore(detail)} style={styles.action}>
           <Text style={styles.link}>Explorar este piso</Text>
         </Pressable> : null}
-        {detail.editing && locations?.length ? <Pressable disabled={isJoining} accessibilityRole="button" onPress={() => setEditing(detail)} style={styles.action}>
+        {detail.editing && locations?.length ? <Pressable disabled={isUpdatingParticipation} accessibilityRole="button" onPress={() => setEditing(detail)} style={styles.action}>
           <Text style={styles.link}>Editar {detail.series ? 'ocurrencia o próximas' : 'actividad'}</Text>
         </Pressable> : null}
-        <Pressable accessibilityRole="button" onPress={refresh} disabled={isJoining} style={styles.action}>
+        <Pressable accessibilityRole="button" onPress={refresh} disabled={isUpdatingParticipation} style={styles.action}>
           <Text style={styles.link}>Actualizar ficha</Text>
         </Pressable>
       </> : null}
   </View>;
+}
+
+function ParticipationControls({ status, canJoin, pending, error, onJoin, onLeave }: {
+  status: ActivityDetailData['participation']['status']; canJoin: boolean; pending: 'JOINED' | 'LEFT' | null;
+  error: string | null; onJoin: () => Promise<void>; onLeave: () => Promise<void>;
+}) {
+  const busy = pending !== null;
+  return <>
+    <Text accessibilityLiveRegion="polite" style={styles.heading}>
+      {status === 'JOINED' ? 'Estás inscrito en esta actividad.'
+        : status === 'LEFT' ? 'Te retiraste de esta actividad.' : 'No estás inscrito en esta actividad.'}
+    </Text>
+    {error ? <Text accessibilityRole="alert" style={styles.text}>{error}</Text> : null}
+    {status === 'JOINED' || canJoin ? <Pressable accessibilityRole="button" disabled={busy}
+      accessibilityState={{ disabled: busy, busy }} onPress={() => { void (status === 'JOINED' ? onLeave() : onJoin()); }}
+      style={[styles.join, status === 'JOINED' && styles.leave, busy && styles.disabled]}>
+      <Text style={status === 'JOINED' ? styles.link : styles.joinText}>
+        {pending === 'LEFT' ? 'Confirmando retiro…' : pending === 'JOINED' ? 'Confirmando inscripción…'
+          : status === 'JOINED' ? 'Retirarme de la actividad' : status === 'LEFT' ? 'Volver a inscribirme' : 'Inscribirme'}
+      </Text>
+    </Pressable> : null}
+  </>;
 }
 
 const styles = StyleSheet.create({
@@ -82,5 +100,6 @@ const styles = StyleSheet.create({
   text: { color: '#334155', lineHeight: 22 }, link: { color: '#0B6E75', fontWeight: '700' },
   action: { paddingVertical: 12 }, banner: { width: '100%', height: 160, borderRadius: 10 },
   join: { backgroundColor: '#0B6E75', padding: 14, borderRadius: 10, alignItems: 'center' },
+  leave: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#0B6E75' },
   joinText: { color: '#FFFFFF', fontWeight: '700' }, disabled: { opacity: 0.6 },
 });

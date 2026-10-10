@@ -30,6 +30,13 @@ export interface ActivityDetail extends Activity {
   tags?: string[];
 }
 export const ACTIVITY_COLORS = { OFFICIAL_EVENT: '#2563EB', COMMUNITY_ACTIVITY: '#B45309' };
+export interface ActivityParticipation {
+  activityId: string;
+  campusId: string;
+  status: 'JOINED' | 'LEFT' | 'NOT_JOINED';
+  joinedAt?: string;
+  updatedAt?: string;
+}
 export const ACTIVITY_LABELS = { OFFICIAL_EVENT: 'Evento oficial', COMMUNITY_ACTIVITY: 'Actividad comunitaria' };
 
 export function filterLocationActivities(activities: Activity[], query: ActivityLocationQuery, now = Date.now()): Activity[] {

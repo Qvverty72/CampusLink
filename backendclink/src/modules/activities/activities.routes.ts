@@ -7,6 +7,7 @@ import { parseCreateActivity } from './activities.create.validation.js';
 import { parseActivityQuery, parseActivityId, parseEmptyActivityInput } from './activities.validation.js';
 import type { ActivityEditDependencies } from './activities.edit.types.js';
 import { editActivityParser } from './activities.edit.validation.js';
+import { createActivityParticipationController } from './activities.controller.js';
 
 export function createActivitiesRouter(dependencies: ActivityEditDependencies = {}): Router {
   const router = Router();
@@ -33,5 +34,11 @@ export function createActivitiesRouter(dependencies: ActivityEditDependencies = 
   router.put('/:activityId/participation', requireAuthentication,
     validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseEmptyActivityInput }),
     createActivityDetailController(dependencies, true));
+  router.get('/:activityId/participation', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseEmptyActivityInput }),
+    createActivityParticipationController(dependencies));
+  router.delete('/:activityId/participation', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseEmptyActivityInput }),
+    createActivityParticipationController(dependencies, true));
   return router;
 }

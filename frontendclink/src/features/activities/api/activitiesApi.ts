@@ -1,5 +1,5 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
-import type { Activity, ActivityDetail, ActivityLocationQuery } from '../types/activity';
+import type { Activity, ActivityDetail, ActivityLocationQuery, ActivityParticipation } from '../types/activity';
 import type { CreateActivityInput } from '../types/creation';
 import type { CreateActivitySeriesInput, ActivityRecurrencePreview, CreatedActivitySeries, ActivitySeries } from '../types/recurrence';
 import type { ActivityEditPreview, ActivityEditResult, EditActivityInput } from '../types/editing';
@@ -100,3 +100,23 @@ export const fetchActivityDetail = (campusId: string, activityId: string, signal
 
 export const registerActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal) =>
   requestActivityDetail(campusId, activityId, true, signal);
+
+async function requestOwnParticipation(campusId: string, activityId: string, method: 'GET' | 'DELETE', signal?: AbortSignal): Promise<ActivityParticipation> {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
+  const response = await authenticatedEnvelopeRequest<ActivityParticipation>(
+    `/api/v1/activities/${activityId}/participation`, { method, signal });
+  const value = response.data;
+  if (!value || value.activityId !== activityId.toLowerCase() || value.campusId !== campusId
+    || !['JOINED', 'LEFT', 'NOT_JOINED'].includes(value.status)
+    || (value.status !== 'NOT_JOINED' && (!value.joinedAt || !Number.isFinite(Date.parse(value.joinedAt))
+      || !value.updatedAt || !Number.isFinite(Date.parse(value.updatedAt))))) {
+    throw new Error('No se pudo confirmar tu estado de participación.');
+  }
+  return value;
+}
+
+export const fetchActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal) =>
+  requestOwnParticipation(campusId, activityId, 'GET', signal);
+
+export const withdrawActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal) =>
+  requestOwnParticipation(campusId, activityId, 'DELETE', signal);

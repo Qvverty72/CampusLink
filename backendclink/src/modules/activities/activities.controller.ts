@@ -5,6 +5,7 @@ import { sendSuccess } from '../../services/apiResponse.js';
 import { getActivities, type ActivityDependencies } from './activities.service.js';
 import type { ActivityQuery } from './activities.types.js';
 import { getActivityDetail, joinActivity } from './activities.detail.service.js';
+import { getOwnActivityParticipation, leaveActivity } from './activities.detail.service.js';
 import { createCommunityActivity, createOfficialEvent } from './activities.create.service.js';
 import type { CreateActivityInput } from './activities.types.js';
 import type { CreateActivitySeriesInput } from './activities.types.js';
@@ -52,5 +53,12 @@ export function createActivityDetailController(dependencies: ActivityDependencie
   return async (_request, response) => {
     const { params } = getValidatedRequest<{ params: { activityId: string } }>(response);
     sendSuccess(response, await (register ? joinActivity : getActivityDetail)(response.locals.auth, params.activityId, dependencies));
+  };
+}
+
+export function createActivityParticipationController(dependencies: ActivityDependencies = {}, withdraw = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { params } = getValidatedRequest<{ params: { activityId: string } }>(response);
+    sendSuccess(response, await (withdraw ? leaveActivity : getOwnActivityParticipation)(response.locals.auth, params.activityId, dependencies));
   };
 }
