@@ -25,6 +25,10 @@ export interface ActivityDocument {
   participantCount: number;
   createdAt: Date;
   updatedAt: Date;
+  seriesId?: ObjectId;
+  occurrenceIndex?: number;
+  occurrenceCount?: number;
+  originalStartAt?: Date;
 }
 
 export interface ActivityQuery {
@@ -33,12 +37,40 @@ export interface ActivityQuery {
   poiKey?: string;
 }
 
-export interface CreateCommunityActivityInput {
+export interface CreateActivityInput {
   title: string;
   description: string;
   startAt: Date;
   endAt: Date;
   location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };
+}
+
+export interface ActivityRecurrenceRule {
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  interval: number;
+  until: string;
+  timeZone: string;
+  excludedDates: string[];
+}
+export interface CreateActivitySeriesInput extends CreateActivityInput {
+  recurrence: ActivityRecurrenceRule;
+  previewHash?: string;
+}
+export interface ActivityOccurrenceDates { index: number; startAt: string; endAt: string }
+export interface ActivityRecurrencePreview {
+  campusId: string; type: ActivityType; previewHash: string; recurrence: ActivityRecurrenceRule;
+  occurrences: ActivityOccurrenceDates[];
+  skipped: { date: string; reason: 'INVALID_MONTH_DAY' | 'EXCLUDED' }[];
+}
+export interface ActivitySeriesDocument extends CreateActivityInput {
+  _id: ObjectId; campusId: string; createdByUserId: string; type: ActivityType;
+  status: 'ACTIVE'; visibility: 'PUBLIC'; recurrence: ActivityRecurrenceRule;
+  occurrenceCount: number; skipped: ActivityRecurrencePreview['skipped']; createdAt: Date; updatedAt: Date;
+}
+export interface ActivitySeriesDto {
+  id: string; campusId: string; title: string; description: string; type: ActivityType;
+  recurrence: ActivityRecurrenceRule; occurrenceCount: number;
+  occurrences: ActivityDto[];
 }
 
 export type ActivityType = 'COMMUNITY_ACTIVITY' | 'OFFICIAL_EVENT';
@@ -52,6 +84,7 @@ export interface ActivityDto {
   status: 'ACTIVE';
   startAt: string;
   endAt: string;
+  series?: { id: string; index: number; total: number };
   location: {
     buildingKey: string;
     buildingName: string;

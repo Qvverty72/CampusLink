@@ -10,6 +10,6 @@ export async function findVisibleActivities(campusId: string, query: ActivityQue
   // Spatial existence and POI visibility are additionally checked against the active map.
   return getMongoDb().collection<ActivityDocument>('activities').find(filter, {
     projection: { _id: 1, campusId: 1, title: 1, description: 1, type: 1, status: 1,
-      visibility: 1, startAt: 1, endAt: 1, location: 1 },
+      visibility: 1, startAt: 1, endAt: 1, location: 1, seriesId: 1, occurrenceIndex: 1, occurrenceCount: 1, originalStartAt: 1 },
   }).sort({ startAt: 1, _id: 1 }).toArray();
 }

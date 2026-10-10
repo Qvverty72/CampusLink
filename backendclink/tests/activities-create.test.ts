@@ -4,12 +4,12 @@ import { Db, MongoClient } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { ActivityDocument, ActivityParticipationDocument, CreateCommunityActivityInput } from '../src/modules/activities/activities.types.js';
+import type { ActivityDocument, ActivityParticipationDocument, CreateActivityInput } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
-import { parseCreateCommunityActivity } from '../src/modules/activities/activities.create.validation.js';
+import { parseCreateActivity } from '../src/modules/activities/activities.create.validation.js';
 import { toVisibleActivity } from '../src/modules/activities/activities.policy.js';
 import { spatialBuildings } from '../src/modules/activities/activities.location.js';
-import { localActivityTimestamp, validateCommunityDraft } from '../../frontendclink/src/features/activities/types/creation.js';
+import { localActivityTimestamp, validateActivityDraft } from '../../frontendclink/src/features/activities/types/creation.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222';
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -28,9 +28,9 @@ const map: CampusMapDocument = { campusId, status: 'ACTIVE', version: 1, created
 const body = () => ({ title: ' Taller ', description: ' Actividad\ncomunitaria ',
   startAt: '2099-10-11T12:00:00.000Z', endAt: '2099-10-11T13:00:00.000Z',
   location: { buildingKey: 'hbuilding', floorKey: 'floor-two' } });
-function parsed(input: unknown = body()): CreateCommunityActivityInput {
-  const result = parseCreateCommunityActivity(input); assert.equal(result.success, true);
-  return (result as { data: CreateCommunityActivityInput }).data;
+function parsed(input: unknown = body()): CreateActivityInput {
+  const result = parseCreateActivity(input); assert.equal(result.success, true);
+  return (result as { data: CreateActivityInput }).data;
 }
 let createCommunityActivity: typeof import('../src/modules/activities/activities.create.service.js').createCommunityActivity;
 before(async () => {
@@ -54,7 +54,7 @@ test('creation rejects protected fields and malformed or incomplete location obj
     { ...body(), location: { buildingKey: 'hbuilding' } }, { ...body(), location: { ...body().location, coordinates: { x: 1, y: 0, z: 1 } } },
     { ...body(), location: { ...body().location, poiKey: { $ne: '' } } }, { ...body(), location: [] },
     { ...body(), location: { ...body().location, poiKey: null } }]) {
-    assert.equal(parseCreateCommunityActivity(input).success, false);
+    assert.equal(parseCreateActivity(input).success, false);
   }
 });
 
@@ -64,9 +64,9 @@ test('creation limits content and rejects controls, missing text and normalized 
     { location: { ...body().location, customLabel: 'x'.repeat(161) } },
     { startAt: '2099-02-30T12:00:00.000Z' }, { startAt: '2099-10-11' },
     { startAt: '2099-10-11T24:00:00.000Z' }, { endAt: body().startAt }, { endAt: '2099-10-10T12:00:00.000Z' }]) {
-    assert.equal(parseCreateCommunityActivity({ ...body(), ...patch }).success, false);
+    assert.equal(parseCreateActivity({ ...body(), ...patch }).success, false);
   }
-  assert.equal(parseCreateCommunityActivity({ ...body(), title: 'x'.repeat(120), description: 'x'.repeat(2000) }).success, true);
+  assert.equal(parseCreateActivity({ ...body(), title: 'x'.repeat(120), description: 'x'.repeat(2000) }).success, true);
 });
 
 test('creation derives all protected fields, enrolls organizer and permits future or ongoing activities', async () => {
@@ -197,9 +197,9 @@ test('form validates local calendar/time, content bounds, chronology and POI hie
   const locations = [{ id: 'hbuilding', name: 'H', floors: [{ id: 'floor-two', name: 'Piso 2', pois: [{ id: 'sala', name: 'Sala' }] }] }];
   const draft = { title: 'Taller', description: 'Descripción', startDate: '11/10/2099', startTime: '12:00',
     endDate: '11/10/2099', endTime: '13:00', ...body().location, poiKey: '', customLabel: '' };
-  const valid = validateCommunityDraft(draft, locations, 0); assert.ok(valid.input); assert.equal(valid.input.location.poiKey, undefined);
-  assert.ok(validateCommunityDraft({ ...draft, poiKey: 'sala' }, locations, 0).input);
+  const valid = validateActivityDraft(draft, locations, 0); assert.ok(valid.input); assert.equal(valid.input.location.poiKey, undefined);
+  assert.ok(validateActivityDraft({ ...draft, poiKey: 'sala' }, locations, 0).input);
   for (const patch of [{ endTime: '11:00' }, { title: 'x'.repeat(121) }, { description: '' }, { floorKey: 'hbuilding_floor2' },
-    { poiKey: 'hidden' }, { buildingKey: 'other-campus' }]) assert.ok(validateCommunityDraft({ ...draft, ...patch }, locations, 0).error);
-  assert.ok(validateCommunityDraft(draft, locations, Date.parse('2100-01-01T00:00:00Z')).error);
+    { poiKey: 'hidden' }, { buildingKey: 'other-campus' }]) assert.ok(validateActivityDraft({ ...draft, ...patch }, locations, 0).error);
+  assert.ok(validateActivityDraft(draft, locations, Date.parse('2100-01-01T00:00:00Z')).error);
 });

@@ -1,7 +1,7 @@
 import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../types/api.js';
-import type { CreateCommunityActivityInput } from './activities.types.js';
+import type { CreateActivityInput } from './activities.types.js';
 
-export const COMMUNITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;
+export const ACTIVITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -12,17 +12,17 @@ function timestamp(value: unknown): Date | null {
   return Number.isFinite(date.getTime()) && date.toISOString() === value.replace(/Z$/, value.includes('.') ? 'Z' : '.000Z') ? date : null;
 }
 
-export const parseCreateCommunityActivity: RequestParser = (input: unknown): ValidationResult<CreateCommunityActivityInput> => {
+export const parseCreateActivity: RequestParser = (input: unknown): ValidationResult<CreateActivityInput> => {
   const issues: ApiErrorDetail[] = [];
   if (!record(input)) return { success: false, issues: [{ field: 'body', message: 'An activity object is required.' }] };
   const allowed = ['title', 'description', 'startAt', 'endAt', 'location'];
   for (const key of Object.keys(input)) if (!allowed.includes(key)) issues.push({ field: key, message: 'Unsupported activity field.' });
-  const text = (value: unknown, field: keyof typeof COMMUNITY_CONTENT_LIMITS, optional = false): string => {
+  const text = (value: unknown, field: keyof typeof ACTIVITY_CONTENT_LIMITS, optional = false): string => {
     if (optional && value === undefined) return '';
     const result = typeof value === 'string' ? value.trim() : '';
     const controls = field === 'description' ? /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/ : /[\u0000-\u001F\u007F]/;
-    if (!result || typeof value !== 'string' || value.length > COMMUNITY_CONTENT_LIMITS[field] || controls.test(value)) {
-      issues.push({ field, message: `Text between 1 and ${COMMUNITY_CONTENT_LIMITS[field]} characters is required.` });
+    if (!result || typeof value !== 'string' || value.length > ACTIVITY_CONTENT_LIMITS[field] || controls.test(value)) {
+      issues.push({ field, message: `Text between 1 and ${ACTIVITY_CONTENT_LIMITS[field]} characters is required.` });
     }
     return result;
   };

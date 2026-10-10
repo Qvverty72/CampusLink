@@ -6,6 +6,10 @@ Actividades del mapa F2.6-01: `GET /api/v1/activities` requiere Bearer y autoriz
 
 Detalle F2.6-02 y participación mínima: [endpoints, contrato JOINED/LEFT, índice único y transacción](docs/activities-detail.md). `GET /api/v1/activities/:activityId` añade organizador y participación propia; `PUT /api/v1/activities/:activityId/participation` inscribe sin cuerpo ni identidad del cliente.
 
+Creación F2.6-03: [contrato comunitario](docs/activities-create.md), `POST /api/v1/activities`. Publicación F2.6-04: [contrato oficial y autorización por campus](docs/activities-official.md), `POST /api/v1/activities/official`. Ambas comparten validación/ubicación/transacción e inscriben al creador JOINED; el servidor fija el tipo. USUARIO_AUTORIZADO necesita PUBLICAR_EVENTO del campus vigente para publicar oficialmente; ADMINISTRADOR conserva acceso automático aprobado.
+
+Recurrencia F2.6-05: [vista previa, calendario, API y migración de series](docs/activities-recurrence.md). Repetición diaria/semanal/mensual con fecha final y exclusiones, preservando hora local. Cada ocurrencia conserva actividad/inscripción propias; publicar inserta serie, ocurrencias y creador JOINED en una transacción. Aplicar `003_activity_series.mongosh.js` después del índice de participación; no se ejecuta al arrancar.
+
 Contrato de lectura acordado: `type` es `COMMUNITY_ACTIVITY` u `OFFICIAL_EVENT`, `status` es `ACTIVE`, `visibility` es `PUBLIC` y `endAt` es posterior al momento de consulta. Incluye actividades futuras y en curso con fechas válidas. Cada actividad debe referenciar `location.buildingKey = building.id` y `location.floorKey = floor.id`; `poiKey` es opcional y debe pertenecer al piso y estar visible/no eliminado. `meshName` solo vincula geometría 3D. No ejecutar el bootstrap documental histórico como migración de este contrato. Esta entrega no crea actividades ni índices/validadores remotos.
 
 Inicio/cierre/recuperación de sesión F2.3-03: [contratos, permisos, plantilla y configuración de Supabase](docs/session-login-recovery.md).

@@ -30,6 +30,31 @@ La selección por raycast conserva `meshName`: la integración resuelve ese nomb
 contra `floorData` y usa `floor.id` para filtrar actividades. Que ambos nombres
 coincidan en el mapa actual no significa que sean el mismo contrato.
 
+## Creación de actividades en modales
+
+`LocationActivities` ofrece crear actividad comunitaria al usuario institucional
+verificado y publicar evento oficial cuando `identity.capabilities.officialActivities`
+lo autoriza. USUARIO_AUTORIZADO necesita PUBLICAR_EVENTO del campus vigente;
+ADMINISTRADOR conserva acceso automático aprobado. `CreateActivityForm` comparte
+campos, muestra al creador como organizador, convierte fechas/horas locales a UTC
+y publica por rutas separadas que fijan su tipo en el backend.
+
+El adaptador `activityLocations` entrega edificios/pisos/POI por IDs de dominio
+al formulario. No entrega meshes ni modifica la escena. Publicar refresca los
+resúmenes del campus/edificio y abre el detalle con creador JOINED. Edificio y piso
+obligatorios, POI visible del piso opcional. Cancelar o perder la respuesta tras
+un commit no revierte la publicación; revisar listado antes de repetir.
+
+## Series recurrentes
+
+El mismo formulario comunitario/oficial ofrece repetir diariamente, semanalmente
+o mensualmente, con intervalo, fecha final de los inicios y exclusiones. El backend
+calcula la vista previa en la zona horaria del dispositivo; cambiar un campo exige
+revisarla nuevamente. Cada fecha publicada tiene su ID de actividad y participación.
+Las tarjetas y `ActivityDetail` distinguen ocurrencia/serie; `ActivitySeriesView`
+permite elegir otra ocurrencia dentro del modal. Los resúmenes conservan los conteos
+de ocurrencias vigentes por campus/edificio y no generan puntos en la escena.
+
 ## Compatibilidad del MVP
 
 - Expo SDK 57

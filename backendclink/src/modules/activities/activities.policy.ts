@@ -21,8 +21,17 @@ export function toVisibleActivity(document: ActivityDocument, campusId: string, 
   if (!location || (query.buildingKey && query.buildingKey !== location.buildingKey)
     || (query.floorKey && query.floorKey !== location.floorKey)
     || (query.poiKey && query.poiKey !== location.poiKey)) return null;
+  let series: ActivityDto['series'];
+  if (document.seriesId !== undefined) {
+    if (!document.seriesId || typeof document.seriesId.toHexString !== 'function'
+      || !Number.isInteger(document.occurrenceIndex) || !Number.isInteger(document.occurrenceCount)
+      || document.occurrenceIndex! < 1 || document.occurrenceCount! < document.occurrenceIndex!
+      || document.occurrenceCount! > 200 || !(document.originalStartAt instanceof Date)
+      || !Number.isFinite(document.originalStartAt.getTime())) return null;
+    series = { id: document.seriesId.toHexString(), index: document.occurrenceIndex!, total: document.occurrenceCount! };
+  }
   return { id: document._id.toHexString(), campusId: document.campusId,
     title: document.title, description: document.description,
     type: document.type as ActivityDto['type'], status: 'ACTIVE',
-    startAt: document.startAt.toISOString(), endAt: document.endAt.toISOString(), location };
+    startAt: document.startAt.toISOString(), endAt: document.endAt.toISOString(), location, ...(series ? { series } : {}) };
 }

@@ -1,17 +1,55 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 import type { Activity, ActivityDetail, ActivityLocationQuery } from '../types/activity';
-import type { CreateCommunityActivityInput } from '../types/creation';
+import type { CreateActivityInput } from '../types/creation';
+import type { CreateActivitySeriesInput, ActivityRecurrencePreview, CreatedActivitySeries, ActivitySeries } from '../types/recurrence';
 
-export async function createCommunityActivity(campusId: string, input: CreateCommunityActivityInput, signal?: AbortSignal): Promise<ActivityDetail> {
-  const response = await authenticatedEnvelopeRequest<ActivityDetail>('/api/v1/activities', {
+export async function previewActivitySeries(campusId: string, input: CreateActivitySeriesInput, official: boolean, signal?: AbortSignal): Promise<ActivityRecurrencePreview> {
+  const response = await authenticatedEnvelopeRequest<ActivityRecurrencePreview>(official ? '/api/v1/activities/series/official/preview' : '/api/v1/activities/series/preview', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
   });
-  if (!response.data || response.data.campusId !== campusId || response.data.type !== 'COMMUNITY_ACTIVITY'
-    || !/^[0-9a-f]{24}$/.test(response.data.id) || response.data.participation.status !== 'JOINED') {
+  const value = response.data;
+  if (!value || value.campusId !== campusId || value.type !== (official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY')
+    || !/^[0-9a-f]{64}$/.test(value.previewHash) || !Array.isArray(value.occurrences) || !value.occurrences.length) throw new Error('Vista previa inválida.');
+  return value;
+}
+
+export async function createActivitySeries(campusId: string, input: CreateActivitySeriesInput, official: boolean, signal?: AbortSignal): Promise<CreatedActivitySeries> {
+  const response = await authenticatedEnvelopeRequest<CreatedActivitySeries>(official ? '/api/v1/activities/series/official' : '/api/v1/activities/series', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+  });
+  const value = response.data;
+  if (!value?.series || value.series.campusId !== campusId || value.series.type !== (official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY')
+    || !/^[0-9a-f]{24}$/.test(value.series.id) || value.firstOccurrence?.campusId !== campusId
+    || value.firstOccurrence.series?.id !== value.series.id || value.firstOccurrence.participation?.status !== 'JOINED') throw new Error('No se pudo confirmar la serie publicada.');
+  return value;
+}
+
+export async function fetchActivitySeries(campusId: string, seriesId: string, signal?: AbortSignal): Promise<ActivitySeries> {
+  if (!/^[0-9a-f]{24}$/i.test(seriesId)) throw new Error('ID de serie inválido.');
+  const response = await authenticatedEnvelopeRequest<ActivitySeries>(`/api/v1/activities/series/${seriesId}`, { signal });
+  if (!response.data || response.data.id !== seriesId.toLowerCase() || response.data.campusId !== campusId
+    || !Array.isArray(response.data.occurrences) || response.data.occurrences.some(activity => activity.campusId !== campusId || activity.series?.id !== seriesId.toLowerCase())) {
+    throw new Error('La serie recibida no corresponde a esta consulta.');
+  }
+  return response.data;
+}
+
+async function publishActivity(campusId: string, input: CreateActivityInput, official: boolean, signal?: AbortSignal): Promise<ActivityDetail> {
+  const response = await authenticatedEnvelopeRequest<ActivityDetail>(official ? '/api/v1/activities/official' : '/api/v1/activities', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+  });
+  if (!response.data || response.data.campusId !== campusId || response.data.type !== (official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY')
+    || !/^[0-9a-f]{24}$/.test(response.data.id) || response.data.participation?.status !== 'JOINED') {
     throw new Error('No se pudo confirmar la actividad publicada.');
   }
   return response.data;
 }
+
+export const createCommunityActivity = (campusId: string, input: CreateActivityInput, signal?: AbortSignal) =>
+  publishActivity(campusId, input, false, signal);
+
+export const createOfficialEvent = (campusId: string, input: CreateActivityInput, signal?: AbortSignal) =>
+  publishActivity(campusId, input, true, signal);
 
 export async function fetchLocationActivities(campusId: string, query: ActivityLocationQuery, signal?: AbortSignal): Promise<Activity[]> {
   const search = new URLSearchParams();

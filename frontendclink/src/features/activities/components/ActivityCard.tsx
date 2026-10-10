@@ -9,6 +9,7 @@ export function ActivityCard({ activity, onPress }: {
       accessibilityLabel={`Abrir ficha: ${activity.title}`} onPress={onPress} style={styles.content}>
       <Text style={{ color: ACTIVITY_COLORS[activity.type], fontWeight: '700' }}>{ACTIVITY_LABELS[activity.type]}</Text>
       <Text style={styles.title}>{activity.title}</Text>
+      {activity.series ? <Text style={styles.text}>Serie recurrente · Ocurrencia {activity.series.index} de {activity.series.total}</Text> : null}
       <Text style={styles.text}>{activity.location.buildingName} · {activity.location.floorName}</Text>
       {activity.location.poiName ? <Text style={styles.text}>{activity.location.poiName}</Text> : null}
       <Text style={styles.text}>{new Date(activity.startAt).toLocaleString('es-CL')}</Text>

@@ -2,13 +2,18 @@ import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity } from '../types/activity';
+import { ActivitySeriesView } from './ActivitySeriesView';
 
 /** Renders inside the current native modal; returning never changes map selection. */
-export function ActivityDetail({ activityId, onBack, onExplore }: {
-  activityId: string; onBack: () => void; onExplore?: (activity: Activity) => void;
+export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurrence }: {
+  activityId: string; onBack: () => void; onExplore?: (activity: Activity) => void; onSelectOccurrence?: (activityId: string) => void;
 }) {
   const { detail, isLoading, error, refresh, join, isJoining, joinError } = useActivityDetail(activityId);
   const [failedBanner, setFailedBanner] = useState<string | null>(null);
+  const [showSeries, setShowSeries] = useState(false);
+  if (showSeries && detail?.series && onSelectOccurrence) return <ActivitySeriesView seriesId={detail.series.id}
+    currentActivityId={activityId} onBack={() => setShowSeries(false)}
+    onSelect={id => { setShowSeries(false); onSelectOccurrence(id); }} />;
   return <View style={styles.content}>
     <Pressable accessibilityRole="button" onPress={onBack} style={styles.action}>
       <Text style={styles.link}>Volver a las actividades</Text>
@@ -20,6 +25,13 @@ export function ActivityDetail({ activityId, onBack, onExplore }: {
       </> : detail ? <>
         <Text style={[styles.type, { color: ACTIVITY_COLORS[detail.type] }]}>{ACTIVITY_LABELS[detail.type]}</Text>
         <Text accessibilityRole="header" style={styles.title}>{detail.title}</Text>
+        {detail.series ? <>
+          <Text style={styles.heading}>Ocurrencia {detail.series.index} de {detail.series.total} · Serie recurrente</Text>
+          <Text style={styles.text}>Las fechas y tu inscripción de esta ficha corresponden a esta ocurrencia.</Text>
+          {onSelectOccurrence ? <Pressable accessibilityRole="button" onPress={() => setShowSeries(true)} style={styles.action}>
+            <Text style={styles.link}>Ver serie y otras ocurrencias</Text>
+          </Pressable> : null}
+        </> : null}
         {detail.bannerUrl && failedBanner !== detail.bannerUrl ? <Image source={{ uri: detail.bannerUrl }}
           accessibilityLabel={`Imagen de ${detail.title}`} style={styles.banner} resizeMode="cover"
           onError={() => setFailedBanner(detail.bannerUrl ?? null)} /> : null}

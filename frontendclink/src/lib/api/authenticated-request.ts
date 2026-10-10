@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '@/features/auth/supabase';
 
 export class AuthApiError extends Error {
-  constructor(public readonly status: number) {
+  constructor(public readonly status: number, public readonly serverMessage?: string) {
     super(status === 401 ? 'La sesión no es válida.' : status === 403
       ? 'La cuenta no tiene acceso.' : 'No se pudo consultar la cuenta.');
   }
@@ -27,6 +27,14 @@ export async function authenticatedEnvelopeRequest<T, Meta = never>(path: string
   headers.set('Authorization', 'Bearer ' + data.session.access_token);
   const search = query?.toString();
   const response = await fetch(baseUrl + path + (search ? '?' + search : ''), { ...init, headers, cache: 'no-store', redirect: 'error' });
-  if (!response.ok) throw new AuthApiError(response.status);
+  if (!response.ok) {
+    let message: string | undefined;
+    try {
+      const body: unknown = await response.json();
+      if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'object'
+        && body.error !== null && 'message' in body.error && typeof body.error.message === 'string' && body.error.message.length <= 500) message = body.error.message;
+    } catch { /* A non-JSON error still preserves its HTTP status. */ }
+    throw new AuthApiError(response.status, message);
+  }
   return await response.json() as { data: T; meta: Meta };
 }

@@ -8,7 +8,7 @@ import { requireParticipationIndex } from './activities.participation-index.js';
 import type { ActivityDocument, ActivityDto, ActivityParticipationDocument } from './activities.types.js';
 
 /** Publish and enroll the creator atomically, rechecking the location in the transaction snapshot. */
-export async function insertCommunityActivity(document: ActivityDocument): Promise<ActivityDto> {
+export async function insertActivity(document: ActivityDocument): Promise<ActivityDto> {
   const db = getMongoDb();
   await requireParticipationIndex(db);
   const result = await mongoClient.withSession(session => session.withTransaction(async () => {

@@ -1,6 +1,6 @@
-export const COMMUNITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;
+export const ACTIVITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;
 
-export interface CreateCommunityActivityInput {
+export interface CreateActivityInput {
   title: string; description: string; startAt: string; endAt: string;
   location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };
 }
@@ -11,7 +11,7 @@ export interface ActivityLocationOption {
   floors: { id: string; name: string; pois: { id: string; name: string }[] }[];
 }
 
-export interface CommunityActivityDraft {
+export interface ActivityDraft {
   title: string; description: string; startDate: string; startTime: string; endDate: string; endTime: string;
   buildingKey: string; floorKey: string; poiKey: string; customLabel: string;
 }
@@ -29,15 +29,15 @@ export function localActivityTimestamp(dateText: string, timeText: string): stri
   return result.toISOString();
 }
 
-export function validateCommunityDraft(draft: CommunityActivityDraft, locations: ActivityLocationOption[], now = Date.now()):
-  { input: CreateCommunityActivityInput; error?: never } | { error: string; input?: never } {
+export function validateActivityDraft(draft: ActivityDraft, locations: ActivityLocationOption[], now = Date.now()):
+  { input: CreateActivityInput; error?: never } | { error: string; input?: never } {
   for (const field of ['title', 'description'] as const) {
     const controls = field === 'description' ? /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/ : /[\u0000-\u001F\u007F]/;
-    if (!draft[field].trim() || draft[field].length > COMMUNITY_CONTENT_LIMITS[field] || controls.test(draft[field])) {
-      return { error: `Completa ${field === 'title' ? 'el nombre' : 'la descripción'} (máximo ${COMMUNITY_CONTENT_LIMITS[field]} caracteres).` };
+    if (!draft[field].trim() || draft[field].length > ACTIVITY_CONTENT_LIMITS[field] || controls.test(draft[field])) {
+      return { error: `Completa ${field === 'title' ? 'el nombre' : 'la descripción'} (máximo ${ACTIVITY_CONTENT_LIMITS[field]} caracteres).` };
     }
   }
-  if (draft.customLabel.length > COMMUNITY_CONTENT_LIMITS.customLabel || /[\u0000-\u001F\u007F]/.test(draft.customLabel)) {
+  if (draft.customLabel.length > ACTIVITY_CONTENT_LIMITS.customLabel || /[\u0000-\u001F\u007F]/.test(draft.customLabel)) {
     return { error: 'La referencia del lugar admite hasta 160 caracteres en una línea.' };
   }
   const startAt = localActivityTimestamp(draft.startDate, draft.startTime);

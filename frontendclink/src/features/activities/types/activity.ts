@@ -8,6 +8,7 @@ export interface Activity {
   status: 'ACTIVE';
   startAt: string;
   endAt: string;
+  series?: { id: string; index: number; total: number };
   location: {
     buildingKey: string;
     buildingName: string;

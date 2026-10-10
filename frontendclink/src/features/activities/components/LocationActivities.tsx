@@ -5,7 +5,7 @@ import { ACTIVITY_COLORS, filterLocationActivities, type Activity, type Activity
 import { ActivityCard } from './ActivityCard';
 import { ActivityDetail } from './ActivityDetail';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { CreateCommunityActivity } from './CreateCommunityActivity';
+import { CreateActivityForm } from './CreateActivityForm';
 import type { ActivityLocationOption } from '../types/creation';
 
 export function LocationActivities(props: {
@@ -15,23 +15,29 @@ export function LocationActivities(props: {
   const { identity, session } = useAuth();
   // Remount the browser/form on campus or session change, clearing drafts and obsolete responses.
   return <LocationActivitiesContent key={JSON.stringify([identity?.campusId, session?.access_token])} {...props}
-    canCreate={!!identity?.capabilities.general && !!identity?.profile.verificado_en} />;
+    canCreate={!!identity?.capabilities.general && !!identity?.profile.verificado_en}
+    canPublishOfficial={!!identity?.capabilities.officialActivities} />;
 }
 
-function LocationActivitiesContent({ state, query = {}, onExplore, locations, canCreate }: {
+function LocationActivitiesContent({ state, query = {}, onExplore, locations, canCreate, canPublishOfficial }: {
   state: ActivitiesState; query?: ActivityLocationQuery; onExplore?: (activity: Activity) => void;
-  locations?: ActivityLocationOption[]; canCreate: boolean;
+  locations?: ActivityLocationOption[]; canCreate: boolean; canPublishOfficial: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [published, setPublished] = useState(false);
-  if (creating && canCreate && locations) return <CreateCommunityActivity locations={locations} initialLocation={query}
-    onCancel={() => { setCreating(false); state.refresh(); }}
-    onCreated={activity => { setCreating(false); setPublished(true); setSelectedId(activity.id); state.refresh(); }} />;
+  const [creating, setCreating] = useState<'COMMUNITY_ACTIVITY' | 'OFFICIAL_EVENT' | null>(null);
+  const [published, setPublished] = useState<string | null>(null);
+  if (creating && (creating === 'OFFICIAL_EVENT' ? canPublishOfficial : canCreate) && locations) {
+    return <CreateActivityForm key={creating} official={creating === 'OFFICIAL_EVENT'} locations={locations} initialLocation={query}
+      onCancel={() => { setCreating(null); state.refresh(); }}
+      onCreated={activity => { setCreating(null); setPublished(activity.series ? `Serie publicada: ${activity.series.total} ocurrencias. Ya estás inscrito en cada una.` : activity.type === 'OFFICIAL_EVENT'
+        ? 'Evento oficial publicado. Ya estás inscrito como organizador.' : 'Actividad publicada. Ya estás inscrito como organizador.');
+        setSelectedId(activity.id); state.refresh(); }} />;
+  }
   if (selectedId) return <View>
-    {published ? <Text accessibilityRole="alert" style={styles.text}>Actividad publicada. Ya estás inscrito como organizador.</Text> : null}
+    {published ? <Text accessibilityRole="alert" style={styles.text}>{published}</Text> : null}
     <ActivityDetail key={selectedId} activityId={selectedId}
-      onBack={() => { setSelectedId(null); setPublished(false); state.refresh(); }} onExplore={onExplore} />
+      onSelectOccurrence={id => { setPublished(null); setSelectedId(id); }}
+      onBack={() => { setSelectedId(null); setPublished(null); state.refresh(); }} onExplore={onExplore} />
   </View>;
   if (state.isLoading) return <View style={styles.section}><ActivityIndicator /><Text style={styles.text}>Cargando actividades…</Text></View>;
   if (state.error) return <View style={styles.section}>
@@ -40,9 +46,12 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
   </View>;
   const activities = filterLocationActivities(state.activities, query);
   return <View style={styles.section}>
-    {published ? <Text accessibilityRole="alert" style={styles.text}>Actividad publicada. Ya estás inscrito como organizador.</Text> : null}
-    {canCreate && locations?.length ? <Pressable accessibilityRole="button" onPress={() => setCreating(true)}>
+    {published ? <Text accessibilityRole="alert" style={styles.text}>{published}</Text> : null}
+    {canCreate && locations?.length ? <Pressable accessibilityRole="button" onPress={() => setCreating('COMMUNITY_ACTIVITY')}>
       <Text style={styles.retry}>Crear actividad comunitaria</Text>
+    </Pressable> : null}
+    {canPublishOfficial && locations?.length ? <Pressable accessibilityRole="button" onPress={() => setCreating('OFFICIAL_EVENT')}>
+      <Text style={[styles.retry, { color: ACTIVITY_COLORS.OFFICIAL_EVENT }]}>Publicar evento oficial</Text>
     </Pressable> : null}
     <Pressable accessibilityRole="button" onPress={state.refresh}><Text style={styles.retry}>Actualizar actividades</Text></Pressable>
     {(['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY'] as const).map(type => {
