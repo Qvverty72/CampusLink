@@ -125,9 +125,9 @@ export function CampusAccessScreen() {
       <Text style={styles.description}>{row.name}</Text>
     </Pressable>)}</View>
     {loading && <ActivityIndicator accessibilityLabel="Cargando accesos" color="#74C69D" />}
-    {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    {notice && <Text accessibilityRole="alert" style={styles.link}>{notice}</Text>}
-    {error && !saving && <Pressable accessibilityRole="button" style={styles.button} onPress={() => {
+    {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+    {!!notice && <Text accessibilityRole="alert" style={styles.link}>{notice}</Text>}
+    {!!error && !saving && <Pressable accessibilityRole="button" style={styles.button} onPress={() => {
       if (selectedId.current && campusId) void selectUser(selectedId.current); else setReload(value => value + 1);
     }}><Text style={styles.buttonText}>Reintentar / recargar</Text></Pressable>}
     {!loading && !error && !campuses.length && <Text style={styles.description}>No tienes campus activos para administrar.</Text>}

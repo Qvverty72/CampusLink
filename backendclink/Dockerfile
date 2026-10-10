@@ -18,6 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node config/supabase/ssl ./config/supabase/ssl
 
 USER node
 EXPOSE 3000
