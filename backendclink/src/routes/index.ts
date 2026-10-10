@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { createActivitiesRouter } from '../modules/activities/activities.routes.js';
+import type { ActivityDependencies } from '../modules/activities/activities.service.js';
 import { env } from '../config/env.js';
 import { createAnalyticsRouter } from '../modules/analytics/analytics.routes.js';
 import { createAuthRouter } from '../modules/auth/auth.routes.js';
@@ -14,6 +16,7 @@ import type { ActiveMapLookup } from '../modules/maps/map.service.js';
 
 export interface ApiRouterOptions {
   getActiveMap?: ActiveMapLookup;
+  activities?: ActivityDependencies;
   diagnosticsEnabled?: boolean;
 }
 
@@ -40,6 +43,7 @@ export function createApiRouter(options: ApiRouterOptions = {}): Router {
 
   apiRouter.use('/users', createUsersRouter(diagnostics));
   apiRouter.use('/auth', createAuthRouter(diagnostics));
+  apiRouter.use('/activities', createActivitiesRouter({ getActiveMap: options.getActiveMap, ...options.activities }));
   apiRouter.use('/maps', createMapRouter({
     lookup: options.getActiveMap,
     diagnosticsEnabled: diagnostics,

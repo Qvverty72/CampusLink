@@ -7,9 +7,11 @@ import { apiErrorHandler } from './middleware/apiErrorHandler.js';
 import { notFoundHandler } from './middleware/error-handler.js';
 import { createApiRouter } from './routes/index.js';
 import type { ActiveMapLookup } from './modules/maps/map.service.js';
+import type { ActivityDependencies } from './modules/activities/activities.service.js';
 
 export interface AppDependencies {
   getActiveMap?: ActiveMapLookup;
+  activities?: ActivityDependencies;
   diagnosticsEnabled?: boolean;
 }
 

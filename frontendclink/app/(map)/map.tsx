@@ -14,12 +14,18 @@ import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useMapStore } from '@/three/store/mapStore';
 import { ApiClientError } from '@/three/api/mapApi';
+import { useLocationActivities } from '@/features/activities/hooks/useLocationActivities';
 
 export default function MapScreen() {
   const auth = useAuth();
   const campusId = auth.identity?.campusId;
   const accessToken = auth.session?.access_token;
   const data = useMapDataStore((state) => state.data);
+  const activities = useLocationActivities({}, Boolean(data && data.campusId === campusId));
+  const selectedFloor = useMapStore(state => state.selectedFloor);
+  useEffect(() => {
+    if (selectedFloor) activities.refresh();
+  }, [selectedFloor, activities.refresh]);
   const error = useMapDataStore((state) => state.error);
   const loadMap = useMapDataStore((state) => state.loadMap);
   const clearMap = useMapDataStore((state) => state.clearMap);
@@ -61,8 +67,8 @@ export default function MapScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.container}>
-        <CampusMapViewport />
-        <FloorInfoModal />
+        <CampusMapViewport activities={activities} />
+        <FloorInfoModal activities={activities} />
       </View>
       <BottomNavigationBar activeItemId={'map'} />
     </View>

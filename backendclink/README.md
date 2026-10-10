@@ -2,6 +2,10 @@
 
 Base API REST de F2.2-03 (GitHub #50). Node.js 22, TypeScript, Express 5, Supabase JS y driver oficial MongoDB. Las rutas se montan en /api/v1.
 
+Actividades del mapa F2.6-01: `GET /api/v1/activities` requiere Bearer y autorización general del campus vigente. Admite `buildingKey`, `floorKey` y `poiKey` como filtros de la jerarquía; un filtro de piso requiere edificio y un filtro de POI requiere piso. No acepta campus, tipo, estado o visibilidad enviados por el cliente. Responde `{ data: ActivityDto[] }`, con fechas ISO y nombres de ubicación resueltos desde el mapa activo.
+
+Contrato de lectura acordado: `type` es `COMMUNITY_ACTIVITY` u `OFFICIAL_EVENT`, `status` es `ACTIVE`, `visibility` es `PUBLIC` y `endAt` es posterior al momento de consulta. Incluye actividades futuras y en curso con fechas válidas. Cada actividad debe referenciar `location.buildingKey = building.id` y `location.floorKey = floor.id`; `poiKey` es opcional y debe pertenecer al piso y estar visible/no eliminado. `meshName` solo vincula geometría 3D. No ejecutar el bootstrap documental histórico como migración de este contrato. Esta entrega no crea actividades ni índices/validadores remotos.
+
 Inicio/cierre/recuperación de sesión F2.3-03: [contratos, permisos, plantilla y configuración de Supabase](docs/session-login-recovery.md).
 
 Perfil académico F2.3-04: [API, validaciones, guardado transaccional y migración necesaria en Supabase](docs/academic-profile.md).

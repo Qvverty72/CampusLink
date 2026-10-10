@@ -17,6 +17,8 @@ import {
 } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
 import { useMapDataStore } from '@/three/store/mapDataStore';
+import { LocationActivities } from '@/features/activities/components/LocationActivities';
+import type { ActivitiesState } from '@/features/activities/hooks/useLocationActivities';
 
 const POI_TYPE_LABELS: Record<string, string> = {
   AUDITORIUM: 'Auditorio',
@@ -30,7 +32,7 @@ const POI_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Otro',
 };
 
-export function FloorInfoModal() {
+export function FloorInfoModal({ activities }: { activities: ActivitiesState }) {
   const mapData = useMapDataStore((s) => s.data);
   // El store conserva identificadores y visibilidad, no objetos completos. Así la
   // fuente de metadata puede cambiar de configuración local a API sin duplicarla.
@@ -125,6 +127,8 @@ export function FloorInfoModal() {
                 ))
               )}
             </View>
+            <LocationActivities key={floor.id} state={activities}
+              query={{ buildingKey: floor.buildingId, floorKey: floor.id }} />
           </ScrollView>
 
           {/* Footer */}
