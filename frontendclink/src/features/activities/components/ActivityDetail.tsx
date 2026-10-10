@@ -1,16 +1,22 @@
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
-import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity } from '../types/activity';
+import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity, type ActivityDetail as ActivityDetailData } from '../types/activity';
 import { ActivitySeriesView } from './ActivitySeriesView';
+import type { ActivityLocationOption } from '../types/creation';
+import { EditActivityForm } from './EditActivityForm';
 
 /** Renders inside the current native modal; returning never changes map selection. */
-export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurrence }: {
+export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurrence, locations, onEdited }: {
   activityId: string; onBack: () => void; onExplore?: (activity: Activity) => void; onSelectOccurrence?: (activityId: string) => void;
+  locations?: ActivityLocationOption[]; onEdited?: (count: number) => void;
 }) {
   const { detail, isLoading, error, refresh, join, isJoining, joinError } = useActivityDetail(activityId);
   const [failedBanner, setFailedBanner] = useState<string | null>(null);
   const [showSeries, setShowSeries] = useState(false);
+  const [editing, setEditing] = useState<ActivityDetailData | null>(null);
+  if (editing && locations) return <EditActivityForm activity={editing} locations={locations}
+    onCancel={() => { setEditing(null); refresh(); }} onSaved={count => { setEditing(null); onEdited?.(count); refresh(); }} />;
   if (showSeries && detail?.series && onSelectOccurrence) return <ActivitySeriesView seriesId={detail.series.id}
     currentActivityId={activityId} onBack={() => setShowSeries(false)}
     onSelect={id => { setShowSeries(false); onSelectOccurrence(id); }} />;
@@ -59,6 +65,9 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
         </Pressable> : null}
         {onExplore ? <Pressable accessibilityRole="button" onPress={() => onExplore(detail)} style={styles.action}>
           <Text style={styles.link}>Explorar este piso</Text>
+        </Pressable> : null}
+        {detail.editing && locations?.length ? <Pressable disabled={isJoining} accessibilityRole="button" onPress={() => setEditing(detail)} style={styles.action}>
+          <Text style={styles.link}>Editar {detail.series ? 'ocurrencia o próximas' : 'actividad'}</Text>
         </Pressable> : null}
         <Pressable accessibilityRole="button" onPress={refresh} disabled={isJoining} style={styles.action}>
           <Text style={styles.link}>Actualizar ficha</Text>

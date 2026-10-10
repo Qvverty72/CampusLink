@@ -4,7 +4,8 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { createCommunityActivity, createOfficialEvent, previewActivitySeries, createActivitySeries } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityLocationQuery } from '../types/activity';
-import { ACTIVITY_CONTENT_LIMITS, validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
+import { validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
+import { ActivityFields } from './ActivityFields';
 import { RECURRENCE_LABELS, recurrenceDraftRule, type ActivityRecurrenceRule, type ActivityRecurrencePreview } from '../types/recurrence';
 
 export function CreateActivityForm({ locations, initialLocation, onCancel, onCreated, official = false }: {
@@ -69,19 +70,6 @@ export function CreateActivityForm({ locations, initialLocation, onCancel, onCre
       if (request.current === abort) request.current = null;
     }
   };
-  const field = (key: keyof ActivityDraft, label: string, placeholder: string, maxLength: number, multiline = false) =>
-    <View style={styles.field} key={key}><Text style={styles.label}>{label}</Text>
-      <TextInput accessibilityLabel={label} placeholder={placeholder} value={draft[key]} onChangeText={value => change(key, value)}
-        editable={!submitting} maxLength={maxLength} multiline={multiline} style={[styles.input, multiline && styles.description]} />
-    </View>;
-  const choices = (key: 'buildingKey' | 'floorKey' | 'poiKey', values: { id: string; name: string }[]) =>
-    <View style={styles.choices}>{values.map(value => <Pressable key={value.id} accessibilityRole="radio"
-      accessibilityState={{ selected: draft[key] === value.id, disabled: submitting }} disabled={submitting}
-      onPress={() => change(key, value.id)} style={[styles.choice, draft[key] === value.id && styles.selected]}>
-      <Text style={draft[key] === value.id ? styles.selectedText : styles.text}>{value.name}</Text>
-    </Pressable>)}</View>;
-  const building = locations.find(value => value.id === draft.buildingKey);
-  const floor = building?.floors.find(value => value.id === draft.floorKey);
   const units = { DAILY: { plural: 'días', single: 'día', label: 'Repetir cada cuántos días' },
     WEEKLY: { plural: 'semanas', single: 'semana', label: 'Repetir cada cuántas semanas' },
     MONTHLY: { plural: 'meses', single: 'mes', label: 'Repetir cada cuántos meses' } }[frequency];
@@ -90,15 +78,8 @@ export function CreateActivityForm({ locations, initialLocation, onCancel, onCre
     <Text accessibilityRole="header" style={styles.heading}>{official ? 'Publicar evento oficial' : 'Crear actividad comunitaria'}</Text>
     <Text style={styles.text}>{official ? 'Se publicará como evento oficial de tu campus. Serás el primer participante.'
       : 'Se publicará en tu campus. Serás organizador y primer participante.'}</Text>
-    <Text style={styles.label}>Organizador</Text>
-    <Text style={styles.text}>{identity?.profile.nombre_completo}</Text>
-    {field('title', 'Nombre', official ? 'Nombre del evento' : 'Nombre de la actividad', ACTIVITY_CONTENT_LIMITS.title)}
-    {field('description', 'Descripción', 'Describe la actividad presencial', ACTIVITY_CONTENT_LIMITS.description, true)}
-    <Text style={styles.text}>{recurring ? 'Fecha y hora de la primera actividad. ' : ''}Fechas y horas locales de tu dispositivo, en formato de 24 horas.</Text>
-    {field('startDate', 'Fecha de inicio', 'DD/MM/AAAA', 10)}
-    {field('startTime', 'Hora de inicio', 'HH:mm', 5)}
-    {field('endDate', 'Fecha de término', 'DD/MM/AAAA', 10)}
-    {field('endTime', 'Hora de término', 'HH:mm', 5)}
+    <ActivityFields draft={draft} change={change} disabled={submitting} locations={locations}
+      organizer={identity?.profile.nombre_completo} firstOccurrence={recurring} />
     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: recurring, disabled: submitting }} disabled={submitting}
       onPress={() => recurrenceChange(() => setRecurring(value => !value))} style={styles.choice}>
       <Text style={styles.label}>{recurring ? '✓ ' : ''}Repetir como serie</Text>
@@ -126,13 +107,6 @@ export function CreateActivityForm({ locations, initialLocation, onCancel, onCre
       <Text style={styles.text}>Zona horaria: {timeZone || 'No disponible'}. Mantiene la hora local. Máximo 200 ocurrencias y dos años.
         Los días mensuales inexistentes se omiten; las horas ambiguas o inexistentes por cambio horario requieren ajustar la regla.</Text>
     </View> : null}
-    <Text style={styles.label}>Edificio</Text>{choices('buildingKey', locations)}
-    <Text style={styles.label}>Piso</Text>
-    {building ? choices('floorKey', building.floors) : <Text style={styles.text}>Selecciona un edificio.</Text>}
-    <Text style={styles.label}>Punto de interés (opcional)</Text>
-    {floor ? choices('poiKey', [{ id: '', name: 'En el piso, sin punto de interés' }, ...floor.pois])
-      : <Text style={styles.text}>Selecciona un piso.</Text>}
-    {field('customLabel', 'Referencia del lugar (opcional)', 'Ejemplo: junto a la sala de estudio', ACTIVITY_CONTENT_LIMITS.customLabel)}
     {recurring ? <Pressable accessibilityRole="button" disabled={submitting} onPress={() => { void publish(true); }} style={styles.cancel}>
       <Text style={styles.label}>{submitting ? 'Procesando…' : 'Ver fechas antes de publicar'}</Text>
     </Pressable> : null}

@@ -9,6 +9,15 @@ import { createCommunityActivity, createOfficialEvent } from './activities.creat
 import type { CreateActivityInput } from './activities.types.js';
 import type { CreateActivitySeriesInput } from './activities.types.js';
 import { createActivitySeries, previewActivitySeries, getActivitySeries } from './activities.series.service.js';
+import { editActivity, previewActivityEdit } from './activities.edit.service.js';
+import type { ActivityEditDependencies, EditActivityInput } from './activities.edit.types.js';
+
+export function createActivityEditController(dependencies: ActivityEditDependencies = {}, preview = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { body, params } = getValidatedRequest<{ body: EditActivityInput; params: { activityId: string } }>(response);
+    sendSuccess(response, await (preview ? previewActivityEdit : editActivity)(response.locals.auth, params.activityId, body, dependencies));
+  };
+}
 
 export function createActivitySeriesController(dependencies: ActivityDependencies = {}, official = false, preview = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {

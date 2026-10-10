@@ -22,6 +22,7 @@ export interface Activity {
 
 export interface ActivityLocationQuery { buildingKey?: string; floorKey?: string; poiKey?: string }
 export interface ActivityDetail extends Activity {
+  editing?: { revision: number; canEditUpcoming: boolean };
   organizer: { name: string } | null;
   participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean };
   bannerUrl?: string;

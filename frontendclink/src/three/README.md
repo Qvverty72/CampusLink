@@ -55,6 +55,23 @@ Las tarjetas y `ActivityDetail` distinguen ocurrencia/serie; `ActivitySeriesView
 permite elegir otra ocurrencia dentro del modal. Los resúmenes conservan los conteos
 de ocurrencias vigentes por campus/edificio y no generan puntos en la escena.
 
+## Edición de actividades
+
+La ficha ofrece editar al creador cuando el backend entrega `editing`. El editor
+reutiliza `ActivityFields` con creación, conserva los segundos de fechas no
+modificadas y exige una vista previa antes de guardar. Una ocurrencia puede
+editarse aunque esté en curso; una futura permite editar esta y las próximas sin
+comenzar. Las fechas se trasladan en la zona guardada de la serie, conservando las
+pasadas, IDs e inscripciones. La regla de creación permanece como referencia
+histórica; el listado muestra las fechas reales editadas de cada ocurrencia.
+
+Guardar refresca ficha y consulta compartida del campus, incluidos los resúmenes
+por edificio. No modifica la selección, las geometrías ni los stores 3D.
+La API conserva historial para F2.6-08; todavía no envía notificaciones.
+Ese historial está embebido en `activities.changeHistory`; la definición original
+de serie está en `seriesDefinition` de la primera ocurrencia. No se crean nuevas
+colecciones MongoDB ni se cambia el contrato usado por los modales.
+
 ## Compatibilidad del MVP
 
 - Expo SDK 57

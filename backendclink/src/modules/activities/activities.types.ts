@@ -1,4 +1,5 @@
 import type { ObjectId } from 'mongodb';
+import type { ActivityChangeDocument } from './activities.edit.types.js';
 
 /** Current activities document supplied by the project owner, not the legacy bootstrap. */
 export interface ActivityDocument {
@@ -29,6 +30,10 @@ export interface ActivityDocument {
   occurrenceIndex?: number;
   occurrenceCount?: number;
   originalStartAt?: Date;
+  editRevision?: number;
+  changeHistory?: ActivityChangeDocument[];
+  /** Canonical creation template, embedded only in occurrence 1. */
+  seriesDefinition?: ActivitySeriesDocument;
 }
 
 export interface ActivityQuery {
@@ -107,6 +112,7 @@ export interface ActivityParticipationDocument {
 }
 
 export interface ActivityDetailDto extends ActivityDto {
+  editing?: { revision: number; canEditUpcoming: boolean };
   organizer: { name: string } | null;
   participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean };
   bannerUrl?: string;

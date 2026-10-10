@@ -29,7 +29,8 @@ export function localActivityTimestamp(dateText: string, timeText: string): stri
   return result.toISOString();
 }
 
-export function validateActivityDraft(draft: ActivityDraft, locations: ActivityLocationOption[], now = Date.now()):
+export function validateActivityDraft(draft: ActivityDraft, locations: ActivityLocationOption[], now = Date.now(),
+  options: { allowEnded?: boolean; timestamps?: { startAt: string | null; endAt: string | null } } = {}):
   { input: CreateActivityInput; error?: never } | { error: string; input?: never } {
   for (const field of ['title', 'description'] as const) {
     const controls = field === 'description' ? /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/ : /[\u0000-\u001F\u007F]/;
@@ -40,11 +41,11 @@ export function validateActivityDraft(draft: ActivityDraft, locations: ActivityL
   if (draft.customLabel.length > ACTIVITY_CONTENT_LIMITS.customLabel || /[\u0000-\u001F\u007F]/.test(draft.customLabel)) {
     return { error: 'La referencia del lugar admite hasta 160 caracteres en una línea.' };
   }
-  const startAt = localActivityTimestamp(draft.startDate, draft.startTime);
-  const endAt = localActivityTimestamp(draft.endDate, draft.endTime);
+  const startAt = options.timestamps ? options.timestamps.startAt : localActivityTimestamp(draft.startDate, draft.startTime);
+  const endAt = options.timestamps ? options.timestamps.endAt : localActivityTimestamp(draft.endDate, draft.endTime);
   if (!startAt || !endAt) return { error: 'Usa fechas válidas DD/MM/AAAA y horas HH:mm (24 horas).' };
   if (Date.parse(endAt) <= Date.parse(startAt)) return { error: 'El término debe ser posterior al inicio.' };
-  if (Date.parse(endAt) <= now) return { error: 'La actividad todavía no debe haber terminado.' };
+  if (!options.allowEnded && Date.parse(endAt) <= now) return { error: 'La actividad todavía no debe haber terminado.' };
   const building = locations.find(value => value.id === draft.buildingKey);
   const floor = building?.floors.find(value => value.id === draft.floorKey);
   if (!floor || (draft.poiKey && !floor.pois.some(value => value.id === draft.poiKey))) {

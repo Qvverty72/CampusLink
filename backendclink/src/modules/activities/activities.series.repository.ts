@@ -10,8 +10,6 @@ import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, Acti
 
 export async function insertActivitySeries(series: ActivitySeriesDocument, documents: ActivityDocument[]): Promise<ActivityDto[]> {
   const db = getMongoDb(); await requireParticipationIndex(db);
-  const collections = await db.listCollections({ name: 'activity_series' }, { nameOnly: true }).toArray();
-  if (!collections.length) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'La colección de series no está configurada.');
   const indexes = await db.collection('activities').indexes();
   if (!indexes.some(index => index.unique && index.key.seriesId === 1 && index.key.occurrenceIndex === 1
     && Object.keys(index.key).length === 2 && JSON.stringify(index.partialFilterExpression) === JSON.stringify({ seriesId: { $type: 'objectId' } })
@@ -25,8 +23,9 @@ export async function insertActivitySeries(series: ActivitySeriesDocument, docum
     const map = await db.collection<CampusMapDocument>('campus_maps').findOne({ campusId: series.campusId, status: 'ACTIVE' }, { session });
     const occurrences = documents.map(document => map && toVisibleActivity(document, series.campusId, now, spatialBuildings(map)));
     if (!documents.length || occurrences.some(value => !value)) throw new ApiError(400, 'VALIDATION_ERROR', 'Las fechas o la ubicación ya no están disponibles. Revisa la vista previa.');
-    await db.collection<ActivitySeriesDocument>('activity_series').insertOne({ ...series, createdAt: now, updatedAt: now }, { session });
-    await transactionDb.collection<ActivityDocument>('activities').insertMany(documents.map(document => ({ ...document, createdAt: now, updatedAt: now })), { session });
+    if (documents.filter(document => document.occurrenceIndex === 1).length !== 1) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'La primera ocurrencia no está disponible.');
+    await transactionDb.collection<ActivityDocument>('activities').insertMany(documents.map(document => ({ ...document, createdAt: now, updatedAt: now,
+      ...(document.occurrenceIndex === 1 ? { seriesDefinition: { ...series, createdAt: now, updatedAt: now } } : {}) })), { session });
     await transactionDb.collection<ActivityParticipationDocument>('activity_participation').insertMany(documents.map(document => ({
       activityId: document._id, campusId: series.campusId, userId: series.createdByUserId, status: 'JOINED' as const,
       joinedAt: now, updatedAt: now,
@@ -37,7 +36,10 @@ export async function insertActivitySeries(series: ActivitySeriesDocument, docum
   return result;
 }
 
-export const findActivitySeries = (campusId: string, seriesId: string) => getMongoDb().collection<ActivitySeriesDocument>('activity_series')
-  .findOne({ campusId, _id: new ObjectId(seriesId), status: 'ACTIVE', visibility: 'PUBLIC' });
+export async function findActivitySeries(campusId: string, seriesId: string): Promise<ActivitySeriesDocument | null> {
+  const id = new ObjectId(seriesId);
+  return (await getMongoDb().collection<ActivityDocument>('activities').findOne({ campusId, seriesId: id,
+    'seriesDefinition._id': id, 'seriesDefinition.status': 'ACTIVE', 'seriesDefinition.visibility': 'PUBLIC' }))?.seriesDefinition ?? null;
+}
 export const findActivitySeriesOccurrences = (campusId: string, seriesId: string, now: Date) => getMongoDb().collection<ActivityDocument>('activities')
   .find({ ...visibleActivityFilter(campusId, now), seriesId: new ObjectId(seriesId) }).sort({ startAt: 1, _id: 1 }).toArray();

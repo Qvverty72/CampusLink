@@ -125,31 +125,34 @@ test('series preview is read-only and publish creates separate activity IDs scop
   assert.equal((await previewActivitySeries(admin, parsed(), deps, true)).type, 'OFFICIAL_EVENT');
 });
 
-test('series transaction rolls back all three collections if creator enrollment fails and revalidates map in snapshot', async () => {
+test('series transaction embeds its template without new collections and rolls back if creator enrollment fails', async () => {
   let staged: { name: string; documents: unknown[] }[] = []; const committed: typeof staged = []; let fail = false; let activeMap = map;
   const session = { withTransaction: async (operation: () => Promise<unknown>) => {
     staged = []; try { const value = await operation(); committed.push(...staged); return value; } finally { staged = []; }
   } };
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: (value: typeof session) => Promise<unknown>) => operation(session));
-  const collectionsMock = mock.method(Db.prototype, 'listCollections', () => ({ toArray: async () => [{ name: 'activity_series' }] }));
-  const dbMock = mock.method(Db.prototype, 'collection', (name: string) => ({
+  const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
+    assert.ok(['activities', 'activity_participation', 'campus_maps'].includes(name), 'Only existing collections allowed');
+    return {
     indexes: async () => name === 'activities' ? [{ key: { seriesId: 1, occurrenceIndex: 1 }, unique: true, partialFilterExpression: { seriesId: { $type: 'objectId' } } }]
       : [{ key: { activityId: 1, userId: 1 }, unique: true }],
     findOne: async (filter: unknown, options: { session: unknown }) => { assert.equal(options.session, session); assert.deepEqual(filter, { campusId, status: 'ACTIVE' }); return activeMap; },
-    insertOne: async (document: unknown, options: { session: unknown }) => { assert.equal(options.session, session); staged.push({ name, documents: [document] }); },
     insertMany: async (documents: unknown[], options: { session: unknown }) => {
       assert.equal(options.session, session); if (fail && name === 'activity_participation') throw new Error('Enrollment failed'); staged.push({ name, documents });
     },
-  }));
+  }; });
   try {
     const preview = await previewActivitySeries(auth, parsed(), basicDeps()); const input = parsed({ ...body(), previewHash: preview.previewHash }, true);
-    await createActivitySeries(auth, input, basicDeps()); assert.equal(committed.length, 3);
-    const activities = committed[1].documents as ActivityDocument[]; const own = committed[2].documents as ActivityParticipationDocument[];
+    await createActivitySeries(auth, input, basicDeps()); assert.equal(committed.length, 2);
+    const activities = committed[0].documents as ActivityDocument[]; const own = committed[1].documents as ActivityParticipationDocument[];
     assert.equal(activities.length, 3); assert.equal(own.length, 3);
+    assert.equal(activities.filter(value => value.seriesDefinition).length, 1);
+    assert.deepEqual(activities[0].seriesDefinition!._id, activities[0].seriesId);
+    assert.equal(activities[0].seriesDefinition!.recurrence.frequency, 'WEEKLY');
     own.forEach((value, index) => { assert.deepEqual(value.activityId, activities[index]._id); assert.equal(value.status, 'JOINED'); assert.equal(value.userId, userId); });
-    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 3); assert.equal(staged.length, 0);
-    activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 3);
-  } finally { sessionMock.mock.restore(); collectionsMock.mock.restore(); dbMock.mock.restore(); }
+    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 2); assert.equal(staged.length, 0);
+    activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 2);
+  } finally { sessionMock.mock.restore(); dbMock.mock.restore(); }
 });
 
 test('series insertMany reaches driver dispatch with a real CSOT transaction instead of an inherited timeout argument failure', async () => {
@@ -157,13 +160,12 @@ test('series insertMany reaches driver dispatch with a real CSOT transaction ins
   assert.ok(mongoClient.options.timeoutMS! > 0, 'Regression must run with the configured client deadline');
   let dispatched = 0; const sentinel = new Error('Command dispatch reached without connecting');
   const connectMock = mock.method(mongoClient, 'connect', async () => { dispatched++; throw sentinel; });
-  const collectionsMock = mock.method(Db.prototype, 'listCollections', () => ({ toArray: async () => [{ name: 'activity_series' }] }));
   const originalCollection = Db.prototype.collection;
   const dbMock = mock.method(Db.prototype, 'collection', function (this: Db, name: string) {
     const collection = originalCollection.call(this, name);
     mock.method(collection, 'indexes', async () => name === 'activities' ? [{ key: { seriesId: 1, occurrenceIndex: 1 }, unique: true, partialFilterExpression: { seriesId: { $type: 'objectId' } } }]
       : [{ key: { activityId: 1, userId: 1 }, unique: true }]);
-    mock.method(collection, 'findOne', async () => map); mock.method(collection, 'insertOne', async () => ({ acknowledged: true }));
+    mock.method(collection, 'findOne', async () => map);
     return collection;
   });
   try {
@@ -171,7 +173,7 @@ test('series insertMany reaches driver dispatch with a real CSOT transaction ins
     // withSession/withTransaction/insertMany remain the real driver, including the client deadline.
     await assert.rejects(createActivitySeries(auth, parsed({ ...body(), previewHash: preview.previewHash }, true), basicDeps()), error => error === sentinel);
     assert.equal(dispatched, 1);
-  } finally { connectMock.mock.restore(); collectionsMock.mock.restore(); dbMock.mock.restore(); }
+  } finally { connectMock.mock.restore(); dbMock.mock.restore(); }
 });
 
 test('series browsing cannot expose foreign, hidden, expired, invalid-POI or unrelated occurrences and preserves legacy activity DTOs', async () => {
@@ -209,18 +211,16 @@ test('joining one occurrence never registers or increments another occurrence in
   assert.equal((await getActivityDetail(visitor, documents[1]._id.toHexString(), deps)).participation.status, 'NOT_JOINED');
 });
 
-test('series writes fail closed without collection or the partial unique occurrence index', async () => {
-  let hasCollection = false; let writes = 0;
-  const collectionsMock = mock.method(Db.prototype, 'listCollections', () => ({ toArray: async () => hasCollection ? [{ name: 'activity_series' }] : [] }));
+test('series writes fail closed without the partial unique occurrence index', async () => {
+  let writes = 0;
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => ({
     indexes: async () => name === 'activities' ? [] : [{ key: { activityId: 1, userId: 1 }, unique: true }],
     insertMany: async () => { writes++; }, insertOne: async () => { writes++; },
   }));
   try {
     const preview = await previewActivitySeries(auth, parsed(), basicDeps()); const input = parsed({ ...body(), previewHash: preview.previewHash }, true);
-    await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 503 }); hasCollection = true;
     await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 503 }); assert.equal(writes, 0);
-  } finally { collectionsMock.mock.restore(); dbMock.mock.restore(); }
+  } finally { dbMock.mock.restore(); }
 });
 
 test('HTTP preview/publication/list/series/detail enforce identity, reviewed dates and independent occurrence participation', async () => {
@@ -260,9 +260,8 @@ test('series migration is additive/idempotent and partial uniqueness leaves sing
   const script = readFileSync(new URL('../src/database/mongodb/003_activity_series.mongosh.js', import.meta.url), 'utf8');
   const names = ['activities', 'activity_participation']; let creates = 0; const indexes = new Map<string, unknown>();
   const db = { getCollectionNames: () => names, createCollection: (name: string) => { names.push(name); creates++; },
-    activity_series: { createIndex: (_key: unknown, options: { name: string }) => indexes.set(options.name, options) },
     activities: { createIndex: (_key: unknown, options: { name: string }) => indexes.set(options.name, options) } };
-  runInNewContext(script, { db }); runInNewContext(script, { db }); assert.equal(creates, 1); assert.equal(indexes.size, 2);
+  runInNewContext(script, { db }); runInNewContext(script, { db }); assert.equal(creates, 0); assert.equal(indexes.size, 1);
   const index = indexes.get('series_occurrence_uq') as { unique: boolean; partialFilterExpression: unknown };
   assert.equal(index.unique, true); assert.equal(JSON.stringify(index.partialFilterExpression), JSON.stringify({ seriesId: { $type: 'objectId' } }));
 });

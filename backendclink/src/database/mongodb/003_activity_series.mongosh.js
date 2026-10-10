@@ -2,8 +2,7 @@
 if (!db.getCollectionNames().includes('activities') || !db.getCollectionNames().includes('activity_participation')) {
   throw new Error('activities and activity_participation must exist first.');
 }
-if (!db.getCollectionNames().includes('activity_series')) db.createCollection('activity_series');
-db.activity_series.createIndex({ campusId: 1, status: 1 }, { name: 'series_campus_status' });
+// Series definition is embedded in activities; never create another collection.
 // Individual activities have no seriesId and remain outside this partial unique index.
 // Duplicates must be reviewed, never deleted automatically by a migration.
 db.activities.createIndex({ seriesId: 1, occurrenceIndex: 1 }, {

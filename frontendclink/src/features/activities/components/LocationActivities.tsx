@@ -36,6 +36,7 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
   if (selectedId) return <View>
     {published ? <Text accessibilityRole="alert" style={styles.text}>{published}</Text> : null}
     <ActivityDetail key={selectedId} activityId={selectedId}
+      locations={locations} onEdited={count => { setPublished(count ? `Cambios guardados en ${count} actividad(es). Tus inscripciones se conservan.` : 'La actividad ya tenía esos datos.'); state.refresh(); }}
       onSelectOccurrence={id => { setPublished(null); setSelectedId(id); }}
       onBack={() => { setSelectedId(null); setPublished(null); state.refresh(); }} onExplore={onExplore} />
   </View>;

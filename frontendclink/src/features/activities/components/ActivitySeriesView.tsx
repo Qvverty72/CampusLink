@@ -37,8 +37,9 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
     <Pressable accessibilityRole="button" onPress={onBack}><Text style={styles.link}>Volver a esta ocurrencia</Text></Pressable>
     {error ? <Text accessibilityRole="alert" style={styles.text}>{error}</Text> : !series ? <ActivityIndicator /> : <>
       <Text accessibilityRole="header" style={styles.heading}>Serie: {series.title}</Text>
-      <Text style={styles.text}>{RECURRENCE_LABELS[series.recurrence.frequency]} cada {series.recurrence.interval} período(s),
+      <Text style={styles.text}>Regla de creación: {RECURRENCE_LABELS[series.recurrence.frequency]} cada {series.recurrence.interval} período(s),
         {' '}hasta {series.recurrence.until} · {series.recurrence.timeZone}</Text>
+      <Text style={styles.text}>Las ocurrencias pueden tener fechas o lugares editados; consulta cada ficha para ver su información actual.</Text>
       <Text style={styles.text}>La serie tiene {series.occurrenceCount} ocurrencias. Cada una tiene su inscripción independiente.</Text>
       <Text style={styles.heading}>Ocurrencias vigentes disponibles ({series.occurrences.length})</Text>
       <Text style={styles.text}>Las fechas finalizadas o no disponibles quedan fuera de esta consulta.</Text>

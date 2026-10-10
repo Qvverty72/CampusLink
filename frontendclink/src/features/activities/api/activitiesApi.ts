@@ -2,6 +2,26 @@ import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 import type { Activity, ActivityDetail, ActivityLocationQuery } from '../types/activity';
 import type { CreateActivityInput } from '../types/creation';
 import type { CreateActivitySeriesInput, ActivityRecurrencePreview, CreatedActivitySeries, ActivitySeries } from '../types/recurrence';
+import type { ActivityEditPreview, ActivityEditResult, EditActivityInput } from '../types/editing';
+
+export async function previewActivityEdit(campusId: string, activityId: string, input: EditActivityInput, signal?: AbortSignal): Promise<ActivityEditPreview> {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('ID inválido.');
+  const response = await authenticatedEnvelopeRequest<ActivityEditPreview>(`/api/v1/activities/${activityId}/edit/preview`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+  });
+  if (!response.data || response.data.campusId !== campusId || response.data.activityId !== activityId.toLowerCase()
+    || !/^[0-9a-f]{64}$/.test(response.data.previewHash) || !Array.isArray(response.data.changes)) throw new Error('Edición recibida inválida.');
+  return response.data;
+}
+export async function saveActivityEdit(_campusId: string, activityId: string, input: EditActivityInput, signal?: AbortSignal): Promise<ActivityEditResult> {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('ID inválido.');
+  const response = await authenticatedEnvelopeRequest<ActivityEditResult>(`/api/v1/activities/${activityId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+  });
+  if (!response.data || response.data.activityId !== activityId.toLowerCase() || !Number.isSafeInteger(response.data.updatedCount)
+    || response.data.updatedCount < 0 || !Number.isSafeInteger(response.data.revision)) throw new Error('No se pudo confirmar la edición.');
+  return response.data;
+}
 
 export async function previewActivitySeries(campusId: string, input: CreateActivitySeriesInput, official: boolean, signal?: AbortSignal): Promise<ActivityRecurrencePreview> {
   const response = await authenticatedEnvelopeRequest<ActivityRecurrencePreview>(official ? '/api/v1/activities/series/official/preview' : '/api/v1/activities/series/preview', {
