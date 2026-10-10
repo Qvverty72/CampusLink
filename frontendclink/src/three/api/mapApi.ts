@@ -3,6 +3,7 @@ import type {
   BuildingId,
   FloorDefinition,
   FloorMeshConfig,
+  PointOfInterestDefinition,
 } from '@/three/types/map';
 
 
@@ -25,7 +26,7 @@ interface ApiFloor {
     scale: ApiVector3;
   };
   subMeshes: string[];
-  pois: unknown[];
+  pois?: PointOfInterestDefinition[];
 }
 
 interface ApiBuilding {
@@ -212,6 +213,26 @@ export async function fetchActiveCampusMap(campusId: string, accessToken: string
         meshName: floor.meshName,
         name: floor.name,
         description: floor.description,
+        // Solo los puntos vigentes de este piso llegan a la consulta del modal.
+        pois: (floor.pois ?? [])
+          .filter((poi) => poi.isVisible === true && !poi.deletedAt)
+          .map((poi) => {
+            const [x, y, z] = parseVector3(
+              [poi.position.x, poi.position.y, poi.position.z],
+              `${floor.meshName}.pois.${poi.poiKey}.position`
+            );
+
+            return {
+              poiKey: poi.poiKey,
+              name: poi.name,
+              type: poi.type,
+              icon: poi.icon,
+              description: poi.description,
+              position: { x, y, z },
+              isFixed: poi.isFixed,
+              isVisible: poi.isVisible,
+            };
+          }),
       };
     }
   }

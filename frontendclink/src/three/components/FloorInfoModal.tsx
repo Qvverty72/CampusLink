@@ -1,5 +1,5 @@
 /**
- * Overlay React Native que presenta metadata del piso seleccionado.
+ * Overlay React Native que presenta metadata y POI vigentes del piso seleccionado.
  *
  * Vive fuera del Canvas: no necesita convertir texto/botones a objetos 3D y puede
  * usar accesibilidad y navegación nativas. Resuelve el ID del store contra la
@@ -12,10 +12,23 @@ import {
   Text,
   TouchableOpacity,
   Modal,
+  ScrollView,
   StyleSheet,
 } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
 import { useMapDataStore } from '@/three/store/mapDataStore';
+
+const POI_TYPE_LABELS: Record<string, string> = {
+  AUDITORIUM: 'Auditorio',
+  CAFETERIA: 'Cafetería',
+  LIBRARY: 'Biblioteca',
+  CHAPEL: 'Capilla',
+  LAB: 'Laboratorio',
+  OFFICE: 'Oficina',
+  SPORTS: 'Deportes',
+  SERVICE: 'Servicio',
+  OTHER: 'Otro',
+};
 
 export function FloorInfoModal() {
   const mapData = useMapDataStore((s) => s.data);
@@ -38,6 +51,10 @@ export function FloorInfoModal() {
     return null;
   }
 
+  const pois = (floor.pois ?? []).filter(
+    (poi) => poi.isVisible === true && !poi.deletedAt
+  );
+
   return (
     <Modal
       visible={isFloorModalOpen}
@@ -55,6 +72,8 @@ export function FloorInfoModal() {
             </View>
             <TouchableOpacity
               onPress={closeFloorModal}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar información del piso"
               style={styles.closeButton}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
@@ -66,7 +85,7 @@ export function FloorInfoModal() {
           <View style={styles.divider} />
 
           {/* Content */}
-          <View style={styles.content}>
+          <ScrollView style={styles.scrollContent} contentContainerStyle={styles.content}>
             <Text style={styles.description}>{floor.description}</Text>
 
             <View style={styles.infoRow}>
@@ -83,10 +102,33 @@ export function FloorInfoModal() {
               <Text style={styles.infoLabel}>ID</Text>
               <Text style={styles.infoValue}>{floor.meshName}</Text>
             </View>
-          </View>
+
+            <View style={styles.poiSection}>
+              <Text accessibilityRole="header" style={styles.sectionTitle}>
+                Puntos de interés ({pois.length})
+              </Text>
+              {pois.length === 0 ? (
+                <Text style={styles.emptyMessage}>
+                  Este piso no tiene puntos de interés vigentes.
+                </Text>
+              ) : (
+                pois.map((poi) => (
+                  <View key={poi.poiKey} style={styles.poiCard}>
+                    <Text style={styles.poiName}>{poi.name}</Text>
+                    <Text style={styles.poiType}>
+                      {POI_TYPE_LABELS[poi.type] ?? poi.type}
+                    </Text>
+                    {poi.description?.trim() ? (
+                      <Text style={styles.poiDescription}>{poi.description}</Text>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </View>
+          </ScrollView>
 
           {/* Footer */}
-          <TouchableOpacity onPress={closeFloorModal} style={styles.footerButton}>
+          <TouchableOpacity onPress={closeFloorModal} accessibilityRole="button" style={styles.footerButton}>
             <Text style={styles.footerButtonText}>Cerrar</Text>
           </TouchableOpacity>
         </View>
@@ -110,6 +152,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     maxWidth: 400,
+    maxHeight: '90%',
     paddingVertical: 20,
     paddingHorizontal: 24,
     // Shadow
@@ -157,8 +200,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8E8ED',
     marginVertical: 16,
   },
-  content: {
+  scrollContent: {
+    flexShrink: 1,
     marginBottom: 20,
+  },
+  content: {
+    paddingBottom: 4,
   },
   description: {
     fontSize: 15,
@@ -180,9 +227,49 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   infoValue: {
+    flexShrink: 1,
+    marginLeft: 12,
+    textAlign: 'right',
     fontSize: 14,
     fontWeight: '600',
     color: '#1A1A2E',
+  },
+  poiSection: {
+    marginTop: 20,
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A2E',
+  },
+  emptyMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#666',
+  },
+  poiCard: {
+    backgroundColor: '#F7F9FC',
+    borderWidth: 1,
+    borderColor: '#E8E8ED',
+    borderRadius: 12,
+    padding: 14,
+    gap: 6,
+  },
+  poiName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1A1A2E',
+  },
+  poiType: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4A90D9',
+  },
+  poiDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#333',
   },
   footerButton: {
     backgroundColor: '#4A90D9',
