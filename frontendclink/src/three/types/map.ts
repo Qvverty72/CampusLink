@@ -26,6 +26,8 @@ export interface PointOfInterestDefinition {
   type: string;
   icon: string;
   description?: string | null;
+  /** Nombres de archivo empaquetados en assets/images/poimages; no rutas del dispositivo. */
+  imageKeys?: string[];
   /** Coordenadas relativas al piso; conserva el vínculo espacial del documento. */
   position: { x: number; y: number; z: number };
   isFixed: boolean;

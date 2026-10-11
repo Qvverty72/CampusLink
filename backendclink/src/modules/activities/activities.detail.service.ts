@@ -47,6 +47,8 @@ export async function getActivityDetail(auth: VerifiedAuthConnection, activityId
   const category = typeof document.category === 'string' ? document.category.trim() : undefined;
   const tags = Array.isArray(document.tags) ? document.tags.filter(tag => typeof tag === 'string' && tag.trim()).map(tag => tag.trim()) : [];
   return { ...activity, organizer: organizer?.name?.trim() ? { name: organizer.name.trim() } : null,
+    ...(Number.isSafeInteger(document.participantCount) && document.participantCount >= 0
+      ? { participantCount: document.participantCount } : {}),
     ...(document.createdByUserId === auth.userId && Number.isSafeInteger(document.editRevision ?? 0) && (document.editRevision ?? 0) >= 0
       ? { editing: { revision: document.editRevision ?? 0, canEditUpcoming: !!activity.series && document.startAt > now } } : {}),
     participation: { status, canJoin: status !== 'JOINED' },

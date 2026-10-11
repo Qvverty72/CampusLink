@@ -4,13 +4,14 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { createCommunityActivity, createOfficialEvent, previewActivitySeries, createActivitySeries } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityLocationQuery } from '../types/activity';
-import { validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
+import { ACTIVITY_DESCRIPTION_OPTIONS, validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
 import { ActivityFields } from './ActivityFields';
+import { ActivityDateTimeField } from './ActivityDateTimeField';
 import { RECURRENCE_LABELS, recurrenceDraftRule, type ActivityRecurrenceRule, type ActivityRecurrencePreview } from '../types/recurrence';
 
-export function CreateActivityForm({ locations, initialLocation, onCancel, onCreated, official = false }: {
+export function CreateActivityForm({ locations, initialLocation, onCreated, official = false }: {
   locations: ActivityLocationOption[]; initialLocation: ActivityLocationQuery;
-  onCancel: () => void; onCreated: (activity: ActivityDetail) => void; official?: boolean;
+  onCreated: (activity: ActivityDetail) => void; official?: boolean;
 }) {
   const { identity, refreshIdentity } = useAuth();
   const [draft, setDraft] = useState<ActivityDraft>({ title: '', description: '', startDate: '', startTime: '',
@@ -33,6 +34,7 @@ export function CreateActivityForm({ locations, initialLocation, onCancel, onCre
   };
   const publish = async (previewOnly = false) => {
     if (request.current || !identity) return;
+    if (!ACTIVITY_DESCRIPTION_OPTIONS.includes(draft.description)) { setError('Selecciona una descripción para la actividad.'); return; }
     const parsed = validateActivityDraft(draft, locations);
     if (parsed.error) { setError(parsed.error); return; }
     const recurrence = recurring ? recurrenceDraftRule(frequency, interval, until, excludedDates, timeZone) : null;
@@ -79,7 +81,7 @@ export function CreateActivityForm({ locations, initialLocation, onCancel, onCre
     <Text style={styles.text}>{official ? 'Se publicará como evento oficial de tu campus. Serás el primer participante.'
       : 'Se publicará en tu campus. Serás organizador y primer participante.'}</Text>
     <ActivityFields draft={draft} change={change} disabled={submitting} locations={locations}
-      organizer={identity?.profile.nombre_completo} firstOccurrence={recurring} />
+      organizer={identity?.profile.nombre_completo} firstOccurrence={recurring} creationLocation={initialLocation} />
     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: recurring, disabled: submitting }} disabled={submitting}
       onPress={() => recurrenceChange(() => setRecurring(value => !value))} style={styles.choice}>
       <Text style={styles.label}>{recurring ? '✓ ' : ''}Repetir como serie</Text>
@@ -96,9 +98,8 @@ export function CreateActivityForm({ locations, initialLocation, onCancel, onCre
       <TextInput accessibilityLabel={units.label} keyboardType="number-pad" value={interval} maxLength={2} editable={!submitting}
         onChangeText={value => recurrenceChange(() => setInterval(value))} style={styles.input} />
       <Text style={styles.text}>1 = cada {units.single}; 2 = cada dos {units.plural}.</Text>
-      <Text style={styles.label}>Repetir hasta el</Text>
-      <TextInput accessibilityLabel="Repetir hasta el" placeholder="DD/MM/AAAA" value={until} maxLength={10} editable={!submitting}
-        onChangeText={value => recurrenceChange(() => setUntil(value))} style={styles.input} />
+      <ActivityDateTimeField label="Repetir hasta el" mode="date" value={until} disabled={submitting}
+        onChange={value => recurrenceChange(() => setUntil(value))} />
       <Text style={styles.text}>No se crearán actividades que comiencen después de esta fecha. Ese día se incluye si coincide con la repetición.</Text>
       <Text style={styles.label}>Fechas que no se realizarán (opcional)</Text>
       <Text style={styles.text}>Permite saltar una actividad, por ejemplo, por un feriado. Déjalo vacío si se realizarán todas. Separa las fechas por comas.</Text>
@@ -123,7 +124,6 @@ export function CreateActivityForm({ locations, initialLocation, onCancel, onCre
       {submitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.selectedText}>{recurring ? `Publicar serie${preview ? ` (${preview.occurrences.length})` : ''}`
         : official ? 'Publicar evento oficial' : 'Publicar actividad'}</Text>}
     </Pressable>
-    <Pressable accessibilityRole="button" disabled={submitting} onPress={onCancel} style={styles.cancel}><Text style={styles.text}>Volver a las actividades</Text></Pressable>
   </View>;
 }
 

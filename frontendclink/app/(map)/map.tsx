@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 
 import { CampusMapViewport } from '@/three/components/CampusMapViewport';
-import { FloorInfoModal } from '@/three/components/FloorInfoModal';
+import { FloorInfoModal } from '@/features/activities/components/FloorInfoModal';
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useAuth } from '@/features/auth/AuthProvider';

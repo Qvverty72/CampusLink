@@ -89,7 +89,9 @@ async function requestActivityDetail(campusId: string, activityId: string, regis
     `/api/v1/activities/${activityId}${register ? '/participation' : ''}`,
     { method: register ? 'PUT' : 'GET', signal },
   );
-  if (!response.data || response.data.id !== activityId.toLowerCase() || response.data.campusId !== campusId) {
+  if (!response.data || response.data.id !== activityId.toLowerCase() || response.data.campusId !== campusId
+    || (response.data.participantCount !== undefined
+      && (!Number.isSafeInteger(response.data.participantCount) || response.data.participantCount < 0))) {
     throw new Error('La actividad recibida no corresponde a esta consulta.');
   }
   return response.data;

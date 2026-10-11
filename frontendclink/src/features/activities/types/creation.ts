@@ -1,5 +1,11 @@
 export const ACTIVITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;
 
+/** Fixed descriptions approved for new community activities and official events. */
+export const ACTIVITY_DESCRIPTION_OPTIONS: readonly string[] = [
+  'Grupo de estudio', 'Actividad de deporte', 'Taller', 'Charla o conferencia',
+  'Actividad cultural', 'Encuentro comunitario', 'Jornada informativa',
+];
+
 export interface CreateActivityInput {
   title: string; description: string; startAt: string; endAt: string;
   location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };

@@ -114,6 +114,8 @@ export interface ActivityParticipationDocument {
 }
 
 export interface ActivityDetailDto extends ActivityDto {
+  /** Omitted when legacy data has no valid stored count. */
+  participantCount?: number;
   editing?: { revision: number; canEditUpcoming: boolean };
   organizer: { name: string } | null;
   participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean };

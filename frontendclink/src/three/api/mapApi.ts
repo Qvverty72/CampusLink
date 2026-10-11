@@ -228,6 +228,10 @@ export async function fetchActiveCampusMap(campusId: string, accessToken: string
               type: poi.type,
               icon: poi.icon,
               description: poi.description,
+              imageKeys: Array.isArray(poi.imageKeys)
+                ? [...new Set(poi.imageKeys.filter((key): key is string => typeof key === 'string')
+                  .map(key => key.trim()).filter(Boolean))]
+                : [],
               position: { x, y, z },
               isFixed: poi.isFixed,
               isVisible: poi.isVisible,

@@ -74,6 +74,19 @@ test('detail resolves organizer and data location without requiring POI or optio
   assert.deepEqual(withPoi.tags, ['Música']);
 });
 
+test('detail exposes only a valid stored participant count without participant identities or invented zero', async () => {
+  for (const participantCount of [0, 1, 37, Number.MAX_SAFE_INTEGER]) {
+    const detail = await getActivityDetail(auth, id.toHexString(), deps(document({ participantCount })));
+    assert.equal(detail.participantCount, participantCount);
+    assert.equal('participants' in detail, false);
+    assert.equal('userId' in detail, false);
+  }
+  for (const participantCount of [undefined, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    const detail = await getActivityDetail(auth, id.toHexString(), deps(document({ participantCount })));
+    assert.equal('participantCount' in detail, false);
+  }
+});
+
 test('direct detail cannot bypass publication, campus, expiry, malformed dates or inactive location', async () => {
   for (const patch of [
     { campusId: creatorId }, { status: 'HIDDEN' }, { status: 'CANCELLED' }, { visibility: 'PRIVATE' },

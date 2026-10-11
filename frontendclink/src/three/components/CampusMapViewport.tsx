@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { BuildingCloseButton } from '@/three/components/BuildingCloseButton';
 import { CampusMap } from '@/three/components/CampusMap';
 import type { ActivitiesState } from '@/features/activities/hooks/useLocationActivities';
-import { MapActivitiesPanel } from './MapActivitiesPanel';
+import { MapActivitiesPanel } from '@/features/activities/components/MapActivitiesPanel';
 
 /**
  * Superpone controles React Native sobre el Canvas sin introducirlos en la escena.

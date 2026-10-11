@@ -82,8 +82,24 @@ export function useActivityDetail(activityId: string) {
       } else {
         const left = await withdrawActivityParticipation(campusId, activityId, abort.signal);
         if (!abort.signal.aborted) setState(current => current.key === key ? { ...current, ownParticipation: left,
-          detail: current.detail ? { ...current.detail, participation: { status: left.status, canJoin: left.status !== 'JOINED' } } : null,
-          pendingParticipation: null, participationError: null } : current);
+          detail: current.detail ? { ...current.detail, participantCount: undefined,
+            participation: { status: left.status, canJoin: left.status !== 'JOINED' } } : null,
+          pendingParticipation: detail ? 'LEFT' : null, participationError: null } : current);
+        // DELETE confirms own state, not the aggregate. Read the stored count again.
+        if (detail && !abort.signal.aborted) {
+          try {
+            const updated = await fetchActivityDetail(campusId, activityId, abort.signal);
+            if (!abort.signal.aborted) setState(current => current.key === key
+              ? { ...current, detail: updated, pendingParticipation: null } : current);
+          } catch (reason) {
+            if (abort.signal.aborted) return;
+            const unavailable = reason instanceof AuthApiError && reason.status === 404;
+            setState(current => current.key === key ? { ...current, pendingParticipation: null,
+              ...(unavailable ? { detail: null, error: unavailableMessage } : {}),
+              participationError: unavailable ? null : 'Tu retiro fue confirmado. No se pudo actualizar el contador; actualiza la ficha.' } : current);
+            if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
+          }
+        }
       }
     } catch (reason) {
       if (abort.signal.aborted) return;
