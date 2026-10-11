@@ -5,6 +5,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { ActivityDetail } from '@/features/activities/components/ActivityDetail';
+import { ActivityRefreshScrollView } from '@/features/activities/components/ActivityRefreshScrollView';
 import { fetchNotifications, updateNotification, type ActivityNotification } from './notifications';
 
 export function NotificationsScreen() {
@@ -74,10 +75,10 @@ function NotificationsContent() {
       {cursor ? <Pressable disabled={busy} accessibilityRole="button" onPress={() => { void load(cursor); }}><Text style={[styles.link, styles.headerLink]}>Cargar más</Text></Pressable> : null}
     </ScrollView>
     <Modal visible={!!activityId} transparent animationType="slide" onRequestClose={() => setActivityId(null)}>
-      <View style={styles.overlay}><ScrollView style={styles.modal} contentContainerStyle={{ padding: 20 }}>
+      <View style={styles.overlay}><ActivityRefreshScrollView style={styles.modal} contentContainerStyle={{ padding: 20 }}>
         {activityId ? <ActivityDetail key={activityId} activityId={activityId} onBack={() => setActivityId(null)}
           onSelectOccurrence={setActivityId} /> : null}
-      </ScrollView></View>
+      </ActivityRefreshScrollView></View>
     </Modal>
     <BottomNavigationBar activeItemId="home" />
   </View>;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity, type ActivityDetail as ActivityDetailData } from '../types/activity';
@@ -9,11 +9,32 @@ import { ReportActivityForm } from '@/features/reports/components/ReportActivity
 import { ActivityParticipationControls } from './ActivityParticipationControls';
 import { ActivityParticipants } from './ActivityParticipants';
 import { ActivityContentTransition } from './ActivityContentTransition';
+import { useActivityRefresh } from './ActivityRefreshScrollView';
+
+const DESCRIPTION_PREVIEW_LENGTH = 240;
+
+/** Keep expansion scoped to the current description through the caller's key. */
+function ActivityDescription({ description }: { description: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const characters = Array.from(description);
+  const canExpand = characters.length > DESCRIPTION_PREVIEW_LENGTH;
+  const collapsed = canExpand && !expanded;
+  return <View style={styles.descriptionBlock}>
+    <Text style={styles.description} numberOfLines={collapsed ? 4 : undefined} ellipsizeMode="tail">
+      {collapsed ? `${characters.slice(0, DESCRIPTION_PREVIEW_LENGTH).join('').trimEnd()}…` : description}
+    </Text>
+    {canExpand ? <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded }}
+      aria-expanded={expanded} onPress={() => setExpanded(value => !value)} style={styles.descriptionToggle}>
+      <Text style={styles.link}>{expanded ? 'Ver menos' : 'Ver más'}</Text>
+    </TouchableOpacity> : null}
+  </View>;
+}
 
 /** The full sheet, edit and report stay inside the current native modal. */
-export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurrence, locations, onEdited, onDeleted }: {
+export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurrence, locations, onEdited, onDeleted, onEditOpen }: {
   activityId: string; onBack: () => void; onExplore?: (activity: Activity) => void; onSelectOccurrence?: (activityId: string) => void;
   locations?: ActivityLocationOption[]; onEdited?: (count: number) => void; onDeleted?: () => void;
+  onEditOpen?: () => void;
 }) {
   const { detail, ownParticipation, isLoading, error, refresh, join, leave, isUpdatingParticipation,
     pendingParticipation, participationError, remove, isDeleting, deletionError } = useActivityDetail(activityId);
@@ -26,6 +47,13 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState<ActivityDetailData | null>(null);
   const [reporting, setReporting] = useState<{ id: string; title: string } | null>(null);
+  const editingOpen = Boolean(editing && locations);
+  useLayoutEffect(() => {
+    if (editingOpen) onEditOpen?.();
+  }, [editingOpen, onEditOpen]);
+  const refreshSheet = useCallback(() => { setConfirmDelete(false); refresh(); }, [refresh]);
+  useActivityRefresh(refreshSheet, isLoading,
+    !busy && !isLoading && !editingOpen && !reporting && !showSeries);
   if (reporting?.id === activityId) return <ActivityContentTransition transitionKey="report">
     <ReportActivityForm key={activityId} activityId={activityId}
       title={reporting.title} onBack={() => { setReporting(null); refresh(); }} />
@@ -49,12 +77,12 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
         : error ? <>
           <Text accessibilityRole="alert" style={styles.text}>{error}</Text>
           {ownParticipation ? participationControls(ownParticipation.status, false) : null}
-          <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={refresh} style={styles.action}><Text style={styles.link}>Actualizar ficha</Text></TouchableOpacity>
+          <Text style={styles.text}>Desliza hacia abajo desde el inicio para reintentar.</Text>
         </> : detail ? <>
           <View style={styles.header}>
             <Text accessibilityRole="header" style={styles.title}>{detail.title}</Text>
             <Text style={styles.location}>{[location, detail.location.poiName, detail.location.customLabel].filter(Boolean).join(' · ')}</Text>
-            <Text style={styles.description}>{detail.description}</Text>
+            <ActivityDescription key={`${detail.id}:${detail.description}`} description={detail.description} />
             <Text style={[styles.type, { color: ACTIVITY_COLORS[detail.type] }]}>{ACTIVITY_LABELS[detail.type]} · Activa</Text>
             <Text style={styles.organizer}>Organizador: {detail.organizer?.name ?? 'No disponible'}</Text>
           </View>
@@ -105,9 +133,6 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
             {onExplore ? <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => onExplore(detail)} style={styles.action}>
               <Text style={styles.link}>Explorar este piso</Text>
             </TouchableOpacity> : null}
-            <TouchableOpacity accessibilityRole="button" onPress={() => { setConfirmDelete(false); refresh(); }} disabled={busy} style={styles.action}>
-              <Text style={styles.link}>Actualizar ficha</Text>
-            </TouchableOpacity>
           </View>
         </> : null}
     </View>
@@ -118,7 +143,9 @@ const styles = StyleSheet.create({
   content: { gap: 18, paddingVertical: 4 }, header: { alignItems: 'center', gap: 10 },
   title: { width: '100%', fontSize: 23, lineHeight: 30, fontWeight: '700', color: '#0F172A', textAlign: 'center' },
   location: { fontSize: 15, lineHeight: 22, color: '#64748B', textAlign: 'center' },
+  descriptionBlock: { width: '100%', gap: 4 },
   description: { fontSize: 15, color: '#334155', lineHeight: 23, textAlign: 'center' },
+  descriptionToggle: { minHeight: 44, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
   type: { fontWeight: '600', textAlign: 'center' }, organizer: { fontSize: 13, color: '#64748B', textAlign: 'center' },
   dates: { flexDirection: 'row', gap: 12 }, date: { flex: 1, minWidth: 0, padding: 12, gap: 5, backgroundColor: '#F8FAFC', borderRadius: 12 },
   dateText: { fontSize: 14, color: '#334155', lineHeight: 22 },

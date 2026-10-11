@@ -4,7 +4,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { createCommunityActivity, createOfficialEvent, previewActivitySeries, createActivitySeries } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityLocationQuery } from '../types/activity';
-import { ACTIVITY_DESCRIPTION_OPTIONS, validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
+import { isActivityDescriptionAllowed, validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
 import { ActivityFields } from './ActivityFields';
 import { ActivityDateTimeField } from './ActivityDateTimeField';
 import { RECURRENCE_LABELS, recurrenceDraftRule, type ActivityRecurrenceRule, type ActivityRecurrencePreview } from '../types/recurrence';
@@ -14,6 +14,7 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
   onCreated: (activity: ActivityDetail) => void; official?: boolean;
 }) {
   const { identity, refreshIdentity } = useAuth();
+  const allowCustomDescription = identity?.capabilities.officialActivities === true;
   const [draft, setDraft] = useState<ActivityDraft>({ title: '', description: '', startDate: '', startTime: '',
     endDate: '', endTime: '', buildingKey: initialLocation.buildingKey ?? '', floorKey: initialLocation.floorKey ?? '',
     poiKey: initialLocation.poiKey ?? '', customLabel: '' });
@@ -34,7 +35,7 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
   };
   const publish = async (previewOnly = false) => {
     if (request.current || !identity) return;
-    if (!ACTIVITY_DESCRIPTION_OPTIONS.includes(draft.description)) { setError('Selecciona una descripción para la actividad.'); return; }
+    if (!isActivityDescriptionAllowed(draft.description, allowCustomDescription)) { setError('Selecciona una descripción para la actividad.'); return; }
     const parsed = validateActivityDraft(draft, locations);
     if (parsed.error) { setError(parsed.error); return; }
     const recurrence = recurring ? recurrenceDraftRule(frequency, interval, until, excludedDates, timeZone) : null;
@@ -81,7 +82,8 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
     <Text style={styles.text}>{official ? 'Se publicará como evento oficial de tu campus. Serás el primer participante.'
       : 'Se publicará en tu campus. Serás organizador y primer participante.'}</Text>
     <ActivityFields draft={draft} change={change} disabled={submitting} locations={locations}
-      organizer={identity?.profile.nombre_completo} firstOccurrence={recurring} creationLocation={initialLocation} />
+      organizer={identity?.profile.nombre_completo} firstOccurrence={recurring} creationLocation={initialLocation}
+      allowCustomDescription={allowCustomDescription} />
     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: recurring, disabled: submitting }} disabled={submitting}
       onPress={() => recurrenceChange(() => setRecurring(value => !value))} style={styles.choice}>
       <Text style={styles.label}>{recurring ? '✓ ' : ''}Repetir como serie</Text>

@@ -1,6 +1,6 @@
 /** Native floor information and activities browser; map stores supply selection only. */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { activityLocations } from '@/three/api/activityLocations';
@@ -10,13 +10,10 @@ import { PointOfInterestDetail } from '@/three/components/PointOfInterestDetail'
 import { PointOfInterestBanner } from '@/three/components/PointOfInterestBanner';
 import { LocationActivities } from './LocationActivities';
 import { ActivityContentTransition } from './ActivityContentTransition';
+import { ActivityRefreshRegistration, ActivityRefreshScrollView } from './ActivityRefreshScrollView';
 import type { ActivitiesState } from '../hooks/useLocationActivities';
-import { ACTIVITY_COLORS, filterLocationActivities, type Activity } from '../types/activity';
-
-const ACTIVITY_TYPES = ['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY'] as const;
-const TYPE_LABELS = {
-  OFFICIAL_EVENT: 'Eventos oficiales', COMMUNITY_ACTIVITY: 'Actividades comunitarias',
-};
+import { filterLocationActivities, type Activity } from '../types/activity';
+import { ACTIVITY_TYPES, ActivityTypeCounter } from './ActivityTypeCounter';
 
 export function FloorInfoModal({ activities }: { activities: ActivitiesState }) {
   const map = useMapDataStore(state => state.data);
@@ -44,6 +41,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
   const [selectedPoiKey, setSelectedPoiKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const scroll = useRef<ScrollView>(null);
+  const resetScroll = useCallback(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, []);
   const query = { buildingKey: floor.buildingId, floorKey: floor.id };
   const entries = filterLocationActivities(activities.activities, query);
   const hasCounts = !activities.isLoading && !activities.error;
@@ -54,7 +52,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
   useEffect(() => {
     if (selectedPoiKey && !selectedPoi) setSelectedPoiKey(null);
   }, [selectedPoiKey, selectedPoi]);
-  useLayoutEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [viewKey, detailOpen]);
+  useLayoutEffect(resetScroll, [viewKey, detailOpen, resetScroll]);
 
   return <View style={styles.card}>
     <View style={detailOpen ? styles.detailHeader : styles.header}>
@@ -67,36 +65,28 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
         <Text style={styles.closeIcon}>✕</Text>
       </Pressable>
     </View>
-    <ScrollView ref={scroll} style={styles.scroll}
+    <ActivityRefreshScrollView ref={scroll} style={styles.scroll}
       contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <ActivityContentTransition transitionKey={viewKey} style={styles.transitionContent}>
       {selectedPoi ? <PointOfInterestDetail key={selectedPoi.poiKey} poi={selectedPoi}
         buildingName={map.buildingConfigs[floor.buildingId].name} floorName={floor.name}
         onBack={() => setSelectedPoiKey(null)} /> : activityType ? <>
         <LocationActivities key={activityType} state={activities} query={query}
-          activityType={activityType} locations={activityLocations(map)} onBackToFloorInfo={() => setActivityType(null)} onDetailVisibilityChange={setDetailOpen} />
+          activityType={activityType} locations={activityLocations(map)} onBackToFloorInfo={() => setActivityType(null)}
+          onDetailVisibilityChange={setDetailOpen} onEditOpen={resetScroll} onPageChange={resetScroll} />
       </> : <>
+        <ActivityRefreshRegistration onRefresh={activities.refresh} refreshing={activities.isLoading}
+          enabled={!activities.isLoading} label="las actividades del piso" />
         <View style={styles.overview}>
           <View style={styles.descriptionColumn}>
             <Text accessibilityRole="header" style={styles.sectionTitle}>Descripción del piso</Text>
             <Text style={styles.description}>{floor.description?.trim() || 'Este piso aún no tiene una descripción.'}</Text>
           </View>
           <View style={styles.counters}>
-            {ACTIVITY_TYPES.map(type => {
-              const count = entries.filter(activity => activity.type === type).length;
-              const color = ACTIVITY_COLORS[type];
-              return <TouchableOpacity key={type} accessibilityRole="button" activeOpacity={0.75}
-                accessibilityLabel={`${TYPE_LABELS[type]}${hasCounts ? `: ${count}` : ''}. Ver actividades del piso`}
-                onPress={() => { setSelectedPoiKey(null); activities.refresh(); setActivityType(type); }}
-                style={styles.counter}>
-                <View style={[styles.countBadge, { borderColor: color }]}>
-                  {activities.isLoading ? <ActivityIndicator color={color} />
-                    : <Text style={[styles.count, { color }]}>{hasCounts ? count : '—'}</Text>}
-                </View>
-                <Text style={[styles.counterLabel, { color }]}>{TYPE_LABELS[type]}</Text>
-                <Text style={styles.counterHint}>Ver actividades</Text>
-              </TouchableOpacity>;
-            })}
+            {ACTIVITY_TYPES.map(type => <ActivityTypeCounter key={type} type={type}
+              count={hasCounts ? entries.filter(activity => activity.type === type).length : null}
+              loading={activities.isLoading} scope="del piso"
+              onPress={() => { setSelectedPoiKey(null); if (!activities.isLoading) activities.refresh(); setActivityType(type); }} />)}
           </View>
         </View>
         {activities.error ? <View style={styles.errorBox}>
@@ -114,7 +104,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
         </View>
       </>}
       </ActivityContentTransition>
-    </ScrollView>
+    </ActivityRefreshScrollView>
   </View>;
 }
 
@@ -141,11 +131,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
   description: { fontSize: 14, lineHeight: 22, color: '#475569' },
   counters: { flexDirection: 'row', flexGrow: 1, flexBasis: 240, gap: 12 },
-  counter: { flex: 1, minWidth: 0, alignItems: 'center', gap: 8, padding: 10, borderRadius: 16, backgroundColor: '#F8FAFC' },
-  countBadge: { alignSelf: 'center', width: 48, height: 48, borderRadius: 24, borderWidth: 2, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  count: { fontSize: 20, fontWeight: '700' },
-  counterLabel: { width: '100%', minHeight: 40, fontSize: 14, lineHeight: 20, fontWeight: '600', textAlign: 'center' },
-  counterHint: { width: '100%', fontSize: 12, color: '#64748B', textAlign: 'center' },
   errorBox: { gap: 8, borderRadius: 12, backgroundColor: '#FFF7ED', padding: 14 },
   retryButton: { paddingVertical: 8 },
   poiSection: { gap: 12 },

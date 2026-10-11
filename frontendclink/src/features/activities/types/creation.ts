@@ -1,10 +1,15 @@
 export const ACTIVITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;
 
-/** Fixed descriptions approved for new community activities and official events. */
+/** Form choices for accounts without the current campus's official publication capability. */
 export const ACTIVITY_DESCRIPTION_OPTIONS: readonly string[] = [
   'Grupo de estudio', 'Actividad de deporte', 'Taller', 'Charla o conferencia',
   'Actividad cultural', 'Encuentro comunitario', 'Jornada informativa',
 ];
+
+/** UI selection policy; existing text can be kept after the capability is lost. */
+export function isActivityDescriptionAllowed(description: string, allowCustom: boolean, originalDescription?: string): boolean {
+  return allowCustom || ACTIVITY_DESCRIPTION_OPTIONS.includes(description) || description === originalDescription;
+}
 
 export interface CreateActivityInput {
   title: string; description: string; startAt: string; endAt: string;
