@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ActivitiesState } from '../hooks/useLocationActivities';
 import { ACTIVITY_COLORS, filterLocationActivities, type Activity, type ActivityLocationQuery } from '../types/activity';
@@ -14,6 +14,7 @@ export function LocationActivities(props: {
   locations?: ActivityLocationOption[];
   activityType?: Activity['type'];
   onBackToFloorInfo?: () => void;
+  onDetailVisibilityChange?: (visible: boolean) => void;
 }) {
   const { identity, session } = useAuth();
   // Remount the browser/form on campus or session change, clearing drafts and obsolete responses.
@@ -22,15 +23,20 @@ export function LocationActivities(props: {
     canPublishOfficial={!!identity?.capabilities.officialActivities} />;
 }
 
-function LocationActivitiesContent({ state, query = {}, onExplore, locations, canCreate, canPublishOfficial, activityType, onBackToFloorInfo }: {
+function LocationActivitiesContent({ state, query = {}, onExplore, locations, canCreate, canPublishOfficial, activityType, onBackToFloorInfo, onDetailVisibilityChange }: {
   state: ActivitiesState; query?: ActivityLocationQuery; onExplore?: (activity: Activity) => void;
   locations?: ActivityLocationOption[]; canCreate: boolean; canPublishOfficial: boolean;
   activityType?: Activity['type'];
   onBackToFloorInfo?: () => void;
+  onDetailVisibilityChange?: (visible: boolean) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState<'COMMUNITY_ACTIVITY' | 'OFFICIAL_EVENT' | null>(null);
   const [published, setPublished] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    onDetailVisibilityChange?.(selectedId !== null);
+    return () => onDetailVisibilityChange?.(false);
+  }, [selectedId, onDetailVisibilityChange]);
   const transition = (key: string, content: ReactNode) =>
     <ActivityContentTransition transitionKey={key}>{content}</ActivityContentTransition>;
   const floorBack = onBackToFloorInfo ? <Pressable accessibilityRole="button" onPress={onBackToFloorInfo} style={styles.backButton}>
@@ -48,11 +54,11 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
     </View>);
   }
   if (selectedId) return transition(`detail:${selectedId}`, <View>
-    {floorBack}
     {published ? <Text accessibilityRole="alert" style={styles.text}>{published}</Text> : null}
     <ActivityDetail key={selectedId} activityId={selectedId}
       locations={locations} onEdited={count => { setPublished(count ? `Cambios guardados en ${count} actividad(es). Tus inscripciones se conservan.` : 'La actividad ya tenía esos datos.'); state.refresh(); }}
       onSelectOccurrence={id => { setPublished(null); setSelectedId(id); }}
+      onDeleted={() => { setSelectedId(null); setPublished('Actividad eliminada.'); state.refresh(); }}
       onBack={() => { setSelectedId(null); setPublished(null); state.refresh(); }} onExplore={onExplore} />
   </View>);
   if (state.isLoading) return transition('loading', <View style={styles.section}>{floorBack}<ActivityIndicator /><Text style={styles.text}>Cargando actividades…</Text></View>);

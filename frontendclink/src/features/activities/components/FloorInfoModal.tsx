@@ -42,6 +42,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
 }) {
   const [activityType, setActivityType] = useState<Activity['type'] | null>(null);
   const [selectedPoiKey, setSelectedPoiKey] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const scroll = useRef<ScrollView>(null);
   const query = { buildingKey: floor.buildingId, floorKey: floor.id };
   const entries = filterLocationActivities(activities.activities, query);
@@ -53,16 +54,16 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
   useEffect(() => {
     if (selectedPoiKey && !selectedPoi) setSelectedPoiKey(null);
   }, [selectedPoiKey, selectedPoi]);
-  useLayoutEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [viewKey]);
+  useLayoutEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [viewKey, detailOpen]);
 
   return <View style={styles.card}>
-    <View style={styles.header}>
-      <View style={styles.headerText}>
+    <View style={detailOpen ? styles.detailHeader : styles.header}>
+      {!detailOpen ? <View style={styles.headerText}>
         <Text accessibilityRole="header" style={styles.title}>{selectedPoi ? 'Información del punto de interés' : activityType ? 'Detalle de actividades' : 'Información del piso'}</Text>
         <Text style={styles.subtitle}>{floor.name}</Text>
-      </View>
+      </View> : null}
       <Pressable onPress={onClose} accessibilityRole="button"
-        accessibilityLabel={selectedPoi ? 'Cerrar información del punto de interés' : 'Cerrar información del piso'} hitSlop={12} style={styles.closeButton}>
+        accessibilityLabel={detailOpen ? 'Cerrar ficha de actividad' : selectedPoi ? 'Cerrar información del punto de interés' : 'Cerrar información del piso'} hitSlop={12} style={styles.closeButton}>
         <Text style={styles.closeIcon}>✕</Text>
       </Pressable>
     </View>
@@ -73,7 +74,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
         buildingName={map.buildingConfigs[floor.buildingId].name} floorName={floor.name}
         onBack={() => setSelectedPoiKey(null)} /> : activityType ? <>
         <LocationActivities key={activityType} state={activities} query={query}
-          activityType={activityType} locations={activityLocations(map)} onBackToFloorInfo={() => setActivityType(null)} />
+          activityType={activityType} locations={activityLocations(map)} onBackToFloorInfo={() => setActivityType(null)} onDetailVisibilityChange={setDetailOpen} />
       </> : <>
         <View style={styles.overview}>
           <View style={styles.descriptionColumn}>
@@ -126,6 +127,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24, elevation: 10,
   },
   header: { paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  detailHeader: { height: 32 },
   headerText: { paddingHorizontal: 36, gap: 6 },
   title: { textAlign: 'center', fontSize: 22, fontWeight: '700', color: '#0F172A' },
   subtitle: { textAlign: 'center', fontSize: 14, color: '#64748B', lineHeight: 20 },

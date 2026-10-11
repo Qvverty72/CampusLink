@@ -123,7 +123,7 @@ test('repository pushes campus, publication, visibility, expiry and spatial filt
   try {
     const { findVisibleActivities } = await import('../src/modules/activities/activities.repository.js');
     await findVisibleActivities(campusId, { buildingKey: 'cabin01', floorKey: 'floor-data-1', poiKey: 'sala' }, now);
-    assert.deepEqual(captured[0], { campusId, status: 'ACTIVE', visibility: 'PUBLIC',
+    assert.deepEqual(captured[0], { campusId, status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,
       type: { $in: ['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'] }, endAt: { $gt: now },
       'location.buildingKey': 'cabin01', 'location.floorKey': 'floor-data-1', 'location.poiKey': 'sala' });
   } finally { dbMock.mock.restore(); }

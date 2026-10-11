@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ActivitiesState } from '@/features/activities/hooks/useLocationActivities';
 import { LocationActivities } from '@/features/activities/components/LocationActivities';
@@ -13,6 +13,9 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
   const buildingKey = useMapStore(value => value.selectedBuilding);
   const floorOpen = useMapStore(value => value.isFloorModalOpen);
   const [open, setOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const scroll = useRef<ScrollView>(null);
+  useLayoutEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [detailOpen]);
   useEffect(() => setOpen(false), [map?.campusId, buildingKey, floorOpen]);
   const activities = filterLocationActivities(state.activities, { buildingKey: buildingKey ?? undefined });
   const hasSummary = !state.isLoading && !state.error;
@@ -42,19 +45,19 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
     </Pressable>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.overlay}><View style={styles.card}>
-        <View style={styles.header}>
-          <Text accessibilityRole="header" style={styles.title}>
+        <View style={[styles.header, detailOpen && styles.detailHeader]}>
+          {!detailOpen ? <><Text accessibilityRole="header" style={styles.title}>
             Detalle de actividades
           </Text>
-          <Text style={styles.subtitle}>{buildingKey ? map.buildingConfigs[buildingKey]?.name : 'Actividades del campus'}</Text>
+          <Text style={styles.subtitle}>{buildingKey ? map.buildingConfigs[buildingKey]?.name : 'Actividades del campus'}</Text></> : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar actividades" hitSlop={12}
             onPress={() => setOpen(false)} style={styles.closeIconButton}>
             <Text style={styles.closeIcon}>✕</Text>
           </Pressable>
         </View>
-        <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scroll} style={styles.scroll} keyboardShouldPersistTaps="handled">
           {open ? <LocationActivities key={buildingKey ?? 'campus'} state={state}
-            query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} locations={activityLocations(map)} /> : null}
+            query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} locations={activityLocations(map)} onDetailVisibilityChange={setDetailOpen} /> : null}
         </ScrollView>
       </View></View>
     </Modal>
@@ -68,6 +71,7 @@ const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 980, height: '86%', maxHeight: '90%', padding: 20, borderRadius: 24, backgroundColor: '#FFFFFF' },
   subtitle: { marginTop: 8, color: '#64748B', fontSize: 14 },
   header: { paddingRight: 44 },
+  detailHeader: { height: 32 },
   closeIconButton: { position: 'absolute', right: 0, top: 0, width: 32, height: 32, borderRadius: 16,
     backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   closeIcon: { fontSize: 16, color: '#475569' },

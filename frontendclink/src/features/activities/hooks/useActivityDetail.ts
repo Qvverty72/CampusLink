@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
-import { fetchActivityDetail, fetchActivityParticipation, registerActivityParticipation, withdrawActivityParticipation } from '../api/activitiesApi';
+import { fetchActivityDetail, fetchActivityParticipation, registerActivityParticipation, withdrawActivityParticipation, deleteActivity } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityParticipation } from '../types/activity';
 
 interface DetailState {
@@ -12,6 +12,8 @@ interface DetailState {
   pendingParticipation: 'JOINED' | 'LEFT' | null;
   error: string | null;
   participationError: string | null;
+  pendingDeletion: boolean;
+  deletionError: string | null;
 }
 
 const unavailableMessage = 'Esta actividad ya no está disponible en el mapa.';
@@ -26,14 +28,14 @@ export function useActivityDetail(activityId: string) {
   const request = useRef<AbortController | null>(null);
   const mutation = useRef<AbortController | null>(null);
   const [state, setState] = useState<DetailState>({ key: '', detail: null, ownParticipation: null,
-    isLoading: false, pendingParticipation: null, error: null, participationError: null });
+    isLoading: false, pendingParticipation: null, error: null, participationError: null, pendingDeletion: false, deletionError: null });
 
   useEffect(() => {
     if (!campusId || !token) return;
     const abort = new AbortController();
     request.current = abort;
     const initial: DetailState = { key, detail: null, ownParticipation: null, isLoading: false,
-      pendingParticipation: null, error: null, participationError: null };
+      pendingParticipation: null, error: null, participationError: null, pendingDeletion: false, deletionError: null };
     setState({ ...initial, isLoading: true });
     void (async () => {
       try {
@@ -112,7 +114,32 @@ export function useActivityDetail(activityId: string) {
     } finally { if (mutation.current === abort) mutation.current = null; }
   };
 
+  const remove = async (): Promise<boolean> => {
+    const abort = request.current;
+    if (!campusId || !token || !abort || abort.signal.aborted || mutation.current === abort
+      || state.key !== key || !detail?.editing) return false;
+    mutation.current = abort;
+    setState(current => current.key === key ? { ...current, pendingDeletion: true, deletionError: null } : current);
+    try {
+      await deleteActivity(campusId, activityId, detail.editing.revision, abort.signal);
+      return !abort.signal.aborted;
+    } catch (reason) {
+      if (abort.signal.aborted) return false;
+      const conflict = reason instanceof AuthApiError && reason.status === 409;
+      setState(current => current.key === key ? { ...current, deletionError: conflict
+        ? 'La actividad cambió. Actualiza la ficha antes de eliminar.' : 'No se pudo confirmar la eliminación. Actualiza la ficha antes de reintentar.' } : current);
+      if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
+      if (reason instanceof AuthApiError && reason.status === 404) refresh();
+      return false;
+    } finally {
+      if (!abort.signal.aborted) setState(current => current.key === key ? { ...current, pendingDeletion: false } : current);
+      if (mutation.current === abort) mutation.current = null;
+    }
+  };
+
   return { detail, ownParticipation, isLoading: state.key !== key || state.isLoading,
+    isDeleting: state.key === key && state.pendingDeletion,
+    deletionError: state.key === key ? state.deletionError : null, remove,
     pendingParticipation: state.key === key ? state.pendingParticipation : null,
     isUpdatingParticipation: state.key === key && state.pendingParticipation !== null,
     error: state.key === key ? state.error : null,

@@ -5,7 +5,9 @@ import type { ActivityDocument, CreateActivityInput } from './activities.types.j
 export interface EditActivityInput extends CreateActivityInput {
   scope: 'ONE' | 'UPCOMING'; expectedRevision: number; previewHash?: string;
 }
-export interface ActivitySnapshot extends CreateActivityInput { type: string }
+export interface ActivitySnapshot extends Omit<CreateActivityInput, 'location'> {
+  type: string; status?: string; deletedAt?: Date; location: ActivityDocument['location'];
+}
 export interface ActivityEditChange { activityId: string; index?: number; revision: number;
   before: ActivitySnapshot; after: ActivitySnapshot; changedFields: string[] }
 export interface ActivityEditPreview {

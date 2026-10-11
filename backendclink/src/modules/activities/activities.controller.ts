@@ -12,6 +12,22 @@ import type { CreateActivitySeriesInput } from './activities.types.js';
 import { createActivitySeries, previewActivitySeries, getActivitySeries } from './activities.series.service.js';
 import { editActivity, previewActivityEdit } from './activities.edit.service.js';
 import type { ActivityEditDependencies, EditActivityInput } from './activities.edit.types.js';
+import { getActivityParticipants, deleteOwnActivity } from './activities.management.service.js';
+import type { ActivityParticipantsQuery } from './activities.types.js';
+
+export function createActivityParticipantsController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { params, query } = getValidatedRequest<{ params: { activityId: string }; query: ActivityParticipantsQuery }>(response);
+    sendSuccess(response, await getActivityParticipants(response.locals.auth, params.activityId, query, dependencies));
+  };
+}
+
+export function createActivityDeletionController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { params, body } = getValidatedRequest<{ params: { activityId: string }; body: { expectedRevision: number } }>(response);
+    sendSuccess(response, await deleteOwnActivity(response.locals.auth, params.activityId, body.expectedRevision, dependencies));
+  };
+}
 
 export function createActivityEditController(dependencies: ActivityEditDependencies = {}, preview = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {

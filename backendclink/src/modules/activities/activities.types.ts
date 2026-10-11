@@ -27,6 +27,8 @@ export interface ActivityDocument {
   participantCount: number;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt?: Date | null;
+  deletedByUserId?: string;
   seriesId?: ObjectId;
   occurrenceIndex?: number;
   occurrenceCount?: number;
@@ -134,3 +136,16 @@ export interface ActivityParticipationDto {
 }
 
 export type ActivityCreatorRecord = Pick<ActivityDocument, '_id' | 'campusId' | 'createdByUserId' | 'createdAt'>;
+
+export interface ActivityParticipantsQuery { page: number; pageSize: number }
+export interface ActivityParticipantsPage extends ActivityParticipantsQuery {
+  activityId: string; campusId: string; total: number;
+  participants: { key: string; name: string | null }[];
+}
+/** Internal identifiers are resolved to names before returning a public page. */
+export interface ActivityParticipantsRecords extends ActivityParticipantsQuery {
+  total: number; rows: { key: string; userId: string }[];
+}
+export interface ActivityDeletionResult {
+  activityId: string; campusId: string; revision: number; deletedAt: string;
+}

@@ -5,6 +5,7 @@ import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
 import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto } from './activities.types.js';
+import type { ActivityDocument, ActivityDto } from './activities.types.js';
 import type { ActivityParticipationDto } from './activities.types.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import { participationDto } from './activities.participation.js';
@@ -19,15 +20,21 @@ function optionalBanner(value: unknown): string | undefined {
   } catch { return undefined; }
 }
 
-export async function getActivityDetail(auth: VerifiedAuthConnection, activityId: string,
-  dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
+export async function getAvailableActivity(auth: VerifiedAuthConnection, activityId: string,
+  dependencies: ActivityDependencies = {}): Promise<{ document: ActivityDocument; activity: ActivityDto; now: Date }> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'A valid activity ID is required.');
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const now = dependencies.now?.() ?? new Date();
   const find = dependencies.findActivity ?? (await import('./activities.detail.repository.js')).findVisibleActivity;
   const document = await find(auth.campusId, activityId, now);
   const activity = document && toVisibleActivity(document, auth.campusId, now, spatialBuildings(map));
-  if (!activity || activity.id !== activityId.toLowerCase()) throw new ApiError(404, 'NOT_FOUND', 'Activity not available.');
+  if (!document || !activity || activity.id !== activityId.toLowerCase()) throw new ApiError(404, 'NOT_FOUND', 'Activity not available.');
+  return { document, activity, now };
+}
+
+export async function getActivityDetail(auth: VerifiedAuthConnection, activityId: string,
+  dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
+  const { document, activity, now } = await getAvailableActivity(auth, activityId, dependencies);
   const participationLookup = dependencies.findParticipation ?? (await import('./activities.detail.repository.js')).findOwnParticipation;
   const organizerLookup = async () => {
     if (document.createdByUserId === auth.userId) return { name: auth.profile.nombre_completo };

@@ -4,13 +4,14 @@ import type { ActivityDocument, ActivityDto, ActivityQuery } from './activities.
 
 /** The same publication policy applies to lists, direct detail and registration. */
 export function visibleActivityFilter(campusId: string, now: Date): Filter<ActivityDocument> {
-  return { campusId, status: 'ACTIVE', visibility: 'PUBLIC',
+  return { campusId, status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,
     type: { $in: ['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'] }, endAt: { $gt: now } };
 }
 
 export function toVisibleActivity(document: ActivityDocument, campusId: string, now: Date,
   buildings: ReturnType<typeof spatialBuildings>, query: ActivityQuery = {}): ActivityDto | null {
   if (document.campusId !== campusId || document.status !== 'ACTIVE' || document.visibility !== 'PUBLIC'
+    || document.deletedAt != null
     || !['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'].includes(document.type)
     || !(document.startAt instanceof Date) || !(document.endAt instanceof Date)
     || !Number.isFinite(document.startAt.getTime()) || !Number.isFinite(document.endAt.getTime())

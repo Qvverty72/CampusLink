@@ -2,11 +2,12 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ActivityDetail } from '../types/activity';
 
 /** Shared server-confirmed actions for list rows, full details and historical own state. */
-export function ActivityParticipationControls({ status, canJoin, pending, error, onJoin, onLeave, activityTitle }: {
+export function ActivityParticipationControls({ status, canJoin, pending, error, onJoin, onLeave, activityTitle, disabled = false }: {
   status: ActivityDetail['participation']['status']; canJoin: boolean; pending: 'JOINED' | 'LEFT' | null;
   error: string | null; onJoin: () => Promise<void>; onLeave: () => Promise<void>; activityTitle?: string;
+  disabled?: boolean;
 }) {
-  const busy = pending !== null;
+  const busy = pending !== null || disabled;
   const joinDisabled = busy || !canJoin;
   const leaveDisabled = busy;
   return <View style={styles.controls}>

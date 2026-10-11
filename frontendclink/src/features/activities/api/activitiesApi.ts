@@ -3,6 +3,32 @@ import type { Activity, ActivityDetail, ActivityLocationQuery, ActivityParticipa
 import type { CreateActivityInput } from '../types/creation';
 import type { CreateActivitySeriesInput, ActivityRecurrencePreview, CreatedActivitySeries, ActivitySeries } from '../types/recurrence';
 import type { ActivityEditPreview, ActivityEditResult, EditActivityInput } from '../types/editing';
+import type { ActivityParticipantsPage, ActivityDeletionResult } from '../types/activity';
+
+export async function fetchActivityParticipants(campusId: string, activityId: string, page: number, signal?: AbortSignal): Promise<ActivityParticipantsPage> {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
+  const response = await authenticatedEnvelopeRequest<ActivityParticipantsPage>(`/api/v1/activities/${activityId}/participants`, { signal },
+    new URLSearchParams({ page: String(page), pageSize: '5' }));
+  const value = response.data;
+  if (!value || value.campusId !== campusId || value.activityId !== activityId.toLowerCase()
+    || !Number.isSafeInteger(value.total) || value.total < 0 || value.pageSize !== 5
+    || !Number.isSafeInteger(value.page) || value.page < 1 || value.page > Math.max(1, Math.ceil(value.total / value.pageSize))
+    || !Array.isArray(value.participants) || value.participants.length > value.pageSize
+    || value.participants.some(person => !person || typeof person.key !== 'string' || !person.key
+      || (person.name !== null && typeof person.name !== 'string'))) throw new Error('La lista de inscritos recibida es inválida.');
+  return value;
+}
+
+export async function deleteActivity(campusId: string, activityId: string, expectedRevision: number, signal?: AbortSignal): Promise<ActivityDeletionResult> {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
+  const response = await authenticatedEnvelopeRequest<ActivityDeletionResult>(`/api/v1/activities/${activityId}`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision }), signal,
+  });
+  const value = response.data;
+  if (!value || value.activityId !== activityId.toLowerCase() || value.campusId !== campusId
+    || value.revision !== expectedRevision + 1 || !Number.isFinite(Date.parse(value.deletedAt))) throw new Error('No se pudo confirmar la eliminación.');
+  return value;
+}
 
 export async function previewActivityEdit(campusId: string, activityId: string, input: EditActivityInput, signal?: AbortSignal): Promise<ActivityEditPreview> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('ID inválido.');

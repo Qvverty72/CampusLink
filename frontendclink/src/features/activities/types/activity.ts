@@ -40,6 +40,14 @@ export interface ActivityParticipation {
 }
 export const ACTIVITY_LABELS = { OFFICIAL_EVENT: 'Evento oficial', COMMUNITY_ACTIVITY: 'Actividad comunitaria' };
 
+export interface ActivityParticipantsPage {
+  activityId: string; campusId: string; page: number; pageSize: number; total: number;
+  participants: { key: string; name: string | null }[];
+}
+export interface ActivityDeletionResult {
+  activityId: string; campusId: string; revision: number; deletedAt: string;
+}
+
 export function filterLocationActivities(activities: Activity[], query: ActivityLocationQuery, now = Date.now()): Activity[] {
   return activities.filter(activity => Date.parse(activity.endAt) > now
     && (!query.buildingKey || activity.location.buildingKey === query.buildingKey)

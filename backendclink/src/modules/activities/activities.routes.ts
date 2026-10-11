@@ -8,9 +8,17 @@ import { parseActivityQuery, parseActivityId, parseEmptyActivityInput } from './
 import type { ActivityEditDependencies } from './activities.edit.types.js';
 import { editActivityParser } from './activities.edit.validation.js';
 import { createActivityParticipationController } from './activities.controller.js';
+import { createActivityParticipantsController, createActivityDeletionController } from './activities.controller.js';
+import { parseActivityParticipantsQuery, parseActivityDeletion } from './activities.management.validation.js';
 
 export function createActivitiesRouter(dependencies: ActivityEditDependencies = {}): Router {
   const router = Router();
+  router.get('/:activityId/participants', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseActivityParticipantsQuery, body: parseEmptyActivityInput }),
+    createActivityParticipantsController(dependencies));
+  router.delete('/:activityId', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseActivityDeletion }),
+    createActivityDeletionController(dependencies));
   router.post('/:activityId/edit/preview', requireAuthentication, validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: editActivityParser() }),
     createActivityEditController(dependencies, true));
   router.patch('/:activityId', requireAuthentication, validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: editActivityParser(true) }),

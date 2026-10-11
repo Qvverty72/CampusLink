@@ -4,6 +4,7 @@ import { ApiError } from '../../services/apiError.js';
 import { hasActivityLocation, spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
 import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivityParticipationDto, ActivityCreatorRecord, ActivityQuery, ActivitySeriesDocument } from './activities.types.js';
+import type { ActivityParticipantsQuery, ActivityParticipantsRecords, ActivityDeletionResult } from './activities.types.js';
 
 export interface ActivityDependencies {
   getActiveMap?: ActiveMapLookup;
@@ -19,6 +20,9 @@ export interface ActivityDependencies {
   createSeries?: (series: ActivitySeriesDocument, documents: ActivityDocument[]) => Promise<ActivityDto[]>;
   findSeries?: (campusId: string, seriesId: string) => Promise<ActivitySeriesDocument | null>;
   findSeriesOccurrences?: (campusId: string, seriesId: string, now: Date) => Promise<ActivityDocument[]>;
+  findParticipants?: (document: ActivityDocument, query: ActivityParticipantsQuery) => Promise<ActivityParticipantsRecords>;
+  findParticipantNames?: (campusId: string, userIds: string[]) => Promise<Map<string, string>>;
+  deleteActivity?: (auth: VerifiedAuthConnection, activityId: string, expectedRevision: number, now: Date) => Promise<ActivityDeletionResult>;
 }
 
 export async function getActivities(auth: VerifiedAuthConnection, query: ActivityQuery, dependencies: ActivityDependencies = {}): Promise<ActivityDto[]> {
