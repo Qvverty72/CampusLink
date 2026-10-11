@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { APP_COLORS } from '@/types/colors';
+import { BottomNavigationIcon } from './BottomNavigationIcon';
 import { router, type Href, usePathname } from 'expo-router';
 import {
   Pressable,
@@ -7,13 +9,14 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 export interface BottomNavigationItem {
   id: string;
   label: string;
   href?: Href;
-  /** Replace this later with the final icon component. */
+  /** Optional custom icon, replacing the default icon for this item. */
   icon?: ReactNode;
 }
 
@@ -24,29 +27,52 @@ interface BottomNavigationBarProps {
 }
 
 export const DEFAULT_BOTTOM_NAVIGATION_ITEMS: BottomNavigationItem[] = [
-  { id: 'home', label: 'Mi Perfil', href: '/profile' },
+  { id: 'home', label: 'Perfil', href: '/profile' },
   { id: 'map', label: 'Mapa', href: '/map' },
   { id: 'physicalgoods', label: 'Mercado', href: '/physicalgoods' },
   { id: 'elibrary', label: 'Biblioteca', href: '/elibrary' },
 ];
 
-/** Horizontal separation between navigation options. */
-const NAVIGATION_ITEM_SPACING = 72;
+const OUTER_PADDING = 4; // margen entre la barra y el borde de la pantalla
+const BAR_PADDING = 4; // margen interno de la barra
+const BAR_MAX_WIDTH = 560;
 
-/** Reusable bottom navigation with replaceable placeholder icons. */
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+/** Barra inferior responsiva: tabs equidistantes, iconos y textos escalados. */
 export function BottomNavigationBar({
   items = DEFAULT_BOTTOM_NAVIGATION_ITEMS,
   activeItemId,
   onItemPress,
 }: BottomNavigationBarProps) {
   const auth = useAuth();
-  items = items.filter(item => item.id === 'home' || (auth.status === 'ready' && auth.identity?.capabilities.general));
   const pathname = usePathname();
+  const { width } = useWindowDimensions();
+
+  const visibleItems = items.filter(
+    (item) =>
+      item.id === 'home' ||
+      (auth.status === 'ready' && auth.identity?.capabilities.general),
+  );
+
   const currentItemId =
     activeItemId ??
-    items.find(
+    visibleItems.find(
       (item) => typeof item.href === 'string' && item.href === pathname,
     )?.id;
+
+  // ---- Dimensiones responsivas ----
+  const count = Math.max(visibleItems.length, 1);
+  const barWidth = Math.min(width - OUTER_PADDING * 2, BAR_MAX_WIDTH);
+
+  // Ancho igual para cada tab: los iconos quedan equidistantes
+  const slot = (barWidth - BAR_PADDING * 2) / count;
+
+  // Tamaños independientes de la separación
+  const iconSize = Math.round(clamp(slot * 0.3, 22, 30));
+  const circleSize = Math.round(iconSize * 1.6);
+  const labelSize = Math.round(clamp(slot * 0.12, 11, 13));
 
   const handleItemPress = (item: BottomNavigationItem) => {
     if (typeof item.href === 'string' && item.href === pathname) {
@@ -65,39 +91,65 @@ export function BottomNavigationBar({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.bar}>
-        {items.map((item) => {
-          const isActive = item.id === currentItemId;
+      <View style={styles.container}>
+        <View
+          style={[styles.bar, { width: barWidth }]}
+          accessibilityRole="tablist"
+          accessibilityLabel="Navegación principal"
+        >
+          {visibleItems.map((item) => {
+            const isActive = item.id === currentItemId;
 
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              accessibilityState={{ selected: isActive }}
-              onPress={() => handleItemPress(item)}
-              style={({ pressed }) => [
-                styles.item,
-                pressed && styles.itemPressed,
-              ]}
-            >
-              <View style={[styles.iconSlot, isActive && styles.iconSlotActive]}>
-                {item.icon ?? (
-                  <View
-                    style={[
-                      styles.iconPlaceholder,
-                      isActive && styles.iconPlaceholderActive,
-                    ]}
-                  />
-                )}
-              </View>
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: isActive }}
+                aria-selected={isActive}
+                onPress={() => handleItemPress(item)}
+                style={({ pressed }) => [
+                  styles.item,
+                  { width: slot },
+                  pressed && styles.itemPressed,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.iconSlot,
+                    {
+                      width: circleSize,
+                      height: circleSize,
+                      borderRadius: circleSize / 2,
+                    },
+                    isActive && styles.iconSlotActive,
+                  ]}
+                >
+                  {item.icon ?? (
+                    <BottomNavigationIcon
+                      id={item.id}
+                      size={iconSize}
+                      color={isActive ? '#FFFFFF' : '#64748B'}
+                    />
+                  )}
+                </View>
 
-              <Text style={[styles.label, isActive && styles.labelActive]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                  style={[
+                    styles.label,
+                    { fontSize: labelSize },
+                    isActive && styles.labelActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -105,58 +157,54 @@ export function BottomNavigationBar({
 
 const styles = StyleSheet.create({
   safeArea: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EEF2F6',
+  },
+  container: {
+    paddingHorizontal: OUTER_PADDING,
+    paddingVertical: 8,
+    alignItems: 'center',
   },
   bar: {
-    minHeight: 64,
+    minHeight: 74,
     flexDirection: 'row',
     alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#DCE4EA',
+    justifyContent: 'space-around',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    columnGap: NAVIGATION_ITEM_SPACING,
+    borderRadius: 26,
+    paddingHorizontal: BAR_PADDING,
+    paddingVertical: 6,
+    shadowColor: APP_COLORS.PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 5,
   },
   item: {
-    minHeight: 56,
-    flex: 1,
+    minHeight: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
+    paddingHorizontal: 4,
     borderRadius: 12,
   },
   itemPressed: {
     opacity: 0.65,
   },
   iconSlot: {
-    width: 30,
-    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
   },
   iconSlotActive: {
-    backgroundColor: '#E5F4F4',
-  },
-  iconPlaceholder: {
-    width: 18,
-    height: 18,
-    borderWidth: 2,
-    borderColor: '#8A9AA7',
-    borderRadius: 5,
-  },
-  iconPlaceholderActive: {
-    borderColor: '#0B6E75',
-    backgroundColor: '#0B6E75',
+    backgroundColor: APP_COLORS.PRIMARY,
   },
   label: {
-    color: '#718390',
-    fontSize: 11,
-    fontWeight: '600',
+    color: APP_COLORS.SECONDARY,
+    fontWeight: '500',
+    textAlign: 'center',
+    maxWidth: '100%',
   },
   labelActive: {
-    color: '#0B6E75',
-    fontWeight: '700',
+    color: APP_COLORS.PRIMARY,
+    fontWeight: '600',
   },
 });

@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity } from '../types/activity';
 import { useActivityDetail } from '../hooks/useActivityDetail';
@@ -50,7 +51,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '700', color: '#0F172A', textAlign: 'center' },
   type: { fontSize: 14, fontWeight: '600', textAlign: 'center' }, date: { color: '#475569', fontSize: 13, lineHeight: 19, textAlign: 'center' },
   text: { color: '#334155', lineHeight: 22 },
-  metadata: { color: '#64748B', fontSize: 13, lineHeight: 20 }, link: { color: '#0B6E75', fontSize: 13, fontWeight: '600' },
+  metadata: { color: '#64748B', fontSize: 13, lineHeight: 20 }, link: { color: APP_COLORS.PRIMARY, fontSize: 13, fontWeight: '600' },
   loading: { gap: 10 }, unavailable: { padding: 16, gap: 12, borderRadius: 16, backgroundColor: '#F8FAFC' },
   linkButton: { paddingVertical: 12 },
 });

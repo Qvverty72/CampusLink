@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -135,7 +136,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12, color: '#0F172A' },
   description: { minHeight: 100, textAlignVertical: 'top' }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choice: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 10 },
-  selected: { backgroundColor: '#0B6E75', borderColor: '#0B6E75' }, selectedText: { color: '#FFFFFF', fontWeight: '600' },
-  error: { color: '#B91C1C', lineHeight: 21 }, publish: { backgroundColor: '#0B6E75', padding: 14, borderRadius: 8, alignItems: 'center' },
+  selected: { backgroundColor: APP_COLORS.PRIMARY, borderColor: APP_COLORS.PRIMARY }, selectedText: { color: '#FFFFFF', fontWeight: '600' },
+  error: { color: '#B91C1C', lineHeight: 21 }, publish: { backgroundColor: APP_COLORS.PRIMARY, padding: 14, borderRadius: 8, alignItems: 'center' },
   cancel: { paddingVertical: 12, alignItems: 'center' },
 });

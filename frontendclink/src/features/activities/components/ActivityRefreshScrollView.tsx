@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { createContext, forwardRef, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, View, type ScrollViewProps } from 'react-native';
 
@@ -110,10 +111,10 @@ export const ActivityRefreshScrollView = forwardRef<ScrollView, ScrollViewProps>
       // Keep it mounted so registering a sheet does not remount the activities browser.
       refreshControl={Platform.OS !== 'web' ? <RefreshControl
         enabled={active && !requested} refreshing={refreshing} onRefresh={refresh}
-        colors={['#0B6E75']} tintColor="#0B6E75" /> : undefined}>
+        colors={[APP_COLORS.PRIMARY]} tintColor={APP_COLORS.PRIMARY} /> : undefined}>
       {Platform.OS === 'web' && (refreshing || (active && pullDistance > 0)) ? <View
         style={[styles.indicator, { height: refreshing ? 48 : Math.min(80, pullDistance / 2) }]}>
-        {refreshing ? <ActivityIndicator color="#0B6E75" accessibilityLabel={`Actualizando ${label}`} /> : null}
+        {refreshing ? <ActivityIndicator color={APP_COLORS.PRIMARY} accessibilityLabel={`Actualizando ${label}`} /> : null}
         <Text accessibilityLiveRegion="polite" aria-live="polite" style={styles.hint}>{refreshing ? `Actualizando ${label}…`
           : pullDistance >= PULL_THRESHOLD ? 'Suelta para actualizar' : 'Desliza para actualizar'}</Text>
       </View> : null}
@@ -124,5 +125,5 @@ export const ActivityRefreshScrollView = forwardRef<ScrollView, ScrollViewProps>
 
 const styles = StyleSheet.create({
   indicator: { alignItems: 'center', justifyContent: 'center', gap: 4, overflow: 'hidden' },
-  hint: { fontSize: 12, color: '#0B6E75' },
+  hint: { fontSize: 12, color: APP_COLORS.PRIMARY },
 });

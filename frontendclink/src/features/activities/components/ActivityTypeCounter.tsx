@@ -7,8 +7,8 @@ export const ACTIVITY_TYPE_LABELS = {
 export const ACTIVITY_TYPES = ['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY'] as const;
 
 const MAP_COUNTER_THEME = {
-  OFFICIAL_EVENT: { color: '#2563EB', countBackground: '#DBEAFE' },
-  COMMUNITY_ACTIVITY: { color: '#EA580C', countBackground: '#FFEDD5' },
+  OFFICIAL_EVENT: { color: ACTIVITY_COLORS.OFFICIAL_EVENT, countBackground: '#DBEAFE' },
+  COMMUNITY_ACTIVITY: { color: ACTIVITY_COLORS.COMMUNITY_ACTIVITY, countBackground: '#FFEDD5' },
 } as const;
 const MAP_BADGE_SIZE = 48;
 

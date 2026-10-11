@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -53,4 +54,4 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
 }
 
 const styles = StyleSheet.create({ content: { gap: 12, paddingVertical: 12 }, heading: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
-  text: { color: '#334155', lineHeight: 21 }, link: { color: '#0B6E75', fontWeight: '700', paddingVertical: 12 } });
+  text: { color: '#334155', lineHeight: 21 }, link: { color: APP_COLORS.PRIMARY, fontWeight: '700', paddingVertical: 12 } });

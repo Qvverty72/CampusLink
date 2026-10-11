@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PointOfInterestDefinition } from '../types/map';
 import { poiTypeLabel } from '../utils/pointOfInterest';
@@ -29,7 +30,7 @@ export function PointOfInterestDetail({ poi, buildingName, floorName, onBack }: 
 const styles = StyleSheet.create({
   content: { gap: 24 },
   back: { paddingVertical: 10 },
-  link: { color: '#0B6E75', fontSize: 14, fontWeight: '600' },
+  link: { color: APP_COLORS.PRIMARY, fontSize: 14, fontWeight: '600' },
   summary: { gap: 8, alignItems: 'center' },
   name: { color: '#0F172A', fontSize: 22, fontWeight: '700', textAlign: 'center' },
   type: { color: '#64748B', fontSize: 14, textAlign: 'center' },

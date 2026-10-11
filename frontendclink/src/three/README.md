@@ -31,6 +31,11 @@ Cada botón ocupa 64 puntos de ancho, con separación de 8 entre botones.
 La insignia se eleva 14 puntos y el padding superior del botón la mantiene dentro del área pulsable.
 Icono/insignia son decorativos para
 lectores de pantalla; el botón conserva su label accesible completo y estado de carga.
+Los enlaces, botones, selecciones e indicadores de los modales de actividades/piso
+usan `APP_COLORS.PRIMARY` (`#002E56`) desde `@/types/colors`.
+La [paleta compartida](../types/README.md) está disponible para todos los módulos.
+`ACTIVITY_COLORS` en `features/activities/types/activity.ts` asocia `OFFICIAL_EVENT`
+con `APP_COLORS.SECONDARY` y `COMMUNITY_ACTIVITY` con `APP_COLORS.ACCENT`.
 Carga muestra spinner y error guion/reintento, sin simular cero; abrir durante carga
 no duplica consulta. Los listados mantienen cinco tarjetas por página, filtro de
 descripción comunitario y publicación del tipo autorizado. Desde ficha se puede

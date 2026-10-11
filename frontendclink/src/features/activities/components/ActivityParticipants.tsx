@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useActivityParticipants } from '../hooks/useActivityParticipants';
 
@@ -6,7 +7,7 @@ export function ActivityParticipants({ activityId, refreshKey }: { activityId: s
   return <View style={styles.section}>
     <Text accessibilityRole="header" style={styles.heading}>Personas inscritas{data ? ` (${data.total})` : ''}</Text>
     <View style={styles.rows}>
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color="#0B6E75" /><Text style={styles.muted}>Cargando inscritos…</Text></View>
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={APP_COLORS.PRIMARY} /><Text style={styles.muted}>Cargando inscritos…</Text></View>
         : error ? <><Text accessibilityRole="alert" style={styles.error}>{error}</Text>
           <TouchableOpacity accessibilityRole="button" onPress={refresh} style={styles.button}><Text style={styles.link}>Reintentar</Text></TouchableOpacity></>
         : data?.total === 0 ? <Text style={styles.muted}>Todavía no hay personas inscritas.</Text>
@@ -36,5 +37,5 @@ const styles = StyleSheet.create({
   loading: { gap: 12, alignItems: 'center', paddingVertical: 36 }, error: { color: '#9A3412', lineHeight: 22 },
   pagination: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
   page: { color: '#64748B', fontSize: 12 }, button: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 4 },
-  link: { color: '#0B6E75', fontWeight: '600' }, disabled: { opacity: 0.35 },
+  link: { color: APP_COLORS.PRIMARY, fontWeight: '600' }, disabled: { opacity: 0.35 },
 });

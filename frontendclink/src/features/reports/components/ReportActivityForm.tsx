@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useActivityReport } from '../hooks/useActivityReport';
@@ -54,6 +55,6 @@ const styles = StyleSheet.create({
   heading: { fontSize: 16, fontWeight: '600', color: '#0F172A' }, text: { color: '#334155', lineHeight: 22 },
   input: { padding: 12, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, color: '#0F172A', backgroundColor: '#FFFFFF' },
   description: { minHeight: 110 }, error: { color: '#B91C1C', lineHeight: 22 },
-  send: { padding: 14, borderRadius: 10, backgroundColor: '#0B6E75', alignItems: 'center' },
-  sendText: { color: '#FFFFFF', fontWeight: '700' }, back: { paddingVertical: 12 }, link: { color: '#0B6E75', fontWeight: '700' },
+  send: { padding: 14, borderRadius: 10, backgroundColor: APP_COLORS.PRIMARY, alignItems: 'center' },
+  sendText: { color: '#FFFFFF', fontWeight: '700' }, back: { paddingVertical: 12 }, link: { color: APP_COLORS.PRIMARY, fontWeight: '700' },
 });

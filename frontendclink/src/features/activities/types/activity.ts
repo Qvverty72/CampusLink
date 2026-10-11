@@ -1,3 +1,5 @@
+import { APP_COLORS } from '@/types/colors';
+
 /** Public read contract. Spatial keys reference map data, not GLB node names. */
 export interface Activity {
   id: string;
@@ -30,7 +32,10 @@ export interface ActivityDetail extends Activity {
   category?: string;
   tags?: string[];
 }
-export const ACTIVITY_COLORS = { OFFICIAL_EVENT: '#2563EB', COMMUNITY_ACTIVITY: '#B45309' };
+export const ACTIVITY_COLORS = {
+  OFFICIAL_EVENT: APP_COLORS.SECONDARY,
+  COMMUNITY_ACTIVITY: APP_COLORS.ACCENT,
+} as const;
 export interface ActivityParticipation {
   activityId: string;
   campusId: string;

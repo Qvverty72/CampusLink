@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '@/features/auth/AuthProvider';
@@ -75,8 +76,8 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
   </View>;
 }
 const styles = StyleSheet.create({ form: { gap: 12, paddingVertical: 12 }, heading: { fontWeight: '700', fontSize: 18, color: '#0F172A' },
-  label: { fontWeight: '600', color: '#0F172A' }, text: { color: '#475569', lineHeight: 21 }, link: { color: '#0B6E75', fontWeight: '700' },
+  label: { fontWeight: '600', color: '#0F172A' }, text: { color: '#475569', lineHeight: 21 }, link: { color: APP_COLORS.PRIMARY, fontWeight: '700' },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, choice: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 10 },
-  selected: { backgroundColor: '#0B6E75', borderColor: '#0B6E75' }, disabled: { opacity: 0.5 },
+  selected: { backgroundColor: APP_COLORS.PRIMARY, borderColor: APP_COLORS.PRIMARY }, disabled: { opacity: 0.5 },
   back: { minHeight: 44, paddingVertical: 12 },
-  save: { backgroundColor: '#0B6E75', padding: 14, alignItems: 'center', borderRadius: 8 }, saveText: { color: '#FFFFFF', fontWeight: '700' }, error: { color: '#B91C1C' } });
+  save: { backgroundColor: APP_COLORS.PRIMARY, padding: 14, alignItems: 'center', borderRadius: 8 }, saveText: { color: '#FFFFFF', fontWeight: '700' }, error: { color: '#B91C1C' } });

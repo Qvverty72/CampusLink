@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useEffect, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ACTIVITY_CONTENT_LIMITS, ACTIVITY_DESCRIPTION_OPTIONS, type ActivityDraft, type ActivityLocationOption } from '../types/creation';
@@ -112,12 +113,12 @@ const styles = StyleSheet.create({ field: { gap: 10 }, label: { fontWeight: '600
   input: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12, color: '#0F172A' },
   description: { minHeight: 100, textAlignVertical: 'top' }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   location: { backgroundColor: '#F1F5F9', borderRadius: 8, padding: 12, color: '#0F172A', lineHeight: 21 },
-  choice: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 10 }, selected: { backgroundColor: '#0B6E75', borderColor: '#0B6E75' },
+  choice: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 10 }, selected: { backgroundColor: APP_COLORS.PRIMARY, borderColor: APP_COLORS.PRIMARY },
   selectedText: { color: '#FFFFFF', fontWeight: '600' },
   dropdown: { gap: 4 }, dropdownTrigger: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12,
     borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12 },
-  dropdownActive: { borderColor: '#0B6E75' }, dropdownValue: { flex: 1, color: '#0F172A', lineHeight: 21 },
+  dropdownActive: { borderColor: APP_COLORS.PRIMARY }, dropdownValue: { flex: 1, color: '#0F172A', lineHeight: 21 },
   placeholder: { color: '#64748B' }, disabled: { opacity: 0.5 },
   dropdownMenu: { maxHeight: 220, borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, backgroundColor: '#FFFFFF' },
   dropdownOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
-  dropdownSelected: { backgroundColor: '#E6F3F3' }, dropdownSelectedText: { color: '#0B6E75', fontWeight: '600' }, });
+  dropdownSelected: { backgroundColor: '#E6F3F3' }, dropdownSelectedText: { color: APP_COLORS.PRIMARY, fontWeight: '600' }, });

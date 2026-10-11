@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 /** Native floor information and activities browser; map stores supply selection only. */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -135,5 +136,5 @@ const styles = StyleSheet.create({
   retryButton: { paddingVertical: 8 },
   poiSection: { gap: 12 },
   emptyCard: { borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC', borderRadius: 18, padding: 18 },
-  backText: { fontSize: 14, color: '#0B6E75', fontWeight: '600' },
+  backText: { fontSize: 14, color: APP_COLORS.PRIMARY, fontWeight: '600' },
 });

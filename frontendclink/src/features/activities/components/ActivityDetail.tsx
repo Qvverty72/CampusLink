@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
@@ -73,7 +74,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
       <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={onBack} style={styles.action}>
         <Text style={styles.link}>‹ Volver a las actividades</Text>
       </TouchableOpacity>
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color="#0B6E75" /><Text style={styles.text}>Cargando ficha…</Text></View>
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={APP_COLORS.PRIMARY} /><Text style={styles.text}>Cargando ficha…</Text></View>
         : error ? <>
           <Text accessibilityRole="alert" style={styles.text}>{error}</Text>
           {ownParticipation ? participationControls(ownParticipation.status, false) : null}
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   dates: { flexDirection: 'row', gap: 12 }, date: { flex: 1, minWidth: 0, padding: 12, gap: 5, backgroundColor: '#F8FAFC', borderRadius: 12 },
   dateText: { fontSize: 14, color: '#334155', lineHeight: 22 },
   heading: { fontSize: 16, fontWeight: '600', color: '#0F172A' }, text: { color: '#334155', lineHeight: 22 },
-  link: { color: '#0B6E75', fontWeight: '700' }, action: { minHeight: 44, paddingVertical: 12 },
+  link: { color: APP_COLORS.PRIMARY, fontWeight: '700' }, action: { minHeight: 44, paddingVertical: 12 },
   banner: { width: '100%', height: 140, borderRadius: 12 }, series: { gap: 4 },
   management: { gap: 4, paddingTop: 12, borderTopWidth: 1, borderColor: '#E2E8F0' },
   danger: { color: '#B91C1C', fontWeight: '600', lineHeight: 22 },

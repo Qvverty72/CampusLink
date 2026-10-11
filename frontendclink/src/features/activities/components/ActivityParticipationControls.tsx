@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ActivityDetail } from '../types/activity';
 
@@ -33,8 +34,8 @@ export function ActivityParticipationControls({ status, canJoin, pending, error,
 const styles = StyleSheet.create({
   controls: { gap: 10 }, status: { fontSize: 13, lineHeight: 19, color: '#475569' },
   button: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  join: { backgroundColor: '#0B6E75' }, leave: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#0B6E75' },
+  join: { backgroundColor: APP_COLORS.PRIMARY }, leave: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: APP_COLORS.PRIMARY },
   joinText: { color: '#FFFFFF', fontWeight: '600', textAlign: 'center' },
-  leaveText: { color: '#0B6E75', fontWeight: '600', textAlign: 'center' },
+  leaveText: { color: APP_COLORS.PRIMARY, fontWeight: '600', textAlign: 'center' },
   disabled: { opacity: 0.4 }, error: { color: '#9A3412', lineHeight: 20, fontSize: 13 },
 });

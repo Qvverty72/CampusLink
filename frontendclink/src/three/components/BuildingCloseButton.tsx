@@ -1,5 +1,6 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
+import { APP_COLORS } from '@/types/colors';
 
 /**
  * Control 2D para abandonar la selección actual.
@@ -17,17 +18,14 @@ export function BuildingCloseButton() {
   return (
     <TouchableOpacity
       accessibilityRole="button"
-      accessibilityLabel="Cerrar edificio y volver al mapa completo"
+      accessibilityLabel="Volver atrás"
       accessibilityHint="Regresa a la vista general del campus"
       activeOpacity={0.78}
       hitSlop={10}
       onPress={resetBuilding}
       style={styles.button}
     >
-      <View pointerEvents="none" style={styles.closeIcon}>
-        <View style={[styles.closeIconLine, styles.closeIconLineForward]} />
-        <View style={[styles.closeIconLine, styles.closeIconLineBackward]} />
-      </View>
+      <Text style={styles.label}>Volver atrás</Text>
     </TouchableOpacity>
   );
 }
@@ -36,14 +34,15 @@ const styles = StyleSheet.create({
   button: {
     position: 'absolute',
     bottom: 16,
-    left: 16,
+    alignSelf: 'center',
     zIndex: 10,
-    width: 52,
-    height: 52,
+    minHeight: 52,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 26,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.4)',
-    backgroundColor: '#0B6E75',
+    backgroundColor: APP_COLORS.SECONDARY,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#0F172A',
@@ -52,23 +51,10 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 7,
   },
-  closeIcon: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeIconLine: {
-    position: 'absolute',
-    width: 20,
-    height: 2.5,
-    borderRadius: 2,
-    backgroundColor: '#FFFFFF',
-  },
-  closeIconLineForward: {
-    transform: [{ rotate: '45deg' }],
-  },
-  closeIconLineBackward: {
-    transform: [{ rotate: '-45deg' }],
+  label: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ActivitiesState } from '../hooks/useLocationActivities';
@@ -164,8 +165,9 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
     </View> : null}
     <View style={styles.creationActions}>
       {canCreate && locations?.length && (!activityType || activityType === 'COMMUNITY_ACTIVITY') ?
-        <TouchableOpacity accessibilityRole="button" activeOpacity={0.75} onPress={() => setCreating('COMMUNITY_ACTIVITY')} style={styles.createButton}>
-          <Text style={styles.createText}>Crear actividad comunitaria</Text>
+        <TouchableOpacity accessibilityRole="button" activeOpacity={0.75} onPress={() => setCreating('COMMUNITY_ACTIVITY')}
+          style={[styles.createButton, { borderColor: ACTIVITY_COLORS.COMMUNITY_ACTIVITY }]}>
+          <Text style={[styles.createText, { color: ACTIVITY_COLORS.COMMUNITY_ACTIVITY }]}>Crear actividad comunitaria</Text>
         </TouchableOpacity> : null}
       {canPublishOfficial && locations?.length && (!activityType || activityType === 'OFFICIAL_EVENT') ?
         <TouchableOpacity accessibilityRole="button" activeOpacity={0.75} onPress={() => setCreating('OFFICIAL_EVENT')}
@@ -178,19 +180,19 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
 
 const styles = StyleSheet.create({
   section: { gap: 12, marginTop: 12 }, heading: { fontSize: 16, fontWeight: '700' },
-  text: { color: '#475569', lineHeight: 21 }, retry: { color: '#0B6E75', fontWeight: '700', paddingVertical: 12 },
-  backButton: { paddingVertical: 10 }, backText: { fontSize: 14, color: '#0B6E75', fontWeight: '600' },
+  text: { color: '#475569', lineHeight: 21 }, retry: { color: APP_COLORS.PRIMARY, fontWeight: '700', paddingVertical: 12 },
+  backButton: { paddingVertical: 10 }, backText: { fontSize: 14, color: APP_COLORS.PRIMARY, fontWeight: '600' },
   descriptionFilter: { gap: 4, marginTop: 12 }, filterLabel: { color: '#0F172A', fontWeight: '600' },
   filterTrigger: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12,
     borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12 },
-  filterActive: { borderColor: '#0B6E75' }, filterValue: { flex: 1, color: '#0F172A', lineHeight: 21 },
+  filterActive: { borderColor: APP_COLORS.PRIMARY }, filterValue: { flex: 1, color: '#0F172A', lineHeight: 21 },
   filterMenu: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, backgroundColor: '#FFFFFF', overflow: 'hidden' },
   filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
-  filterSelected: { backgroundColor: '#E6F3F3' }, filterSelectedText: { color: '#0B6E75', fontWeight: '600' },
+  filterSelected: { backgroundColor: '#E6F3F3' }, filterSelectedText: { color: APP_COLORS.PRIMARY, fontWeight: '600' },
   pagination: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
   pageButton: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 4 },
-  pageLink: { color: '#0B6E75', fontWeight: '600' }, page: { color: '#64748B', fontSize: 12 }, disabled: { opacity: 0.35 },
+  pageLink: { color: APP_COLORS.PRIMARY, fontWeight: '600' }, page: { color: '#64748B', fontSize: 12 }, disabled: { opacity: 0.35 },
   creationActions: { gap: 12, marginTop: 20 },
-  createButton: { borderWidth: 1, borderColor: '#0B6E75', borderRadius: 16, padding: 18, alignItems: 'center', backgroundColor: '#F8FAFC' },
-  createText: { color: '#0B6E75', fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  createButton: { borderWidth: 1, borderRadius: 16, padding: 18, alignItems: 'center', backgroundColor: '#F8FAFC' },
+  createText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
 });

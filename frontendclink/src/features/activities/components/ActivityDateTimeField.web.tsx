@@ -1,3 +1,4 @@
+import { APP_COLORS } from '@/types/colors';
 import { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { browserDateSelection, browserDateValue, formatPickerValue, pickerDate, type ActivityDateTimeFieldProps } from '../types/dateTime';
@@ -47,5 +48,5 @@ const styles = StyleSheet.create({
   picker: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, gap: 16 },
   heading: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }, action: { minHeight: 44, padding: 12 },
-  confirm: { color: '#0B6E75', fontWeight: '600' },
+  confirm: { color: APP_COLORS.PRIMARY, fontWeight: '600' },
 });
