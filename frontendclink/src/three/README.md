@@ -13,16 +13,24 @@ El hook cancela solicitudes obsoletas al cambiar sesión/campus y actualiza la c
 al terminar la primera actividad. El navegador y el modal permiten actualizarla.
 
 `MapActivitiesPanel` muestra dos contadores circulares sobre el mapa, azul para
-oficiales y naranja para comunitarias, en una columna a 16 puntos del borde
+oficiales y naranja para comunitarias, en una columna con eventos oficiales arriba
+y actividades comunitarias abajo, a 16 puntos del borde
 inferior/derecho del viewport (encima de la barra de navegación). Cada círculo de
-64 puntos muestra el número centrado y su etiqueta de tipo debajo, y abre el listado del campus
+48 puntos muestra un icono de calendario/personas de 23,4 puntos visuales y el conteo en una insignia
+superior derecha, sin etiquetas visibles. Abre el listado del campus
 en la vista general o del edificio seleccionado. El wrapper usa box-none para
 conservar interacción con el mapa fuera de los botones. No hay recuadro grande
 ni indicadores 3D. Se ocultan al abrir información del piso.
 `ActivityTypeCounter` comparte conteo/estado/etiquetas accesibles entre la variante
-mapa (anillo fino de 64 puntos con fondo blanco y borde/número del color del tipo)
-y piso (anillo de 48 puntos, label y acción). La variante mapa usa la misma base
-del anillo del piso y mantiene la presentación plana de la referencia visual.
+mapa (círculo blanco, borde azul/naranja de 1 punto y sombra suave)
+y piso (anillo de 48 puntos, label y acción). En el mapa solo aparecen el dibujo
+centrado y la insignia. `ActivityTypeIcon` dibuja trazos nativos de calendario/personas
+sin dependencias adicionales. La insignia de conteo tiene fondo azul/naranja pálido,
+altura de 24 puntos y ancho adaptable hasta 52; conteos largos ajustan fuente al ancho.
+Cada botón ocupa 64 puntos de ancho, con separación de 8 entre botones.
+La insignia se eleva 14 puntos y el padding superior del botón la mantiene dentro del área pulsable.
+Icono/insignia son decorativos para
+lectores de pantalla; el botón conserva su label accesible completo y estado de carga.
 Carga muestra spinner y error guion/reintento, sin simular cero; abrir durante carga
 no duplica consulta. Los listados mantienen cinco tarjetas por página, filtro de
 descripción comunitario y publicación del tipo autorizado. Desde ficha se puede

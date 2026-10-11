@@ -62,7 +62,7 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
 }
 
 const styles = StyleSheet.create({
-  counters: { position: 'absolute', bottom: 16, right: 16, gap: 12, zIndex: 10 },
+  counters: { position: 'absolute', bottom: 32, right: 8, flexDirection: 'column', gap: 8, zIndex: 10 },
   title: { fontSize: 16, color: '#0F172A', fontWeight: '700' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   card: { width: '100%', maxWidth: 980, height: '86%', maxHeight: '90%', padding: 20, borderRadius: 24, backgroundColor: '#FFFFFF' },
