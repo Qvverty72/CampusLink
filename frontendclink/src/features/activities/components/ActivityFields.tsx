@@ -97,10 +97,10 @@ export function ActivityFields({ draft, change, disabled, locations, organizer, 
     {creationLocation?.buildingKey || creationLocation?.floorKey ? <Text style={styles.text}>Ubicación seleccionada en el mapa</Text> : null}
     <Text style={styles.label}>Edificio</Text>
     {creationLocation?.buildingKey ? <Text style={styles.location}>{building?.name ?? 'El edificio seleccionado ya no está disponible.'}</Text>
-      : choices('buildingKey', 'Edificio', locations, locations.length ? 'Selecciona un edificio' : 'No hay edificios disponibles')}
+      : choices('buildingKey', 'Edificio', [{ id: '', name: 'En el campus, sin edificio' }, ...locations], 'En el campus, sin edificio')}
     <Text style={styles.label}>Piso</Text>
     {creationLocation?.floorKey ? <Text style={styles.location}>{floor?.name ?? 'El piso seleccionado ya no está disponible.'}</Text>
-      : building || locationDropdowns ? choices('floorKey', 'Piso', building?.floors ?? [],
+      : building || locationDropdowns ? choices('floorKey', 'Piso', building ? [{ id: '', name: 'En el edificio, sin piso' }, ...building.floors] : [],
         building ? building.floors.length ? 'Selecciona un piso' : 'No hay pisos disponibles' : 'Selecciona un edificio primero')
       : <Text style={styles.text}>Selecciona un edificio.</Text>}
     <Text style={styles.label}>Punto de interés (opcional)</Text>

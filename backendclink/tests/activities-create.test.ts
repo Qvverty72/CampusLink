@@ -1,3 +1,4 @@
+import './helpers/activity-integrity.js';
 import assert from 'node:assert/strict';
 import { after, before, mock, test } from 'node:test';
 import { Db, MongoClient } from 'mongodb';
@@ -51,7 +52,7 @@ test('creation parses UTC dates into BSON-compatible Dates and trims required/op
 test('creation rejects protected fields and malformed or incomplete location objects', () => {
   for (const input of [null, [], 'activity', {}, ...['campusId', 'createdByUserId', 'type', 'status', 'visibility', 'participantCount', 'bannerUrl']
     .map(key => ({ ...body(), [key]: key === 'type' ? 'OFFICIAL_EVENT' : 'override' })),
-    { ...body(), location: { buildingKey: 'hbuilding' } }, { ...body(), location: { ...body().location, coordinates: { x: 1, y: 0, z: 1 } } },
+    { ...body(), location: { floorKey: 'floor-two' } }, { ...body(), location: { ...body().location, coordinates: { x: 1, y: 0, z: 1 } } },
     { ...body(), location: { ...body().location, poiKey: { $ne: '' } } }, { ...body(), location: [] },
     { ...body(), location: { ...body().location, poiKey: null } }]) {
     assert.equal(parseCreateActivity(input).success, false);
@@ -140,7 +141,7 @@ test('creation transaction commits organizer JOINED and activity count together,
     assert.deepEqual(own.activityId, activity._id); assert.equal(own.campusId, campusId); assert.equal(own.userId, userId);
     assert.equal(own.status, 'JOINED'); assert.deepEqual(own.joinedAt, activity.createdAt);
     failParticipation = true;
-    await assert.rejects(createCommunityActivity(auth, parsed(), dependencies), /Participation failed/);
+    await assert.rejects(createCommunityActivity(auth, parsed(), dependencies), { status: 503 });
     assert.equal(committed.length, 2); assert.equal(staged.length, 0);
     activeMap = { ...map, buildings: [] };
     await assert.rejects(createCommunityActivity(auth, parsed(), dependencies), { status: 400 });

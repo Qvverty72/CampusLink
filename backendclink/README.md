@@ -1,5 +1,7 @@
 # CampusLink Backend
 
+F2.2-06: [referencias, reglas del creador, cuatro niveles de ubicación y recuperación de cancelaciones](docs/document-references.md). Aplicar la migración de la cola privada antes de desplegar; no se ejecuta al iniciar la API. No requiere nuevas dependencias ni endpoints.
+
 Denuncias F2.6-09: [API, persistencia común y QA manual](docs/activities-reports.md). `POST /api/v1/reports/activities/:activityId` guarda PENDIENTE en `reporte_contenido`, con motivo libre, descripción opcional y copia del contenido; no modifica actividades ni inscripciones. Revisión administrativa corresponde a F2.6-10. Sin migraciones ni colecciones nuevas.
 
 Base API REST de F2.2-03 (GitHub #50). Node.js 22, TypeScript, Express 5, Supabase JS y driver oficial MongoDB. Las rutas se montan en /api/v1.

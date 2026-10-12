@@ -13,7 +13,7 @@ export function isActivityDescriptionAllowed(description: string, allowCustom: b
 
 export interface CreateActivityInput {
   title: string; description: string; startAt: string; endAt: string;
-  location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };
+  location: { buildingKey?: string; floorKey?: string; poiKey?: string; customLabel?: string };
 }
 
 /** Domain catalog supplied by the map adapter; no meshes or rendering state. */
@@ -59,10 +59,12 @@ export function validateActivityDraft(draft: ActivityDraft, locations: ActivityL
   if (!options.allowEnded && Date.parse(endAt) <= now) return { error: 'La actividad todavía no debe haber terminado.' };
   const building = locations.find(value => value.id === draft.buildingKey);
   const floor = building?.floors.find(value => value.id === draft.floorKey);
-  if (!floor || (draft.poiKey && !floor.pois.some(value => value.id === draft.poiKey))) {
-    return { error: 'Selecciona un edificio, un piso y un punto de interés vigente si corresponde.' };
+  if ((draft.buildingKey && !building) || (draft.floorKey && (!building || !floor))
+    || (draft.poiKey && (!floor || !floor.pois.some(value => value.id === draft.poiKey)))) {
+    return { error: 'Selecciona una ubicación vigente dentro del campus.' };
   }
   return { input: { title: draft.title.trim(), description: draft.description.trim(), startAt, endAt,
-    location: { buildingKey: draft.buildingKey, floorKey: draft.floorKey,
+    location: { ...(draft.buildingKey ? { buildingKey: draft.buildingKey } : {}),
+      ...(draft.floorKey ? { floorKey: draft.floorKey } : {}),
       ...(draft.poiKey ? { poiKey: draft.poiKey } : {}), ...(draft.customLabel.trim() ? { customLabel: draft.customLabel.trim() } : {}) } } };
 }

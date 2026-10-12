@@ -1,3 +1,4 @@
+import './helpers/activity-integrity.js';
 import assert from 'node:assert/strict';
 import { after, before, test, mock } from 'node:test';
 import { Db, ObjectId } from 'mongodb';

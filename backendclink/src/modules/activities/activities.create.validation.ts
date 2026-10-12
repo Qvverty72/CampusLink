@@ -32,20 +32,25 @@ export const parseCreateActivity: RequestParser = (input: unknown): ValidationRe
   if (!endAt) issues.push({ field: 'endAt', message: 'A valid UTC ISO timestamp is required.' });
   if (startAt && endAt && endAt <= startAt) issues.push({ field: 'endAt', message: 'End must be after start.' });
   const location = record(input.location) ? input.location : {};
-  if (!record(input.location)) issues.push({ field: 'location', message: 'A building and floor are required.' });
+  if (!record(input.location)) issues.push({ field: 'location', message: 'A campus location object is required.' });
   for (const key of Object.keys(location)) if (!['buildingKey', 'floorKey', 'poiKey', 'customLabel'].includes(key)) {
     issues.push({ field: `location.${key}`, message: 'Unsupported location field.' });
   }
   for (const key of ['buildingKey', 'floorKey', 'poiKey'] as const) {
-    if (key === 'poiKey' && location[key] === undefined) continue;
+    if (location[key] === undefined) continue;
     if (typeof location[key] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(location[key] as string)) {
       issues.push({ field: `location.${key}`, message: 'A valid domain location ID is required.' });
     }
   }
+  if ((location.floorKey !== undefined && location.buildingKey === undefined)
+    || (location.poiKey !== undefined && (location.buildingKey === undefined || location.floorKey === undefined))) {
+    issues.push({ field: 'location', message: 'Floor requires building; POI requires building and floor.' });
+  }
   const customLabel = text(location.customLabel, 'customLabel', true);
   return issues.length ? { success: false, issues } : { success: true, data: {
     title, description, startAt: startAt!, endAt: endAt!, location: {
-      buildingKey: location.buildingKey as string, floorKey: location.floorKey as string,
+      ...(location.buildingKey !== undefined ? { buildingKey: location.buildingKey as string } : {}),
+      ...(location.floorKey !== undefined ? { floorKey: location.floorKey as string } : {}),
       ...(location.poiKey !== undefined ? { poiKey: location.poiKey as string } : {}),
       ...(customLabel ? { customLabel } : {}),
     },

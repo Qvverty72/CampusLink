@@ -1,3 +1,4 @@
+import { activityLocationLabel } from '../types/activity';
 import { APP_COLORS } from '@/types/colors';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -85,8 +86,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
     <ActivitySeriesView seriesId={detail.series.id} currentActivityId={activityId} onBack={() => setShowSeries(false)}
       onSelect={id => { setShowSeries(false); onSelectOccurrence(id); }} />
   </ActivityContentTransition>;
-  const location = detail && (detail.location.floorName.toLocaleLowerCase().includes(detail.location.buildingName.toLocaleLowerCase())
-    ? detail.location.floorName : `${detail.location.buildingName} · ${detail.location.floorName}`);
+  const location = detail && activityLocationLabel(detail.location);
   return <ActivityContentTransition transitionKey={isLoading ? 'loading' : error ? 'error' : `detail:${activityId}`}>
     <View style={styles.content}>
       <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={onBack} style={styles.action}>

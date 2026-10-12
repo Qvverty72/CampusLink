@@ -12,10 +12,10 @@ export interface Activity {
   endAt: string;
   series?: { id: string; index: number; total: number };
   location: {
-    buildingKey: string;
-    buildingName: string;
-    floorKey: string;
-    floorName: string;
+    buildingKey?: string;
+    buildingName?: string;
+    floorKey?: string;
+    floorName?: string;
     poiKey?: string;
     poiName?: string;
     customLabel?: string;
@@ -45,6 +45,13 @@ export interface ActivityParticipation {
   updatedAt?: string;
 }
 export const ACTIVITY_LABELS = { OFFICIAL_EVENT: 'Evento oficial', COMMUNITY_ACTIVITY: 'Actividad comunitaria' };
+
+export function activityLocationLabel(location: Activity['location']): string {
+  if (!location.buildingName) return 'Campus';
+  if (!location.floorName) return location.buildingName;
+  return location.floorName.toLocaleLowerCase().includes(location.buildingName.toLocaleLowerCase())
+    ? location.floorName : `${location.buildingName} · ${location.floorName}`;
+}
 
 export const ACTIVITY_PARTICIPANTS_PAGE_SIZE = 7;
 

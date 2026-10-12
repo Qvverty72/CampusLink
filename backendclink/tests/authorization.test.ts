@@ -33,7 +33,7 @@ before(async () => {
     if(url.pathname==='/auth/v1/user')return authStatus===200?Response.json({id:userId,email:'qa@duocuc.cl',email_confirmed_at:'2026-10-09T12:00:00Z',
       user_metadata:{roles:['ADMINISTRADOR'],campus_id:other}}):Response.json({code:'bad_jwt',msg:'private token'},{status:authStatus});
     if(providerFailure)throw new Error('private PostgreSQL transport credentials');
-    if(secret){assert.equal(url.searchParams.get('id'),'eq.'+current.campusId);assert.equal(url.searchParams.get('activo'),'eq.true');return Response.json(activeCampus?[{id:current.campusId}]:[]);}
+    if(secret){assert.equal(url.searchParams.get('id'),'eq.'+current.campusId);assert.equal(url.searchParams.get('select'),'id,institucion_id,activo');return Response.json(activeCampus?{id:current.campusId,institucion_id:campus,activo:true}:null);}
     if(url.pathname.endsWith('/perfil_usuario')){assert.equal(url.searchParams.get('id'),'eq.'+userId);return Response.json([current.profile]);}
     assert.equal(url.searchParams.get('perfil_usuario_id'),'eq.'+userId);assert.equal(url.searchParams.get('revocado_en'),'is.null');
     const kind=url.pathname.endsWith('/usuario_rol')?'rol':'permiso';

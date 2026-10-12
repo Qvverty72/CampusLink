@@ -7,12 +7,14 @@ async function main(): Promise<void> {
   const server = await startApi();
   const { startActivityNotificationWorker } = await import('./modules/activities/activities.notifications.worker.js');
   const stopNotifications = startActivityNotificationWorker();
+  const { startActivityLifecycleWorker } = await import('./modules/activities/activities.lifecycle.worker.js');
+  const stopLifecycle = startActivityLifecycleWorker();
   console.log('CampusLink API running on port ' + env.port);
   let stopping = false;
   const shutdown = async (): Promise<void> => {
     if (stopping) return;
     stopping = true;
-    try { await stopNotifications(); await stopApi(server); }
+    try { await Promise.all([stopNotifications(), stopLifecycle()]); await stopApi(server); }
     catch { console.error('API shutdown failed'); process.exitCode = 1; }
   };
   process.once('SIGINT', () => void shutdown());

@@ -7,6 +7,9 @@ export interface ActivityDocument {
   _id: ObjectId;
   campusId: string;
   createdByUserId: string;
+  /** PostgreSQL profile version locked during publication; protects delayed cancellation replay. */
+  creatorVersion?: string;
+  creatorCancellation?: { eventId: string; reason: string; changedAt: Date };
   title: string;
   description: string;
   type: string;
@@ -18,8 +21,8 @@ export interface ActivityDocument {
   category?: string | null;
   tags?: string[];
   location: {
-    buildingKey: string;
-    floorKey: string;
+    buildingKey?: string;
+    floorKey?: string;
     poiKey?: string | null;
     customLabel?: string | null;
     coordinates?: { x: number; y: number; z: number } | null;
@@ -51,7 +54,7 @@ export interface CreateActivityInput {
   description: string;
   startAt: Date;
   endAt: Date;
-  location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };
+  location: { buildingKey?: string; floorKey?: string; poiKey?: string; customLabel?: string };
 }
 
 export interface ActivityRecurrenceRule {
@@ -95,10 +98,10 @@ export interface ActivityDto {
   endAt: string;
   series?: { id: string; index: number; total: number };
   location: {
-    buildingKey: string;
-    buildingName: string;
-    floorKey: string;
-    floorName: string;
+    buildingKey?: string;
+    buildingName?: string;
+    floorKey?: string;
+    floorName?: string;
     poiKey?: string;
     poiName?: string;
     customLabel?: string;

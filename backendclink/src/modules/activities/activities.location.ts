@@ -28,10 +28,19 @@ export function spatialBuildings(map: CampusMapDocument): SpatialBuilding[] {
 }
 
 export function resolveActivityLocation(buildings: SpatialBuilding[], location: ActivityDocument['location']): ActivityDto['location'] | null {
-  if (!location || typeof location.buildingKey !== 'string' || typeof location.floorKey !== 'string') return null;
+  if (!location || typeof location !== 'object' || Array.isArray(location)) return null;
+  for (const key of ['buildingKey','floorKey','poiKey'] as const) {
+    if (location[key] !== undefined && !(key === 'poiKey' && location[key] === null)
+      && (typeof location[key] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(location[key]!))) return null;
+  }
+  if ((location.floorKey && !location.buildingKey) || (location.poiKey && (!location.buildingKey || !location.floorKey))) return null;
+  const label = typeof location.customLabel === 'string' && location.customLabel.trim() ? { customLabel: location.customLabel.trim() } : {};
+  // Empty hierarchy means the current campus; no invented building or floor IDs.
+  if (!location.buildingKey) return label;
   const matches = buildings.filter(value => value.id === location.buildingKey);
   if (matches.length !== 1) return null;
   const building = matches[0];
+  if (!location.floorKey) return { buildingKey: building.id, buildingName: building.name, ...label };
   const floors = building.floors.filter(value => value.id === location.floorKey);
   if (floors.length !== 1) return null;
   const floor = floors[0];

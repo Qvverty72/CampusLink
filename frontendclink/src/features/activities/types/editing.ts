@@ -12,7 +12,7 @@ export function activityEditDraft(activity: Activity): ActivityDraft {
     return { date: `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`, time: `${pad(date.getHours())}:${pad(date.getMinutes())}` }; };
   const start = fields(activity.startAt), end = fields(activity.endAt);
   return { title: activity.title, description: activity.description, startDate: start.date, startTime: start.time,
-    endDate: end.date, endTime: end.time, buildingKey: activity.location.buildingKey, floorKey: activity.location.floorKey,
+    endDate: end.date, endTime: end.time, buildingKey: activity.location.buildingKey ?? '', floorKey: activity.location.floorKey ?? '',
     poiKey: activity.location.poiKey ?? '', customLabel: activity.location.customLabel ?? '' };
 }
 
