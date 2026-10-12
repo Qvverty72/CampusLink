@@ -3,6 +3,8 @@ import { getAuthorizedActiveMap, type ActiveMapLookup } from '../maps/map.servic
 import { ApiError } from '../../services/apiError.js';
 import { hasActivityLocation, spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
+import { activityIntegrity } from './activities.integrity.js';
+import { documentOperation } from '../../services/document-references.js';
 import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivityParticipationDto, ActivityCreatorRecord, ActivityQuery, ActivitySeriesDocument } from './activities.types.js';
 import type { ActivityParticipantsQuery, ActivityParticipantsRecords, ActivityDeletionResult } from './activities.types.js';
 
@@ -31,10 +33,11 @@ export async function getActivities(auth: VerifiedAuthConnection, query: Activit
   if (!hasActivityLocation(buildings, query)) throw new ApiError(404, 'NOT_FOUND', 'Activity location not found.');
   const now = dependencies.now?.() ?? new Date();
   const lookup = dependencies.findActivities ?? (await import('./activities.repository.js')).findVisibleActivities;
-  const documents = await lookup(auth.campusId, query, now);
-  const result = documents.flatMap((document): ActivityDto[] => {
+  const documents = await documentOperation(() => lookup(auth.campusId, query, now));
+  const result: ActivityDto[] = [];
+  for (const document of documents) {
     const activity = toVisibleActivity(document, auth.campusId, now, buildings, query);
-    return activity ? [activity] : [];
-  });
+    if (activity && await activityIntegrity.isVisible(document)) result.push(activity);
+  }
   return result.sort((a, b) => a.startAt.localeCompare(b.startAt) || a.id.localeCompare(b.id));
 }

@@ -1,3 +1,4 @@
+import './helpers/activity-integrity.js';
 import assert from 'node:assert/strict';
 import { before, after, mock, test } from 'node:test';
 import { Db, MongoClient, ObjectId } from 'mongodb';
@@ -197,7 +198,7 @@ test('series transaction embeds its template without new collections and rolls b
     assert.equal(notices.length, 1); assert.equal(notices[0].key, `series:${official[0].seriesId}:published`);
     assert.equal(notices[0].title, `Nuevo evento recurrente: ${official[0].title} · 4 fechas`);
     assert.equal(official[0].notificationEvents!.length, 1); assert.equal(official[1].notificationEvents!.length, 0);
-    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 4); assert.equal(staged.length, 0);
+    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 503 }); assert.equal(committed.length, 4); assert.equal(staged.length, 0);
     activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 4);
   } finally { sessionMock.mock.restore(); dbMock.mock.restore(); }
 });
@@ -218,7 +219,7 @@ test('series insertMany reaches driver dispatch with a real CSOT transaction ins
   try {
     const preview = await previewActivitySeries(auth, parsed(), basicDeps());
     // withSession/withTransaction/insertMany remain the real driver, including the client deadline.
-    await assert.rejects(createActivitySeries(auth, parsed({ ...body(), previewHash: preview.previewHash }, true), basicDeps()), error => error === sentinel);
+    await assert.rejects(createActivitySeries(auth, parsed({ ...body(), previewHash: preview.previewHash }, true), basicDeps()), { status: 503 });
     assert.equal(dispatched, 1);
   } finally { connectMock.mock.restore(); dbMock.mock.restore(); }
 });

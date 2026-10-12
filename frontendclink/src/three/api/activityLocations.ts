@@ -24,5 +24,5 @@ export function activityLocations(map: RuntimeMapData): ActivityLocationOption[]
         pois: (floor.pois ?? []).filter(poi => poi.isVisible === true && !poi.deletedAt)
           .map(poi => ({ id: poi.poiKey, name: poi.name })),
       })),
-  })).filter(building => building.floors.length > 0);
+  }));
 }

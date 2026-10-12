@@ -1,5 +1,7 @@
 import { ObjectId } from 'mongodb';
 import { ApiError } from '../../services/apiError.js';
+import { activityIntegrity } from './activities.integrity.js';
+import { documentOperation } from '../../services/document-references.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
@@ -43,10 +45,13 @@ export async function prepareActivityDocument(auth: VerifiedAuthConnection, inpu
 /** Type is selected by the authorized entry point, never by the request body. */
 async function publishActivity(auth: VerifiedAuthConnection, input: CreateActivityInput, type: ActivityType,
   dependencies: ActivityDependencies): Promise<ActivityDetailDto> {
-  const document = await prepareActivityDocument(auth, input, type, dependencies);
-  const persist = dependencies.createActivity ?? (await import('./activities.create.repository.js')).insertActivity;
-  const activity = await persist(document);
-  return createdActivityDetail(auth, activity);
+  return activityIntegrity.withActor(auth, type === 'OFFICIAL_EVENT' ? 'officialActivities' : 'general', async (current, version) => {
+    const document = await prepareActivityDocument(current, input, type, dependencies);
+    document.creatorVersion = version;
+    const persist = dependencies.createActivity ?? (await import('./activities.create.repository.js')).insertActivity;
+    const activity = await documentOperation(() => persist(document));
+    return createdActivityDetail(current, activity);
+  });
 }
 
 export function createdActivityDetail(auth: VerifiedAuthConnection, activity: import('./activities.types.js').ActivityDto): ActivityDetailDto {

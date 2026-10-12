@@ -1,3 +1,4 @@
+import './helpers/activity-integrity.js';
 import assert from 'node:assert/strict';
 import { after, before, mock, test } from 'node:test';
 import { Db, MongoClient } from 'mongodb';
@@ -142,7 +143,7 @@ test('official transaction commits type/count/creator JOINED together and aborts
     assert.equal(activity.notificationEvents?.[0].status, 'PENDING');
     assert.deepEqual(own.activityId, activity._id); assert.equal(own.userId, userId); assert.equal(own.campusId, campusId);
     assert.equal(own.status, 'JOINED'); assert.deepEqual(own.joinedAt, activity.createdAt);
-    fail = true; await assert.rejects(createOfficialEvent(context(), parsed(), deps), /Creator enrollment failed/);
+    fail = true; await assert.rejects(createOfficialEvent(context(), parsed(), deps), { status: 503 });
     assert.equal(committed.length, 2); assert.equal(staged.length, 0);
     activeMap = { ...map, buildings: [] }; await assert.rejects(createOfficialEvent(context(), parsed(), deps), { status: 400 });
     assert.equal(committed.length, 2);

@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { requireResourceOwner } from '../auth/auth.authorization.js';
+import { requireResourceOwner, requireCampusCapability } from '../auth/auth.authorization.js';
+import { activityIntegrity } from './activities.integrity.js';
+import { documentOperation } from '../../services/document-references.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { ApiError } from '../../services/apiError.js';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
@@ -23,12 +25,14 @@ export async function previewActivityEdit(auth: VerifiedAuthConnection, activity
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'ID de actividad válido requerido.');
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const find = dependencies.findEditable ?? (await import('./activities.edit.repository.js')).findEditableActivity;
-  const current = await find(auth.campusId, activityId);
+  const current = await documentOperation(() => find(auth.campusId, activityId));
   if (!current || current._id?.toHexString?.() !== activityId.toLowerCase() || current.campusId !== auth.campusId
     || current.status !== 'ACTIVE' || current.visibility !== 'PUBLIC' || !['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'].includes(current.type)) {
     throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible para editar.');
   }
   requireResourceOwner(auth, current.createdByUserId);
+  if (current.type === 'OFFICIAL_EVENT') requireCampusCapability(auth, current.campusId, 'officialActivities');
+  if (!await activityIntegrity.isVisible(current)) throw new ApiError(404, 'NOT_FOUND', 'La publicación ya no está vigente.');
   if (!valid(current)) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Los datos de la publicación no están disponibles.');
   if (current.seriesId !== undefined && (typeof current.seriesId?.toHexString !== 'function'
     || !Number.isInteger(current.occurrenceIndex) || !Number.isInteger(current.occurrenceCount)
@@ -92,8 +96,11 @@ export async function previewActivityEdit(auth: VerifiedAuthConnection, activity
 
 export async function editActivity(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput,
   dependencies: ActivityEditDependencies = {}): Promise<ActivityEditResult> {
-  const plan = await previewActivityEdit(auth, activityId, input, dependencies);
-  if (plan.previewHash !== input.previewHash) throw conflict();
-  if (dependencies.saveEdit) return dependencies.saveEdit(plan);
-  return (await import('./activities.edit.repository.js')).commitActivityEdit(auth, activityId, input, dependencies.now?.() ?? new Date());
+  return activityIntegrity.withActor(auth, 'general', async current => {
+    auth = current;
+    const plan = await previewActivityEdit(auth, activityId, input, dependencies);
+    if (plan.previewHash !== input.previewHash) throw conflict();
+    if (dependencies.saveEdit) return documentOperation(() => dependencies.saveEdit!(plan));
+    return documentOperation(async () => (await import('./activities.edit.repository.js')).commitActivityEdit(auth, activityId, input, dependencies.now?.() ?? new Date()));
+  });
 }

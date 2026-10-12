@@ -25,6 +25,13 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
   const activities = filterLocationActivities(state.activities, { buildingKey: buildingKey ?? undefined });
   const hasSummary = !state.isLoading && !state.error;
   const explore = (activity: Activity) => {
+    if (!activity.location.floorKey) {
+      setActivityType(null);
+      const building = Object.values(map?.buildingConfigs ?? {}).find(value => value.id === activity.location.buildingKey);
+      if (building) useMapStore.getState().selectBuilding(building.id);
+      else useMapStore.getState().resetBuilding();
+      return;
+    }
     const floor = Object.values(map?.floorData ?? {}).find(value => value.id === activity.location.floorKey
       && value.buildingId === activity.location.buildingKey);
     if (!floor) return;

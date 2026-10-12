@@ -1,5 +1,7 @@
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { requireResourceOwner } from '../auth/auth.authorization.js';
+import { requireResourceOwner, requireCampusCapability } from '../auth/auth.authorization.js';
+import { activityIntegrity } from './activities.integrity.js';
+import { documentOperation } from '../../services/document-references.js';
 import { ApiError } from '../../services/apiError.js';
 import { getAvailableActivity } from './activities.detail.service.js';
 import type { ActivityDependencies } from './activities.service.js';
@@ -28,12 +30,16 @@ export async function getActivityParticipants(auth: VerifiedAuthConnection, acti
 
 export async function deleteOwnActivity(auth: VerifiedAuthConnection, activityId: string, expectedRevision: number,
   dependencies: ActivityDependencies = {}): Promise<ActivityDeletionResult> {
-  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER) {
-    throw new ApiError(400, 'VALIDATION_ERROR', 'A valid expected revision is required.');
-  }
-  const { document, activity, now } = await getAvailableActivity(auth, activityId, dependencies);
-  requireResourceOwner(auth, document.createdByUserId);
-  if ((document.editRevision ?? 0) !== expectedRevision) throw new ApiError(409, 'CONFLICT', 'La actividad cambió. Recarga la ficha antes de eliminar.');
-  const commit = dependencies.deleteActivity ?? (await import('./activities.management.repository.js')).commitActivityDeletion;
-  return commit(auth, activity.id, expectedRevision, now);
+  return activityIntegrity.withActor(auth, 'general', async current => {
+    auth = current;
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'A valid expected revision is required.');
+    }
+    const { document, activity, now } = await getAvailableActivity(auth, activityId, dependencies);
+    requireResourceOwner(auth, document.createdByUserId);
+    if (document.type === 'OFFICIAL_EVENT') requireCampusCapability(auth, document.campusId, 'officialActivities');
+    if ((document.editRevision ?? 0) !== expectedRevision) throw new ApiError(409, 'CONFLICT', 'La actividad cambió. Recarga la ficha antes de eliminar.');
+    const commit = dependencies.deleteActivity ?? (await import('./activities.management.repository.js')).commitActivityDeletion;
+    return documentOperation(() => commit(auth, activity.id, expectedRevision, now));
+  });
 }

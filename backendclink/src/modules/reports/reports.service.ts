@@ -8,6 +8,8 @@ import { spatialBuildings } from '../activities/activities.location.js';
 import { toVisibleActivity } from '../activities/activities.policy.js';
 import { ApiError } from '../../services/apiError.js';
 import { parseActivityReport } from './reports.validation.js';
+import { activityIntegrity } from '../activities/activities.integrity.js';
+import { documentOperation } from '../../services/document-references.js';
 
 export const getReportsHealth: () => Promise<ReportsHealth> =
   createModuleHealthCheck('reports', probeReportsDependencies);
@@ -21,9 +23,9 @@ export async function reportActivity(auth: VerifiedAuthConnection, activityId: s
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const now = dependencies.now?.() ?? new Date();
   const find = dependencies.findActivity ?? (await import('../activities/activities.detail.repository.js')).findVisibleActivity;
-  const document = await find(auth.campusId, id, now);
+  const document = await documentOperation(() => find(auth.campusId, id, now));
   const visible = document && toVisibleActivity(document, auth.campusId, now, spatialBuildings(map));
-  if (!visible || visible.id !== id) throw new ApiError(404, 'NOT_FOUND', 'Esta actividad ya no está disponible para denunciar.');
+  if (!visible || visible.id !== id || !await activityIntegrity.isVisible(document)) throw new ApiError(404, 'NOT_FOUND', 'Esta actividad ya no está disponible para denunciar.');
   // Keep the content reviewed by the complainant, never participation, change logs or delivery events.
   const snapshot: ActivityReportSnapshot = { ...visible, visibility: 'PUBLIC', revision: document.editRevision ?? 0 };
   if (typeof document.createdByUserId === 'string' && /^[0-9a-f-]{36}$/i.test(document.createdByUserId)) snapshot.createdByUserId = document.createdByUserId;
