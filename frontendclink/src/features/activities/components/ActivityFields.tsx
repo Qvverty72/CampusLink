@@ -89,7 +89,7 @@ export function ActivityFields({ draft, change, disabled, locations, organizer, 
         <Text style={styles.text}>Para cambiar la descripción, elige una opción de la lista.</Text>
       </> : null}
     </View>}
-    <Text style={styles.text}>{firstOccurrence ? 'Fecha y hora de la primera actividad. ' : ''}Fechas y horas locales de tu dispositivo, en formato de 24 horas.</Text>
+    <Text style={styles.text}>{firstOccurrence ? 'Fecha y hora de inicio de la serie. Las actividades se generarán según la repetición. ' : ''}Fechas y horas locales de tu dispositivo, en formato de 24 horas.</Text>
     <ActivityDateTimeField label="Fecha de inicio" mode="date" value={draft.startDate} disabled={disabled} onChange={value => change('startDate', value)} />
     <ActivityDateTimeField label="Hora de inicio" mode="time" value={draft.startTime} disabled={disabled} onChange={value => change('startTime', value)} />
     <ActivityDateTimeField label="Fecha de término" mode="date" value={draft.endDate} disabled={disabled} onChange={value => change('endDate', value)} />

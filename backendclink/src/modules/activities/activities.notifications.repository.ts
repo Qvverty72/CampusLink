@@ -2,6 +2,10 @@ import { ObjectId } from 'mongodb';
 import { getMongoDb } from '../../config/mongodb.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityNotificationEvent } from './activities.notifications.js';
+import { startedNotification } from './activities.notifications.js';
+import type { CampusMapDocument } from '../maps/map.types.js';
+import { spatialBuildings } from './activities.location.js';
+import { toVisibleActivity } from './activities.policy.js';
 
 export interface PendingActivityNotification {
   activityId: string;
@@ -9,6 +13,33 @@ export interface PendingActivityNotification {
   event: ActivityNotificationEvent;
   creatorId: string;
   createdAt: Date;
+}
+
+/** Server-side start detection, including existing series; never replay fully ended dates. */
+export async function enqueueStartedOfficialOccurrences(now = new Date()): Promise<void> {
+  const db = getMongoDb();
+  const activities = db.collection<ActivityDocument>('activities');
+  const documents = await activities.find({ type: 'OFFICIAL_EVENT', status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,
+    seriesId: { $type: 'objectId' }, startAt: { $lte: now }, endAt: { $gt: now },
+    $expr: { $gt: ['$startAt', '$createdAt'] },
+    notificationEvents: { $not: { $elemMatch: { type: 'OFFICIAL_EVENT_STARTED' } } },
+  }).toArray();
+  const maps = new Map<string, CampusMapDocument | null>();
+  for (const document of documents) {
+    if (document.type !== 'OFFICIAL_EVENT' || !document.seriesId || !(document.createdAt instanceof Date)
+      || !(document.startAt instanceof Date) || document.startAt > now || document.startAt <= document.createdAt) continue;
+    if (!maps.has(document.campusId)) maps.set(document.campusId,
+      await db.collection<CampusMapDocument>('campus_maps').findOne({ campusId: document.campusId, status: 'ACTIVE' }));
+    const map = maps.get(document.campusId);
+    if (!map || map.campusId !== document.campusId || map.status !== 'ACTIVE'
+      || !toVisibleActivity(document, document.campusId, now, spatialBuildings(map))) continue;
+    const event = startedNotification(document);
+    // Exact dates protect against a concurrent edit; a conditional push protects concurrent workers/restarts.
+    await activities.updateOne({ _id: document._id, campusId: document.campusId, type: 'OFFICIAL_EVENT',
+      status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null, seriesId: document.seriesId,
+      startAt: document.startAt, endAt: document.endAt, 'notificationEvents.key': { $ne: event.key } },
+    { $push: { notificationEvents: event } });
+  }
 }
 
 export async function findPendingActivityNotifications(): Promise<PendingActivityNotification[]> {

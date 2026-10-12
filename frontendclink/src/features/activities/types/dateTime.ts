@@ -1,4 +1,5 @@
 export interface ActivityDateTimeFieldProps {
+  displayValue?: string;
   label: string;
   mode: 'date' | 'time';
   value: string;

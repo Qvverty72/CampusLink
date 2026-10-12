@@ -1,14 +1,14 @@
 import { APP_COLORS } from '@/types/colors';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { createCommunityActivity, createOfficialEvent, previewActivitySeries, createActivitySeries } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityLocationQuery } from '../types/activity';
 import { isActivityDescriptionAllowed, validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
 import { ActivityFields } from './ActivityFields';
-import { ActivityDateTimeField } from './ActivityDateTimeField';
-import { RECURRENCE_LABELS, recurrenceDraftRule, type ActivityRecurrenceRule, type ActivityRecurrencePreview } from '../types/recurrence';
+import { ActivityRecurrencePicker } from './ActivityRecurrencePicker';
+import { recurrenceDraftRule, type ActivityRecurrenceDraft, type ActivityRecurrencePreview } from '../types/recurrence';
 
 export function CreateActivityForm({ locations, initialLocation, onCreated, official = false }: {
   locations: ActivityLocationOption[]; initialLocation: ActivityLocationQuery;
@@ -21,11 +21,13 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
     poiKey: initialLocation.poiKey ?? '', customLabel: '' });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [recurring, setRecurring] = useState(false);
-  const [frequency, setFrequency] = useState<ActivityRecurrenceRule['frequency']>('WEEKLY');
-  const [interval, setInterval] = useState('1'); const [until, setUntil] = useState(''); const [excludedDates, setExcludedDates] = useState('');
+  const [recurrenceDraft, setRecurrenceDraft] = useState<ActivityRecurrenceDraft>({
+    enabled: false, frequency: 'WEEKLY', interval: '1', until: '', excludedDates: '',
+  });
+  const { enabled: recurring, frequency, interval, until, excludedDates, weekdays } = recurrenceDraft;
   const [timeZone] = useState(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ''; } });
   const [preview, setPreview] = useState<ActivityRecurrencePreview | null>(null);
+  const [showPreviewDates, setShowPreviewDates] = useState(false);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const change = (field: keyof ActivityDraft, value: string) => {
@@ -33,13 +35,14 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
       ...(field === 'buildingKey' ? { floorKey: '', poiKey: '' } : field === 'floorKey' ? { poiKey: '' } : {}) }));
     setError(null);
     setPreview(null);
+    setShowPreviewDates(false);
   };
   const publish = async (previewOnly = false) => {
     if (request.current || !identity) return;
     if (!isActivityDescriptionAllowed(draft.description, allowCustomDescription)) { setError('Selecciona una descripción para la actividad.'); return; }
     const parsed = validateActivityDraft(draft, locations);
     if (parsed.error) { setError(parsed.error); return; }
-    const recurrence = recurring ? recurrenceDraftRule(frequency, interval, until, excludedDates, timeZone) : null;
+    const recurrence = recurring ? recurrenceDraftRule(frequency, interval, until, excludedDates, timeZone, weekdays) : null;
     if (recurrence?.error) { setError(recurrence.error); return; }
     if (recurring && !previewOnly && !preview) { setError('Revisa las fechas de la vista previa antes de publicar.'); return; }
     const abort = new AbortController(); request.current = abort;
@@ -74,10 +77,20 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
       if (request.current === abort) request.current = null;
     }
   };
-  const units = { DAILY: { plural: 'días', single: 'día', label: 'Repetir cada cuántos días' },
-    WEEKLY: { plural: 'semanas', single: 'semana', label: 'Repetir cada cuántas semanas' },
-    MONTHLY: { plural: 'meses', single: 'mes', label: 'Repetir cada cuántos meses' } }[frequency];
-  const recurrenceChange = (action: () => void) => { action(); setPreview(null); setError(null); };
+  const preparePreview = useCallback(async (value: ActivityRecurrenceDraft, signal: AbortSignal) => {
+    if (!identity) throw new Error('Vuelve a iniciar sesión para calcular las fechas.');
+    const base = validateActivityDraft(draft, locations);
+    const recurrence = recurrenceDraftRule(value.frequency, value.interval, value.until, value.excludedDates, timeZone, value.weekdays);
+    if (!base.input || !recurrence.rule) throw new Error(base.error ?? recurrence.error ?? 'Completa los datos de la actividad.');
+    if (!isActivityDescriptionAllowed(draft.description, allowCustomDescription)) throw new Error('Selecciona una descripción válida.');
+    try { return await previewActivitySeries(identity.campusId, { ...base.input, recurrence: recurrence.rule }, official, signal); }
+    catch (reason) {
+      if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
+      throw new Error(reason instanceof AuthApiError && [400, 409].includes(reason.status)
+        ? reason.serverMessage ?? 'Revisa las fechas de la repetición.' : 'No se pudieron calcular las fechas. Reintenta.');
+    }
+  }, [draft, locations, identity, timeZone, official, allowCustomDescription, refreshIdentity]);
+  const canPreview = !!identity && !!validateActivityDraft(draft, locations).input && isActivityDescriptionAllowed(draft.description, allowCustomDescription);
   return <View style={styles.form}>
     <Text accessibilityRole="header" style={styles.heading}>{official ? 'Publicar evento oficial' : 'Crear actividad comunitaria'}</Text>
     <Text style={styles.text}>{official ? 'Se publicará como evento oficial de tu campus. Serás el primer participante.'
@@ -85,41 +98,20 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
     <ActivityFields draft={draft} change={change} disabled={submitting} locations={locations}
       organizer={identity?.profile.nombre_completo} firstOccurrence={recurring} creationLocation={initialLocation}
       allowCustomDescription={allowCustomDescription} />
-    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: recurring, disabled: submitting }} disabled={submitting}
-      onPress={() => recurrenceChange(() => setRecurring(value => !value))} style={styles.choice}>
-      <Text style={styles.label}>{recurring ? '✓ ' : ''}Repetir como serie</Text>
-    </Pressable>
-    {recurring ? <View style={styles.form}>
-      <Text style={styles.label}>Frecuencia</Text><View style={styles.choices}>
-        {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map(value => <Pressable key={value} accessibilityRole="radio"
-          accessibilityState={{ selected: frequency === value, disabled: submitting }} disabled={submitting}
-          onPress={() => recurrenceChange(() => setFrequency(value))} style={[styles.choice, frequency === value && styles.selected]}>
-          <Text style={frequency === value ? styles.selectedText : styles.text}>{RECURRENCE_LABELS[value]}</Text>
-        </Pressable>)}
-      </View>
-      <Text style={styles.label}>{units.label} (1–52)</Text>
-      <TextInput accessibilityLabel={units.label} keyboardType="number-pad" value={interval} maxLength={2} editable={!submitting}
-        onChangeText={value => recurrenceChange(() => setInterval(value))} style={styles.input} />
-      <Text style={styles.text}>1 = cada {units.single}; 2 = cada dos {units.plural}.</Text>
-      <ActivityDateTimeField label="Repetir hasta el" mode="date" value={until} disabled={submitting}
-        onChange={value => recurrenceChange(() => setUntil(value))} />
-      <Text style={styles.text}>No se crearán actividades que comiencen después de esta fecha. Ese día se incluye si coincide con la repetición.</Text>
-      <Text style={styles.label}>Fechas que no se realizarán (opcional)</Text>
-      <Text style={styles.text}>Permite saltar una actividad, por ejemplo, por un feriado. Déjalo vacío si se realizarán todas. Separa las fechas por comas.</Text>
-      <TextInput accessibilityLabel="Fechas que no se realizarán" placeholder="DD/MM/AAAA, DD/MM/AAAA" value={excludedDates} multiline maxLength={2400} editable={!submitting}
-        onChangeText={value => recurrenceChange(() => setExcludedDates(value))} style={styles.input} />
-      <Text style={styles.text}>Zona horaria: {timeZone || 'No disponible'}. Mantiene la hora local. Máximo 200 ocurrencias y dos años.
-        Los días mensuales inexistentes se omiten; las horas ambiguas o inexistentes por cambio horario requieren ajustar la regla.</Text>
-    </View> : null}
-    {recurring ? <Pressable accessibilityRole="button" disabled={submitting} onPress={() => { void publish(true); }} style={styles.cancel}>
+    <ActivityRecurrencePicker value={recurrenceDraft} disabled={submitting} timeZone={timeZone}
+      startDate={draft.startDate} onPreview={canPreview ? preparePreview : undefined}
+      previewContext={JSON.stringify([draft, locations, identity?.campusId, official, allowCustomDescription])}
+      onChange={(value, reviewed) => { setRecurrenceDraft(value); setPreview(reviewed ?? null); setShowPreviewDates(false); setError(null); }} />
+    {recurring && !preview ? <Pressable accessibilityRole="button" disabled={submitting} onPress={() => { void publish(true); }} style={styles.cancel}>
       <Text style={styles.label}>{submitting ? 'Procesando…' : 'Ver fechas antes de publicar'}</Text>
     </Pressable> : null}
     {recurring && preview ? <View style={styles.form}>
-      <Text accessibilityRole="header" style={styles.heading}>Vista previa: {preview.occurrences.length} ocurrencias</Text>
-      <Text style={styles.text}>Revisa todas las fechas. Te inscribirás como organizador en cada ocurrencia.</Text>
-      {preview.occurrences.map(value => <Text key={value.index} style={styles.text}>{value.index}. {new Date(value.startAt).toLocaleString('es-CL', { timeZone })}
+      <Text style={styles.text}>{preview.occurrences.length === 1 ? 'Se creará 1 actividad.' : `Se crearán ${preview.occurrences.length} actividades.`} Serás participante en cada una.</Text>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showPreviewDates }} aria-expanded={showPreviewDates}
+        onPress={() => setShowPreviewDates(value => !value)} style={styles.cancel}><Text style={styles.label}>{showPreviewDates ? 'Ocultar fechas' : 'Ver fechas de la serie'}</Text></Pressable>
+      {showPreviewDates ? <>{preview.occurrences.map(value => <Text key={value.index} style={styles.text}>{value.index}. {new Date(value.startAt).toLocaleString('es-CL', { timeZone })}
         {' — '}{new Date(value.endAt).toLocaleString('es-CL', { timeZone })}</Text>)}
-      {preview.skipped.map(value => <Text key={value.date} style={styles.text}>{value.date}: {value.reason === 'EXCLUDED' ? 'fecha excluida' : 'día inexistente omitido'}.</Text>)}
+      {preview.skipped.map(value => <Text key={value.date} style={styles.text}>{value.date}: {value.reason === 'EXCLUDED' ? 'fecha excluida' : 'día inexistente omitido'}.</Text>)}</> : null}
     </View> : null}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: submitting || (recurring && !preview) }}
@@ -132,11 +124,8 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
 
 const styles = StyleSheet.create({
   form: { gap: 12, paddingVertical: 12 }, heading: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  field: { gap: 6 }, label: { fontWeight: '600', color: '#0F172A' }, text: { color: '#475569', lineHeight: 21 },
-  input: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12, color: '#0F172A' },
-  description: { minHeight: 100, textAlignVertical: 'top' }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  choice: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 10 },
-  selected: { backgroundColor: APP_COLORS.PRIMARY, borderColor: APP_COLORS.PRIMARY }, selectedText: { color: '#FFFFFF', fontWeight: '600' },
+  label: { fontWeight: '600', color: '#0F172A' }, text: { color: '#475569', lineHeight: 21 },
+  selectedText: { color: '#FFFFFF', fontWeight: '600' },
   error: { color: '#B91C1C', lineHeight: 21 }, publish: { backgroundColor: APP_COLORS.PRIMARY, padding: 14, borderRadius: 8, alignItems: 'center' },
   cancel: { paddingVertical: 12, alignItems: 'center' },
 });

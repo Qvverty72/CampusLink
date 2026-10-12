@@ -61,6 +61,40 @@ test('monthly rules skip nonexistent dates visibly, preserve anchor day after sk
   assert.equal(leap.occurrences[1].startAt, '2096-02-29T12:00:00.000Z');
 });
 
+test('selected ISO weekdays start at the first marked date on/after the lower bound and normalize into a stable fingerprint', () => {
+  const input = { ...body(), startAt: '2099-01-05T12:00:00.000Z', endAt: '2099-01-05T13:00:00.000Z',
+    recurrence: { ...body().recurrence, weekdays: [4, 2], until: '2099-01-19' } };
+  // 2099-01-05 is Monday: do not materialize it when only Tuesday/Thursday are marked.
+  const result = expand(input);
+  assert.deepEqual(result.occurrences.map(value => value.startAt.substring(0, 10)), ['2099-01-06', '2099-01-08', '2099-01-13', '2099-01-15']);
+  assert.deepEqual(result.recurrence.weekdays, [2, 4]);
+  assert.equal(result.previewHash, expand({ ...input, recurrence: { ...input.recurrence, weekdays: [2, 4] } }).previewHash);
+  assert.notEqual(result.previewHash, expand({ ...input, recurrence: { ...input.recurrence, weekdays: [2] } }).previewHash);
+  const excluded = expand({ ...input, recurrence: { ...input.recurrence, excludedDates: ['2099-01-08'] } });
+  assert.equal(excluded.occurrences.length, 3); assert.equal(excluded.skipped[0].reason, 'EXCLUDED');
+  assert.throws(() => expand({ ...input, recurrence: { ...input.recurrence, excludedDates: ['2099-01-05'] } }), { status: 400 });
+  assert.throws(() => expand({ ...input, recurrence: { ...input.recurrence, until: '2099-01-05' } }), { status: 400 });
+});
+
+test('weekday validation rejects duplicates, empty/out-of-range/fractional/non-weekly input while legacy weekly rules keep their anchor', () => {
+  for (const weekdays of [[], [0], [8], [2, 2], [1.5], ['2'], null, '2']) {
+    assert.equal(activitySeriesParser()({ ...body(), recurrence: { ...body().recurrence, weekdays } }).success, false);
+  }
+  for (const frequency of ['DAILY', 'MONTHLY']) assert.equal(activitySeriesParser()({ ...body(), recurrence: { ...body().recurrence, frequency, weekdays: [1] } }).success, false);
+  assert.equal(expand(body()).recurrence.weekdays, undefined);
+  assert.deepEqual(expand(body()).occurrences.map(value => value.startAt.substring(0, 10)), ['2099-01-05', '2099-01-12', '2099-01-19']);
+});
+
+test('multi-day weekly intervals count Monday-based weeks, keep local wall clocks across DST and enforce occurrence limits', () => {
+  const interval = expand({ ...body(), startAt: '2099-01-07T12:00:00.000Z', endAt: '2099-01-07T13:00:00.000Z',
+    recurrence: { ...body().recurrence, interval: 2, weekdays: [1, 4], until: '2099-01-26' } });
+  assert.deepEqual(interval.occurrences.map(value => value.startAt.substring(0, 10)), ['2099-01-08', '2099-01-19', '2099-01-22']);
+  const dst = expand({ ...body(), startAt: '2027-03-08T15:00:00.000Z', endAt: '2027-03-08T16:00:00.000Z',
+    recurrence: { ...body().recurrence, timeZone: 'America/New_York', weekdays: [2, 4], until: '2027-03-18' } });
+  assert.deepEqual(dst.occurrences.map(value => value.startAt.substring(11, 16)), ['15:00', '15:00', '14:00', '14:00']);
+  assert.throws(() => expand({ ...body(), recurrence: { ...body().recurrence, weekdays: [1, 2, 3, 4, 5, 6, 7], until: '2100-01-01' } }), { status: 400 });
+});
+
 test('exclusions remove only matching start dates, indices identify materialized occurrences and fingerprints bind all publication fields', () => {
   const excluded = expand({ ...body(), recurrence: { ...body().recurrence, excludedDates: ['2099-01-05'] } });
   assert.equal(excluded.occurrences.length, 2); assert.equal(excluded.occurrences[0].index, 1);
@@ -142,16 +176,29 @@ test('series transaction embeds its template without new collections and rolls b
     },
   }; });
   try {
-    const preview = await previewActivitySeries(auth, parsed(), basicDeps()); const input = parsed({ ...body(), previewHash: preview.previewHash }, true);
+    const selectedDays = { ...body(), recurrence: { ...body().recurrence, weekdays: [2, 4] } };
+    const preview = await previewActivitySeries(auth, parsed(selectedDays), basicDeps()); const input = parsed({ ...selectedDays, previewHash: preview.previewHash }, true);
     await createActivitySeries(auth, input, basicDeps()); assert.equal(committed.length, 2);
     const activities = committed[0].documents as ActivityDocument[]; const own = committed[1].documents as ActivityParticipationDocument[];
-    assert.equal(activities.length, 3); assert.equal(own.length, 3);
+    assert.equal(activities.length, 4); assert.equal(own.length, 4);
     assert.equal(activities.filter(value => value.seriesDefinition).length, 1);
     assert.deepEqual(activities[0].seriesDefinition!._id, activities[0].seriesId);
     assert.equal(activities[0].seriesDefinition!.recurrence.frequency, 'WEEKLY');
+    assert.deepEqual(activities[0].seriesDefinition!.recurrence.weekdays, [2, 4]);
+    assert.equal(activities[0].startAt.toISOString().substring(0, 10), '2099-01-06');
     own.forEach((value, index) => { assert.deepEqual(value.activityId, activities[index]._id); assert.equal(value.status, 'JOINED'); assert.equal(value.userId, userId); });
-    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 2); assert.equal(staged.length, 0);
-    activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 2);
+    assert.equal(activities.flatMap(value => value.notificationEvents ?? []).length, 0, 'community never broadcasts');
+    const admin = { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }] };
+    const officialPreview = await previewActivitySeries(admin, parsed(selectedDays), basicDeps(), true);
+    await createActivitySeries(admin, parsed({ ...selectedDays, previewHash: officialPreview.previewHash }, true), basicDeps(), true);
+    const official = committed[2].documents as ActivityDocument[];
+    assert.equal(official.length, 4); assert.equal((committed[3].documents as ActivityParticipationDocument[]).length, 4);
+    const notices = official.flatMap(value => value.notificationEvents ?? []);
+    assert.equal(notices.length, 1); assert.equal(notices[0].key, `series:${official[0].seriesId}:published`);
+    assert.equal(notices[0].title, `Nuevo evento recurrente: ${official[0].title} · 4 fechas`);
+    assert.equal(official[0].notificationEvents!.length, 1); assert.equal(official[1].notificationEvents!.length, 0);
+    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 4); assert.equal(staged.length, 0);
+    activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 4);
   } finally { sessionMock.mock.restore(); dbMock.mock.restore(); }
 });
 
@@ -267,6 +314,10 @@ test('series migration is additive/idempotent and partial uniqueness leaves sing
 });
 
 test('frontend recurrence fields validate calendar exceptions and retain supplied device zone for server preview', () => {
+  const weekly = recurrenceDraftRule('WEEKLY', '1', '30/11/2099', '', 'America/Santiago', [4, 2]);
+  assert.deepEqual(weekly.rule?.weekdays, [2, 4]);
+  assert.ok(recurrenceDraftRule('WEEKLY', '1', '30/11/2099', '', 'UTC', []).error);
+  assert.ok(recurrenceDraftRule('MONTHLY', '1', '30/11/2099', '', 'UTC', [2]).error);
   const result = recurrenceDraftRule('MONTHLY', '2', '31/12/2099', '31/03/2099,31/05/2099', 'America/Santiago');
   assert.ok(result.rule); assert.deepEqual(result.rule.excludedDates, ['2099-03-31', '2099-05-31']); assert.equal(result.rule.timeZone, 'America/Santiago');
   for (const [interval, until, exclusions, zone] of [['0', '31/12/2099', '', 'UTC'], ['1', '31/02/2099', '', 'UTC'],

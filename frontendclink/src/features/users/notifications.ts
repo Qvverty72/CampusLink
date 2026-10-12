@@ -1,7 +1,7 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
 export interface ActivityNotification {
-  id: string; activityId: string; type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED';
+  id: string; activityId: string; seriesId?: string; type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED' | 'OFFICIAL_EVENT_STARTED';
   title: string; message: string; createdAt: string; readAt: string | null;
 }
 export interface NotificationPage { items: ActivityNotification[]; nextCursor: string | null }
@@ -13,7 +13,8 @@ export async function fetchNotifications(cursor?: string, signal?: AbortSignal):
   const value = response.data;
   if (!value || !Array.isArray(value.items) || (value.nextCursor !== null && !uuid.test(value.nextCursor))
     || value.items.some(item => !uuid.test(item.id) || !/^[0-9a-f]{24}$/.test(item.activityId)
-      || !['OFFICIAL_EVENT_PUBLISHED', 'ACTIVITY_CHANGED'].includes(item.type) || typeof item.title !== 'string'
+      || (item.seriesId !== undefined && !/^[0-9a-f]{24}$/.test(item.seriesId))
+      || !['OFFICIAL_EVENT_PUBLISHED', 'ACTIVITY_CHANGED', 'OFFICIAL_EVENT_STARTED'].includes(item.type) || typeof item.title !== 'string'
       || typeof item.message !== 'string' || !Number.isFinite(Date.parse(item.createdAt)))) {
     throw new Error('No se pudieron cargar las notificaciones.');
   }

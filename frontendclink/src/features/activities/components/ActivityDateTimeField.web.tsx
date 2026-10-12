@@ -4,15 +4,15 @@ import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { browserDateSelection, browserDateValue, formatPickerValue, pickerDate, type ActivityDateTimeFieldProps } from '../types/dateTime';
 
 /** Browser-native selector inside a blocking modal, with changes staged until acceptance. */
-export function ActivityDateTimeField({ label, mode, value, disabled, onChange }: ActivityDateTimeFieldProps) {
+export function ActivityDateTimeField({ label, mode, value, disabled, onChange, displayValue }: ActivityDateTimeFieldProps) {
   const [selection, setSelection] = useState<string | null>(null);
   useEffect(() => { if (disabled) setSelection(null); }, [disabled]);
   return <View style={styles.field}>
     <Text style={styles.label}>{label}</Text>
-    <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} accessibilityValue={{ text: value || 'Sin seleccionar' }}
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} accessibilityValue={{ text: displayValue || value || 'Sin seleccionar' }}
       accessibilityState={{ disabled, expanded: selection !== null }} disabled={disabled} activeOpacity={0.75}
       onPress={() => setSelection(value || formatPickerValue(pickerDate('', mode), mode))} style={[styles.trigger, disabled && styles.disabled]}>
-      <Text style={value ? styles.value : styles.placeholder}>{value || (mode === 'date' ? 'Seleccionar fecha' : 'Seleccionar hora')}</Text>
+      <Text style={value ? styles.value : styles.placeholder}>{displayValue || value || (mode === 'date' ? 'Seleccionar fecha' : 'Seleccionar hora')}</Text>
       <Text aria-hidden style={styles.placeholder}>▾</Text>
     </TouchableOpacity>
     {selection !== null && !disabled ? <Modal visible transparent animationType="fade" onRequestClose={() => setSelection(null)}>
@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   field: { gap: 8 }, label: { fontWeight: '600', color: '#0F172A' },
   trigger: { minHeight: 48, borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  value: { color: '#0F172A' }, placeholder: { color: '#64748B' }, disabled: { opacity: 0.5 },
+  value: { color: '#0F172A', flexShrink: 1, lineHeight: 20 }, placeholder: { color: '#64748B' }, disabled: { opacity: 0.5 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   picker: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, gap: 16 },
   heading: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
