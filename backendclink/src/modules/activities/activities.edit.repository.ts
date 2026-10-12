@@ -7,7 +7,7 @@ import { ApiError } from '../../services/apiError.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityChangeDocument, ActivityEditResult, EditActivityInput } from './activities.edit.types.js';
 import { previewActivityEdit } from './activities.edit.service.js';
-import { changeNotification, participantsAtChange } from './activities.notifications.js';
+import { changeNotification, groupedChangeNotification, participantsAtChange } from './activities.notifications.js';
 
 export const findEditableActivity = (campusId: string, activityId: string) => getMongoDb().collection<ActivityDocument>('activities')
   .findOne({ campusId, _id: new ObjectId(activityId), status: 'ACTIVE', visibility: 'PUBLIC' });
@@ -42,6 +42,8 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
         rows.push(row); participantsByActivity.set(id, rows);
       }
       const operations = [];
+      const histories: ActivityChangeDocument[] = [];
+      const recipients = new Map<string, string[]>();
       for (const change of changed) {
         const participants = participantsByActivity.get(change.activityId) ?? [];
         const reasons: ActivityChangeDocument['notificationReasons'] = [];
@@ -51,14 +53,20 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
         const history: ActivityChangeDocument = { _id: new ObjectId(), operationId, campusId: auth.campusId,
           activityId: new ObjectId(change.activityId), actorUserId: auth.userId, revision: change.revision + 1, scope: input.scope,
           changedAt: transactionNow, before: change.before, after: change.after, changedFields: change.changedFields, notificationReasons: reasons };
+        histories.push(history);
+        recipients.set(change.activityId, participantsAtChange(participants, auth.userId));
         operations.push({ updateOne: {
           filter: { _id: new ObjectId(change.activityId), campusId: auth.campusId, createdByUserId: auth.userId,
             ...(change.revision === 0 ? { $or: [{ editRevision: 0 }, { editRevision: { $exists: false } }] } : { editRevision: change.revision }) },
           update: { $set: { title: change.after.title, description: change.after.description, startAt: change.after.startAt, endAt: change.after.endAt,
             location: change.after.location, editRevision: change.revision + 1, updatedAt: transactionNow },
-            $push: { changeHistory: history, notificationEvents: changeNotification(history, participantsAtChange(participants, auth.userId)) } },
+            $push: { changeHistory: history } },
         } });
       }
+      // One durable event per operation; histories and every revision remain per occurrence.
+      Object.assign(operations[0].updateOne.update.$push, { notificationEvents: changed.length === 1
+        ? changeNotification(histories[0], recipients.get(histories[0].activityId.toHexString())!)
+        : groupedChangeNotification(histories, recipients) });
       const update = await transactionDb.collection<ActivityDocument>('activities').bulkWrite(operations, { session });
       if (update.matchedCount !== changed.length) throw new ApiError(409, 'CONFLICT', 'La actividad cambió. Recarga la ficha antes de editar.');
     }

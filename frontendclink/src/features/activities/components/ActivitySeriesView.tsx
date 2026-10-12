@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchActivitySeries } from '../api/activitiesApi';
-import { RECURRENCE_LABELS, type ActivitySeries } from '../types/recurrence';
+import { RECURRENCE_LABELS, RECURRENCE_WEEKDAYS, type ActivitySeries } from '../types/recurrence';
 import { ActivityCard } from './ActivityCard';
 
 /** Series context remains in the current modal. Participation always belongs to the selected activity ID. */
@@ -40,6 +40,7 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
       <Text accessibilityRole="header" style={styles.heading}>Serie: {series.title}</Text>
       <Text style={styles.text}>Regla de creación: {RECURRENCE_LABELS[series.recurrence.frequency]} cada {series.recurrence.interval} período(s),
         {' '}hasta {series.recurrence.until} · {series.recurrence.timeZone}</Text>
+      {series.recurrence.weekdays ? <Text style={styles.text}>Días: {RECURRENCE_WEEKDAYS.filter(day => series.recurrence.weekdays!.includes(day.value)).map(day => day.name).join(', ')}.</Text> : null}
       <Text style={styles.text}>Las ocurrencias pueden tener fechas o lugares editados; consulta cada ficha para ver su información actual.</Text>
       <Text style={styles.text}>La serie tiene {series.occurrenceCount} ocurrencias. Cada una tiene su inscripción independiente.</Text>
       <Text style={styles.heading}>Ocurrencias vigentes disponibles ({series.occurrences.length})</Text>

@@ -9,8 +9,13 @@ para React Three Fiber.
 nativos, incluidos `components/FloorInfoModal.tsx` y `components/MapActivitiesPanel.tsx`.
 La pantalla Expo carga una consulta del campus y comparte el resultado por props con
 el resumen y los modales nativos, sin duplicar actividades en `mapStore` o `mapDataStore`.
-El hook cancela solicitudes obsoletas al cambiar sesión/campus y actualiza la consulta
-al terminar la primera actividad. El navegador y el modal permiten actualizarla.
+El hook cancela solicitudes obsoletas al cambiar sesión/campus y conserva internamente
+la respuesta completa autorizada. `selectActivityOccurrences` proyecta una tarjeta por
+serie: la primera aún no terminada por inicio real (en curso o próxima), antes de filtrar
+ubicación. El temporizador sustituye la tarjeta al terminar y revalida en segundo plano
+sin vaciar el listado; volver a primer plano recalcula/revalida. Un error de red en esta
+revalidación conserva la última respuesta; errores de autorización sí la retiran.
+El navegador y el modal permiten actualizar manualmente con carga/error habituales.
 
 `MapActivitiesPanel` muestra dos contadores circulares sobre el mapa, azul para
 oficiales y naranja para comunitarias, en una columna con eventos oficiales arriba
@@ -97,9 +102,25 @@ consultas de detalle hasta recibir resultados. Se comparte entre mapa y piso.
 página. Reemplazan los spinners/textos visibles de ficha e inscritos, manteniendo
 regreso/cierre, error/reintento y paginador cuando llegan datos. No cambia otros
 spinners ni migra formularios o módulos ajenos automáticamente.
-La vista «Detalle de actividades» muestra título/tipo/inicio/término y contador
-de inscritos en tarjetas de ancho disponible. Descripción/organizador/estado/ubicación se consultan
-en «Ver ficha completa», sin repetirlos en cada fila.
+La vista «Detalle de actividades» muestra título/descripción/inicio/término y contador
+de inscritos en tarjetas de ancho disponible. `ActivityDescription` comparte la
+presentación entre listado y ficha: listado resume a 160 caracteres Unicode y hasta
+tres líneas; «Ver más» abre la ficha mediante `onReadMore={onPress}`, sin expandir
+la tarjeta. Dentro de la ficha conserva 240 caracteres y cuatro líneas, con
+«Ver más / Ver menos» para desplegar el texto íntegro. Cambiar ID o descripción
+reinicia expansión. El callback opcional omite el estado expanded accesible y
+anuncia que abre detalles; al omitirlo mantiene expansión local.
+Los botones de título/fechas/enlace siguen abriendo la misma ficha.
+La ubicación se consulta dentro de la ficha completa junto
+con organizador/estado; tarjeta y skeleton no muestran una línea de ubicación.
+El enlace dice «Ver detalles y ubicación» o, si el usuario está JOINED confirmado,
+«Ver detalles e inscritos». Las etiquetas accesibles usan el mismo texto; el
+estado propio confirmado mantiene también el acceso histórico cuando la actividad
+ya no está disponible públicamente, sin mostrar metadata anterior.
+El tipo se indica en el
+encabezado del grupo y mediante el color de borde; no se repite debajo del título
+de cada tarjeta. La ficha completa conserva el tipo explícito y el skeleton del
+listado anticipa la descripción sin esa línea de tipo.
 `LocationActivities` pagina las tarjetas con un máximo de cinco publicaciones en
 total, incluso cuando aparecen ambos tipos. Conserva oficiales primero y el orden
 de la consulta dentro de cada tipo. Los encabezados muestran los totales del filtro,
@@ -209,8 +230,7 @@ El catálogo es política frontend; API conserva description string y sus límit
 ruedas y Aceptar/Cancelar en iOS. La variante `.web` abre un modal con selector del
 navegador. Estos selectores bloquean la interacción con el formulario de fondo;
 Cancelar/cerrar conserva el valor anterior y solo Aceptar aplica la elección. Inicio,
-término y el límite de repetición usan estos selectores; las exclusiones de una
-serie conservan su entrada por fechas separadas por comas. La referencia libre
+término y el límite de repetición usan estos selectores. La referencia libre
 del lugar se omite en creación y al editar actividades sin referencia previa.
 La edición recibe `existingContent`: una descripción previa fuera del catálogo
 puede conservarse como texto sin edición cuando falta capacidad oficial, o
@@ -221,7 +241,15 @@ contexto espacial en creación. Las fechas no modificadas conservan segundos y
 milisegundos, aunque el selector muestre precisión de minutos.
 
 El adaptador `activityLocations` entrega edificios/pisos/POI por IDs de dominio
-al formulario. No entrega meshes ni modifica la escena. Publicar refresca los
+al formulario. Ordena edificios alfabéticamente por nombre en español con comparación
+numérica natural (Cabaña A/B/C). El orden de pisos usa el número firmado visible
+en el nombre «Piso …»; cuando no existe, usa `level` como respaldo. Esto cubre
+pisos renombrados cuyo nombre ya no coincide con el nivel técnico del mapa.
+Los pisos de nivel visible no negativo van primero en orden ascendente;
+luego los negativos del más cercano al suelo al más profundo
+(por ejemplo, 1, -2, -3). Creación comunitaria/oficial y edición comparten el orden,
+sin modificar nombres, IDs ni datos originales del mapa.
+No entrega meshes ni modifica la escena. Publicar refresca los
 resúmenes del campus/edificio y abre el detalle con creador JOINED. Edificio y piso
 obligatorios, POI visible del piso opcional. Cancelar o perder la respuesta tras
 un commit no revierte la publicación; revisar listado antes de repetir.
@@ -243,12 +271,37 @@ Fuera de creación, `FloorInfoModal` ofrece regreso a información del piso medi
 ## Series recurrentes
 
 El mismo formulario comunitario/oficial ofrece repetir diariamente, semanalmente
-o mensualmente, con intervalo, fecha final de los inicios y exclusiones. El backend
+o mensualmente, con fecha final de los inicios y selección de días semanales.
+`ActivityRecurrencePicker` muestra una fila «Repetir / Nunca» y abre un selector
+modal con cuatro respuestas: No, solo una vez; Sí, todos los días; Sí, algunos días
+de la semana; Sí, una vez al mes. La opción semanal despliega Lun–Dom con selección
+múltiple. `weekdays` usa días ISO1–7; solo genera días marcados desde la fecha inicial,
+sin forzar actividad ese primer día. Series antiguas sin este campo mantienen su regla.
+¿Hasta cuándo? usa el selector de fecha con una etiqueta legible. Así quedará muestra
+descripción natural y total real desde preview del backend, sin estimaciones locales.
+Solicitudes debounced/abortables y clave de regla/contenido impiden mostrar totales
+o confirmar hashes obsoletos. El modal no ofrece opciones avanzadas para editar
+intervalos ni fechas a omitir. El contrato mantiene esos campos para compatibilidad
+con reglas existentes; los intervalos semanales usan semanas ISO de lunes a domingo.
+Los cambios se mantienen temporales hasta Listo; cancelar/cerrar/disabled no cambia
+el formulario. Listo transfiere preview revisada y hash cuando el contenido coincide.
+Si faltan datos básicos, se puede guardar configuración válida sin inventar total;
+publicar sigue requiriendo preview. Un error de cálculo permite Reintentar.
+Fecha final obligatoria, zona/horas locales, DST, límites y persistencia permanecen.
+El contrato añade únicamente weekdays opcional; no ofrece anual/posiciones mensuales.
+El backend
 calcula la vista previa en la zona horaria del dispositivo; cambiar un campo exige
 revisarla nuevamente. Cada fecha publicada tiene su ID de actividad y participación.
-Las tarjetas y `ActivityDetail` distinguen ocurrencia/serie; `ActivitySeriesView`
-permite elegir otra ocurrencia dentro del modal. Los resúmenes conservan los conteos
-de ocurrencias vigentes por campus/edificio y no generan puntos en la escena.
+Las tarjetas distinguen la instancia con un distintivo «Ocurrencia X de N» y conservan
+su ID, fechas e inscripción propias. El listado y los contadores del campus/edificio/
+piso/POI cuentan una representante por serie, además de las actividades independientes.
+Al finalizar pasa a la próxima incluso entre fechas; si cambia de piso/lugar, aparece
+en la ubicación de esa instancia. Solapamientos conservan la primera por inicio hasta
+su fin; fechas editadas determinan el orden, con índice/ID como desempate. Una serie
+totalmente finalizada desaparece del listado vigente sin borrar sus documentos.
+`ActivityDetail` conserva acceso a `ActivitySeriesView`, que permite elegir todas las
+ocurrencias vigentes dentro del modal. No genera puntos en la escena ni agrupa datos
+persistidos o participaciones. API de listado y de serie permanecen sin cambios.
 
 ## Edición de actividades
 
@@ -278,7 +331,15 @@ histórica; el listado muestra las fechas reales editadas de cada ocurrencia.
 Guardar refresca ficha y consulta compartida del campus, incluidos los resúmenes
 por edificio. No modifica la selección, las geometrías ni los stores 3D.
 F2.6-08 usa el historial y eventos embebidos para notificaciones in-app; la bandeja
-se abre desde Mi perfil y reutiliza ActivityDetail en modal. No crea puntos 3D.
+se abre desde Mi perfil y reutiliza ActivityDetail en modal. Una publicación de serie
+oficial aparece como «Nuevo evento recurrente: título · N fechas» y recibe seriesId
+opcional; al tocarla consulta la serie y abre la ocurrencia vigente o próxima por
+inicio real. Cambios conjuntos producen un aviso por usuario con su cantidad/motivos
+y destino afectado. OFFICIAL_EVENT_STARTED muestra «Evento oficial en curso» y abre
+su instancia concreta; backend lo genera al inicio de cada fecha recurrente oficial
+para el campus. Comunitarias solo notifican cambios a participantes. Avisos anteriores
+siguen conservados; carga/lectura/eliminación mantienen sus contratos y no hay push
+externo ni actualización streaming. No crea puntos 3D.
 Ese historial está embebido en `activities.changeHistory`; la definición original
 de serie está en `seriesDefinition` de la primera ocurrencia. No se crean nuevas
 colecciones MongoDB ni se cambia el contrato usado por los modales.

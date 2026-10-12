@@ -63,6 +63,22 @@ export interface ActivityDeletionResult {
   activityId: string; campusId: string; revision: number; deletedAt: string;
 }
 
+/** Choose one real activity per series before spatial filters; never merge participation or IDs. */
+export function selectActivityOccurrences(activities: Activity[], now = Date.now()): Activity[] {
+  const ordered = activities.filter(activity => Number.isFinite(Date.parse(activity.startAt))
+    && Date.parse(activity.startAt) < Date.parse(activity.endAt) && Date.parse(activity.endAt) > now)
+    .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)
+      || (a.series?.index ?? 0) - (b.series?.index ?? 0) || a.id.localeCompare(b.id));
+  const series = new Set<string>();
+  return ordered.filter(activity => {
+    if (!activity.series) return true;
+    const key = JSON.stringify([activity.campusId, activity.series.id]);
+    if (series.has(key)) return false;
+    series.add(key);
+    return true;
+  });
+}
+
 export function filterLocationActivities(activities: Activity[], query: ActivityLocationQuery, now = Date.now()): Activity[] {
   return activities.filter(activity => Date.parse(activity.endAt) > now
     && (!query.buildingKey || activity.location.buildingKey === query.buildingKey)

@@ -22,7 +22,13 @@ export function expandActivityRecurrence(input: CreateActivitySeriesInput, campu
     .toZonedDateTime(rule.timeZone, { disambiguation: 'reject' });
   for (let period = 0; period <= 732; period++) {
     let date: Temporal.PlainDate;
-    if (rule.frequency === 'MONTHLY') {
+    if (rule.frequency === 'WEEKLY' && rule.weekdays) {
+      // Scan from the lower bound; interval counts ISO weeks anchored to its Monday.
+      date = firstDate.add({ days: period });
+      if (Temporal.PlainDate.compare(date, until) > 0) break;
+      const week = Math.floor((period + firstDate.dayOfWeek - 1) / 7);
+      if (week % rule.interval !== 0 || !rule.weekdays.includes(date.dayOfWeek)) continue;
+    } else if (rule.frequency === 'MONTHLY') {
       const month = firstDate.toPlainYearMonth().add({ months: period * rule.interval });
       const requested = `${month.toString()}-${String(firstDate.day).padStart(2, '0')}`;
       const comparison = Temporal.PlainYearMonth.compare(month, until.toPlainYearMonth());

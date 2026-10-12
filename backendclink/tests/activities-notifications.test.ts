@@ -11,7 +11,7 @@ import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 import type { PendingActivityNotification } from '../src/modules/activities/activities.notifications.repository.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityChangeDocument } from '../src/modules/activities/activities.edit.types.js';
-import { publicationNotifications, changeNotification, participantsAtChange } from '../src/modules/activities/activities.notifications.js';
+import { publicationNotifications, changeNotification, groupedChangeNotification, startedNotification, participantsAtChange } from '../src/modules/activities/activities.notifications.js';
 
 const db = new PGlite();
 const campusId = randomUUID(), otherCampus = randomUUID(), userId = randomUUID(), second = randomUUID(), foreign = randomUUID();
@@ -90,6 +90,105 @@ test('durable event keys distinguish occurrences/revisions; community creation e
   const changed = changeNotification(history, [userId]);
   assert.equal(changed.key, `activity:${id.toHexString()}:revision:1`); assert.deepEqual(changed.recipientIds, [userId]);
   assert.notEqual(changeNotification({ ...history, revision: 2 }, [userId]).key, changed.key);
+});
+
+test('ten official dates produce one series publication and its inbox target retains series identity', async () => {
+  const seriesId = new ObjectId();
+  const events = Array.from({ length: 10 }, (_, index) => publicationNotifications({ _id: new ObjectId(),
+    title: 'Prueba', type: 'OFFICIAL_EVENT', seriesId, occurrenceIndex: index + 1, occurrenceCount: 10 } as ActivityDocument, now)).flat();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].title, 'Nuevo evento recurrente: Prueba · 10 fechas');
+  assert.equal(events[0].key, `series:${seriesId}:published`);
+  const publication = { ...task(), event: events[0] };
+  await sql.deliverActivityNotification(publication, null, transaction);
+  await sql.deliverActivityNotification(publication, null, transaction);
+  const rows = (await db.query('SELECT * FROM notificacion WHERE actividad_evento_clave=$1', [events[0].key])).rows;
+  assert.equal(rows.length, 2, 'one per active campus profile, not ten');
+  const page = await operation(auth, {}, transaction); assert.ok('items' in page);
+  const item = page.items.find(item => item.title === events[0].title)!;
+  assert.equal(item.seriesId, seriesId.toHexString()); assert.equal(item.activityId, publication.activityId);
+  assert.deepEqual(publicationNotifications({ _id: id, type: 'COMMUNITY_ACTIVITY', seriesId, occurrenceIndex: 1 } as ActivityDocument, now), []);
+});
+
+test('one grouped edit delivers one personalized notice per affected user with no audience widening or retry duplicates', async () => {
+  const operationId = new ObjectId(), firstId = new ObjectId(), secondId = new ObjectId();
+  const history = (activityId: ObjectId, reasons: ActivityChangeDocument['notificationReasons'], offset: number): ActivityChangeDocument => ({
+    operationId, activityId, revision: 1, after: { title: 'Serie', startAt: new Date(now.getTime() + offset) },
+    notificationReasons: reasons, changedAt: now,
+  } as ActivityChangeDocument);
+  const event = groupedChangeNotification([history(firstId, ['DATES_CHANGED'], 1), history(secondId, ['LOCATION_CHANGED'], 2)],
+    new Map([[firstId.toHexString(), [userId, foreign, suspended, deleted]], [secondId.toHexString(), [userId, second]]]));
+  const grouped = { ...task('ACTIVITY_CHANGED'), event };
+  const deps = { pending: async () => [grouped], participants: async () => event.recipientIds!,
+    deliver: (value: PendingActivityNotification, users: string[] | null) => sql.deliverActivityNotification(value, users, transaction),
+    acknowledge: async () => {} };
+  await dispatch(deps); await dispatch(deps);
+  const rows = (await db.query<{ destinatario_id: string; mensaje: string; actividad_id: string; id: string }>(
+    'SELECT * FROM notificacion WHERE actividad_evento_clave=$1', [event.key])).rows;
+  assert.equal(rows.length, 2);
+  assert.match(rows.find(row => row.destinatario_id === userId)!.mensaje, /2 fechas.*fechas, ubicación/);
+  assert.equal(rows.find(row => row.destinatario_id === userId)!.actividad_id, firstId.toHexString());
+  assert.match(rows.find(row => row.destinatario_id === second)!.mensaje, /1 fecha.*ubicación/);
+  assert.doesNotMatch(rows.find(row => row.destinatario_id === second)!.mensaje, /fechas, ubicación/);
+  assert.equal(rows.find(row => row.destinatario_id === second)!.actividad_id, secondId.toHexString());
+  await operation(auth, { id: rows.find(row => row.destinatario_id === userId)!.id, remove: true }, transaction);
+  await dispatch(deps);
+  assert.equal((await db.query('SELECT id FROM notificacion WHERE actividad_evento_clave=$1', [event.key])).rows.length, 2);
+  const empty = { ...grouped, event: { ...event, key: 'empty-' + event.key } };
+  await sql.deliverActivityNotification(empty, [], transaction);
+  assert.equal((await db.query('SELECT id FROM notificacion WHERE actividad_evento_clave=$1', [empty.event.key])).rows.length, 0);
+});
+
+test('official start broadcasts once to the campus while community changes stay participant scoped', async () => {
+  const document = { _id: new ObjectId(), title: 'Prueba', startAt: now, occurrenceIndex: 2, occurrenceCount: 10 } as ActivityDocument;
+  const start = { ...task(), activityId: document._id.toHexString(), event: startedNotification(document) };
+  let detection = 0, participantLookups = 0;
+  const deps = { enqueueStarted: async () => { detection++; }, pending: async () => [start],
+    participants: async () => { participantLookups++; return [userId]; },
+    deliver: (value: PendingActivityNotification, users: string[] | null) => sql.deliverActivityNotification(value, users, transaction),
+    acknowledge: async () => {} };
+  await dispatch(deps); await dispatch(deps);
+  assert.equal(detection, 2); assert.equal(participantLookups, 0);
+  const rows = (await db.query<{ destinatario_id: string; mensaje: string }>('SELECT * FROM notificacion WHERE actividad_evento_clave=$1', [start.event.key])).rows;
+  assert.deepEqual(rows.map(row => row.destinatario_id).sort(), [userId, second].sort());
+  assert.match(rows[0].mensaje, /ocurrencia 2 de 10/);
+  await dispatch(deps, () => true); assert.equal(detection, 2);
+});
+
+test('server start detection respects actual dates, public location, official-only scope and atomic once-per-occurrence keys', async () => {
+  const start = new Date(now.getTime() - 1000), end = new Date(now.getTime() + 3600000);
+  const base: ActivityDocument = { _id: new ObjectId(), campusId, createdByUserId: userId, title: 'Inicio', description: 'Descripción',
+    type: 'OFFICIAL_EVENT', status: 'ACTIVE', visibility: 'PUBLIC', seriesId: new ObjectId(), occurrenceIndex: 2, occurrenceCount: 10,
+    originalStartAt: start, startAt: start, endAt: end, createdAt: new Date(start.getTime() - 1000), updatedAt: now,
+    participantCount: 1, location: { buildingKey: 'a', floorKey: 'a-1' } };
+  const documents = [base, { ...base, _id: new ObjectId(), type: 'COMMUNITY_ACTIVITY' },
+    { ...base, _id: new ObjectId(), startAt: end }, { ...base, _id: new ObjectId(), endAt: now },
+    { ...base, _id: new ObjectId(), visibility: 'HIDDEN' }, { ...base, _id: new ObjectId(), createdAt: start },
+    { ...base, _id: new ObjectId(), location: { ...base.location, poiKey: 'hidden' } }];
+  let emitted = 0; const keys = new Set<string>(); const queries: any[] = [];
+  const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
+    assert.ok(['activities', 'campus_maps'].includes(name));
+    return name === 'campus_maps' ? { findOne: async () => ({ campusId, status: 'ACTIVE', buildings: [
+      { id: 'a', name: 'A', floors: [{ id: 'a-1', name: 'Piso 1', pois: [{ poiKey: 'hidden', name: 'Oculto', isVisible: false }] }] },
+    ] }) } : {
+      find: (filter: unknown) => { queries.push(filter); return { toArray: async () => documents }; },
+      updateOne: async (filter: any, update: any) => {
+        assert.equal(filter._id, base._id); assert.equal(filter.type, 'OFFICIAL_EVENT');
+        assert.equal(filter.startAt, start); assert.equal(filter.endAt, end);
+        const key = update.$push.notificationEvents.key; assert.equal(filter['notificationEvents.key'].$ne, key);
+        assert.deepEqual(Object.keys(update), ['$push']);
+        if (!keys.has(key)) { keys.add(key); emitted++; }
+      },
+    };
+  });
+  try {
+    const { enqueueStartedOfficialOccurrences } = await import('../src/modules/activities/activities.notifications.repository.js');
+    await enqueueStartedOfficialOccurrences(now); await enqueueStartedOfficialOccurrences(now);
+    assert.equal(emitted, 1);
+    assert.equal(queries[0].type, 'OFFICIAL_EVENT'); assert.equal(queries[0].seriesId.$type, 'objectId');
+    assert.deepEqual(queries[0].startAt, { $lte: now }); assert.deepEqual(queries[0].endAt, { $gt: now });
+    assert.deepEqual(queries[0].$expr, { $gt: ['$startAt', '$createdAt'] });
+  } finally { dbMock.mock.restore(); }
 });
 
 test('failed delivery or post-commit acknowledgement remains pending; replay creates no duplicate notifications', async () => {

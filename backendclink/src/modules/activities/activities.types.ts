@@ -63,6 +63,8 @@ export interface ActivityRecurrenceRule {
   until: string;
   timeZone: string;
   excludedDates: string[];
+  /** Optional ISO weekdays (Monday=1, Sunday=7), only for weekly rules. Omitted preserves legacy anchoring. */
+  weekdays?: number[];
 }
 export interface CreateActivitySeriesInput extends CreateActivityInput {
   recurrence: ActivityRecurrenceRule;

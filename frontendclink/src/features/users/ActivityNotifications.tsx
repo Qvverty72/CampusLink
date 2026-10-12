@@ -7,6 +7,8 @@ import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar
 import { ActivityDetail } from '@/features/activities/components/ActivityDetail';
 import { ActivityRefreshScrollView } from '@/features/activities/components/ActivityRefreshScrollView';
 import { fetchNotifications, updateNotification, type ActivityNotification } from './notifications';
+import { fetchActivitySeries } from '@/features/activities/api/activitiesApi';
+import { selectActivityOccurrences } from '@/features/activities/types/activity';
 
 export function NotificationsScreen() {
   const { identity, session } = useAuth();
@@ -14,7 +16,7 @@ export function NotificationsScreen() {
 }
 
 function NotificationsContent() {
-  const { refreshIdentity } = useAuth();
+  const { identity, refreshIdentity } = useAuth();
   const [items, setItems] = useState<ActivityNotification[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +52,15 @@ function NotificationsContent() {
       if (!abort.signal.aborted) {
         setItems(current => remove ? current.filter(row => row.id !== item.id)
           : current.map(row => row.id === item.id ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row));
-        if (!remove) setActivityId(item.activityId);
+        if (!remove) {
+          if (item.seriesId && identity?.campusId) {
+            const series = await fetchActivitySeries(identity.campusId, item.seriesId, abort.signal);
+            if (abort.signal.aborted) return;
+            const next = selectActivityOccurrences(series.occurrences)[0];
+            if (!next) { setError('Esta serie ya no tiene fechas vigentes disponibles.'); return; }
+            setActivityId(next.id);
+          } else setActivityId(item.activityId);
+        }
       }
     } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
     finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
@@ -64,7 +74,8 @@ function NotificationsContent() {
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       {!busy && !error && !items.length ? <Text style={[styles.text, styles.headerLink]}>No tienes notificaciones de actividades en este campus.</Text> : null}
       {items.map(item => <View key={item.id} style={styles.card}>
-        <Text style={styles.type}>{item.type === 'OFFICIAL_EVENT_PUBLISHED' ? 'Evento oficial publicado' : 'Cambios en tu actividad'}{item.readAt ? '' : ' · Sin leer'}</Text>
+        <Text style={styles.type}>{item.type === 'OFFICIAL_EVENT_PUBLISHED' ? 'Evento oficial publicado'
+          : item.type === 'OFFICIAL_EVENT_STARTED' ? 'Evento oficial en curso' : 'Cambios en tu actividad'}{item.readAt ? '' : ' · Sin leer'}</Text>
         <Text accessibilityRole="header" style={styles.heading}>{item.title}</Text>
         <Text style={styles.text}>{item.message}</Text>
         <Text style={styles.text}>{new Date(item.createdAt).toLocaleString('es-CL')}</Text>

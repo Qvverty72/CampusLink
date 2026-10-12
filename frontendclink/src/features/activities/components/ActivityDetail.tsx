@@ -12,11 +12,10 @@ import { ReportActivityForm } from '@/features/reports/components/ReportActivity
 import { ActivityParticipationControls } from './ActivityParticipationControls';
 import { ActivityParticipants } from './ActivityParticipants';
 import { ActivityDetailSkeleton } from './ActivityDetailSkeleton';
+import { ActivityDescription } from './ActivityDescription';
 import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
 import { useActivityRefresh } from './ActivityRefreshScrollView';
-
-const DESCRIPTION_PREVIEW_LENGTH = 240;
 
 /** Text names the action; the icon and its background are decorative. */
 function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = false }: {
@@ -31,23 +30,6 @@ function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = fal
     </View>
     <Text style={[styles.managementLabel, danger && styles.danger]}>{label}</Text>
   </TouchableOpacity>;
-}
-
-/** Keep expansion scoped to the current description through the caller's key. */
-function ActivityDescription({ description }: { description: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const characters = Array.from(description);
-  const canExpand = characters.length > DESCRIPTION_PREVIEW_LENGTH;
-  const collapsed = canExpand && !expanded;
-  return <View style={styles.descriptionBlock}>
-    <Text style={styles.description} numberOfLines={collapsed ? 4 : undefined} ellipsizeMode="tail">
-      {collapsed ? `${characters.slice(0, DESCRIPTION_PREVIEW_LENGTH).join('').trimEnd()}…` : description}
-    </Text>
-    {canExpand ? <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded }}
-      aria-expanded={expanded} onPress={() => setExpanded(value => !value)} style={styles.descriptionToggle}>
-      <Text style={styles.link}>{expanded ? 'Ver menos' : 'Ver más'}</Text>
-    </TouchableOpacity> : null}
-  </View>;
 }
 
 /** The full sheet, edit and report stay inside the current native modal. */
@@ -167,9 +149,6 @@ const styles = StyleSheet.create({
   content: { gap: 18, paddingVertical: 4 }, header: { alignItems: 'center', gap: 10 },
   title: { width: '100%', fontSize: 23, lineHeight: 30, fontWeight: '700', color: '#0F172A', textAlign: 'center' },
   location: { fontSize: 15, lineHeight: 22, color: '#64748B', textAlign: 'center' },
-  descriptionBlock: { width: '100%', gap: 4 },
-  description: { fontSize: 15, color: '#334155', lineHeight: 23, textAlign: 'center' },
-  descriptionToggle: { minHeight: 44, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
   type: { fontWeight: '600', textAlign: 'center' }, organizer: { fontSize: 13, color: '#64748B', textAlign: 'center' },
   dates: { flexDirection: 'row', gap: 12 }, date: { flex: 1, minWidth: 0, padding: 12, gap: 5, backgroundColor: '#F8FAFC', borderRadius: 12 },
   dateText: { fontSize: 14, color: '#334155', lineHeight: 22 },

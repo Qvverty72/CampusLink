@@ -13,7 +13,7 @@ const calendarDate = (value: unknown): value is string => {
 export function parseRecurrenceRule(value: unknown): ValidationResult<ActivityRecurrenceRule> {
   const issues: ApiErrorDetail[] = [];
   if (!record(value)) return { success: false, issues: [{ field: 'recurrence', message: 'Define la regla de repetición.' }] };
-  for (const key of Object.keys(value)) if (!['frequency', 'interval', 'until', 'timeZone', 'excludedDates'].includes(key)) issues.push({ field: `recurrence.${key}`, message: 'Campo de recurrencia no admitido.' });
+  for (const key of Object.keys(value)) if (!['frequency', 'interval', 'until', 'timeZone', 'excludedDates', 'weekdays'].includes(key)) issues.push({ field: `recurrence.${key}`, message: 'Campo de recurrencia no admitido.' });
   if (!['DAILY', 'WEEKLY', 'MONTHLY'].includes(value.frequency as string)) issues.push({ field: 'recurrence.frequency', message: 'Frecuencia diaria, semanal o mensual requerida.' });
   if (!Number.isInteger(value.interval) || (value.interval as number) < 1 || (value.interval as number) > RECURRENCE_LIMITS.interval) issues.push({ field: 'recurrence.interval', message: 'Intervalo entero entre 1 y 52 requerido.' });
   if (!calendarDate(value.until)) issues.push({ field: 'recurrence.until', message: 'Fecha final YYYY-MM-DD válida requerida.' });
@@ -22,10 +22,16 @@ export function parseRecurrenceRule(value: unknown): ValidationResult<ActivityRe
     Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(value.timeZone);
   } catch { issues.push({ field: 'recurrence.timeZone', message: 'Zona horaria IANA válida requerida.' }); }
   const excludedDates = value.excludedDates ?? [];
+  const weekdays = value.weekdays;
+  if (weekdays !== undefined && (value.frequency !== 'WEEKLY' || !Array.isArray(weekdays) || weekdays.length < 1 || weekdays.length > 7
+    || weekdays.some(day => !Number.isInteger(day) || day < 1 || day > 7) || new Set(weekdays).size !== weekdays.length)) {
+    issues.push({ field: 'recurrence.weekdays', message: 'Selecciona días semanales distintos del 1 (lunes) al 7 (domingo).' });
+  }
   if (!Array.isArray(excludedDates) || excludedDates.length > RECURRENCE_LIMITS.occurrences || excludedDates.some(date => !calendarDate(date))
     || new Set(excludedDates).size !== excludedDates.length) issues.push({ field: 'recurrence.excludedDates', message: 'Usa hasta 200 fechas válidas distintas.' });
   return issues.length ? { success: false, issues } : { success: true, data: { frequency: value.frequency as ActivityRecurrenceRule['frequency'],
-    interval: value.interval as number, until: value.until as string, timeZone: value.timeZone as string, excludedDates: [...excludedDates as string[]].sort() } };
+    interval: value.interval as number, until: value.until as string, timeZone: value.timeZone as string, excludedDates: [...excludedDates as string[]].sort(),
+    ...(weekdays !== undefined ? { weekdays: [...weekdays as number[]].sort((a, b) => a - b) } : {}) } };
 }
 
 export function activitySeriesParser(publish = false): RequestParser {

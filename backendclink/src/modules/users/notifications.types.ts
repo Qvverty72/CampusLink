@@ -1,7 +1,8 @@
 export interface ActivityNotificationDto {
   id: string;
   activityId: string;
-  type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED';
+  seriesId?: string;
+  type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED' | 'OFFICIAL_EVENT_STARTED';
   title: string;
   message: string;
   createdAt: string;

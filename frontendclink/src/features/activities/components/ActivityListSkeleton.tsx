@@ -14,7 +14,7 @@ export function ActivityListSkeleton({ activityType }: { activityType?: Activity
         <View style={styles.identityColumn}>
           <View style={styles.summary}>
             <SkeletonBlock style={styles.title} />
-            <SkeletonBlock style={styles.type} />
+            <SkeletonBlock style={styles.description} />
             <SkeletonBlock style={styles.date} />
             <SkeletonBlock style={styles.date} />
             <SkeletonBlock style={styles.link} />
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   summary: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 18,
     backgroundColor: '#F8FAFC', padding: 16, gap: 12, alignItems: 'center' },
   title: { width: '60%', height: 20 },
-  type: { width: '45%', height: 14 },
+  description: { width: '90%', height: 46 },
   date: { width: '80%', height: 12 },
   link: { width: '50%', height: 14, marginTop: 4 },
   participants: { width: 112, height: 24, alignSelf: 'center', marginTop: 12 },

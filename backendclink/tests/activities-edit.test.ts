@@ -158,6 +158,48 @@ test('edit and immutable history commit together; stale snapshot, location loss 
   } finally { sessionMock.mock.restore(); collectionMock.mock.restore(); }
 });
 
+test('a multi-date edit atomically saves every history and a single grouped event with per-occurrence participant snapshots', async () => {
+  const { values, series } = recurring(); const current = values[0], id = current._id.toHexString();
+  const rows = [{ activityId: values[0]._id, userId: other, status: 'JOINED' },
+    { activityId: values[1]._id, userId: other, status: 'LEFT' },
+    { activityId: values[2]._id, userId: other, status: 'JOINED' }];
+  const input = parsed({ ...body(), scope: 'UPCOMING' });
+  const review = await preview(auth, id, input, { ...deps(current), findSeries: async () => series, findEditOccurrences: async () => values });
+  let staged: any[] = [], committed: any[] = []; let fail = false;
+  const session = { withTransaction: async (operation: () => Promise<unknown>) => {
+    staged = []; try { const result = await operation(); committed.push(...staged); return result; } finally { staged = []; }
+  } };
+  const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: (value: typeof session) => Promise<unknown>) => operation(session));
+  const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
+    assert.ok(['activities', 'activity_participation', 'campus_maps'].includes(name));
+    return { findOne: async (filter: any) => name === 'campus_maps' ? map : filter['seriesDefinition._id'] ? { seriesDefinition: series } : current,
+      find: (filter: any) => ({ toArray: async () => {
+        if (name === 'activity_participation') { assert.deepEqual(filter.activityId.$in, values.map(value => value._id)); return rows; }
+        return values;
+      } }), bulkWrite: async (operations: any[]) => {
+        staged.push(...operations); if (fail) throw new Error('grouped write failed'); return { matchedCount: operations.length };
+      } };
+  });
+  try {
+    const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
+    const result = await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now);
+    assert.equal(result.updatedCount, 3); assert.equal(committed.length, 3);
+    const histories = committed.map(operation => operation.updateOne.update.$push.changeHistory);
+    assert.equal(new Set(histories.map(history => history.operationId.toHexString())).size, 1);
+    assert.deepEqual(histories.map(history => history.activityId), values.map(value => value._id));
+    const notices = committed.flatMap(operation => operation.updateOne.update.$push.notificationEvents ?? []);
+    assert.equal(notices.length, 1); assert.match(notices[0].key, /^operation:[0-9a-f]{24}:changed$/);
+    assert.equal(notices[0].deliveries.length, 2);
+    assert.equal(notices[0].deliveries.find((delivery: any) => delivery.recipientId === userId).dateCount, 3);
+    assert.equal(notices[0].deliveries.find((delivery: any) => delivery.recipientId === other).dateCount, 2, 'LEFT on second instance stays out');
+    assert.equal(notices[0].deliveries.find((delivery: any) => delivery.recipientId === other).activityId, id);
+    assert.equal(new Set(notices[0].recipientIds).size, 2);
+    committed.forEach(operation => { assert.equal(operation.updateOne.update.$set.participantCount, undefined); assert.equal(operation.updateOne.update.$set.seriesDefinition, undefined); });
+    fail = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), /grouped write failed/);
+    assert.equal(committed.length, 3); assert.equal(staged.length, 0);
+  } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
+});
+
 test('HTTP authenticated owner preview and PATCH enforce confirmation; shared detail exposes editing only to creator', async () => {
   const value = document(); const id = value._id.toHexString(); const originalFetch = globalThis.fetch;
   globalThis.fetch = async input => { const url = new URL(String(input));

@@ -11,27 +11,46 @@ export async function deliverActivityNotification(task: PendingActivityNotificat
   const message = task.event.type === 'OFFICIAL_EVENT_PUBLISHED' ? 'Se publicó un evento oficial en tu campus.'
     : `Cambió la actividad en la que participas: ${task.event.reasons.map(reason => reasonLabels[reason]).join(', ')}.`;
   await transaction(async client => {
+    if (task.event.deliveries) {
+      const audience = new Set(participants ?? []);
+      const rows = task.event.deliveries.filter(delivery => audience.has(delivery.recipientId)).map(delivery => {
+        const reasons = delivery.reasons.map(reason => reasonLabels[reason]).join(', ');
+        return { recipient_id: delivery.recipientId, activity_id: delivery.activityId,
+          message: `Se ${delivery.dateCount === 1 ? 'modificó 1 fecha' : `modificaron ${delivery.dateCount} fechas`} de «${task.event.title}» en las que participas: ${reasons}.` };
+      });
+      await client.query(`INSERT INTO public.notificacion
+        (destinatario_id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,campus_id,actividad_evento_clave)
+        SELECT p.id,n.activity_id,$2,$3,n.message,$4,$1,$5 FROM public.perfil_usuario p
+        JOIN jsonb_to_recordset($6::jsonb) AS n(recipient_id uuid,activity_id text,message text) ON n.recipient_id=p.id
+        WHERE p.campus_id=$1 AND p.estado_cuenta='ACTIVA' AND p.deleted_at IS NULL
+        ON CONFLICT (destinatario_id,actividad_evento_clave) WHERE actividad_evento_clave IS NOT NULL DO NOTHING`,
+      [task.campusId, task.event.type, task.event.title, task.event.occurredAt, task.event.key, JSON.stringify(rows)]);
+      return;
+    }
     await client.query(`INSERT INTO public.notificacion
       (destinatario_id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,campus_id,actividad_evento_clave)
       SELECT p.id,$2,$3,$4,$5,$6,$1,$7 FROM public.perfil_usuario p
       WHERE p.campus_id=$1 AND p.estado_cuenta='ACTIVA' AND p.deleted_at IS NULL
         AND ($8::uuid[] IS NULL OR p.id=ANY($8::uuid[]))
       ON CONFLICT (destinatario_id,actividad_evento_clave) WHERE actividad_evento_clave IS NOT NULL DO NOTHING`,
-    [task.campusId, task.activityId, task.event.type, task.event.title, message, task.event.occurredAt, task.event.key, participants]);
+    [task.campusId, task.activityId, task.event.type, task.event.title, task.event.message ?? message, task.event.occurredAt, task.event.key, participants]);
   });
 }
 
 type SqlNotification = { id: string; actividad_id: string; tipo_notificacion: ActivityNotificationDto['type'];
-  titulo: string; mensaje: string; created_at: Date; leida_en: Date | null };
+  titulo: string; mensaje: string; created_at: Date; leida_en: Date | null; actividad_evento_clave: string };
 
 export async function listOwnNotifications(client: PoolClient, userId: string, campusId: string, cursor?: string): Promise<NotificationPage> {
-  const result = await client.query<SqlNotification>(`SELECT id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,leida_en
+  const result = await client.query<SqlNotification>(`SELECT id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,leida_en,actividad_evento_clave
     FROM public.notificacion WHERE destinatario_id=$1 AND campus_id=$2 AND deleted_at IS NULL
       AND actividad_evento_clave IS NOT NULL AND ($3::uuid IS NULL OR (created_at,id) <
         (SELECT created_at,id FROM public.notificacion WHERE id=$3 AND destinatario_id=$1 AND campus_id=$2))
     ORDER BY created_at DESC,id DESC LIMIT 31`, [userId, campusId, cursor ?? null]);
-  const items = result.rows.slice(0, 30).map(row => ({ id: row.id, activityId: row.actividad_id,
-    type: row.tipo_notificacion, title: row.titulo, message: row.mensaje, createdAt: row.created_at.toISOString(), readAt: row.leida_en?.toISOString() ?? null }));
+  const items = result.rows.slice(0, 30).map(row => {
+    const seriesId = /^series:([0-9a-f]{24}):published$/.exec(row.actividad_evento_clave)?.[1];
+    return { id: row.id, activityId: row.actividad_id, ...(seriesId ? { seriesId } : {}),
+      type: row.tipo_notificacion, title: row.titulo, message: row.mensaje, createdAt: row.created_at.toISOString(), readAt: row.leida_en?.toISOString() ?? null };
+  });
   return { items, nextCursor: result.rows.length > 30 ? items.at(-1)!.id : null };
 }
 

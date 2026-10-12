@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
-import { filterLocationActivities, type Activity } from '../../frontendclink/src/features/activities/types/activity.js';
+import { filterLocationActivities, selectActivityOccurrences, type Activity } from '../../frontendclink/src/features/activities/types/activity.js';
 import { parseActivityQuery } from '../src/modules/activities/activities.validation.js';
 
 test('activity filters require a complete hierarchy and reject campus/policy overrides', () => {
@@ -169,4 +169,55 @@ test('frontend location selection excludes sibling floors and activities expirin
   const sibling = { ...first, id: 'two', location: { buildingKey: 'cabin01', floorKey: 'floor-data-2' } } as Activity;
   const ended = { ...first, id: 'ended', endAt: now.toISOString() };
   assert.deepEqual(filterLocationActivities([first, sibling, ended], { buildingKey: 'cabin01', floorKey: 'floor-data-1' }, now.getTime()).map(value => value.id), ['one']);
+});
+
+const occurrence = (index: number, seriesId = 'series-a'): Activity => ({
+  id: `${seriesId}-${index}`, campusId, title: 'Mismo título', description: 'Reunión',
+  type: 'OFFICIAL_EVENT', status: 'ACTIVE',
+  startAt: `2026-10-${String(11 + index).padStart(2, '0')}T14:00:00Z`,
+  endAt: `2026-10-${String(11 + index).padStart(2, '0')}T15:00:00Z`,
+  series: { id: seriesId, index, total: 10 },
+  location: { buildingKey: 'cabin01', buildingName: 'Cabaña A', floorKey: 'floor-1', floorName: 'Piso 1' },
+});
+
+test('frontend lists one real occurrence per series and advances at its exact end, including gaps and completion', () => {
+  const dates = Array.from({ length: 10 }, (_, index) => occurrence(index + 1));
+  const original = structuredClone(dates);
+  const idsAt = (time: string) => selectActivityOccurrences([...dates].reverse(), Date.parse(time)).map(value => value.id);
+  assert.deepEqual(idsAt('2026-10-12T13:00:00Z'), ['series-a-1']);
+  assert.deepEqual(idsAt('2026-10-12T14:30:00Z'), ['series-a-1']);
+  assert.deepEqual(idsAt('2026-10-12T15:00:00Z'), ['series-a-2']);
+  assert.deepEqual(idsAt('2026-10-13T13:00:00Z'), ['series-a-2']);
+  assert.deepEqual(idsAt('2026-10-21T14:30:00Z'), ['series-a-10']);
+  assert.deepEqual(idsAt('2026-10-21T15:00:00Z'), []);
+  const selected = selectActivityOccurrences(dates, Date.parse('2026-10-12T15:00:00Z'))[0];
+  assert.equal(selected, dates[1]);
+  assert.deepEqual(selected.series, { id: 'series-a', index: 2, total: 10 });
+  assert.deepEqual(dates, original);
+});
+
+test('frontend picks series representatives before location filters and sorts by edited dates without merging titles', () => {
+  const first = occurrence(1);
+  const second = { ...occurrence(2), location: { ...first.location, floorKey: 'floor-2', poiKey: 'room-b' } };
+  const independent = { ...occurrence(1), id: 'individual', series: undefined };
+  const anotherSeries = occurrence(1, 'series-b');
+  const activities = [second, anotherSeries, independent, first];
+  const before = selectActivityOccurrences(activities, Date.parse('2026-10-12T14:30:00Z'));
+  assert.equal(before.length, 3);
+  assert.equal(filterLocationActivities(before, { floorKey: 'floor-2' }, Date.parse('2026-10-12T14:30:00Z')).length, 0);
+  const after = selectActivityOccurrences(activities, Date.parse(first.endAt));
+  assert.deepEqual(filterLocationActivities(after, { floorKey: 'floor-1' }, Date.parse(first.endAt)), []);
+  assert.deepEqual(filterLocationActivities(after, { floorKey: 'floor-2', poiKey: 'room-b' }, Date.parse(first.endAt)).map(value => value.id), [second.id]);
+  const edited = { ...second, startAt: '2026-10-12T12:00:00Z', endAt: '2026-10-12T16:00:00Z' };
+  assert.equal(selectActivityOccurrences([first, edited], Date.parse('2026-10-12T14:30:00Z'))[0].id, edited.id);
+});
+
+test('frontend keeps the earliest ongoing occurrence during overlaps and resolves tied starts deterministically', () => {
+  const first = { ...occurrence(1), endAt: '2026-10-13T15:00:00Z' };
+  const second = { ...occurrence(2), endAt: '2026-10-13T16:00:00Z' };
+  assert.equal(selectActivityOccurrences([second, first], Date.parse('2026-10-13T14:30:00Z'))[0].id, first.id);
+  assert.equal(selectActivityOccurrences([second, first], Date.parse(first.endAt))[0].id, second.id);
+  const tied = { ...second, startAt: first.startAt };
+  assert.equal(selectActivityOccurrences([tied, first], Date.parse('2026-10-12T14:30:00Z'))[0].id, first.id);
+  assert.deepEqual(selectActivityOccurrences([{ ...first, startAt: 'invalid' }, { ...second, endAt: second.startAt }]), []);
 });
