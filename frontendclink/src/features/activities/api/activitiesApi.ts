@@ -4,17 +4,19 @@ import type { CreateActivityInput } from '../types/creation';
 import type { CreateActivitySeriesInput, ActivityRecurrencePreview, CreatedActivitySeries, ActivitySeries } from '../types/recurrence';
 import type { ActivityEditPreview, ActivityEditResult, EditActivityInput } from '../types/editing';
 import type { ActivityParticipantsPage, ActivityDeletionResult } from '../types/activity';
+import { ACTIVITY_PARTICIPANTS_PAGE_SIZE } from '../types/activity';
 
 export async function fetchActivityParticipants(campusId: string, activityId: string, page: number, signal?: AbortSignal): Promise<ActivityParticipantsPage> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
   const response = await authenticatedEnvelopeRequest<ActivityParticipantsPage>(`/api/v1/activities/${activityId}/participants`, { signal },
-    new URLSearchParams({ page: String(page), pageSize: '5' }));
+    new URLSearchParams({ page: String(page), pageSize: String(ACTIVITY_PARTICIPANTS_PAGE_SIZE) }));
   const value = response.data;
   if (!value || value.campusId !== campusId || value.activityId !== activityId.toLowerCase()
-    || !Number.isSafeInteger(value.total) || value.total < 0 || value.pageSize !== 5
+    || !Number.isSafeInteger(value.total) || value.total < 0 || value.pageSize !== ACTIVITY_PARTICIPANTS_PAGE_SIZE
     || !Number.isSafeInteger(value.page) || value.page < 1 || value.page > Math.max(1, Math.ceil(value.total / value.pageSize))
     || !Array.isArray(value.participants) || value.participants.length > value.pageSize
     || value.participants.some(person => !person || typeof person.key !== 'string' || !person.key
+      || typeof person.isCurrentUser !== 'boolean'
       || (person.name !== null && typeof person.name !== 'string'))) throw new Error('La lista de inscritos recibida es inválida.');
   return value;
 }
@@ -116,6 +118,7 @@ async function requestActivityDetail(campusId: string, activityId: string, regis
     { method: register ? 'PUT' : 'GET', signal },
   );
   if (!response.data || response.data.id !== activityId.toLowerCase() || response.data.campusId !== campusId
+    || typeof response.data.participation?.canLeave !== 'boolean'
     || (response.data.participantCount !== undefined
       && (!Number.isSafeInteger(response.data.participantCount) || response.data.participantCount < 0))) {
     throw new Error('La actividad recibida no corresponde a esta consulta.');
@@ -136,6 +139,7 @@ async function requestOwnParticipation(campusId: string, activityId: string, met
   const value = response.data;
   if (!value || value.activityId !== activityId.toLowerCase() || value.campusId !== campusId
     || !['JOINED', 'LEFT', 'NOT_JOINED'].includes(value.status)
+    || typeof value.canLeave !== 'boolean'
     || (value.status !== 'NOT_JOINED' && (!value.joinedAt || !Number.isFinite(Date.parse(value.joinedAt))
       || !value.updatedAt || !Number.isFinite(Date.parse(value.updatedAt))))) {
     throw new Error('No se pudo confirmar tu estado de participación.');

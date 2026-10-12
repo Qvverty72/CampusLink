@@ -84,7 +84,7 @@ test('official type and identity are server-owned, organizer comes from profile,
     assert.equal(document.location.floorKey, 'floor-two'); assert.equal('organizer' in document, false);
   }));
   assert.deepEqual(detail.organizer, { name: 'Organizador oficial' });
-  assert.deepEqual(detail.participation, { status: 'JOINED', canJoin: false }); assert.equal(detail.location.poiName, 'Sala de reuniones');
+  assert.deepEqual(detail.participation, { status: 'JOINED', canJoin: false, canLeave: false }); assert.equal(detail.location.poiName, 'Sala de reuniones');
   // Institutional verification is required for COMMUNITY; official publication follows its specific role/permission.
   for (const key of ['type', 'campusId', 'createdByUserId', 'organizer', 'organizerId', 'participantCount', 'roles', 'permissions']) {
     assert.equal(parseCreateActivity({ ...body(), [key]: 'override' }).success, false);
@@ -184,7 +184,7 @@ test('HTTP official flow enforces fresh permissions, returns official list/detai
     const response = await publish(); assert.equal(response.status, 201); assert.equal(response.headers.get('cache-control'), 'no-store');
     const official = (await response.json()).data;
     assert.equal(official.type, 'OFFICIAL_EVENT'); assert.equal(official.campusId, campusId);
-    assert.deepEqual(official.organizer, { name: 'Organizador oficial' }); assert.deepEqual(official.participation, { status: 'JOINED', canJoin: false });
+    assert.deepEqual(official.organizer, { name: 'Organizador oficial' }); assert.deepEqual(official.participation, { status: 'JOINED', canJoin: false, canLeave: false });
     const list = (await (await originalFetch(base, { headers })).json()).data;
     assert.equal(list[0].type, 'OFFICIAL_EVENT'); assert.equal(list[0].id, official.id);
     const detail = (await (await originalFetch(base + '/' + official.id, { headers })).json()).data;

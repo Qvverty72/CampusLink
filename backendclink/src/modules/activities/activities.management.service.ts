@@ -13,7 +13,7 @@ export async function getActivityParticipants(auth: VerifiedAuthConnection, acti
   }
   const { document, activity } = await getAvailableActivity(auth, activityId, dependencies);
   const find = dependencies.findParticipants ?? (await import('./activities.management.repository.js')).findActivityParticipants;
-  const page = await find(document, query);
+  const page = await find(document, query, auth.userId);
   if (!Number.isSafeInteger(page.total) || page.total < 0 || page.pageSize !== query.pageSize
     || !Number.isSafeInteger(page.page) || page.page < 1 || page.page > Math.max(1, Math.ceil(page.total / page.pageSize))
     || page.rows.length > page.pageSize || page.rows.some(row => !row.key || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(row.userId))) {
@@ -22,7 +22,8 @@ export async function getActivityParticipants(auth: VerifiedAuthConnection, acti
   const lookup = dependencies.findParticipantNames ?? (await import('./activities.management.repository.js')).findParticipantNames;
   const names = page.rows.length ? await lookup(auth.campusId, page.rows.map(row => row.userId)) : new Map<string, string>();
   return { activityId: activity.id, campusId: auth.campusId, page: page.page, pageSize: page.pageSize, total: page.total,
-    participants: page.rows.map(row => ({ key: row.key, name: names.get(row.userId)?.trim() || null })) };
+    participants: page.rows.map(row => ({ key: row.key, name: names.get(row.userId)?.trim() || null,
+      isCurrentUser: row.userId === auth.userId })) };
 }
 
 export async function deleteOwnActivity(auth: VerifiedAuthConnection, activityId: string, expectedRevision: number,

@@ -1,6 +1,7 @@
 import { APP_COLORS } from '@/types/colors';
 import { useCallback, useLayoutEffect, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { MapPinSearch, SquarePen, Trash, type LucideIcon } from 'lucide-react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity, type ActivityDetail as ActivityDetailData } from '../types/activity';
 import { ActivitySeriesView } from './ActivitySeriesView';
@@ -9,10 +10,27 @@ import { EditActivityForm } from './EditActivityForm';
 import { ReportActivityForm } from '@/features/reports/components/ReportActivityForm';
 import { ActivityParticipationControls } from './ActivityParticipationControls';
 import { ActivityParticipants } from './ActivityParticipants';
+import { ActivityDetailSkeleton } from './ActivityDetailSkeleton';
+import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
 import { useActivityRefresh } from './ActivityRefreshScrollView';
 
 const DESCRIPTION_PREVIEW_LENGTH = 240;
+
+/** Text names the action; the icon and its background are decorative. */
+function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = false }: {
+  icon: LucideIcon; label: string; onPress: () => void; disabled: boolean; danger?: boolean;
+}) {
+  return <TouchableOpacity accessibilityRole="button" accessibilityLabel={label}
+    accessibilityState={{ disabled }} disabled={disabled} activeOpacity={0.75} onPress={onPress}
+    style={[styles.managementButton, danger && styles.managementButtonDanger, disabled && styles.disabled]}>
+    <View accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      style={[styles.managementIcon, danger && styles.managementIconDanger]}>
+      <Icon size={22} strokeWidth={1.8} color={danger ? '#B91C1C' : APP_COLORS.PRIMARY} />
+    </View>
+    <Text style={[styles.managementLabel, danger && styles.danger]}>{label}</Text>
+  </TouchableOpacity>;
+}
 
 /** Keep expansion scoped to the current description through the caller's key. */
 function ActivityDescription({ description }: { description: string }) {
@@ -42,7 +60,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   const busy = isUpdatingParticipation || isDeleting;
   const participationControls = (status: ActivityDetailData['participation']['status'], canJoin: boolean) =>
     <ActivityParticipationControls status={status} canJoin={canJoin} pending={pendingParticipation}
-      disabled={isDeleting} error={participationError} onJoin={join} onLeave={leave} />;
+      disabled={isDeleting} error={participationError} onJoin={join} />;
   const [failedBanner, setFailedBanner] = useState<string | null>(null);
   const [showSeries, setShowSeries] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -74,10 +92,14 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
       <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={onBack} style={styles.action}>
         <Text style={styles.link}>‹ Volver a las actividades</Text>
       </TouchableOpacity>
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color={APP_COLORS.PRIMARY} /><Text style={styles.text}>Cargando ficha…</Text></View>
+      {isLoading ? <ActivityDetailSkeleton />
         : error ? <>
           <Text accessibilityRole="alert" style={styles.text}>{error}</Text>
           {ownParticipation ? participationControls(ownParticipation.status, false) : null}
+          {ownParticipation?.status === 'JOINED' && ownParticipation.canLeave ? <View style={styles.ownRow}>
+            <Text style={styles.text}>Tu inscripción</Text>
+            <ActivityWithdrawalButton onLeave={leave} disabled={busy} pending={pendingParticipation === 'LEFT'} />
+          </View> : null}
           <Text style={styles.text}>Desliza hacia abajo desde el inicio para reintentar.</Text>
         </> : detail ? <>
           <View style={styles.header}>
@@ -104,15 +126,17 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
             </TouchableOpacity> : null}
           </View> : null}
           <ActivityParticipants key={detail.id} activityId={detail.id}
+            canLeave={detail.participation.status === 'JOINED' && detail.participation.canLeave}
+            onLeave={leave} disabled={busy} leavePending={pendingParticipation === 'LEFT'}
             refreshKey={JSON.stringify([detail.participantCount, detail.participation.status, detail.editing?.revision])} />
           {detail.category ? <Text style={styles.text}>Categoría: {detail.category}</Text> : null}
           {detail.tags?.length ? <Text style={styles.text}>Etiquetas: {detail.tags.join(', ')}</Text> : null}
           {participationControls(detail.participation.status, detail.participation.canJoin)}
           <View style={styles.management}>
             {detail.editing ? <>
-              {locations?.length ? <TouchableOpacity disabled={busy} accessibilityRole="button" onPress={() => setEditing(detail)} style={styles.action}>
-                <Text style={styles.link}>Editar {detail.series ? 'ocurrencia o próximas' : 'actividad'}</Text>
-              </TouchableOpacity> : null}
+              {locations?.length ? <DetailActionButton icon={SquarePen} disabled={busy}
+                label={`Editar ${detail.series ? 'ocurrencia o próximas' : 'actividad'}`}
+                onPress={() => setEditing(detail)} /> : null}
               {confirmDelete ? <View style={styles.confirmation}>
                 <Text style={styles.heading}>¿Eliminar {detail.series ? 'esta ocurrencia' : 'esta actividad'}?</Text>
                 <Text style={styles.text}>Dejará de aparecer en el mapa. Se conservarán las inscripciones y el historial{detail.series ? '; las demás ocurrencias seguirán disponibles' : ''}.</Text>
@@ -123,17 +147,16 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
                 <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => setConfirmDelete(false)} style={styles.action}>
                   <Text style={styles.link}>Cancelar</Text>
                 </TouchableOpacity>
-              </View> : <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => setConfirmDelete(true)} style={styles.action}>
-                <Text style={styles.danger}>Eliminar {detail.series ? 'esta ocurrencia' : 'actividad'}</Text>
-              </TouchableOpacity>}
+              </View> : <DetailActionButton icon={Trash} disabled={busy} danger
+                label={`Eliminar ${detail.series ? 'esta ocurrencia' : 'actividad'}`}
+                onPress={() => setConfirmDelete(true)} />}
               {deletionError ? <Text accessibilityRole="alert" style={styles.danger}>{deletionError}</Text> : null}
             </> : <TouchableOpacity accessibilityRole="button" disabled={busy}
               onPress={() => setReporting({ id: detail.id, title: detail.title })} style={styles.action}>
               <Text style={styles.link}>Denunciar actividad</Text>
             </TouchableOpacity>}
-            {onExplore ? <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => onExplore(detail)} style={styles.action}>
-              <Text style={styles.link}>Explorar este piso</Text>
-            </TouchableOpacity> : null}
+            {onExplore ? <DetailActionButton icon={MapPinSearch} disabled={busy}
+              label="Explorar este piso" onPress={() => onExplore(detail)} /> : null}
           </View>
         </> : null}
     </View>
@@ -153,10 +176,19 @@ const styles = StyleSheet.create({
   heading: { fontSize: 16, fontWeight: '600', color: '#0F172A' }, text: { color: '#334155', lineHeight: 22 },
   link: { color: APP_COLORS.PRIMARY, fontWeight: '700' }, action: { minHeight: 44, paddingVertical: 12 },
   banner: { width: '100%', height: 140, borderRadius: 12 }, series: { gap: 4 },
-  management: { gap: 4, paddingTop: 12, borderTopWidth: 1, borderColor: '#E2E8F0' },
+  management: { gap: 10, paddingTop: 16, borderTopWidth: 1, borderColor: '#E2E8F0' },
+  ownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  managementButton: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#FFFFFF',
+    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16,
+    shadowColor: APP_COLORS.PRIMARY, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
+  managementButtonDanger: { backgroundColor: '#FFF7F7', borderColor: '#FECACA' },
+  managementIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#EDF3F8', pointerEvents: 'none' },
+  managementIconDanger: { backgroundColor: '#FEE2E2' },
+  managementLabel: { flex: 1, color: APP_COLORS.PRIMARY, fontSize: 14, lineHeight: 20, fontWeight: '600' },
   danger: { color: '#B91C1C', fontWeight: '600', lineHeight: 22 },
   confirmation: { gap: 12, padding: 14, borderRadius: 12, backgroundColor: '#FFF7ED' },
   deleteButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: '#B91C1C', borderRadius: 10 },
   deleteText: { color: '#FFFFFF', fontWeight: '600', textAlign: 'center' }, disabled: { opacity: 0.4 },
-  loading: { minHeight: 360, justifyContent: 'center', alignItems: 'center', gap: 12 },
 });

@@ -13,7 +13,8 @@ import type { ActivityChangeDocument } from './activities.edit.types.js';
 import type { ActivityDocument, ActivityParticipationDocument, ActivityParticipantsQuery, ActivityParticipantsRecords, ActivityDeletionResult } from './activities.types.js';
 
 /** A snapshot keeps the total, legacy creator and page consistent during joins/withdrawals. */
-export async function findActivityParticipants(document: ActivityDocument, query: ActivityParticipantsQuery): Promise<ActivityParticipantsRecords> {
+export async function findActivityParticipants(document: ActivityDocument, query: ActivityParticipantsQuery,
+  currentUserId: string): Promise<ActivityParticipantsRecords> {
   const db = getMongoDb();
   const rows = db.collection<ActivityParticipationDocument>('activity_participation');
   const result = await mongoClient.withSession(session => session.withTransaction(async () => {
@@ -27,15 +28,27 @@ export async function findActivityParticipants(document: ActivityDocument, query
     const creator = await rows.findOne({ campusId: document.campusId, activityId: document._id, userId: document.createdByUserId }, { session });
     // A legacy creator with an explicit LEFT row must never be added back.
     const implicitCreator = !creator;
+    const own = currentUserId === document.createdByUserId ? creator
+      : await rows.findOne({ ...filter, userId: currentUserId }, { session });
+    const ownJoined = own?.status === 'JOINED';
+    // Build the ordering before slicing, so the viewer occupies just one slot on page one.
+    const prefix = ownJoined ? [{ key: own._id!.toHexString(), userId: currentUserId }] : [];
+    if (implicitCreator) {
+      const implicit = { key: 'creator', userId: document.createdByUserId };
+      if (currentUserId === document.createdByUserId) prefix.unshift(implicit);
+      else prefix.push(implicit);
+    }
     const total = await rows.countDocuments(filter, { session }) + Number(implicitCreator);
     const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
-    const firstCreator = implicitCreator && page === 1;
-    const offset = Math.max(0, (page - 1) * query.pageSize - Number(implicitCreator));
-    const limit = query.pageSize - Number(firstCreator);
-    const participants = limit ? await rows.find(filter, { session, projection: { _id: 1, userId: 1 } })
+    const pageOffset = (page - 1) * query.pageSize;
+    const first = prefix.slice(pageOffset, pageOffset + query.pageSize);
+    const offset = Math.max(0, pageOffset - prefix.length);
+    const limit = query.pageSize - first.length;
+    const remainingFilter = ownJoined ? { ...filter, userId: { $ne: currentUserId } } : filter;
+    const participants = limit ? await rows.find(remainingFilter, { session, projection: { _id: 1, userId: 1 } })
       .sort({ _id: 1 }).skip(offset).limit(limit).toArray() : [];
     return { page, pageSize: query.pageSize, total,
-      rows: [...(firstCreator ? [{ key: 'creator', userId: document.createdByUserId }] : []),
+      rows: [...first,
         ...participants.map(row => ({ key: row._id!.toHexString(), userId: row.userId }))] };
   }, { readConcern: { level: 'snapshot' } }));
   if (!result) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Participant lookup unavailable.');

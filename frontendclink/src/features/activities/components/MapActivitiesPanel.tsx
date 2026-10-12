@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { X } from 'lucide-react-native';
 import type { ActivitiesState } from '@/features/activities/hooks/useLocationActivities';
 import { LocationActivities } from '@/features/activities/components/LocationActivities';
 import { ActivityRefreshScrollView } from './ActivityRefreshScrollView';
@@ -7,7 +8,7 @@ import { filterLocationActivities, type Activity } from '@/features/activities/t
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { useMapStore } from '@/three/store/mapStore';
 import { activityLocations } from '@/three/api/activityLocations';
-import { ACTIVITY_TYPES, ACTIVITY_TYPE_LABELS, ActivityTypeCounter } from './ActivityTypeCounter';
+import { ACTIVITY_TYPES, ActivityTypeCounter } from './ActivityTypeCounter';
 
 /** Native browser bridges domain locations to map selection; it never guesses a GLB node. */
 export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
@@ -41,14 +42,13 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
     </View>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setActivityType(null)}>
       <View style={styles.overlay}><View style={styles.card}>
-        <View style={[styles.header, detailOpen && styles.detailHeader]}>
-          {!detailOpen ? <><Text accessibilityRole="header" style={styles.title}>
-            {activityType ? ACTIVITY_TYPE_LABELS[activityType] : 'Detalle de actividades'}
-          </Text>
-          <Text style={styles.subtitle}>{buildingKey ? map.buildingConfigs[buildingKey]?.name : 'Actividades del campus'}</Text></> : null}
+        <View style={styles.header}>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar actividades" hitSlop={12}
             onPress={() => setActivityType(null)} style={styles.closeIconButton}>
-            <Text style={styles.closeIcon}>✕</Text>
+            <View pointerEvents="none" accessible={false} aria-hidden accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants">
+              <X size={16} color="#475569" strokeWidth={1.7} />
+            </View>
           </Pressable>
         </View>
         <ActivityRefreshScrollView ref={scroll} style={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -62,15 +62,11 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
 }
 
 const styles = StyleSheet.create({
-  counters: { position: 'absolute', bottom: 32, right: 8, flexDirection: 'column', gap: 8, zIndex: 10 },
-  title: { fontSize: 16, color: '#0F172A', fontWeight: '700' },
+  counters: { position: 'absolute', bottom: 128, right: 8, flexDirection: 'column', gap: 8, zIndex: 10 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   card: { width: '100%', maxWidth: 980, height: '86%', maxHeight: '90%', padding: 20, borderRadius: 24, backgroundColor: '#FFFFFF' },
-  subtitle: { marginTop: 8, color: '#64748B', fontSize: 14 },
-  header: { paddingRight: 44 },
-  detailHeader: { height: 32 },
+  header: { height: 32 },
   closeIconButton: { position: 'absolute', right: 0, top: 0, width: 32, height: 32, borderRadius: 16,
     backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  closeIcon: { fontSize: 16, color: '#475569' },
   scroll: { flex: 1, marginVertical: 12 },
 });

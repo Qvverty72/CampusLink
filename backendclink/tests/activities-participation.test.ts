@@ -46,14 +46,34 @@ test('own state is scoped and available without a public detail or active map, i
   }, getActiveMap: async () => { throw new Error('Historical state must not require a map'); },
   findActivity: async () => { throw new Error('Historical state must not expose content'); } };
   const result = await service.getOwnActivityParticipation(auth, id.toHexString().toUpperCase(), dependencies);
-  assert.deepEqual(result, { campusId, activityId: id.toHexString(), status: 'LEFT',
+  assert.deepEqual(result, { campusId, activityId: id.toHexString(), status: 'LEFT', canLeave: false,
     joinedAt: joinedAt.toISOString(), updatedAt: joinedAt.toISOString() });
   assert.equal('userId' in result, false); assert.equal('title' in result, false);
   const legacy = { ...dependencies, findParticipation: async () => null,
     findCreatedActivity: async () => activity({ createdByUserId: userId, status: 'HIDDEN', endAt: joinedAt }) };
   assert.equal((await service.getOwnActivityParticipation(auth, id.toHexString(), legacy)).status, 'JOINED');
+  assert.equal((await service.getOwnActivityParticipation(auth, id.toHexString(), legacy)).canLeave, false);
   assert.deepEqual(await service.getOwnActivityParticipation(auth, id.toHexString(), { ...legacy, findCreatedActivity: async () => null }),
-    { campusId, activityId: id.toHexString(), status: 'NOT_JOINED' });
+    { campusId, activityId: id.toHexString(), status: 'NOT_JOINED', canLeave: false });
+});
+
+test('own withdrawal capability excludes creators and creator service rejects before any mutation', async () => {
+  let writes = 0;
+  for (const own of [null, row('JOINED'), row('LEFT')]) {
+    const deps: ActivityDependencies = { findParticipation: async () => own,
+      findCreatedActivity: async (campus, activityId, user) => {
+        assert.equal(campus, campusId); assert.equal(activityId, id.toHexString()); assert.equal(user, userId);
+        return activity({ createdByUserId: userId });
+      }, withdrawParticipation: async () => { writes++; throw new Error('Creator withdrawal must not run'); } };
+    const result = await service.getOwnActivityParticipation(auth, id.toHexString(), deps);
+    assert.equal(result.canLeave, false);
+    await assert.rejects(service.leaveActivity(auth, id.toHexString(), deps), { status: 403 });
+  }
+  assert.equal(writes, 0);
+  const participant = await service.getOwnActivityParticipation(auth, id.toHexString(), {
+    findParticipation: async () => row('JOINED'), findCreatedActivity: async () => null,
+  });
+  assert.equal(participant.canLeave, true);
 });
 
 test('own state rejects invalid stored identity, dates and status instead of inventing a result', async () => {
@@ -68,9 +88,10 @@ test('own state rejects invalid stored identity, dates and status instead of inv
 test('participation services authorize before storage and never accept a different identity', async () => {
   let calls = 0;
   const deps: ActivityDependencies = { findParticipation: async () => { calls++; return null; },
+    findCreatedActivity: async () => null,
     withdrawParticipation: async (campus, activityId, user) => {
       calls++; assert.equal(campus, campusId); assert.equal(activityId, id.toHexString()); assert.equal(user, userId);
-      return { campusId, activityId, status: 'LEFT', joinedAt: joinedAt.toISOString(), updatedAt: now.toISOString() };
+      return { campusId, activityId, status: 'LEFT', canLeave: false, joinedAt: joinedAt.toISOString(), updatedAt: now.toISOString() };
     } };
   for (const operation of [service.getOwnActivityParticipation, service.leaveActivity]) {
     await assert.rejects(operation(auth, 'invalid', deps), { status: 400 });
@@ -135,20 +156,21 @@ test('leave is idempotent, retains row/id/join date, and rejoin increments exact
   });
 });
 
-test('legacy creator can leave, then rejoin once; strangers and existing LEFT rows cause no writes', async () => {
+test('creators cannot withdraw, including legacy and explicit rows; strangers and LEFT rows cause no writes', async () => {
   const store: Store = { document: activity({ createdByUserId: userId, participantCount: 1 }), own: null, updates: 0 };
   await withStore(store, async () => {
-    assert.equal((await repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now)).status, 'LEFT');
-    assert.equal(store.own?.joinedAt, joinedAt); assert.equal(store.document.participantCount, 0);
-    await repository.registerActivityParticipation(campusId, id.toHexString(), userId, now);
-    await repository.registerActivityParticipation(campusId, id.toHexString(), userId, now);
-    assert.equal(store.document.participantCount, 1); assert.equal(store.updates, 2);
+    for (const own of [null, row('JOINED'), row('LEFT')]) {
+      store.own = own;
+      await assert.rejects(repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now), { status: 403 });
+      assert.equal(store.own?.status, own?.status);
+      assert.equal(store.document.participantCount, 1); assert.equal(store.updates, 0);
+    }
     store.own = null; store.document.createdByUserId = creatorId;
     assert.equal((await repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now)).status, 'NOT_JOINED');
-    assert.equal(store.own, null); assert.equal(store.updates, 2);
+    assert.equal(store.own, null); assert.equal(store.updates, 0);
     store.own = row('LEFT');
     await repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now);
-    assert.equal(store.updates, 2);
+    assert.equal(store.updates, 0);
   });
 });
 
@@ -179,7 +201,7 @@ test('invalid counters and failed counter writes cannot leave a partial LEFT row
   });
 });
 
-test('withdrawal requires the existing full unique index and handles concurrent legacy upserts', async () => {
+test('withdrawal requires the existing full unique index and handles concurrent participation writes', async () => {
   const missing = mock.method(Db.prototype, 'collection', () => ({ indexes: async () => [] }));
   try { await assert.rejects(repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now), { status: 503 }); }
   finally { missing.mock.restore(); }
@@ -203,15 +225,17 @@ test('HTTP GET/DELETE require authentication, reject identity/state overrides an
   };
   let own: ActivityParticipationDocument | null = row('JOINED');
   let withdrawals = 0;
+  let ownActivity = false;
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
   const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
   const app = express(); app.use(express.json());
   app.use('/api/v1/activities', createActivitiesRouter({ getActiveMap: async () => map,
     findActivity: async () => activity({ endAt: joinedAt }), findParticipation: async () => own,
-    findCreatedActivity: async () => null, withdrawParticipation: async (campus, activityId, user) => {
+    findCreatedActivity: async () => ownActivity ? activity({ createdByUserId: userId }) : null,
+    withdrawParticipation: async (campus, activityId, user) => {
       assert.equal(campus, campusId); assert.equal(activityId, id.toHexString()); assert.equal(user, userId);
       if (own?.status === 'JOINED') { own = { ...own, status: 'LEFT', updatedAt: now }; withdrawals++; }
-      return { campusId, activityId, status: own!.status, joinedAt: joinedAt.toISOString(), updatedAt: own!.updatedAt.toISOString() };
+      return { campusId, activityId, status: own!.status, canLeave: false, joinedAt: joinedAt.toISOString(), updatedAt: own!.updatedAt.toISOString() };
     }, now: () => now }));
   app.use(apiErrorHandler);
   const server = app.listen(0, '127.0.0.1');
@@ -239,6 +263,11 @@ test('HTTP GET/DELETE require authentication, reject identity/state overrides an
     }
     assert.equal(withdrawals, 1);
     assert.equal((await (await originalFetch(url + '/participation', { headers })).json()).data.status, 'LEFT');
+    ownActivity = true; own = row('JOINED');
+    const creatorState = (await (await originalFetch(url + '/participation', { headers })).json()).data;
+    assert.equal(creatorState.canLeave, false);
+    assert.equal((await originalFetch(url + '/participation', { method: 'DELETE', headers })).status, 403);
+    assert.equal(own.status, 'JOINED'); assert.equal(withdrawals, 1);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

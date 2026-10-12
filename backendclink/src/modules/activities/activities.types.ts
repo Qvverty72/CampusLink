@@ -120,7 +120,7 @@ export interface ActivityDetailDto extends ActivityDto {
   participantCount?: number;
   editing?: { revision: number; canEditUpcoming: boolean };
   organizer: { name: string } | null;
-  participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean };
+  participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean; canLeave: boolean };
   bannerUrl?: string;
   category?: string;
   tags?: string[];
@@ -131,6 +131,7 @@ export interface ActivityParticipationDto {
   activityId: string;
   campusId: string;
   status: 'JOINED' | 'LEFT' | 'NOT_JOINED';
+  canLeave: boolean;
   joinedAt?: string;
   updatedAt?: string;
 }
@@ -140,7 +141,7 @@ export type ActivityCreatorRecord = Pick<ActivityDocument, '_id' | 'campusId' | 
 export interface ActivityParticipantsQuery { page: number; pageSize: number }
 export interface ActivityParticipantsPage extends ActivityParticipantsQuery {
   activityId: string; campusId: string; total: number;
-  participants: { key: string; name: string | null }[];
+  participants: { key: string; name: string | null; isCurrentUser: boolean }[];
 }
 /** Internal identifiers are resolved to names before returning a public page. */
 export interface ActivityParticipantsRecords extends ActivityParticipantsQuery {

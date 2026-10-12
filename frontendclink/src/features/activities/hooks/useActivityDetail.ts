@@ -72,8 +72,9 @@ export function useActivityDetail(activityId: string) {
   const changeParticipation = async (target: 'JOINED' | 'LEFT') => {
     const abort = request.current;
     const status = detail?.participation.status ?? ownParticipation?.status;
+    const canLeave = detail?.participation.canLeave ?? ownParticipation?.canLeave ?? false;
     if (!campusId || !token || !abort || abort.signal.aborted || mutation.current === abort
-      || state.key !== key || (target === 'JOINED' ? !detail?.participation.canJoin : status !== 'JOINED')) return;
+      || state.key !== key || (target === 'JOINED' ? !detail?.participation.canJoin : status !== 'JOINED' || !canLeave)) return;
     mutation.current = abort;
     setState(current => current.key === key ? { ...current, pendingParticipation: target, participationError: null } : current);
     try {
@@ -85,7 +86,7 @@ export function useActivityDetail(activityId: string) {
         const left = await withdrawActivityParticipation(campusId, activityId, abort.signal);
         if (!abort.signal.aborted) setState(current => current.key === key ? { ...current, ownParticipation: left,
           detail: current.detail ? { ...current.detail, participantCount: undefined,
-            participation: { status: left.status, canJoin: left.status !== 'JOINED' } } : null,
+            participation: { status: left.status, canJoin: left.status !== 'JOINED', canLeave: left.canLeave } } : null,
           pendingParticipation: detail ? 'LEFT' : null, participationError: null } : current);
         // DELETE confirms own state, not the aggregate. Read the stored count again.
         if (detail && !abort.signal.aborted) {

@@ -2,15 +2,15 @@ import { APP_COLORS } from '@/types/colors';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ActivityDetail } from '../types/activity';
 
-/** Shared server-confirmed actions for list rows, full details and historical own state. */
-export function ActivityParticipationControls({ status, canJoin, pending, error, onJoin, onLeave, activityTitle, disabled = false }: {
+/** Server-confirmed actions in the full sheet, including historical own participation. */
+export function ActivityParticipationControls({ status, canJoin, pending, error, onJoin, activityTitle, disabled = false }: {
   status: ActivityDetail['participation']['status']; canJoin: boolean; pending: 'JOINED' | 'LEFT' | null;
-  error: string | null; onJoin: () => Promise<void>; onLeave: () => Promise<void>; activityTitle?: string;
+  error: string | null; onJoin: () => Promise<void>; activityTitle?: string;
   disabled?: boolean;
 }) {
   const busy = pending !== null || disabled;
   const joinDisabled = busy || !canJoin;
-  const leaveDisabled = busy;
+  if (status === 'JOINED' && !error) return null;
   return <View style={styles.controls}>
     {status === 'NOT_JOINED' ? <Text accessibilityLiveRegion="polite" style={styles.status}>
       No estás inscrito.
@@ -21,12 +21,6 @@ export function ActivityParticipationControls({ status, canJoin, pending, error,
       style={[styles.button, styles.join, joinDisabled && styles.disabled]}>
       <Text style={styles.joinText}>{pending === 'JOINED' ? 'Inscribiendo…' : 'Inscribirme'}</Text>
     </TouchableOpacity> : null}
-    {status === 'JOINED' ? <TouchableOpacity accessibilityRole="button" activeOpacity={0.75} disabled={leaveDisabled}
-      accessibilityLabel={`Desinscribirme${activityTitle ? ` de ${activityTitle}` : ''}`}
-      accessibilityState={{ disabled: leaveDisabled, busy: pending === 'LEFT' }} onPress={() => { void onLeave(); }}
-      style={[styles.button, styles.leave, leaveDisabled && styles.disabled]}>
-      <Text style={styles.leaveText}>{pending === 'LEFT' ? 'Confirmando retiro…' : 'Desinscribirme'}</Text>
-    </TouchableOpacity> : null}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
   </View>;
 }
@@ -34,8 +28,7 @@ export function ActivityParticipationControls({ status, canJoin, pending, error,
 const styles = StyleSheet.create({
   controls: { gap: 10 }, status: { fontSize: 13, lineHeight: 19, color: '#475569' },
   button: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  join: { backgroundColor: APP_COLORS.PRIMARY }, leave: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: APP_COLORS.PRIMARY },
+  join: { backgroundColor: APP_COLORS.PRIMARY },
   joinText: { color: '#FFFFFF', fontWeight: '600', textAlign: 'center' },
-  leaveText: { color: APP_COLORS.PRIMARY, fontWeight: '600', textAlign: 'center' },
   disabled: { opacity: 0.4 }, error: { color: '#9A3412', lineHeight: 20, fontSize: 13 },
 });

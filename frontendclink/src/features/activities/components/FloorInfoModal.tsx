@@ -2,6 +2,7 @@ import { APP_COLORS } from '@/types/colors';
 /** Native floor information and activities browser; map stores supply selection only. */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { X } from 'lucide-react-native';
 import { useMapStore } from '@/three/store/mapStore';
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { activityLocations } from '@/three/api/activityLocations';
@@ -63,7 +64,10 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
       </View> : null}
       <Pressable onPress={onClose} accessibilityRole="button"
         accessibilityLabel={detailOpen ? 'Cerrar ficha de actividad' : selectedPoi ? 'Cerrar información del punto de interés' : 'Cerrar información del piso'} hitSlop={12} style={styles.closeButton}>
-        <Text style={styles.closeIcon}>✕</Text>
+        <View pointerEvents="none" accessible={false} aria-hidden accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants">
+          <X size={16} color="#475569" strokeWidth={1.7} />
+        </View>
       </Pressable>
     </View>
     <ActivityRefreshScrollView ref={scroll} style={styles.scroll}
@@ -123,7 +127,6 @@ const styles = StyleSheet.create({
   title: { textAlign: 'center', fontSize: 22, fontWeight: '700', color: '#0F172A' },
   subtitle: { textAlign: 'center', fontSize: 14, color: '#64748B', lineHeight: 20 },
   closeButton: { position: 'absolute', right: 0, top: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  closeIcon: { fontSize: 16, color: '#475569' },
   scroll: { flex: 1, marginVertical: 18 },
   content: { gap: 20, paddingBottom: 4 },
   transitionContent: { gap: 20 },

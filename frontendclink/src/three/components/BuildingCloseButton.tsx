@@ -1,6 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useMapStore } from '@/three/store/mapStore';
 import { APP_COLORS } from '@/types/colors';
+import { GlassSurface } from '@/components/GlassSurface';
 
 /**
  * Control 2D para abandonar la selección actual.
@@ -25,7 +26,9 @@ export function BuildingCloseButton() {
       onPress={resetBuilding}
       style={styles.button}
     >
-      <Text style={styles.label}>Volver atrás</Text>
+      <GlassSurface radius={26} contentStyle={styles.content}>
+        <Text style={styles.label}>Volver atrás</Text>
+      </GlassSurface>
     </TouchableOpacity>
   );
 }
@@ -33,27 +36,21 @@ export function BuildingCloseButton() {
 const styles = StyleSheet.create({
   button: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 128,
     alignSelf: 'center',
     zIndex: 10,
+    borderRadius: 26,
+  },
+  content: {
     minHeight: 52,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    backgroundColor: APP_COLORS.SECONDARY,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 7,
   },
   label: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: APP_COLORS.PRIMARY,
+    fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
   },

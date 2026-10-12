@@ -9,6 +9,6 @@ export function participationDto(document: ActivityParticipationDocument, campus
     || !(document.updatedAt instanceof Date) || !Number.isFinite(document.updatedAt.getTime())) {
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Activity participation data is invalid.');
   }
-  return { campusId, activityId, status: document.status,
+  return { campusId, activityId, status: document.status, canLeave: document.status === 'JOINED',
     joinedAt: document.joinedAt.toISOString(), updatedAt: document.updatedAt.toISOString() };
 }

@@ -28,6 +28,8 @@ export function useActivityParticipants(activityId: string, refreshKey: string) 
   return { data, isLoading: !!campusId && !!token && state.key !== key,
     error: state.key === key ? state.error : null,
     refresh: () => setRevision(value => value + 1),
-    previous: () => setPage(Math.max(1, (data?.page ?? page) - 1)),
-    next: () => { if (data && data.page * data.pageSize < data.total) setPage(data.page + 1); } };
+    goToPage: (target: number) => {
+      if (data && Number.isSafeInteger(target) && target >= 1
+        && target <= Math.max(1, Math.ceil(data.total / data.pageSize)) && target !== data.page) setPage(target);
+    } };
 }

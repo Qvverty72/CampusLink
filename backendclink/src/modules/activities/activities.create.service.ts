@@ -51,5 +51,5 @@ async function publishActivity(auth: VerifiedAuthConnection, input: CreateActivi
 
 export function createdActivityDetail(auth: VerifiedAuthConnection, activity: import('./activities.types.js').ActivityDto): ActivityDetailDto {
   return { ...activity, organizer: auth.profile.nombre_completo.trim() ? { name: auth.profile.nombre_completo.trim() } : null,
-    participation: { status: 'JOINED', canJoin: false } };
+    participation: { status: 'JOINED', canJoin: false, canLeave: false } };
 }

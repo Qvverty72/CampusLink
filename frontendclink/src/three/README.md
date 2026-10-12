@@ -16,29 +16,43 @@ al terminar la primera actividad. El navegador y el modal permiten actualizarla.
 oficiales y naranja para comunitarias, en una columna con eventos oficiales arriba
 y actividades comunitarias abajo, a 16 puntos del borde
 inferior/derecho del viewport (encima de la barra de navegación). Cada círculo de
-48 puntos muestra un icono de calendario/personas de 23,4 puntos visuales y el conteo en una insignia
+48 puntos muestra un icono Lucide de calendario/personas de 31,68 puntos visuales y el conteo en una insignia
 superior derecha, sin etiquetas visibles. Abre el listado del campus
 en la vista general o del edificio seleccionado. El wrapper usa box-none para
 conservar interacción con el mapa fuera de los botones. No hay recuadro grande
 ni indicadores 3D. Se ocultan al abrir información del piso.
+El modal del mapa reserva una cabecera de 32 puntos solo para la X de cierre;
+el tipo y su contador se muestran en el contenido de `LocationActivities`, sin
+repetir título ni subtítulo de campus/edificio encima del listado.
 `ActivityTypeCounter` comparte conteo/estado/etiquetas accesibles entre la variante
-mapa (círculo blanco, borde azul/naranja de 1 punto y sombra suave)
+mapa (círculo translúcido, borde por tipo de 1 punto y sombra suave)
 y piso (anillo de 48 puntos, label y acción). En el mapa solo aparecen el dibujo
-centrado y la insignia. `ActivityTypeIcon` dibuja trazos nativos de calendario/personas
-sin dependencias adicionales. La insignia de conteo tiene fondo azul/naranja pálido,
+centrado y la insignia. `ActivityTypeIcon` usa `CalendarDays`/`UsersRound` de
+`lucide-react-native`, con `react-native-svg` ya instalado para navegación.
+`MAP_ICON_SIZE` (36) y la escala de `styles.mapIcon` (0.88) controlan su tamaño;
+`strokeWidth` (1.7) controla el grosor. La insignia de conteo usa también `GlassSurface`,
+con borde y número por tipo,
 altura de 24 puntos y ancho adaptable hasta 52; conteos largos ajustan fuente al ancho.
 Cada botón ocupa 64 puntos de ancho, con separación de 8 entre botones.
 La insignia se eleva 14 puntos y el padding superior del botón la mantiene dentro del área pulsable.
 Icono/insignia son decorativos para
 lectores de pantalla; el botón conserva su label accesible completo y estado de carga.
+Los círculos del mapa y `BuildingCloseButton` («Volver atrás») usan
+`components/GlassSurface.tsx`, el mismo material del navbar: blur35 y la opacidad
+blanca de `GLASS_MATERIAL.surfaceTint` (actualmente0.80 ajustada por usuario).
+Las insignias quedan fuera del recorte y por encima de la elevación del círculo.
+El retorno mantiene bottom128/centrado y usa texto PRIMARY sobre la superficie clara.
+La variante piso conserva anillo/número y textos. [Guía del material](../components/README.md).
 Los enlaces, botones, selecciones e indicadores de los modales de actividades/piso
 usan `APP_COLORS.PRIMARY` (`#002E56`) desde `@/types/colors`.
 La [paleta compartida](../types/README.md) está disponible para todos los módulos.
 `ACTIVITY_COLORS` en `features/activities/types/activity.ts` asocia `OFFICIAL_EVENT`
 con `APP_COLORS.SECONDARY` y `COMMUNITY_ACTIVITY` con `APP_COLORS.ACCENT`.
 Carga muestra spinner y error guion/reintento, sin simular cero; abrir durante carga
-no duplica consulta. Los listados mantienen cinco tarjetas por página, filtro de
-descripción comunitario y publicación del tipo autorizado. Desde ficha se puede
+no duplica consulta. Los listados mantienen cinco tarjetas por página. El paginador
+solo aparece desde seis resultados vigentes del filtro actual, con flechas Lucide,
+números/selección circular y elipsis responsivas (`components/Pagination.tsx`).
+Mantienen filtro de descripción comunitario y publicación del tipo autorizado. Desde ficha se puede
 explorar su piso; cerrar conserva edificio y cambiar campus/edificio cierra la vista.
 `FloorInfoModal` abre con descripción del piso, contadores circulares independientes
 para eventos oficiales y actividades comunitarias y tarjetas de POI visibles. Cada
@@ -69,9 +83,22 @@ máximo de 980 mientras cargan o cambian de vista; el contenido usa ScrollView.
 `ActivityContentTransition` suaviza navegación y llegada de datos con opacidad y
 un desplazamiento de 6 puntos durante 180 ms. Respeta reducir movimiento y cancela
 animaciones anteriores; no retrasa consultas ni reutiliza datos anteriores.
-La vista «Detalle de actividades» usa filas adaptables: título/tipo/inicio/término
-y contador de inscritos a la izquierda y acciones de inscripción/retiro a la derecha;
-en móvil los bloques se apilan. Descripción/organizador/estado/ubicación se consultan
+Durante la carga del listado, `LocationActivities` muestra `ActivityListSkeleton`
+con dos filas neutrales adaptables y un placeholder de filtro en comunitarias.
+La base universal vive en `components/Skeleton.tsx`: `Skeleton` agrupa placeholders
+con `label`, `style` y `contentStyle`; `SkeletonBlock` admite `width`, `height`,
+`borderRadius` y `style` para líneas, círculos o rectángulos en cualquier módulo.
+Comparte color neutral y una pulsación por grupo, respeta reducir movimiento y
+se cancela al desmontar; lectores de pantalla reciben un único estado de carga.
+Los layouts específicos solo componen bloques, sin duplicar el motor. No monta tarjetas ni
+consultas de detalle hasta recibir resultados. Se comparte entre mapa y piso.
+`ActivityDetailSkeleton` anticipa cabecera, fechas, siete filas y acción de la ficha;
+`ActivityParticipants` usa la misma base para siete filas durante carga/cambio de
+página. Reemplazan los spinners/textos visibles de ficha e inscritos, manteniendo
+regreso/cierre, error/reintento y paginador cuando llegan datos. No cambia otros
+spinners ni migra formularios o módulos ajenos automáticamente.
+La vista «Detalle de actividades» muestra título/tipo/inicio/término y contador
+de inscritos en tarjetas de ancho disponible. Descripción/organizador/estado/ubicación se consultan
 en «Ver ficha completa», sin repetirlos en cada fila.
 `LocationActivities` pagina las tarjetas con un máximo de cinco publicaciones en
 total, incluso cuando aparecen ambos tipos. Conserva oficiales primero y el orden
@@ -94,7 +121,34 @@ su consulta. Menú inline con opciones radio/estado seleccionado y scroll del mo
 sin añadir otro ScrollView ni modificar los formularios.
 Crear actividad/publicar evento aparece al final, según tipo y capacidades.
 `ActivityCard` reutiliza `useActivityDetail` para participación propia autorizada;
-`ActivityParticipationControls` y `ActivityParticipantCount` se comparten con ficha.
+`ActivityParticipationControls` muestra las acciones dentro de la ficha completa;
+`ActivityParticipantCount` presenta el contador del listado.
+En el listado, JOINED confirmado añade «(estás inscrito)» junto a Inscritos y
+no muestra acciones de participación. Inscribirme está en la ficha; retiro usa
+CalendarOff junto a la fila propia (tú), sin botón textual Desinscribirme. `canLeave`
+confirmado por servidor es true solo para JOINED ajeno. El creador no puede retirarse,
+y API/hook rechazan esa operación. Datos LEFT históricos conservan su estado.
+Icono44/CalendarOff22 con label accesible se bloquea durante participación/eliminación.
+Si falla listado o ficha pública, el mismo icono se ofrece en fila Tu inscripción
+solo con capacidad propia confirmada, sin exponer contenido público anterior.
+La ficha presenta Editar/Eliminar/Explorar como botones con texto y los iconos
+Lucide `SquarePen`/`Trash`/`MapPinSearch`: filas de 64 puntos mínimos, icono22 sobre
+superficie40 y borde/sombra suaves. Eliminar usa rojo y abre la confirmación existente.
+Permisos de propietario, ubicaciones disponibles, callback de explorar y bloqueo
+durante operaciones pendientes siguen controlando su disponibilidad.
+Si el detalle público deja de estar disponible pero la participación propia es
+JOINED, la tarjeta ofrece acceso a la ficha para consultar/retirarse sin mostrar
+metadata pública anterior.
+`ActivityParticipants` de la ficha consulta siete personas por página mediante
+`ACTIVITY_PARTICIPANTS_PAGE_SIZE`; utiliza el mismo `components/Pagination.tsx`
+numérico que el listado. Se oculta con siete inscritos o menos y aparece desde
+ocho. `useActivityParticipants.goToPage` valida el salto y consulta la página
+solicitada; muestra la página ajustada por el servidor si disminuye el total.
+La lista reserva siete filas, conserva carga/error/reintento y no reutiliza nombres
+de otra página, sesión o campus. El listado de actividades mantiene su límite de cinco.
+Si el usuario actual está inscrito, el servidor lo coloca primero antes de paginar
+y devuelve `isCurrentUser` para mostrar «Nombre (tú)» en la primera página.
+El resto conserva orden estable, sin duplicar su fila ni inferir identidad por nombre.
 El contador viene del detalle (`participantCount` opcional), nunca de cálculos cliente.
 Después de retirarse se consulta de nuevo: un fallo no deshace el estado confirmado
 ni se presenta como cero. No se añade ninguna colección ni caché de actividades.

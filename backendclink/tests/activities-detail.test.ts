@@ -64,7 +64,7 @@ test('detail resolves organizer and data location without requiring POI or optio
   assert.equal(detail.location.floorKey, 'floor-id');
   assert.equal(detail.location.floorName, 'Piso 1');
   assert.equal(detail.location.poiName, undefined);
-  assert.deepEqual(detail.participation, { status: 'NOT_JOINED', canJoin: true });
+  assert.deepEqual(detail.participation, { status: 'NOT_JOINED', canJoin: true, canLeave: false });
   assert.equal('createdByUserId' in detail, false); assert.equal('userId' in detail, false);
   assert.equal(detail.bannerUrl, undefined); assert.equal(detail.category, undefined); assert.equal(detail.tags, undefined);
   const withPoi = await getActivityDetail(auth, id.toHexString(), deps(document({ type: 'OFFICIAL_EVENT',
@@ -109,12 +109,13 @@ test('direct detail cannot bypass publication, campus, expiry, malformed dates o
 test('participation uses only own record, honors LEFT and counts the creator without registering twice', async () => {
   for (const status of ['JOINED', 'LEFT'] as const) {
     const detail = await getActivityDetail(auth, id.toHexString(), deps(document(), participation(status)));
-    assert.deepEqual(detail.participation, { status, canJoin: status === 'LEFT' });
+    assert.deepEqual(detail.participation, { status, canJoin: status === 'LEFT', canLeave: status === 'JOINED' });
   }
   const creator = document({ createdByUserId: userId });
   const detail = await getActivityDetail(auth, id.toHexString(), deps(creator));
   assert.deepEqual(detail.organizer, { name: 'Mi nombre' });
-  assert.deepEqual(detail.participation, { status: 'JOINED', canJoin: false });
+  assert.deepEqual(detail.participation, { status: 'JOINED', canJoin: false, canLeave: false });
+  assert.equal((await getActivityDetail(auth, id.toHexString(), deps(creator, participation('JOINED')))).participation.canLeave, false);
   let writes = 0;
   await joinActivity(auth, id.toHexString(), { ...deps(creator), registerParticipation: async () => { writes++; } });
   assert.equal(writes, 0);

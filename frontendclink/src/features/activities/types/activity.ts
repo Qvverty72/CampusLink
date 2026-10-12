@@ -1,4 +1,4 @@
-import { APP_COLORS } from '@/types/colors';
+import { APP_COLORS } from '../../../types/colors';
 
 /** Public read contract. Spatial keys reference map data, not GLB node names. */
 export interface Activity {
@@ -27,7 +27,7 @@ export interface ActivityDetail extends Activity {
   participantCount?: number;
   editing?: { revision: number; canEditUpcoming: boolean };
   organizer: { name: string } | null;
-  participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean };
+  participation: { status: 'JOINED' | 'LEFT' | 'NOT_JOINED'; canJoin: boolean; canLeave: boolean };
   bannerUrl?: string;
   category?: string;
   tags?: string[];
@@ -40,14 +40,17 @@ export interface ActivityParticipation {
   activityId: string;
   campusId: string;
   status: 'JOINED' | 'LEFT' | 'NOT_JOINED';
+  canLeave: boolean;
   joinedAt?: string;
   updatedAt?: string;
 }
 export const ACTIVITY_LABELS = { OFFICIAL_EVENT: 'Evento oficial', COMMUNITY_ACTIVITY: 'Actividad comunitaria' };
 
+export const ACTIVITY_PARTICIPANTS_PAGE_SIZE = 7;
+
 export interface ActivityParticipantsPage {
   activityId: string; campusId: string; page: number; pageSize: number; total: number;
-  participants: { key: string; name: string | null }[];
+  participants: { key: string; name: string | null; isCurrentUser: boolean }[];
 }
 export interface ActivityDeletionResult {
   activityId: string; campusId: string; revision: number; deletedAt: string;

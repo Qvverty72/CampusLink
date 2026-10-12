@@ -20,7 +20,7 @@ export interface ActivityDependencies {
   createSeries?: (series: ActivitySeriesDocument, documents: ActivityDocument[]) => Promise<ActivityDto[]>;
   findSeries?: (campusId: string, seriesId: string) => Promise<ActivitySeriesDocument | null>;
   findSeriesOccurrences?: (campusId: string, seriesId: string, now: Date) => Promise<ActivityDocument[]>;
-  findParticipants?: (document: ActivityDocument, query: ActivityParticipantsQuery) => Promise<ActivityParticipantsRecords>;
+  findParticipants?: (document: ActivityDocument, query: ActivityParticipantsQuery, currentUserId: string) => Promise<ActivityParticipantsRecords>;
   findParticipantNames?: (campusId: string, userIds: string[]) => Promise<Map<string, string>>;
   deleteActivity?: (auth: VerifiedAuthConnection, activityId: string, expectedRevision: number, now: Date) => Promise<ActivityDeletionResult>;
 }

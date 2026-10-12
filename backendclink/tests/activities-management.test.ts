@@ -48,13 +48,14 @@ test('pagination and deletion reject overrides, malformed values and unbounded p
 
 test('same-campus non-owner can read only names; unavailable profiles stay anonymous', async () => {
   const result = await service.getActivityParticipants(auth, id.toHexString(), { page: 2, pageSize: 5 }, { ...deps(document({ createdByUserId: other })),
-    findParticipants: async (value, query) => {
+    findParticipants: async (value, query, currentUserId) => {
+      assert.equal(currentUserId, auth.userId);
       assert.equal(value.campusId, campusId); assert.equal(query.page, 2);
       return { ...query, total: 7, rows: [{ key: 'p1', userId }, { key: 'p2', userId: other }] };
     }, findParticipantNames: async (campus, ids) => {
       assert.equal(campus, campusId); assert.deepEqual(ids, [userId, other]); return new Map([[userId, ' Nombre Apellido ']]);
     } });
-  assert.deepEqual(result.participants, [{ key: 'p1', name: 'Nombre Apellido' }, { key: 'p2', name: null }]);
+  assert.deepEqual(result.participants, [{ key: 'p1', name: 'Nombre Apellido', isCurrentUser: true }, { key: 'p2', name: null, isCurrentUser: false }]);
   assert.equal(JSON.stringify(result).includes(userId), false);
 });
 
@@ -98,21 +99,90 @@ test('Mongo pages exclude LEFT, preserve legacy creator semantics and clamp an e
         assert.equal(filter.status, 'JOINED'); let offset = 0; let count = 0;
         const cursor = { sort: sort => { assert.deepEqual(sort, { _id: 1 }); return cursor; },
           skip: value => { offset = value; return cursor; }, limit: value => { count = value; return cursor; },
-          toArray: async () => joined.slice(offset, offset + count) }; return cursor;
+          toArray: async () => joined.filter(row => !('userId' in filter) || row.userId !== filter.userId.$ne)
+            .slice(offset, offset + count) }; return cursor;
       } };
   });
   try {
-    let page = await repository.findActivityParticipants(document(), { page: 1, pageSize: 5 });
+    let page = await repository.findActivityParticipants(document(), { page: 1, pageSize: 5 }, userId);
     assert.equal(page.total, 7); assert.equal(page.rows[0].key, 'creator'); assert.equal(page.rows.length, 5);
-    page = await repository.findActivityParticipants(document(), { page: 2, pageSize: 5 });
+    page = await repository.findActivityParticipants(document(), { page: 2, pageSize: 5 }, userId);
     assert.deepEqual(page.rows.map(row => row.key), joined.slice(4).map(row => row._id.toHexString()));
-    creator = { activityId: id, campusId, userId, status: 'LEFT', joinedAt: now, updatedAt: now };
+    creator = { _id: new ObjectId('ffffffffffffffffffffffff'), activityId: id, campusId, userId, status: 'LEFT', joinedAt: now, updatedAt: now };
     joined = joined.slice(0, 1);
-    page = await repository.findActivityParticipants(document(), { page: 2, pageSize: 5 });
+    page = await repository.findActivityParticipants(document(), { page: 2, pageSize: 5 }, userId);
     assert.equal(page.page, 1); assert.equal(page.total, 1); assert.equal(page.rows.some(row => row.key === 'creator'), false);
     creator.status = 'JOINED';
-    page = await repository.findActivityParticipants(document(), { page: 1, pageSize: 5 });
+    joined.push({ _id: creator._id!, userId });
+    page = await repository.findActivityParticipants(document(), { page: 1, pageSize: 5 }, userId);
+    assert.equal(page.rows[0].userId, userId);
+    assert.equal(page.rows.filter(row => row.userId === userId).length, 1);
     assert.equal(page.rows.some(row => row.key === 'creator'), false);
+  } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
+});
+
+test('viewer is first before pagination, without duplicate rows, including legacy creators and LEFT state', async () => {
+  const row = (personId: string, index: number, status: ActivityParticipationDocument['status'] = 'JOINED'): ActivityParticipationDocument => ({
+    _id: new ObjectId(index.toString(16).padStart(24, '0')), campusId, activityId: id, userId: personId,
+    status, joinedAt: now, updatedAt: now,
+  });
+  const spectators = Array.from({ length: 8 }, (_, index) => row(`00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, index + 1));
+  const own = row(userId, 99);
+  let records = [...spectators, own];
+  const value = document({ createdByUserId: other });
+  const sessionMock = mock.method(MongoClient.prototype, 'withSession', async callback => callback({ withTransaction: async work => work() }));
+  const dbMock = mock.method(Db.prototype, 'collection', name => {
+    if (name === 'activities') return { findOne: async () => value };
+    if (name === 'campus_maps') return { findOne: async () => map };
+    assert.equal(name, 'activity_participation');
+    const matches = (item: ActivityParticipationDocument, filter: Record<string, any>) => {
+      assert.equal(filter.campusId, campusId); assert.equal(filter.activityId, id);
+      return (!filter.status || item.status === filter.status)
+        && (!filter.userId || (typeof filter.userId === 'string' ? item.userId === filter.userId : item.userId !== filter.userId.$ne));
+    };
+    return {
+      findOne: async filter => records.find(item => matches(item, filter)) ?? null,
+      countDocuments: async filter => records.filter(item => matches(item, filter)).length,
+      find: filter => {
+        let offset = 0, limit = 0;
+        const cursor = { sort: sort => { assert.deepEqual(sort, { _id: 1 }); return cursor; },
+          skip: count => { offset = count; return cursor; }, limit: count => { limit = count; return cursor; },
+          toArray: async () => records.filter(item => matches(item, filter))
+            .sort((a, b) => a._id!.toHexString().localeCompare(b._id!.toHexString())).slice(offset, offset + limit) };
+        return cursor;
+      },
+    };
+  });
+  try {
+    for (const pageSize of [1, 2, 7]) {
+      const all: string[] = [];
+      for (let requested = 1; requested <= Math.ceil(10 / pageSize); requested++) {
+        const page = await repository.findActivityParticipants(value, { page: requested, pageSize }, userId);
+        assert.equal(page.total, 10); assert.ok(page.rows.length <= pageSize);
+        if (requested === 1) assert.equal(page.rows[0].userId, userId);
+        else assert.equal(page.rows.some(person => person.userId === userId), false);
+        all.push(...page.rows.map(person => person.key));
+      }
+      assert.deepEqual(all, [own._id!.toHexString(), 'creator', ...spectators.map(person => person._id!.toHexString())]);
+      assert.equal(new Set(all).size, 10);
+    }
+    let page = await repository.findActivityParticipants(value, { page: 1, pageSize: 7 }, other);
+    assert.equal(page.rows[0].key, 'creator'); // The viewing legacy creator is already a participant.
+    own.status = 'LEFT';
+    page = await repository.findActivityParticipants(value, { page: 1, pageSize: 7 }, userId);
+    assert.equal(page.total, 9); assert.equal(page.rows[0].key, 'creator');
+    assert.equal(page.rows.some(person => person.userId === userId), false);
+    own.status = 'JOINED';
+    const creator = row(other, 100, 'LEFT'); records.push(creator);
+    page = await repository.findActivityParticipants(value, { page: 1, pageSize: 7 }, userId);
+    assert.equal(page.total, 9); assert.equal(page.rows[0].userId, userId);
+    assert.equal(page.rows.some(person => person.key === 'creator'), false);
+    creator.status = 'JOINED';
+    page = await repository.findActivityParticipants(value, { page: 1, pageSize: 7 }, other);
+    assert.equal(page.total, 10); assert.equal(page.rows[0].key, creator._id!.toHexString());
+    records = records.map(person => ({ ...person, status: 'LEFT' }));
+    page = await repository.findActivityParticipants(value, { page: 3, pageSize: 7 }, userId);
+    assert.equal(page.page, 1); assert.equal(page.total, 0); assert.deepEqual(page.rows, []);
   } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
 });
 

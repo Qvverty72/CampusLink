@@ -1,9 +1,11 @@
 import { APP_COLORS } from '@/types/colors';
+import { Pagination } from '@/components/Pagination';
 import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ActivitiesState } from '../hooks/useLocationActivities';
 import { ACTIVITY_COLORS, filterLocationActivities, type Activity, type ActivityLocationQuery } from '../types/activity';
 import { ActivityCard } from './ActivityCard';
+import { ActivityListSkeleton } from './ActivityListSkeleton';
 import { ActivityDetail } from './ActivityDetail';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { CreateActivityForm } from './CreateActivityForm';
@@ -100,7 +102,11 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
   </View>);
   const listRefresh = <ActivityRefreshRegistration onRefresh={refreshList} refreshing={state.isLoading}
     enabled={!state.isLoading} label="las actividades" />;
-  if (state.isLoading) return transition('loading', <View style={styles.section}>{listRefresh}{floorBack}<ActivityIndicator /><Text style={styles.text}>Cargando actividades…</Text></View>);
+  if (state.isLoading) return transition('loading', <View style={styles.section}>
+    {listRefresh}
+    {floorBack}
+    <ActivityListSkeleton activityType={activityType} />
+  </View>);
   if (state.error) return transition('error', <View style={styles.section}>
     {listRefresh}
     {floorBack}
@@ -150,19 +156,8 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
             : 'No hay actividades comunitarias vigentes en este lugar.'}</Text>}
       </View>;
     })}
-    {filtered.length > 0 ? <View style={styles.pagination}>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Página anterior de actividades"
-        disabled={currentPage <= 1} accessibilityState={{ disabled: currentPage <= 1 }}
-        onPress={() => setPage(currentPage - 1)} style={[styles.pageButton, currentPage <= 1 && styles.disabled]}>
-        <Text style={styles.pageLink}>‹ Anterior</Text>
-      </TouchableOpacity>
-      <Text accessibilityLiveRegion="polite" style={styles.page}>Página {currentPage} de {totalPages}</Text>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Página siguiente de actividades"
-        disabled={currentPage >= totalPages} accessibilityState={{ disabled: currentPage >= totalPages }}
-        onPress={() => setPage(currentPage + 1)} style={[styles.pageButton, currentPage >= totalPages && styles.disabled]}>
-        <Text style={styles.pageLink}>Siguiente ›</Text>
-      </TouchableOpacity>
-    </View> : null}
+    {filtered.length > PAGE_SIZE ? <Pagination page={currentPage} totalPages={totalPages}
+      onPageChange={setPage} label="Paginación de actividades y eventos" /> : null}
     <View style={styles.creationActions}>
       {canCreate && locations?.length && (!activityType || activityType === 'COMMUNITY_ACTIVITY') ?
         <TouchableOpacity accessibilityRole="button" activeOpacity={0.75} onPress={() => setCreating('COMMUNITY_ACTIVITY')}
@@ -189,9 +184,6 @@ const styles = StyleSheet.create({
   filterMenu: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, backgroundColor: '#FFFFFF', overflow: 'hidden' },
   filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
   filterSelected: { backgroundColor: '#E6F3F3' }, filterSelectedText: { color: APP_COLORS.PRIMARY, fontWeight: '600' },
-  pagination: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
-  pageButton: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 4 },
-  pageLink: { color: APP_COLORS.PRIMARY, fontWeight: '600' }, page: { color: '#64748B', fontSize: 12 }, disabled: { opacity: 0.35 },
   creationActions: { gap: 12, marginTop: 20 },
   createButton: { borderWidth: 1, borderRadius: 16, padding: 18, alignItems: 'center', backgroundColor: '#F8FAFC' },
   createText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },

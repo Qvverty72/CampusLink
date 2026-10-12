@@ -67,6 +67,14 @@ con ese archivo. Cambiar solo Mongo no descarga fotos nuevas. Para administrar
 imágenes sin distribuir assets se necesitaría almacenamiento remoto y URLs; eso
 queda fuera de esta implementación.
 
+Para diagnosticar un banner vacío, regenera el registro y reinicia Expo con caché
+limpia (`npm run poi:images` y `npx expo start --clear`); después recarga completamente
+la app. Comprueba los `imageKeys` de la respuesta del mapa, no solo el inventario:
+deben coincidir exactamente con nombres del registro. El gesto de refresh del piso
+actualiza actividades, pero no vuelve a consultar el mapa ni sus fotos. Si el banner
+sigue vacío, revisa errores de carga de assets y sus dimensiones en el inspector;
+un registro correcto no garantiza que el servidor/bundle entregue la imagen.
+
 ## Placeholders incluidos
 
 - Inventario de 2026-10-10: 15 placeholders adicionales, uno por cada POI de H,

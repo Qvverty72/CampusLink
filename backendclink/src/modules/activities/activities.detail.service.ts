@@ -58,7 +58,7 @@ export async function getActivityDetail(auth: VerifiedAuthConnection, activityId
       ? { participantCount: document.participantCount } : {}),
     ...(document.createdByUserId === auth.userId && Number.isSafeInteger(document.editRevision ?? 0) && (document.editRevision ?? 0) >= 0
       ? { editing: { revision: document.editRevision ?? 0, canEditUpcoming: !!activity.series && document.startAt > now } } : {}),
-    participation: { status, canJoin: status !== 'JOINED' },
+    participation: { status, canJoin: status !== 'JOINED', canLeave: status === 'JOINED' && document.createdByUserId !== auth.userId },
     ...(bannerUrl ? { bannerUrl } : {}), ...(category ? { category } : {}), ...(tags.length ? { tags } : {}) };
 }
 
@@ -83,21 +83,27 @@ export async function getOwnActivityParticipation(auth: VerifiedAuthConnection, 
   const id = authorizeParticipation(auth, activityId);
   const find = dependencies.findParticipation ?? (await import('./activities.detail.repository.js')).findOwnParticipation;
   const current = await find(auth.campusId, id, auth.userId);
-  if (current) return participationDto(current, auth.campusId, id, auth.userId);
+  const result = current && participationDto(current, auth.campusId, id, auth.userId);
+  if (result && result.status !== 'JOINED') return result;
   // Older activities count the creator even when they have no explicit participation row.
   const findCreated = dependencies.findCreatedActivity ?? (await import('./activities.detail.repository.js')).findCreatedActivity;
   const activity = await findCreated(auth.campusId, id, auth.userId);
+  if (result) return { ...result, canLeave: !activity };
   if (activity) {
-    return participationDto({ campusId: activity.campusId, activityId: activity._id,
+    return { ...participationDto({ campusId: activity.campusId, activityId: activity._id,
       userId: activity.createdByUserId, status: 'JOINED', joinedAt: activity.createdAt, updatedAt: activity.createdAt },
-    auth.campusId, id, auth.userId);
+    auth.campusId, id, auth.userId), canLeave: false };
   }
-  return { campusId: auth.campusId, activityId: id, status: 'NOT_JOINED' };
+  return { campusId: auth.campusId, activityId: id, status: 'NOT_JOINED', canLeave: false };
 }
 
 export async function leaveActivity(auth: VerifiedAuthConnection, activityId: string,
   dependencies: ActivityDependencies = {}): Promise<ActivityParticipationDto> {
   const id = authorizeParticipation(auth, activityId);
+  const findCreated = dependencies.findCreatedActivity ?? (await import('./activities.detail.repository.js')).findCreatedActivity;
+  if (await findCreated(auth.campusId, id, auth.userId)) {
+    throw new ApiError(403, 'FORBIDDEN', 'No puedes retirarte de una actividad que creaste.');
+  }
   const withdraw = dependencies.withdrawParticipation ?? (await import('./activities.detail.repository.js')).withdrawActivityParticipation;
   return withdraw(auth.campusId, id, auth.userId, dependencies.now?.() ?? new Date());
 }

@@ -91,12 +91,15 @@ export async function withdrawActivityParticipation(campusId: string, activityId
   const withdraw = () => mongoClient.withSession(session => session.withTransaction(async () => {
     const transactionNow = new Date(Math.max(now.getTime(), Date.now()));
     const current = await participations.findOne(key, { session });
+    const activity = await activities.findOne({ _id, campusId }, { session });
+    if (activity?.createdByUserId === userId) {
+      throw new ApiError(403, 'FORBIDDEN', 'No puedes retirarte de una actividad que creaste.');
+    }
     const ownState = current && participationDto(current, campusId, activityId, userId);
     if (ownState?.status === 'LEFT') return ownState;
     // Withdrawal is also available after expiry or hiding; it exposes no activity content.
-    const activity = await activities.findOne({ _id, campusId }, { session });
-    if (!current && activity?.createdByUserId !== userId) {
-      return { campusId, activityId, status: 'NOT_JOINED' as const };
+    if (!current) {
+      return { campusId, activityId, status: 'NOT_JOINED' as const, canLeave: false };
     }
     if (!activity || !Number.isSafeInteger(activity.participantCount) || activity.participantCount < 1) {
       throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Activity participant count is invalid.');
@@ -118,7 +121,7 @@ export async function withdrawActivityParticipation(campusId: string, activityId
     if (!result) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Activity withdrawal was not confirmed.');
     return result;
   } catch (error) {
-    // Concurrent legacy-creator upserts may collide instead of being retried by MongoDB.
+    // Concurrent participation writes may collide instead of being retried by MongoDB.
     if (error instanceof MongoServerError && error.code === 11000) {
       const current = await findOwnParticipation(campusId, activityId, userId);
       if (current?.status === 'LEFT') return participationDto(current, campusId, activityId, userId);

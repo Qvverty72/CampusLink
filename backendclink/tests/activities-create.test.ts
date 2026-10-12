@@ -81,7 +81,7 @@ test('creation derives all protected fields, enrolls organizer and permits futur
         return toVisibleActivity(document, campusId, now, spatialBuildings(map))!;
       },
     });
-    assert.equal(writes, 1); assert.deepEqual(detail.participation, { status: 'JOINED', canJoin: false });
+    assert.equal(writes, 1); assert.deepEqual(detail.participation, { status: 'JOINED', canJoin: false, canLeave: false });
     assert.deepEqual(detail.organizer, { name: 'Organizador' }); assert.equal(detail.location.floorName, 'Piso 2');
   }
 });
@@ -185,7 +185,7 @@ test('HTTP creation requires identity, rejects overrides, returns 201 JOINED wit
     assert.equal(response.status, 201); assert.equal(response.headers.get('cache-control'), 'no-store');
     const created = (await response.json()).data;
     assert.equal(created.type, 'COMMUNITY_ACTIVITY'); assert.equal(created.campusId, campusId);
-    assert.deepEqual(created.participation, { status: 'JOINED', canJoin: false }); assert.equal(writes, 1);
+    assert.deepEqual(created.participation, { status: 'JOINED', canJoin: false, canLeave: false }); assert.equal(writes, 1);
   } finally { globalThis.fetch = originalFetch; await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 });
 
