@@ -1,11 +1,26 @@
 import { ObjectId } from 'mongodb';
 import { ApiError } from '../../services/apiError.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { requireCampusCapability } from '../auth/auth.authorization.js';
+import { requireCampusCapability, accountCapabilities } from '../auth/auth.authorization.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
 import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto, ActivityDocument, ActivityType, CreateActivityInput } from './activities.types.js';
+import type { CommunityActivityCreationAvailability } from './activities.types.js';
+import { COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from './activities.policy.js';
+
+export async function getCommunityActivityCreationAvailability(auth: VerifiedAuthConnection,
+  dependencies: ActivityDependencies = {}): Promise<CommunityActivityCreationAvailability> {
+  requireCampusCapability(auth, auth.campusId, 'general');
+  if (auth.profile.campus_id !== auth.campusId || !auth.profile.verificado_en) {
+    throw new ApiError(403, 'FORBIDDEN', 'A verified institutional account in the current campus is required.');
+  }
+  if (accountCapabilities(auth).officialActivities) return { campusId: auth.campusId, canCreate: true };
+  const find = dependencies.findActiveCommunityActivity
+    ?? (await import('./activities.create.repository.js')).findActiveCommunityActivity;
+  const existing = await find(auth.campusId, auth.userId, dependencies.now?.() ?? new Date());
+  return { campusId: auth.campusId, canCreate: !existing, ...(existing ? { message: COMMUNITY_ACTIVITY_LIMIT_MESSAGE } : {}) };
+}
 
 export async function createCommunityActivity(auth: VerifiedAuthConnection, input: CreateActivityInput,
   dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
@@ -45,7 +60,9 @@ async function publishActivity(auth: VerifiedAuthConnection, input: CreateActivi
   dependencies: ActivityDependencies): Promise<ActivityDetailDto> {
   const document = await prepareActivityDocument(auth, input, type, dependencies);
   const persist = dependencies.createActivity ?? (await import('./activities.create.repository.js')).insertActivity;
-  const activity = await persist(document);
+  const activity = await persist(document, {
+    limitActiveCommunity: type === 'COMMUNITY_ACTIVITY' && !accountCapabilities(auth).officialActivities,
+  });
   return createdActivityDetail(auth, activity);
 }
 

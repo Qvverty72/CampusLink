@@ -43,3 +43,12 @@ export const parseEmptyActivityInput: RequestParser = (input: unknown) => {
   }
   return { success: false, issues: [{ field: 'request', message: 'No activity overrides are accepted.' }] };
 };
+
+export const parseActivityView: RequestParser = (input: unknown) => {
+  const value = input as { type?: unknown; operationId?: unknown } | null;
+  return value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).every(key => ['type', 'operationId'].includes(key)) && value.type === 'VIEWED'
+    && typeof value.operationId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.operationId)
+    ? { success: true, data: { type: 'VIEWED', operationId: value.operationId.toLowerCase() } }
+    : { success: false, issues: [{ field: 'body', message: 'Envía VIEWED con un identificador UUID de apertura, sin campos de identidad.' }] };
+};

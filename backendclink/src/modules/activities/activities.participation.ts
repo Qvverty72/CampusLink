@@ -1,5 +1,11 @@
 import { ApiError } from '../../services/apiError.js';
 import type { ActivityParticipationDocument, ActivityParticipationDto } from './activities.types.js';
+import type { ObjectId } from 'mongodb';
+
+export function initialActivityParticipation(activityId: ObjectId, campusId: string, userId: string, at: Date): ActivityParticipationDocument {
+  return { activityId, campusId, userId, status: 'JOINED', joinedAt: at, updatedAt: at,
+    firstJoinedAt: at, lastJoinedAt: at, lastLeftAt: null, joinCount: 1, leaveCount: 0, historyComplete: true };
+}
 
 export function participationDto(document: ActivityParticipationDocument, campusId: string,
   activityId: string, userId: string): ActivityParticipationDto {

@@ -7,7 +7,7 @@ import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto } from './activities.types.js';
 import type { ActivityDocument, ActivityDto } from './activities.types.js';
 import type { ActivityParticipationDto } from './activities.types.js';
-import { requireCampusCapability } from '../auth/auth.authorization.js';
+import { requireCampusCapability, accountCapabilities } from '../auth/auth.authorization.js';
 import { participationDto } from './activities.participation.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,17 +57,17 @@ export async function getActivityDetail(auth: VerifiedAuthConnection, activityId
     ...(Number.isSafeInteger(document.participantCount) && document.participantCount >= 0
       ? { participantCount: document.participantCount } : {}),
     ...(document.createdByUserId === auth.userId && Number.isSafeInteger(document.editRevision ?? 0) && (document.editRevision ?? 0) >= 0
-      ? { editing: { revision: document.editRevision ?? 0, canEditUpcoming: !!activity.series && document.startAt > now } } : {}),
+      ? { editing: { revision: document.editRevision ?? 0, canEditUpcoming: accountCapabilities(auth).officialActivities && !!activity.series && document.startAt > now } } : {}),
     participation: { status, canJoin: status !== 'JOINED', canLeave: status === 'JOINED' && document.createdByUserId !== auth.userId },
     ...(bannerUrl ? { bannerUrl } : {}), ...(category ? { category } : {}), ...(tags.length ? { tags } : {}) };
 }
 
 export async function joinActivity(auth: VerifiedAuthConnection, activityId: string,
-  dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
+  dependencies: ActivityDependencies = {}, operationId?: string): Promise<ActivityDetailDto> {
   const detail = await getActivityDetail(auth, activityId, dependencies);
   if (!detail.participation.canJoin) return detail;
   const register = dependencies.registerParticipation ?? (await import('./activities.detail.repository.js')).registerActivityParticipation;
-  await register(auth.campusId, detail.id, auth.userId, dependencies.now?.() ?? new Date());
+  await register(auth.campusId, detail.id, auth.userId, dependencies.now?.() ?? new Date(), operationId);
   // Return server-owned participation, never an optimistic client-supplied state.
   return getActivityDetail(auth, detail.id, dependencies);
 }
@@ -76,6 +76,14 @@ function authorizeParticipation(auth: VerifiedAuthConnection, activityId: string
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'A valid activity ID is required.');
   requireCampusCapability(auth, auth.campusId, 'general');
   return activityId.toLowerCase();
+}
+
+export async function recordViewedActivity(auth: VerifiedAuthConnection, activityId: string, operationId: string,
+  dependencies: ActivityDependencies = {}) {
+  const id = authorizeParticipation(auth, activityId);
+  const record = dependencies.recordView ?? (await import('./activities.views.repository.js')).recordActivityView;
+  await record(auth.campusId, id, auth.userId, dependencies.now?.() ?? new Date(), operationId);
+  return { campusId: auth.campusId, activityId: id, type: 'VIEWED' as const, recorded: true };
 }
 
 export async function getOwnActivityParticipation(auth: VerifiedAuthConnection, activityId: string,
@@ -98,12 +106,12 @@ export async function getOwnActivityParticipation(auth: VerifiedAuthConnection, 
 }
 
 export async function leaveActivity(auth: VerifiedAuthConnection, activityId: string,
-  dependencies: ActivityDependencies = {}): Promise<ActivityParticipationDto> {
+  dependencies: ActivityDependencies = {}, operationId?: string): Promise<ActivityParticipationDto> {
   const id = authorizeParticipation(auth, activityId);
   const findCreated = dependencies.findCreatedActivity ?? (await import('./activities.detail.repository.js')).findCreatedActivity;
   if (await findCreated(auth.campusId, id, auth.userId)) {
     throw new ApiError(403, 'FORBIDDEN', 'No puedes retirarte de una actividad que creaste.');
   }
   const withdraw = dependencies.withdrawParticipation ?? (await import('./activities.detail.repository.js')).withdrawActivityParticipation;
-  return withdraw(auth.campusId, id, auth.userId, dependencies.now?.() ?? new Date());
+  return withdraw(auth.campusId, id, auth.userId, dependencies.now?.() ?? new Date(), operationId);
 }

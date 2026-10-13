@@ -14,7 +14,10 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
 }) {
   const { identity, refreshIdentity } = useAuth(); const [draft, setDraft] = useState(() => activityEditDraft(activity));
   const allowCustomDescription = identity?.capabilities.officialActivities === true;
+  const canViewOccurrences = identity?.capabilities.officialActivities === true;
   const [scope, setScope] = useState<EditActivityInput['scope']>('ONE');
+  const effectiveScope = canViewOccurrences ? scope : 'ONE';
+  useEffect(() => { if (!canViewOccurrences) setScope('ONE'); }, [canViewOccurrences]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false); const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
@@ -27,7 +30,7 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
     if (!isActivityDescriptionAllowed(draft.description, allowCustomDescription, activity.description)) {
       setError('Selecciona una descripción para la actividad.'); return;
     }
-    const parsed = validateActivityEditDraft(draft, activity, locations, scope);
+    const parsed = validateActivityEditDraft(draft, activity, locations, effectiveScope);
     if (!parsed.input) { setError(parsed.error); return; }
     const abort = new AbortController(); request.current = abort; setBusy(true); setError(null);
     let saving = false;
@@ -52,9 +55,9 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
     <TouchableOpacity disabled={busy} accessibilityRole="button" onPress={onCancel} style={styles.back}>
       <Text style={styles.link}>‹ Volver a la ficha</Text>
     </TouchableOpacity>
-    <Text accessibilityRole="header" style={styles.heading}>Editar {activity.series ? 'ocurrencia' : 'actividad'}</Text>
+    <Text accessibilityRole="header" style={styles.heading}>Editar {canViewOccurrences && activity.series ? 'ocurrencia' : 'actividad'}</Text>
     <Text style={styles.text}>Conserva sus inscripciones y su tipo {activity.type === 'OFFICIAL_EVENT' ? 'oficial' : 'comunitario'}. Los cambios quedan en su historial.</Text>
-    {activity.series ? <View style={styles.form}>
+    {canViewOccurrences && activity.series ? <View style={styles.form}>
       <Text style={styles.label}>Aplicar cambios a</Text>
       <View style={styles.choices}>
         {(['ONE', ...(activity.editing?.canEditUpcoming ? ['UPCOMING'] : [])] as EditActivityInput['scope'][]).map(value =>

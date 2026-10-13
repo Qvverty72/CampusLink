@@ -2,6 +2,13 @@ import type { Filter } from 'mongodb';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
 import type { ActivityDocument, ActivityDto, ActivityQuery } from './activities.types.js';
 
+export const COMMUNITY_ACTIVITY_LIMIT_MESSAGE = 'Solo puedes tener activa una actividad comunitaria.';
+
+/** Future and ongoing publications reserve the creator's slot across the entire campus. */
+export function activeCommunityActivityFilter(campusId: string, userId: string, now: Date): Filter<ActivityDocument> {
+  return { ...visibleActivityFilter(campusId, now), createdByUserId: userId, type: 'COMMUNITY_ACTIVITY' };
+}
+
 /** The same publication policy applies to lists, direct detail and registration. */
 export function visibleActivityFilter(campusId: string, now: Date): Filter<ActivityDocument> {
   return { campusId, status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,

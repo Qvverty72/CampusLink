@@ -3,6 +3,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchActivityDetail, fetchActivityParticipation, registerActivityParticipation, withdrawActivityParticipation, deleteActivity } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityParticipation } from '../types/activity';
+import { activityOperationId } from '../types/interaction';
 
 interface DetailState {
   key: string;
@@ -27,6 +28,7 @@ export function useActivityDetail(activityId: string) {
   const key = JSON.stringify([campusId, token, activityId, revision]);
   const request = useRef<AbortController | null>(null);
   const mutation = useRef<AbortController | null>(null);
+  const interactionIntent = useRef<{ key: string; id: string } | null>(null);
   const [state, setState] = useState<DetailState>({ key: '', detail: null, ownParticipation: null,
     isLoading: false, pendingParticipation: null, error: null, participationError: null, pendingDeletion: false, deletionError: null });
 
@@ -76,14 +78,19 @@ export function useActivityDetail(activityId: string) {
     if (!campusId || !token || !abort || abort.signal.aborted || mutation.current === abort
       || state.key !== key || (target === 'JOINED' ? !detail?.participation.canJoin : status !== 'JOINED' || !canLeave)) return;
     mutation.current = abort;
+    const intentKey = JSON.stringify([campusId, identity?.profile.id, activityId, target]);
+    if (interactionIntent.current?.key !== intentKey) interactionIntent.current = { key: intentKey, id: activityOperationId() };
+    const operationId = interactionIntent.current.id;
     setState(current => current.key === key ? { ...current, pendingParticipation: target, participationError: null } : current);
     try {
       if (target === 'JOINED') {
-        const registered = await registerActivityParticipation(campusId, activityId, abort.signal);
+        const registered = await registerActivityParticipation(campusId, activityId, abort.signal, operationId);
+        interactionIntent.current = null;
         if (!abort.signal.aborted) setState(current => current.key === key
           ? { ...current, detail: registered, ownParticipation: null, pendingParticipation: null, participationError: null } : current);
       } else {
-        const left = await withdrawActivityParticipation(campusId, activityId, abort.signal);
+        const left = await withdrawActivityParticipation(campusId, activityId, abort.signal, operationId);
+        interactionIntent.current = null;
         if (!abort.signal.aborted) setState(current => current.key === key ? { ...current, ownParticipation: left,
           detail: current.detail ? { ...current.detail, participantCount: undefined,
             participation: { status: left.status, canJoin: left.status !== 'JOINED', canLeave: left.canLeave } } : null,

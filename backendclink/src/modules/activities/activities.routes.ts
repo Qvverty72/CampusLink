@@ -4,15 +4,21 @@ import { validateRequest } from '../../middleware/validateRequest.js';
 import { createActivitiesController, createActivityDetailController, createActivityPublicationController, createActivitySeriesController, createActivitySeriesDetailController, createActivityEditController } from './activities.controller.js';
 import { activitySeriesParser, parseSeriesId } from './activities.series.validation.js';
 import { parseCreateActivity } from './activities.create.validation.js';
-import { parseActivityQuery, parseActivityId, parseEmptyActivityInput } from './activities.validation.js';
+import { parseActivityQuery, parseActivityId, parseEmptyActivityInput, parseActivityView } from './activities.validation.js';
 import type { ActivityEditDependencies } from './activities.edit.types.js';
 import { editActivityParser } from './activities.edit.validation.js';
 import { createActivityParticipationController } from './activities.controller.js';
 import { createActivityParticipantsController, createActivityDeletionController } from './activities.controller.js';
+import { createCommunityActivityAvailabilityController } from './activities.controller.js';
+import { createActivityViewController } from './activities.controller.js';
 import { parseActivityParticipantsQuery, parseActivityDeletion } from './activities.management.validation.js';
 
 export function createActivitiesRouter(dependencies: ActivityEditDependencies = {}): Router {
   const router = Router();
+  router.post('/:activityId/interactions', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseActivityView }), createActivityViewController(dependencies));
+  router.get('/community/creation-availability', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput, body: parseEmptyActivityInput }), createCommunityActivityAvailabilityController(dependencies));
   router.get('/:activityId/participants', requireAuthentication,
     validateRequest({ params: parseActivityId, query: parseActivityParticipantsQuery, body: parseEmptyActivityInput }),
     createActivityParticipantsController(dependencies));

@@ -135,7 +135,7 @@ test('official transaction commits type/count/creator JOINED together and aborts
   try {
     const deps = { getActiveMap: async () => map, now: () => now };
     const detail = await createOfficialEvent(context(), parsed(), deps);
-    assert.equal(committed.length, 2);
+    assert.equal(committed.length, 3);
     const activity = committed[0].document as ActivityDocument; const own = committed[1].document as ActivityParticipationDocument;
     assert.equal(activity.type, 'OFFICIAL_EVENT'); assert.equal(activity.participantCount, 1); assert.equal(activity._id.toHexString(), detail.id);
     assert.equal(activity.notificationEvents?.[0].key, `activity:${detail.id}:published`);
@@ -143,9 +143,9 @@ test('official transaction commits type/count/creator JOINED together and aborts
     assert.deepEqual(own.activityId, activity._id); assert.equal(own.userId, userId); assert.equal(own.campusId, campusId);
     assert.equal(own.status, 'JOINED'); assert.deepEqual(own.joinedAt, activity.createdAt);
     fail = true; await assert.rejects(createOfficialEvent(context(), parsed(), deps), /Creator enrollment failed/);
-    assert.equal(committed.length, 2); assert.equal(staged.length, 0);
+    assert.equal(committed.length, 3); assert.equal(staged.length, 0);
     activeMap = { ...map, buildings: [] }; await assert.rejects(createOfficialEvent(context(), parsed(), deps), { status: 400 });
-    assert.equal(committed.length, 2);
+    assert.equal(committed.length, 3);
   } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
 });
 

@@ -16,6 +16,10 @@ export interface CreateActivityInput {
   location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };
 }
 
+export interface CommunityActivityCreationAvailability {
+  campusId: string; canCreate: boolean; message?: string;
+}
+
 /** Domain catalog supplied by the map adapter; no meshes or rendering state. */
 export interface ActivityLocationOption {
   id: string; name: string;

@@ -5,8 +5,18 @@ import { sendSuccess } from '../../services/apiResponse.js';
 import { getActivities, type ActivityDependencies } from './activities.service.js';
 import type { ActivityQuery } from './activities.types.js';
 import { getActivityDetail, joinActivity } from './activities.detail.service.js';
+import { recordViewedActivity } from './activities.detail.service.js';
+import { ApiError } from '../../services/apiError.js';
+
+function participationOperationId(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Idempotency-Key debe ser un UUID válido.');
+  }
+  return value.toLowerCase();
+}
 import { getOwnActivityParticipation, leaveActivity } from './activities.detail.service.js';
-import { createCommunityActivity, createOfficialEvent } from './activities.create.service.js';
+import { createCommunityActivity, createOfficialEvent, getCommunityActivityCreationAvailability } from './activities.create.service.js';
 import type { CreateActivityInput } from './activities.types.js';
 import type { CreateActivitySeriesInput } from './activities.types.js';
 import { createActivitySeries, previewActivitySeries, getActivitySeries } from './activities.series.service.js';
@@ -58,6 +68,12 @@ export function createActivityPublicationController(dependencies: ActivityDepend
   };
 }
 
+export function createCommunityActivityAvailabilityController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    sendSuccess(response, await getCommunityActivityCreationAvailability(response.locals.auth, dependencies));
+  };
+}
+
 export function createActivitiesController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
     const { query } = getValidatedRequest<{ query: ActivityQuery }>(response);
@@ -66,15 +82,24 @@ export function createActivitiesController(dependencies: ActivityDependencies = 
 }
 
 export function createActivityDetailController(dependencies: ActivityDependencies = {}, register = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
-  return async (_request, response) => {
+  return async (request, response) => {
     const { params } = getValidatedRequest<{ params: { activityId: string } }>(response);
-    sendSuccess(response, await (register ? joinActivity : getActivityDetail)(response.locals.auth, params.activityId, dependencies));
+    sendSuccess(response, register ? await joinActivity(response.locals.auth, params.activityId, dependencies, participationOperationId(request.headers['idempotency-key']))
+      : await getActivityDetail(response.locals.auth, params.activityId, dependencies));
   };
 }
 
 export function createActivityParticipationController(dependencies: ActivityDependencies = {}, withdraw = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
-  return async (_request, response) => {
+  return async (request, response) => {
     const { params } = getValidatedRequest<{ params: { activityId: string } }>(response);
-    sendSuccess(response, await (withdraw ? leaveActivity : getOwnActivityParticipation)(response.locals.auth, params.activityId, dependencies));
+    sendSuccess(response, withdraw ? await leaveActivity(response.locals.auth, params.activityId, dependencies, participationOperationId(request.headers['idempotency-key']))
+      : await getOwnActivityParticipation(response.locals.auth, params.activityId, dependencies));
+  };
+}
+
+export function createActivityViewController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { params, body } = getValidatedRequest<{ params: { activityId: string }; body: { operationId: string } }>(response);
+    sendSuccess(response, await recordViewedActivity(response.locals.auth, params.activityId, body.operationId, dependencies));
   };
 }

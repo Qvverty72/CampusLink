@@ -177,6 +177,14 @@ ni se presenta como cero. No se añade ninguna colección ni caché de actividad
 y permite inscribirse. «Volver a las actividades» conserva la selección del mapa.
 El hook cancela consultas obsoletas y revalida al vencer la actividad; cerrar el
 modal desmonta la ficha. La inscripción usa `activity_participation` con JOINED/LEFT.
+
+Cada apertura correctamente cargada de `ActivityDetail` registra VIEWED mediante
+`POST /activities/:activityId/interactions`, con operationId UUID por apertura y
+deduplicación en backend. Tarjetas y refresh no suman vistas; cerrar/reabrir sí.
+La telemetría no bloquea la ficha ni conserva una cola offline. Inscripción/retiro
+envían Idempotency-Key por intención y conservan la clave ante resultados inciertos.
+El estado actual permanece en `activity_participation`; sus transiciones y vistas
+se conservan en `activity_interactions` para analítica histórica.
 La actualización manual se realiza arrastrando hacia abajo desde el inicio del
 modal, con indicador de carga. En información del piso actualiza los contadores de
 actividades vigentes; en Detalle de actividades actualiza el listado para mostrar
@@ -217,6 +225,18 @@ lo autoriza. USUARIO_AUTORIZADO necesita PUBLICAR_EVENTO del campus vigente;
 ADMINISTRADOR conserva acceso automático aprobado. `CreateActivityForm` comparte
 campos, muestra al creador como organizador, convierte fechas/horas locales a UTC
 y publica por rutas separadas que fijan su tipo en el backend.
+
+Sin capacidad oficial, el formulario consulta
+`GET /api/v1/activities/community/creation-availability` antes de mostrar los campos.
+Si el organizador ya tiene una comunitaria ACTIVE/PUBLIC sin eliminar y con término
+futuro en su campus, muestra «Solo puedes tener activa una actividad comunitaria.»
+y permite comprobar de nuevo. Cuenta tanto futuras como en curso en cualquier
+ubicación de la sede. El cupo se libera al terminar/eliminarse; no limita inscripciones
+en actividades ajenas. Error de consulta permite Reintentar. Requests abortables y
+clave de usuario/campus/capacidad evitan aplicar disponibilidad de otra identidad.
+El backend vuelve a verificar al guardar y devuelve 409 con el mismo aviso si otra
+solicitud ocupó el cupo; el formulario reconsulta. Perfiles con capacidad oficial
+mantienen publicación múltiple y recurrencia, con sus permisos existentes.
 
 En creación y edición, `ActivityFields` usa `allowCustomDescription` según
 `identity.capabilities.officialActivities` del campus vigente. Quien puede publicar
@@ -270,6 +290,11 @@ Fuera de creación, `FloorInfoModal` ofrece regreso a información del piso medi
 
 ## Series recurrentes
 
+El selector «Repetir» del formulario comunitario/oficial se muestra únicamente con
+`identity.capabilities.officialActivities`, la capacidad vigente de publicar eventos
+oficiales en el campus. Al perderla, se descartan la selección recurrente y su preview.
+El backend exige esa capacidad para preview/publicación de ambos tipos de serie;
+la consulta e inscripción siguen disponibles conforme a sus reglas existentes.
 El mismo formulario comunitario/oficial ofrece repetir diariamente, semanalmente
 o mensualmente, con fecha final de los inicios y selección de días semanales.
 `ActivityRecurrencePicker` muestra una fila «Repetir / Nunca» y abre un selector
@@ -292,16 +317,24 @@ El contrato añade únicamente weekdays opcional; no ofrece anual/posiciones men
 El backend
 calcula la vista previa en la zona horaria del dispositivo; cambiar un campo exige
 revisarla nuevamente. Cada fecha publicada tiene su ID de actividad y participación.
-Las tarjetas distinguen la instancia con un distintivo «Ocurrencia X de N» y conservan
+Para perfiles con capacidad oficial, las tarjetas distinguen la instancia con un distintivo «Ocurrencia X de N» y conservan
 su ID, fechas e inscripción propias. El listado y los contadores del campus/edificio/
 piso/POI cuentan una representante por serie, además de las actividades independientes.
 Al finalizar pasa a la próxima incluso entre fechas; si cambia de piso/lugar, aparece
 en la ubicación de esa instancia. Solapamientos conservan la primera por inicio hasta
 su fin; fechas editadas determinan el orden, con índice/ID como desempate. Una serie
 totalmente finalizada desaparece del listado vigente sin borrar sus documentos.
-`ActivityDetail` conserva acceso a `ActivitySeriesView`, que permite elegir todas las
-ocurrencias vigentes dentro del modal. No genera puntos en la escena ni agrupa datos
-persistidos o participaciones. API de listado y de serie permanecen sin cambios.
+Solo perfiles con `identity.capabilities.officialActivities` ven el distintivo
+«Ocurrencia X de N», información de serie y acceso a `ActivitySeriesView`. El usuario
+común ve la actividad representante y conserva ficha/inscripción, sin textos de
+ocurrencias en tarjeta, ficha o acciones de edición/eliminación. Revocar capacidad
+cierra la vista de serie y aborta consultas; la clave de SeriesView incluye la
+capacidad para no reutilizar datos privilegiados. GET de serie requiere la misma
+capacidad en backend. El editor oculta ONE/UPCOMING y usa ONE sin permiso; preview
+y guardado UPCOMING también están protegidos, con propiedad/campus conservados.
+No genera puntos en la escena ni agrupa datos persistidos o participaciones. La
+metadata interna series y la API de listado/detalle se mantienen para agrupación
+y relevo automático de representante.
 
 ## Edición de actividades
 

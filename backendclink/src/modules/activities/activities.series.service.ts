@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import { requireCampusCapability } from '../auth/auth.authorization.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { ApiError } from '../../services/apiError.js';
 import { prepareActivityDocument, createdActivityDetail } from './activities.create.service.js';
@@ -12,12 +13,14 @@ import type { ActivityDetailDto, ActivitySeriesDocument, ActivitySeriesDto, Crea
 
 export async function previewActivitySeries(auth: VerifiedAuthConnection, input: CreateActivitySeriesInput,
   dependencies: ActivityDependencies = {}, official = false) {
+  requireCampusCapability(auth, auth.campusId, 'officialActivities');
   const document = await prepareActivityDocument(auth, input, official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY', dependencies);
   return expandActivityRecurrence(input, auth.campusId, document.type as 'COMMUNITY_ACTIVITY' | 'OFFICIAL_EVENT', document.createdAt);
 }
 
 export async function createActivitySeries(auth: VerifiedAuthConnection, input: CreateActivitySeriesInput,
   dependencies: ActivityDependencies = {}, official = false): Promise<{ series: ActivitySeriesDto; firstOccurrence: ActivityDetailDto }> {
+  requireCampusCapability(auth, auth.campusId, 'officialActivities');
   const base = await prepareActivityDocument(auth, input, official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY', dependencies);
   const preview = expandActivityRecurrence(input, auth.campusId, official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY', base.createdAt);
   if (input.previewHash !== preview.previewHash) throw new ApiError(409, 'CONFLICT', 'La configuración cambió. Revisa una nueva vista previa antes de publicar.');
@@ -36,6 +39,7 @@ export async function createActivitySeries(auth: VerifiedAuthConnection, input: 
 
 export async function getActivitySeries(auth: VerifiedAuthConnection, seriesId: string, dependencies: ActivityDependencies = {}): Promise<ActivitySeriesDto> {
   if (!/^[0-9a-f]{24}$/i.test(seriesId)) throw new ApiError(400, 'VALIDATION_ERROR', 'ID de serie válido requerido.');
+  requireCampusCapability(auth, auth.campusId, 'officialActivities');
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const repository = dependencies.findSeries && dependencies.findSeriesOccurrences ? null : await import('./activities.series.repository.js');
   const series = await (dependencies.findSeries ?? repository!.findActivitySeries)(auth.campusId, seriesId);

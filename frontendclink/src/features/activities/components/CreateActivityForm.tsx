@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthApiError } from '@/lib/api/authenticated-request';
-import { createCommunityActivity, createOfficialEvent, previewActivitySeries, createActivitySeries } from '../api/activitiesApi';
+import { createCommunityActivity, createOfficialEvent, previewActivitySeries, createActivitySeries, fetchCommunityActivityCreationAvailability } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityLocationQuery } from '../types/activity';
-import { isActivityDescriptionAllowed, validateActivityDraft, type ActivityLocationOption, type ActivityDraft } from '../types/creation';
+import { isActivityDescriptionAllowed, validateActivityDraft, type ActivityLocationOption, type ActivityDraft, type CommunityActivityCreationAvailability } from '../types/creation';
 import { ActivityFields } from './ActivityFields';
 import { ActivityRecurrencePicker } from './ActivityRecurrencePicker';
 import { recurrenceDraftRule, type ActivityRecurrenceDraft, type ActivityRecurrencePreview } from '../types/recurrence';
@@ -16,6 +16,26 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
 }) {
   const { identity, refreshIdentity } = useAuth();
   const allowCustomDescription = identity?.capabilities.officialActivities === true;
+  const canCreateRecurring = identity?.capabilities.officialActivities === true;
+  const requiresAvailability = !official && !canCreateRecurring;
+  const [availabilityRevision, setAvailabilityRevision] = useState(0);
+  const availabilityKey = JSON.stringify([identity?.profile.id, identity?.campusId, requiresAvailability, availabilityRevision]);
+  const [availabilityState, setAvailabilityState] = useState<{ key: string; data: CommunityActivityCreationAvailability | null; error: string | null }>({ key: '', data: null, error: null });
+  const availability = availabilityState.key === availabilityKey ? availabilityState.data : null;
+  const availabilityError = availabilityState.key === availabilityKey ? availabilityState.error : null;
+  useEffect(() => {
+    if (!requiresAvailability || !identity?.campusId) return;
+    const abort = new AbortController();
+    setAvailabilityState({ key: availabilityKey, data: null, error: null });
+    void fetchCommunityActivityCreationAvailability(identity.campusId, abort.signal).then(data => {
+      if (!abort.signal.aborted) setAvailabilityState({ key: availabilityKey, data, error: null });
+    }).catch(reason => {
+      if (abort.signal.aborted) return;
+      if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
+      setAvailabilityState({ key: availabilityKey, data: null, error: 'No se pudo comprobar si puedes crear una actividad. Intenta nuevamente.' });
+    });
+    return () => abort.abort();
+  }, [availabilityKey, requiresAvailability, identity?.campusId, refreshIdentity]);
   const [draft, setDraft] = useState<ActivityDraft>({ title: '', description: '', startDate: '', startTime: '',
     endDate: '', endTime: '', buildingKey: initialLocation.buildingKey ?? '', floorKey: initialLocation.floorKey ?? '',
     poiKey: initialLocation.poiKey ?? '', customLabel: '' });
@@ -30,6 +50,11 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
   const [showPreviewDates, setShowPreviewDates] = useState(false);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
+  useEffect(() => {
+    if (canCreateRecurring) return;
+    setRecurrenceDraft(current => current.enabled ? { ...current, enabled: false } : current);
+    setPreview(null); setShowPreviewDates(false);
+  }, [canCreateRecurring]);
   const change = (field: keyof ActivityDraft, value: string) => {
     setDraft(current => ({ ...current, [field]: value,
       ...(field === 'buildingKey' ? { floorKey: '', poiKey: '' } : field === 'floorKey' ? { poiKey: '' } : {}) }));
@@ -39,6 +64,8 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
   };
   const publish = async (previewOnly = false) => {
     if (request.current || !identity) return;
+    if (requiresAvailability && !availability?.canCreate) return;
+    if (recurring && !canCreateRecurring) { setError('Necesitas permiso para publicar eventos oficiales en tu campus para crear una serie.'); return; }
     if (!isActivityDescriptionAllowed(draft.description, allowCustomDescription)) { setError('Selecciona una descripción para la actividad.'); return; }
     const parsed = validateActivityDraft(draft, locations);
     if (parsed.error) { setError(parsed.error); return; }
@@ -67,11 +94,14 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
       setError(reason instanceof AuthApiError && [400, 409].includes(reason.status)
         ? reason.serverMessage ?? 'Revisa las fechas y la ubicación: deben seguir vigentes. Si el lugar cambió, vuelve a abrir el mapa.'
         : reason instanceof AuthApiError && [401, 403].includes(reason.status)
-          ? official ? 'Necesitas una cuenta activa y permiso para publicar eventos oficiales en tu campus.'
+          ? official || recurring ? 'Necesitas una cuenta activa y permiso para publicar eventos oficiales en tu campus.'
             : 'Necesitas una cuenta institucional verificada y activa para publicar.'
           : previewOnly ? 'No se pudo generar la vista previa. Reintenta.'
             : 'No se pudo confirmar la publicación. Actualiza el listado antes de reintentar para comprobar si se creó.');
       if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
+      if (reason instanceof AuthApiError && reason.status === 409 && !official && !recurring) {
+        setAvailabilityRevision(previous => previous + 1); refreshIdentity();
+      }
     } finally {
       if (!abort.signal.aborted) setSubmitting(false);
       if (request.current === abort) request.current = null;
@@ -79,6 +109,7 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
   };
   const preparePreview = useCallback(async (value: ActivityRecurrenceDraft, signal: AbortSignal) => {
     if (!identity) throw new Error('Vuelve a iniciar sesión para calcular las fechas.');
+    if (!identity.capabilities.officialActivities) throw new Error('Necesitas permiso para publicar eventos oficiales en tu campus para crear una serie.');
     const base = validateActivityDraft(draft, locations);
     const recurrence = recurrenceDraftRule(value.frequency, value.interval, value.until, value.excludedDates, timeZone, value.weekdays);
     if (!base.input || !recurrence.rule) throw new Error(base.error ?? recurrence.error ?? 'Completa los datos de la actividad.');
@@ -87,10 +118,23 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
     catch (reason) {
       if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
       throw new Error(reason instanceof AuthApiError && [400, 409].includes(reason.status)
-        ? reason.serverMessage ?? 'Revisa las fechas de la repetición.' : 'No se pudieron calcular las fechas. Reintenta.');
+        ? reason.serverMessage ?? 'Revisa las fechas de la repetición.'
+        : reason instanceof AuthApiError && [401, 403].includes(reason.status)
+          ? 'Necesitas una cuenta activa y permiso para publicar eventos oficiales en tu campus.' : 'No se pudieron calcular las fechas. Reintenta.');
     }
   }, [draft, locations, identity, timeZone, official, allowCustomDescription, refreshIdentity]);
   const canPreview = !!identity && !!validateActivityDraft(draft, locations).input && isActivityDescriptionAllowed(draft.description, allowCustomDescription);
+  if (requiresAvailability && !availability?.canCreate) return <View style={styles.form}>
+    <Text accessibilityRole="header" style={styles.heading}>Crear actividad comunitaria</Text>
+    {availability ? <>
+      <Text accessibilityRole="alert" style={styles.text}>{availability.message}</Text>
+      <Text style={styles.text}>Espera a que termine o elimina la actividad que ya publicaste para crear otra.</Text>
+    </> : availabilityError ? <Text accessibilityRole="alert" style={styles.error}>{availabilityError}</Text>
+      : <><ActivityIndicator color={APP_COLORS.PRIMARY} /><Text style={styles.text}>Comprobando tus actividades…</Text></>}
+    {availability || availabilityError ? <Pressable accessibilityRole="button" onPress={() => setAvailabilityRevision(previous => previous + 1)} style={styles.cancel}>
+      <Text style={styles.label}>{availability ? 'Comprobar de nuevo' : 'Reintentar'}</Text>
+    </Pressable> : null}
+  </View>;
   return <View style={styles.form}>
     <Text accessibilityRole="header" style={styles.heading}>{official ? 'Publicar evento oficial' : 'Crear actividad comunitaria'}</Text>
     <Text style={styles.text}>{official ? 'Se publicará como evento oficial de tu campus. Serás el primer participante.'
@@ -98,10 +142,10 @@ export function CreateActivityForm({ locations, initialLocation, onCreated, offi
     <ActivityFields draft={draft} change={change} disabled={submitting} locations={locations}
       organizer={identity?.profile.nombre_completo} firstOccurrence={recurring} creationLocation={initialLocation}
       allowCustomDescription={allowCustomDescription} />
-    <ActivityRecurrencePicker value={recurrenceDraft} disabled={submitting} timeZone={timeZone}
+    {canCreateRecurring ? <ActivityRecurrencePicker value={recurrenceDraft} disabled={submitting} timeZone={timeZone}
       startDate={draft.startDate} onPreview={canPreview ? preparePreview : undefined}
       previewContext={JSON.stringify([draft, locations, identity?.campusId, official, allowCustomDescription])}
-      onChange={(value, reviewed) => { setRecurrenceDraft(value); setPreview(reviewed ?? null); setShowPreviewDates(false); setError(null); }} />
+      onChange={(value, reviewed) => { setRecurrenceDraft(value); setPreview(reviewed ?? null); setShowPreviewDates(false); setError(null); }} /> : null}
     {recurring && !preview ? <Pressable accessibilityRole="button" disabled={submitting} onPress={() => { void publish(true); }} style={styles.cancel}>
       <Text style={styles.label}>{submitting ? 'Procesando…' : 'Ver fechas antes de publicar'}</Text>
     </Pressable> : null}

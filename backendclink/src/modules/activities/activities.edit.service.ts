@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { requireResourceOwner } from '../auth/auth.authorization.js';
+import { requireResourceOwner, requireCampusCapability } from '../auth/auth.authorization.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { ApiError } from '../../services/apiError.js';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
@@ -11,7 +11,7 @@ import type { ActivityEditDependencies, ActivityEditPreview, ActivityEditResult,
 
 export const editRevision = (document: ActivityDocument): number => document.editRevision === undefined ? 0 : document.editRevision;
 const snapshot = (document: ActivityDocument): ActivitySnapshot => ({ title: document.title, description: document.description,
-  type: document.type, startAt: document.startAt, endAt: document.endAt, location: document.location as ActivitySnapshot['location'] });
+  type: document.type, status: document.status, startAt: document.startAt, endAt: document.endAt, location: document.location as ActivitySnapshot['location'] });
 const conflict = () => new ApiError(409, 'CONFLICT', 'La actividad o las ocurrencias cambiaron. Recarga la ficha y revisa una nueva vista previa.');
 const valid = (document: ActivityDocument) => document._id?.toHexString?.() && document.startAt instanceof Date && document.endAt instanceof Date
   && Number.isFinite(document.startAt.getTime()) && Number.isFinite(document.endAt.getTime()) && document.endAt > document.startAt
@@ -21,11 +21,13 @@ const valid = (document: ActivityDocument) => document._id?.toHexString?.() && d
 export async function previewActivityEdit(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput,
   dependencies: ActivityEditDependencies = {}): Promise<ActivityEditPreview> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'ID de actividad válido requerido.');
+  if (input.scope === 'UPCOMING') requireCampusCapability(auth, auth.campusId, 'officialActivities');
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const find = dependencies.findEditable ?? (await import('./activities.edit.repository.js')).findEditableActivity;
   const current = await find(auth.campusId, activityId);
   if (!current || current._id?.toHexString?.() !== activityId.toLowerCase() || current.campusId !== auth.campusId
-    || current.status !== 'ACTIVE' || current.visibility !== 'PUBLIC' || !['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'].includes(current.type)) {
+    || !['ACTIVE', 'FINISHED'].includes(current.status) || current.deletedAt != null
+    || current.visibility !== 'PUBLIC' || !['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'].includes(current.type)) {
     throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible para editar.');
   }
   requireResourceOwner(auth, current.createdByUserId);
@@ -40,7 +42,7 @@ export async function previewActivityEdit(auth: VerifiedAuthConnection, activity
   if (!resolveActivityLocation(spatialBuildings(map), input.location)) throw new ApiError(400, 'VALIDATION_ERROR', 'Selecciona una ubicación activa de tu campus.');
   const now = dependencies.now?.() ?? new Date(); let targets = [current]; let timeZone: string | undefined;
   if (input.scope === 'UPCOMING') {
-    if (!current.seriesId || current.startAt <= now) throw new ApiError(400, 'VALIDATION_ERROR', 'Para cambiar las próximas, selecciona una ocurrencia que todavía no comenzó.');
+    if (current.status !== 'ACTIVE' || !current.seriesId || current.startAt <= now) throw new ApiError(400, 'VALIDATION_ERROR', 'Para cambiar las próximas, selecciona una ocurrencia que todavía no comenzó.');
     const id = current.seriesId.toHexString();
     const series = await (dependencies.findSeries ?? (await import('./activities.series.repository.js')).findActivitySeries)(auth.campusId, id);
     const rule = series && parseRecurrenceRule(series.recurrence);
@@ -78,7 +80,8 @@ export async function previewActivityEdit(auth: VerifiedAuthConnection, activity
     if (after.endAt <= after.startAt || (input.scope === 'UPCOMING' && after.startAt <= now)) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Las próximas ocurrencias deben seguir sin comenzar y terminar después de su inicio.');
     }
-    const changedFields = ['title', 'description', 'startAt', 'endAt', 'location'].filter(key =>
+    after.status = after.endAt > now ? 'ACTIVE' : 'FINISHED';
+    const changedFields = ['title', 'description', 'startAt', 'endAt', 'location', 'status'].filter(key =>
       JSON.stringify(before[key as keyof ActivitySnapshot]) !== JSON.stringify(after[key as keyof ActivitySnapshot]));
     return { activityId: document._id.toHexString(), ...(document.occurrenceIndex ? { index: document.occurrenceIndex } : {}),
       revision: editRevision(document), before, after, changedFields };

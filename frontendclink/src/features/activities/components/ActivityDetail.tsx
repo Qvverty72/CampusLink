@@ -1,5 +1,5 @@
 import { APP_COLORS } from '@/types/colors';
-import { useCallback, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MapPinSearch, SquarePen, Trash, type LucideIcon } from 'lucide-react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
@@ -15,6 +15,10 @@ import { ActivityDescription } from './ActivityDescription';
 import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
 import { useActivityRefresh } from './ActivityRefreshScrollView';
+import { useAuth } from '@/features/auth/AuthProvider';
+import { recordViewedActivity } from '../api/activitiesApi';
+import { activityOperationId } from '../types/interaction';
+import { AuthApiError } from '@/lib/api/authenticated-request';
 
 /** Text names the action; the icon and its background are decorative. */
 function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = false }: {
@@ -37,14 +41,31 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   locations?: ActivityLocationOption[]; onEdited?: (count: number) => void; onDeleted?: () => void;
   onEditOpen?: () => void;
 }) {
+  const { identity, refreshIdentity } = useAuth();
+  const canViewOccurrences = identity?.capabilities.officialActivities === true;
   const { detail, ownParticipation, isLoading, error, refresh, join, leave, isUpdatingParticipation,
     pendingParticipation, participationError, remove, isDeleting, deletionError } = useActivityDetail(activityId);
+  const view = useRef<{ key: string; id: string; confirmed: boolean } | null>(null);
+  useEffect(() => {
+    if (!identity || !detail || isLoading || error || detail.campusId !== identity.campusId) return;
+    const key = JSON.stringify([identity.profile.id, identity.campusId, activityId]);
+    if (view.current?.key !== key) view.current = { key, id: activityOperationId(), confirmed: false };
+    if (view.current.confirmed) return;
+    const intent = view.current; const abort = new AbortController();
+    void recordViewedActivity(identity.campusId, activityId, intent.id, abort.signal).then(() => {
+      if (!abort.signal.aborted && view.current === intent) intent.confirmed = true;
+    }).catch(reason => {
+      if (!abort.signal.aborted && reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
+    });
+    return () => abort.abort();
+  }, [identity?.profile.id, identity?.campusId, activityId, detail?.id, detail?.campusId, isLoading, error, refreshIdentity]);
   const busy = isUpdatingParticipation || isDeleting;
   const participationControls = (status: ActivityDetailData['participation']['status'], canJoin: boolean) =>
     <ActivityParticipationControls status={status} canJoin={canJoin} pending={pendingParticipation}
       disabled={isDeleting} error={participationError} onJoin={join} />;
   const [failedBanner, setFailedBanner] = useState<string | null>(null);
   const [showSeries, setShowSeries] = useState(false);
+  useLayoutEffect(() => { if (!canViewOccurrences) setShowSeries(false); }, [canViewOccurrences]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState<ActivityDetailData | null>(null);
   const [reporting, setReporting] = useState<{ id: string; title: string } | null>(null);
@@ -63,7 +84,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
     <EditActivityForm activity={editing} locations={locations}
       onCancel={() => { setEditing(null); refresh(); }} onSaved={count => { setEditing(null); onEdited?.(count); refresh(); }} />
   </ActivityContentTransition>;
-  if (showSeries && detail?.series && onSelectOccurrence) return <ActivityContentTransition transitionKey="series">
+  if (canViewOccurrences && showSeries && detail?.series && onSelectOccurrence) return <ActivityContentTransition transitionKey="series">
     <ActivitySeriesView seriesId={detail.series.id} currentActivityId={activityId} onBack={() => setShowSeries(false)}
       onSelect={id => { setShowSeries(false); onSelectOccurrence(id); }} />
   </ActivityContentTransition>;
@@ -101,7 +122,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
               <Text style={styles.dateText}>{new Date(value).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</Text>
             </View>)}
           </View>
-          {detail.series ? <View style={styles.series}>
+          {canViewOccurrences && detail.series ? <View style={styles.series}>
             <Text style={styles.text}>Ocurrencia {detail.series.index} de {detail.series.total} · Serie recurrente</Text>
             {onSelectOccurrence ? <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => setShowSeries(true)} style={styles.action}>
               <Text style={styles.link}>Ver serie y otras ocurrencias</Text>
@@ -117,11 +138,11 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
           <View style={styles.management}>
             {detail.editing ? <>
               {locations?.length ? <DetailActionButton icon={SquarePen} disabled={busy}
-                label={`Editar ${detail.series ? 'ocurrencia o próximas' : 'actividad'}`}
+                label={`Editar ${canViewOccurrences && detail.series ? 'ocurrencia o próximas' : 'actividad'}`}
                 onPress={() => setEditing(detail)} /> : null}
               {confirmDelete ? <View style={styles.confirmation}>
-                <Text style={styles.heading}>¿Eliminar {detail.series ? 'esta ocurrencia' : 'esta actividad'}?</Text>
-                <Text style={styles.text}>Dejará de aparecer en el mapa. Se conservarán las inscripciones y el historial{detail.series ? '; las demás ocurrencias seguirán disponibles' : ''}.</Text>
+                <Text style={styles.heading}>¿Eliminar {canViewOccurrences && detail.series ? 'esta ocurrencia' : 'esta actividad'}?</Text>
+                <Text style={styles.text}>Dejará de aparecer en el mapa. Se conservarán las inscripciones y el historial{canViewOccurrences && detail.series ? '; las demás ocurrencias seguirán disponibles' : ''}.</Text>
                 <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => { void remove().then(deleted => { if (deleted) (onDeleted ?? onBack)(); }); }}
                   style={[styles.deleteButton, busy && styles.disabled]}>
                   <Text style={styles.deleteText}>{isDeleting ? 'Eliminando…' : 'Confirmar eliminación'}</Text>
@@ -130,7 +151,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
                   <Text style={styles.link}>Cancelar</Text>
                 </TouchableOpacity>
               </View> : <DetailActionButton icon={Trash} disabled={busy} danger
-                label={`Eliminar ${detail.series ? 'esta ocurrencia' : 'actividad'}`}
+                label={`Eliminar ${canViewOccurrences && detail.series ? 'esta ocurrencia' : 'actividad'}`}
                 onPress={() => setConfirmDelete(true)} />}
               {deletionError ? <Text accessibilityRole="alert" style={styles.danger}>{deletionError}</Text> : null}
             </> : <TouchableOpacity accessibilityRole="button" disabled={busy}

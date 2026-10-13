@@ -7,6 +7,8 @@ import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity, visibleActivityFilter } from './activities.policy.js';
 import { requireParticipationIndex } from './activities.participation-index.js';
 import { publicationNotifications } from './activities.notifications.js';
+import { initialActivityParticipation } from './activities.participation.js';
+import { appendActivityInteraction, activityInteractionKey } from './activities.interactions.js';
 import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivitySeriesDocument } from './activities.types.js';
 
 export async function insertActivitySeries(series: ActivitySeriesDocument, documents: ActivityDocument[]): Promise<ActivityDto[]> {
@@ -28,12 +30,14 @@ export async function insertActivitySeries(series: ActivitySeriesDocument, docum
     await transactionDb.collection<ActivityDocument>('activities').insertMany(documents.map(document => ({ ...document, createdAt: now, updatedAt: now,
       notificationEvents: publicationNotifications(document, now),
       ...(document.occurrenceIndex === 1 ? { seriesDefinition: { ...series, createdAt: now, updatedAt: now } } : {}) })), { session });
-    await transactionDb.collection<ActivityParticipationDocument>('activity_participation').insertMany(documents.map(document => ({
-      activityId: document._id, campusId: series.campusId, userId: series.createdByUserId, status: 'JOINED' as const,
-      joinedAt: now, updatedAt: now,
-    })), { session });
+    await transactionDb.collection<ActivityParticipationDocument>('activity_participation').insertMany(documents.map(document =>
+      initialActivityParticipation(document._id, series.campusId, series.createdByUserId, now)), { session });
+    for (const document of documents) await appendActivityInteraction(transactionDb, {
+      activityId: document._id, campusId: series.campusId, userId: series.createdByUserId, type: 'JOINED', occurredAt: now,
+      provenance: 'LIVE', eventKey: activityInteractionKey(document._id, series.campusId, series.createdByUserId, 'JOINED', 1),
+    }, session);
     return occurrences as ActivityDto[];
-  }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } }));
+  }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' }, timeoutMS: 60_000 }));
   if (!result) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo confirmar la publicación de la serie.');
   return result;
 }

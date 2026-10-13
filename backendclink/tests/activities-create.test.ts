@@ -73,7 +73,8 @@ test('creation derives all protected fields, enrolls organizer and permits futur
   for (const startAt of ['2099-10-11T12:00:00.000Z', '2099-10-09T12:00:00.000Z']) {
     let writes = 0;
     const detail = await createCommunityActivity(auth, parsed({ ...body(), startAt }), {
-      getActiveMap: async () => map, now: () => now, createActivity: async document => {
+      getActiveMap: async () => map, now: () => now, createActivity: async (document, options) => {
+        assert.equal(options?.limitActiveCommunity, true);
         writes++; assert.equal(document.campusId, campusId); assert.equal(document.createdByUserId, userId);
         assert.equal(document.type, 'COMMUNITY_ACTIVITY'); assert.equal(document.status, 'ACTIVE');
         assert.equal(document.visibility, 'PUBLIC'); assert.equal(document.participantCount, 1);
@@ -121,7 +122,13 @@ test('creation transaction commits organizer JOINED and activity count together,
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: (value: typeof session) => Promise<unknown>) => operation(session));
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => ({
     indexes: async () => [{ key: { activityId: 1, userId: 1 }, unique: true }],
+    findOneAndUpdate: async (filter: unknown, update: unknown, options: { session: unknown; returnDocument: string }) => {
+      assert.equal(name, 'campus_maps'); assert.equal(options.session, session); assert.equal(options.returnDocument, 'after');
+      assert.deepEqual(filter, { campusId, status: 'ACTIVE' });
+      assert.deepEqual(update, { $inc: { communityActivityCreationRevision: 1 } }); return activeMap;
+    },
     findOne: async (filter: unknown, options: { session: unknown }) => {
+      if (name === 'activities') { assert.equal(options.session, session); return null; }
       assert.equal(name, 'campus_maps'); assert.equal(options.session, session);
       assert.deepEqual(filter, { campusId, status: 'ACTIVE' }); return activeMap;
     },
@@ -134,17 +141,17 @@ test('creation transaction commits organizer JOINED and activity count together,
   try {
     const dependencies = { getActiveMap: async () => map, now: () => now };
     const created = await createCommunityActivity(auth, parsed(), dependencies);
-    assert.equal(committed.length, 2);
+    assert.equal(committed.length, 3);
     const activity = committed[0].value as ActivityDocument; const own = committed[1].value as ActivityParticipationDocument;
     assert.equal(activity._id.toHexString(), created.id); assert.equal(activity.participantCount, 1);
     assert.deepEqual(own.activityId, activity._id); assert.equal(own.campusId, campusId); assert.equal(own.userId, userId);
     assert.equal(own.status, 'JOINED'); assert.deepEqual(own.joinedAt, activity.createdAt);
     failParticipation = true;
     await assert.rejects(createCommunityActivity(auth, parsed(), dependencies), /Participation failed/);
-    assert.equal(committed.length, 2); assert.equal(staged.length, 0);
+    assert.equal(committed.length, 3); assert.equal(staged.length, 0);
     activeMap = { ...map, buildings: [] };
     await assert.rejects(createCommunityActivity(auth, parsed(), dependencies), { status: 400 });
-    assert.equal(committed.length, 2);
+    assert.equal(committed.length, 3);
   } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
 });
 

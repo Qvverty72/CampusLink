@@ -27,6 +27,8 @@ const activity = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
 });
 const row = (status: 'JOINED' | 'LEFT'): ActivityParticipationDocument => ({
   _id: new ObjectId(), activityId: id, userId, campusId, status, joinedAt, updatedAt: joinedAt,
+  firstJoinedAt: joinedAt, lastJoinedAt: joinedAt, lastLeftAt: status === 'LEFT' ? joinedAt : null,
+  joinCount: 1, leaveCount: status === 'LEFT' ? 1 : 0, historyComplete: true,
 });
 const map: CampusMapDocument = { campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now,
   buildings: [{ id: 'hbuilding', name: 'Edificio H', floors: [{ id: 'hbuilding_floor2', meshName: 'h_mesh', name: 'Piso 2', pois: [] }] }] };
@@ -103,21 +105,30 @@ test('participation services authorize before storage and never accept a differe
   assert.equal(calls, 1);
 });
 
-interface Store { document: ActivityDocument; own: ActivityParticipationDocument | null; updates: number; failCounter?: boolean }
+interface Store { document: ActivityDocument; own: ActivityParticipationDocument | null; updates: number; failCounter?: boolean; failEvent?: boolean; events?: any[] }
 async function withStore(store: Store, operation: () => Promise<void>) {
+  store.events ??= [];
   const session = { withTransaction: async (callback: () => Promise<unknown>) => {
-    const original = { own: store.own && { ...store.own }, document: { ...store.document }, updates: store.updates };
+    const original = { own: store.own && { ...store.own }, document: { ...store.document }, updates: store.updates, events: [...store.events!] };
     try { return await callback(); } catch (error) { Object.assign(store, original); throw error; }
   } };
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (callback: (value: typeof session) => Promise<unknown>) => callback(session));
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
-    assert.ok(['activities', 'activity_participation', 'campus_maps'].includes(name));
+    assert.ok(['activities', 'activity_participation', 'campus_maps', 'activity_interactions'].includes(name));
+    if (name === 'activity_interactions') return {
+      findOne: async (filter: any) => store.events!.find(event => event._id.toHexString() === filter._id.toHexString()) ?? null,
+      insertOne: async (event: any, options: any) => {
+        assert.equal(options.session, session); if (store.failEvent) throw new Error('Interaction failed');
+        store.events!.push(event);
+      },
+    };
     if (name === 'activity_participation') return {
       indexes: async () => [{ key: { activityId: 1, userId: 1 }, unique: true }],
       findOne: async (key: unknown) => { assert.deepEqual(key, { campusId, activityId: id, userId }); return store.own; },
-      updateOne: async (_key: unknown, update: { $set: Partial<ActivityParticipationDocument>; $setOnInsert: Partial<ActivityParticipationDocument> }, options: { session: unknown; upsert: boolean }) => {
+      updateOne: async (_key: unknown, update: { $set: Partial<ActivityParticipationDocument>; $setOnInsert: Partial<ActivityParticipationDocument>; $inc: any }, options: { session: unknown; upsert: boolean }) => {
         assert.equal(options.session, session); assert.equal(options.upsert, true);
         store.own = { ...(store.own ?? update.$setOnInsert), ...update.$set } as ActivityParticipationDocument;
+        for (const [key, value] of Object.entries(update.$inc ?? {})) (store.own as any)[key] = ((store.own as any)[key] ?? 0) + (value as number);
         return { matchedCount: 1 };
       },
     };
@@ -152,7 +163,25 @@ test('leave is idempotent, retains row/id/join date, and rejoin increments exact
     await repository.registerActivityParticipation(campusId, id.toHexString(), userId, now);
     assert.equal(store.own?.status, 'JOINED'); assert.deepEqual(store.own?.joinedAt, now);
     assert.equal(store.document.participantCount, 2); assert.equal(store.updates, 2);
+    assert.equal(store.own?.joinCount, 2); assert.equal(store.own?.leaveCount, 1);
+    assert.deepEqual(store.own?.firstJoinedAt, joinedAt); assert.deepEqual(store.own?.lastLeftAt, now);
+    assert.deepEqual(store.events!.map(event => event.type), ['LEFT', 'JOINED']);
     assert.equal(store.document.editRevision, 3); assert.deepEqual(store.document.changeHistory, []);
+  });
+});
+
+test('event failure rolls back state and activity count, and replaying a confirmed operation never applies it again after another transition', async () => {
+  const store: Store = { document: activity(), own: row('JOINED'), updates: 0, failEvent: true };
+  await withStore(store, async () => {
+    await assert.rejects(repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now), /Interaction failed/);
+    assert.equal(store.own?.status, 'JOINED'); assert.equal(store.own?.leaveCount, 0); assert.equal(store.events!.length, 0);
+    assert.equal(store.document.participantCount, 2);
+    store.failEvent = false;
+    const operationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now, operationId);
+    await repository.registerActivityParticipation(campusId, id.toHexString(), userId, now);
+    const replay = await repository.withdrawActivityParticipation(campusId, id.toHexString(), userId, now, operationId);
+    assert.equal(replay.status, 'JOINED'); assert.equal(store.events!.length, 2); assert.equal(store.document.participantCount, 2);
   });
 });
 

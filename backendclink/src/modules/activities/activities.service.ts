@@ -3,7 +3,7 @@ import { getAuthorizedActiveMap, type ActiveMapLookup } from '../maps/map.servic
 import { ApiError } from '../../services/apiError.js';
 import { hasActivityLocation, spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
-import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivityParticipationDto, ActivityCreatorRecord, ActivityQuery, ActivitySeriesDocument } from './activities.types.js';
+import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivityParticipationDto, ActivityCreatorRecord, ActivityQuery, ActivitySeriesDocument, ActivityCreationOptions } from './activities.types.js';
 import type { ActivityParticipantsQuery, ActivityParticipantsRecords, ActivityDeletionResult } from './activities.types.js';
 
 export interface ActivityDependencies {
@@ -13,10 +13,12 @@ export interface ActivityDependencies {
   findActivity?: (campusId: string, activityId: string, now: Date) => Promise<ActivityDocument | null>;
   findParticipation?: (campusId: string, activityId: string, userId: string) => Promise<ActivityParticipationDocument | null>;
   findOrganizer?: (userId: string) => Promise<{ name: string } | null>;
-  registerParticipation?: (campusId: string, activityId: string, userId: string, now: Date) => Promise<void>;
+  registerParticipation?: (campusId: string, activityId: string, userId: string, now: Date, operationId?: string) => Promise<void>;
+  recordView?: (campusId: string, activityId: string, userId: string, now: Date, operationId: string) => Promise<void>;
   findCreatedActivity?: (campusId: string, activityId: string, userId: string) => Promise<ActivityCreatorRecord | null>;
-  withdrawParticipation?: (campusId: string, activityId: string, userId: string, now: Date) => Promise<ActivityParticipationDto>;
-  createActivity?: (document: ActivityDocument) => Promise<ActivityDto>;
+  withdrawParticipation?: (campusId: string, activityId: string, userId: string, now: Date, operationId?: string) => Promise<ActivityParticipationDto>;
+  createActivity?: (document: ActivityDocument, options?: ActivityCreationOptions) => Promise<ActivityDto>;
+  findActiveCommunityActivity?: (campusId: string, userId: string, now: Date) => Promise<ActivityDocument | null>;
   createSeries?: (series: ActivitySeriesDocument, documents: ActivityDocument[]) => Promise<ActivityDto[]>;
   findSeries?: (campusId: string, seriesId: string) => Promise<ActivitySeriesDocument | null>;
   findSeriesOccurrences?: (campusId: string, seriesId: string, now: Date) => Promise<ActivityDocument[]>;

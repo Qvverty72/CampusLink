@@ -17,7 +17,9 @@ import { recurrenceDraftRule } from '../../frontendclink/src/features/activities
 
 const campusId = '22222222-2222-4222-8222-222222222222', userId = '11111111-1111-4111-8111-111111111111';
 const other = '33333333-3333-4333-8333-333333333333'; const now = new Date('2099-01-01T00:00:00Z');
-const auth: VerifiedAuthConnection = { userId, campusId, roles: [], permissions: [], profile: { id: userId, campus_id: campusId,
+const auth: VerifiedAuthConnection = { userId, campusId,
+  roles: [{ id: 'authorized', name: 'USUARIO_AUTORIZADO', campusId }],
+  permissions: [{ id: 'publish', name: 'PUBLICAR_EVENTO', campusId }], profile: { id: userId, campus_id: campusId,
   institucion_id: campusId, nombre_completo: 'Organizador', foto_path: null, verificado_en: now.toISOString(), estado_cuenta: 'ACTIVA', deleted_at: null } };
 const map: CampusMapDocument = { campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now, buildings: [
   { id: 'hbuilding', name: 'Edificio H', floors: [{ id: 'floor-two', meshName: 'hbuilding_floor2', name: 'Piso 2', pois: [
@@ -146,7 +148,7 @@ test('series preview is read-only and publish creates separate activity IDs scop
   } };
   const preview = await previewActivitySeries(auth, parsed(), deps); assert.equal(writes, 0);
   await assert.rejects(createActivitySeries(auth, parsed({ ...body(), previewHash: 'a'.repeat(64) }, true), deps), { status: 409 });
-  await assert.rejects(previewActivitySeries(auth, parsed(), deps, true), { status: 403 });
+  await assert.rejects(previewActivitySeries({ ...auth, permissions: [] }, parsed(), deps, true), { status: 403 });
   const result = await createActivitySeries(auth, parsed({ ...body(), previewHash: preview.previewHash }, true), deps);
   assert.equal(writes, 1); assert.equal(result.series.occurrenceCount, 3); assert.equal(new Set(saved.map(value => value._id.toHexString())).size, 3);
   for (const [index, document] of saved.entries()) {
@@ -155,8 +157,45 @@ test('series preview is read-only and publish creates separate activity IDs scop
     assert.deepEqual(document.originalStartAt, document.startAt);
   }
   assert.equal(result.firstOccurrence.participation.status, 'JOINED');
-  const admin = { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }] };
+  const admin = { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }], permissions: [] };
   assert.equal((await previewActivitySeries(admin, parsed(), deps, true)).type, 'OFFICIAL_EVENT');
+});
+
+test('recurrence requires the current official publication capability for both types, without map reads or writes on denial', async () => {
+  let reads = 0; let writes = 0;
+  const deps: ActivityDependencies = { now: () => now, getActiveMap: async () => { reads++; return map; },
+    createSeries: async (_series, documents) => {
+      writes++; return documents.map(document => toVisibleActivity(document, campusId, now, spatialBuildings(map))!);
+    } };
+  const denied: VerifiedAuthConnection[] = [
+    { ...auth, roles: [], permissions: [] }, // verified institutional user
+    { ...auth, permissions: [] }, // role alone / revoked permission
+    { ...auth, roles: [] }, // permission without authorized role
+    { ...auth, permissions: [{ ...auth.permissions[0], name: 'ACCEDER_ANALITICA' }] },
+    { ...auth, permissions: [{ ...auth.permissions[0], campusId: other }] },
+    { ...auth, roles: [{ ...auth.roles[0], campusId: other }] },
+    { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId: other }], permissions: [] },
+    ...['SUSPENDIDA', 'DESACTIVADA'].map(estado_cuenta => ({ ...auth, profile: { ...auth.profile, estado_cuenta } })),
+    { ...auth, profile: { ...auth.profile, deleted_at: now.toISOString() } },
+    { ...auth, profile: { ...auth.profile, campus_id: other } },
+  ];
+  for (const official of [false, true]) {
+    // A valid fingerprint obtained by an authorized account cannot bypass revocation.
+    const preview = expandActivityRecurrence(parsed(), campusId, official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY', now);
+    const publication = parsed({ ...body(), previewHash: preview.previewHash }, true);
+    for (const context of denied) {
+      await assert.rejects(previewActivitySeries(context, parsed(), deps, official), { status: 403 });
+      await assert.rejects(createActivitySeries(context, publication, deps, official), { status: 403 });
+    }
+  }
+  assert.equal(reads, 0); assert.equal(writes, 0);
+  const admin = { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }], permissions: [] };
+  for (const context of [auth, admin]) for (const official of [false, true]) {
+    const preview = await previewActivitySeries(context, parsed(), deps, official);
+    const result = await createActivitySeries(context, parsed({ ...body(), previewHash: preview.previewHash }, true), deps, official);
+    assert.equal(result.series.type, official ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY');
+  }
+  assert.equal(writes, 4);
 });
 
 test('series transaction embeds its template without new collections and rolls back if creator enrollment fails', async () => {
@@ -166,7 +205,7 @@ test('series transaction embeds its template without new collections and rolls b
   } };
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: (value: typeof session) => Promise<unknown>) => operation(session));
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
-    assert.ok(['activities', 'activity_participation', 'campus_maps'].includes(name), 'Only existing collections allowed');
+    assert.ok(['activities', 'activity_participation', 'campus_maps', 'activity_interactions'].includes(name), 'Only existing collections allowed');
     return {
     indexes: async () => name === 'activities' ? [{ key: { seriesId: 1, occurrenceIndex: 1 }, unique: true, partialFilterExpression: { seriesId: { $type: 'objectId' } } }]
       : [{ key: { activityId: 1, userId: 1 }, unique: true }],
@@ -174,11 +213,14 @@ test('series transaction embeds its template without new collections and rolls b
     insertMany: async (documents: unknown[], options: { session: unknown }) => {
       assert.equal(options.session, session); if (fail && name === 'activity_participation') throw new Error('Enrollment failed'); staged.push({ name, documents });
     },
+    insertOne: async (document: unknown, options: { session: unknown }) => {
+      assert.equal(name, 'activity_interactions'); assert.equal(options.session, session); staged.push({ name, documents: [document] });
+    },
   }; });
   try {
     const selectedDays = { ...body(), recurrence: { ...body().recurrence, weekdays: [2, 4] } };
     const preview = await previewActivitySeries(auth, parsed(selectedDays), basicDeps()); const input = parsed({ ...selectedDays, previewHash: preview.previewHash }, true);
-    await createActivitySeries(auth, input, basicDeps()); assert.equal(committed.length, 2);
+    await createActivitySeries(auth, input, basicDeps()); assert.equal(committed.length, 6);
     const activities = committed[0].documents as ActivityDocument[]; const own = committed[1].documents as ActivityParticipationDocument[];
     assert.equal(activities.length, 4); assert.equal(own.length, 4);
     assert.equal(activities.filter(value => value.seriesDefinition).length, 1);
@@ -191,14 +233,15 @@ test('series transaction embeds its template without new collections and rolls b
     const admin = { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }] };
     const officialPreview = await previewActivitySeries(admin, parsed(selectedDays), basicDeps(), true);
     await createActivitySeries(admin, parsed({ ...selectedDays, previewHash: officialPreview.previewHash }, true), basicDeps(), true);
-    const official = committed[2].documents as ActivityDocument[];
-    assert.equal(official.length, 4); assert.equal((committed[3].documents as ActivityParticipationDocument[]).length, 4);
+    const official = committed[6].documents as ActivityDocument[];
+    assert.equal(official.length, 4); assert.equal((committed[7].documents as ActivityParticipationDocument[]).length, 4);
     const notices = official.flatMap(value => value.notificationEvents ?? []);
     assert.equal(notices.length, 1); assert.equal(notices[0].key, `series:${official[0].seriesId}:published`);
     assert.equal(notices[0].title, `Nuevo evento recurrente: ${official[0].title} · 4 fechas`);
     assert.equal(official[0].notificationEvents!.length, 1); assert.equal(official[1].notificationEvents!.length, 0);
-    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 4); assert.equal(staged.length, 0);
-    activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 4);
+    assert.equal(committed.filter(row => row.name === 'activity_interactions').length, 8);
+    fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 12); assert.equal(staged.length, 0);
+    activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 12);
   } finally { sessionMock.mock.restore(); dbMock.mock.restore(); }
 });
 
@@ -239,6 +282,25 @@ test('series browsing cannot expose foreign, hidden, expired, invalid-POI or unr
   assert.equal(toVisibleActivity(legacy, campusId, now, spatialBuildings(map))?.series, undefined);
 });
 
+test('series browsing denies missing/revoked/foreign capability before reading and preserves local administrator access', async () => {
+  let series!: ActivitySeriesDocument; let documents: ActivityDocument[] = []; let reads = 0;
+  const deps = { ...basicDeps(), createSeries: async (value: ActivitySeriesDocument, values: ActivityDocument[]) => {
+    series = value; documents = values; return values.map(document => toVisibleActivity(document, campusId, now, spatialBuildings(map))!);
+  }, findSeries: async () => { reads++; return series; }, findSeriesOccurrences: async () => documents };
+  const preview = await previewActivitySeries(auth, parsed(), deps);
+  await createActivitySeries(auth, parsed({ ...body(), previewHash: preview.previewHash }, true), deps);
+  const id = series._id.toHexString();
+  for (const context of [{ ...auth, roles: [], permissions: [] }, { ...auth, permissions: [] }, { ...auth, roles: [] },
+    { ...auth, permissions: [{ ...auth.permissions[0], campusId: other }] },
+    { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId: other }], permissions: [] },
+    { ...auth, profile: { ...auth.profile, estado_cuenta: 'SUSPENDIDA' } }]) {
+    await assert.rejects(getActivitySeries(context, id, { ...deps, getActiveMap: async () => { throw new Error('Must not read the map'); } }), { status: 403 });
+  }
+  assert.equal(reads, 0);
+  assert.equal((await getActivitySeries(auth, id, deps)).occurrences.length, 3);
+  assert.equal((await getActivitySeries({ ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }], permissions: [] }, id, deps)).occurrences.length, 3);
+});
+
 test('joining one occurrence never registers or increments another occurrence in the same series', async () => {
   let documents: ActivityDocument[] = []; const own = new Map<string, ActivityParticipationDocument>();
   const visitor = { ...auth, userId: other, profile: { ...auth.profile, id: other } };
@@ -270,10 +332,13 @@ test('series writes fail closed without the partial unique occurrence index', as
   } finally { dbMock.mock.restore(); }
 });
 
-test('HTTP preview/publication/list/series/detail enforce identity, reviewed dates and independent occurrence participation', async () => {
+test('HTTP recurrence requires current publication permission for the series browser while activity detail remains public to the campus', async () => {
   const originalFetch = globalThis.fetch; let series!: ActivitySeriesDocument; let documents: ActivityDocument[] = [];
+  let allowed = false;
   globalThis.fetch = async input => { const url = new URL(String(input));
     if (url.pathname === '/auth/v1/user') return Response.json({ id: userId, email: 'test@duocuc.cl', email_confirmed_at: now.toISOString() });
+    if (url.pathname.endsWith('/usuario_rol')) return Response.json(allowed ? [{ campus_id: campusId, rol: { id: 'authorized', nombre: 'USUARIO_AUTORIZADO' } }] : []);
+    if (url.pathname.endsWith('/usuario_permiso')) return Response.json(allowed ? [{ campus_id: campusId, permiso: { id: 'publish', nombre: 'PUBLICAR_EVENTO' } }] : []);
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js'); const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
@@ -288,16 +353,30 @@ test('HTTP preview/publication/list/series/detail enforce identity, reviewed dat
   const post = (path: string, payload: unknown) => originalFetch(base + path, { method: 'POST', headers, body: JSON.stringify(payload) });
   try {
     assert.equal((await originalFetch(base + '/series/preview', { method: 'POST' })).status, 401);
-    assert.equal((await post('/series/official/preview', body())).status, 403);
+    for (const path of ['/series', '/series/official']) {
+      assert.equal((await post(path + '/preview', body())).status, 403);
+      const preview = expandActivityRecurrence(parsed(), campusId, path.endsWith('official') ? 'OFFICIAL_EVENT' : 'COMMUNITY_ACTIVITY', now);
+      assert.equal((await post(path, { ...body(), previewHash: preview.previewHash })).status, 403);
+    }
+    assert.equal(documents.length, 0);
+    allowed = true;
+    assert.equal((await post('/series/official/preview', body())).status, 200);
     assert.equal((await post('/series', body())).status, 400); assert.equal(documents.length, 0);
     const previewResponse = await post('/series/preview', body()); assert.equal(previewResponse.status, 200); assert.equal(previewResponse.headers.get('cache-control'), 'no-store');
     const preview = (await previewResponse.json()).data; assert.equal(documents.length, 0);
     assert.equal((await post('/series', { ...body(), title: 'Changed', previewHash: preview.previewHash })).status, 409); assert.equal(documents.length, 0);
     const createdResponse = await post('/series', { ...body(), previewHash: preview.previewHash }); assert.equal(createdResponse.status, 201);
     const created = (await createdResponse.json()).data; assert.equal(created.firstOccurrence.series.id, created.series.id);
+    allowed = false;
+    assert.equal((await post('/series/preview', body())).status, 403);
+    assert.equal((await post('/series', { ...body(), previewHash: preview.previewHash })).status, 403);
+    assert.equal(documents.length, 3);
     const list = (await (await originalFetch(base, { headers })).json()).data; assert.equal(list.length, 3); assert.equal(list[1].series.index, 2);
     const detail = (await (await originalFetch(base + '/' + list[1].id, { headers })).json()).data;
     assert.equal(detail.id, list[1].id); assert.equal(detail.series.index, 2); assert.equal(detail.participation.status, 'JOINED');
+    assert.equal(detail.editing.canEditUpcoming, false);
+    assert.equal((await originalFetch(base + '/series/' + created.series.id, { headers })).status, 403);
+    allowed = true;
     const seriesResponse = await originalFetch(base + '/series/' + created.series.id, { headers }); assert.equal(seriesResponse.status, 200);
     assert.equal((await seriesResponse.json()).data.occurrences.length, 3);
   } finally { globalThis.fetch = originalFetch; await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }

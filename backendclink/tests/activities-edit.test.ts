@@ -14,6 +14,8 @@ const campusId = '22222222-2222-4222-8222-222222222222', userId = '11111111-1111
 const other = '33333333-3333-4333-8333-333333333333'; const now = new Date('2099-01-01T00:00:00Z');
 const auth: VerifiedAuthConnection = { userId, campusId, roles: [], permissions: [], profile: { id: userId, campus_id: campusId,
   institucion_id: campusId, nombre_completo: 'Creador', foto_path: null, verificado_en: now.toISOString(), estado_cuenta: 'ACTIVA', deleted_at: null } };
+const publisher: VerifiedAuthConnection = { ...auth, roles: [{ id: 'authorized', name: 'USUARIO_AUTORIZADO', campusId }],
+  permissions: [{ id: 'publish', name: 'PUBLICAR_EVENTO', campusId }] };
 const map: CampusMapDocument = { campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now, buildings: [
   { id: 'h', name: 'H', floors: [{ id: 'f2', name: 'Piso 2', meshName: 'other_mesh', pois: [{ poiKey: 'library', name: 'Biblioteca', isVisible: true }] },
     { id: 'f3', name: 'Piso 3', pois: [{ poiKey: 'hidden', name: 'Oculto', isVisible: false }] }] },
@@ -79,6 +81,7 @@ function recurring() {
 }
 
 test('upcoming preview shifts existing local calendar dates from selected index, preserves past/ongoing IDs, and rejects moving future instances into past', async () => {
+  const auth = publisher;
   const { values, series } = recurring(); const current = values[1]; const fixedNow = new Date('2099-01-05T12:30:00Z');
   const dependencies = { ...deps(current), now: () => fixedNow, findSeries: async () => series, findEditOccurrences: async () => values };
   const input = parsed({ ...body(), scope: 'UPCOMING', startAt: '2099-01-13T14:00:00Z', endAt: '2099-01-13T15:00:00Z' });
@@ -90,7 +93,22 @@ test('upcoming preview shifts existing local calendar dates from selected index,
   await assert.rejects(preview(auth, current._id.toHexString(), { ...input, startAt: fixedNow, endAt: new Date(fixedNow.getTime() + 3600000) }, dependencies), { status: 400 });
 });
 
+test('ordinary owners can edit one activity but cannot inspect or save upcoming occurrences without local official capability', async () => {
+  const { values, series } = recurring(); const current = values[0]; let reads = 0; let writes = 0;
+  const dependencies = { ...deps(current), findSeries: async () => { reads++; return series; }, findEditOccurrences: async () => values,
+    saveEdit: async () => { writes++; throw new Error('Must not save'); } };
+  const upcoming = parsed({ ...body(), scope: 'UPCOMING' });
+  for (const context of [auth, { ...publisher, permissions: [] }, { ...publisher, roles: [] },
+    { ...publisher, permissions: [{ ...publisher.permissions[0], campusId: other }] }]) {
+    await assert.rejects(preview(context, current._id.toHexString(), upcoming, dependencies), { status: 403 });
+    await assert.rejects(edit(context, current._id.toHexString(), { ...upcoming, previewHash: 'a'.repeat(64) }, dependencies), { status: 403 });
+  }
+  assert.equal(reads, 0); assert.equal(writes, 0);
+  assert.equal((await preview(auth, current._id.toHexString(), parsed(), dependencies)).changes.length, 1);
+});
+
 test('upcoming edits preserve saved-zone wall clocks across DST and reject nonexistent shifted hours', async () => {
+  const auth = publisher;
   const { values, series } = recurring(); series.recurrence.timeZone = 'America/New_York';
   values[0].startAt = new Date('2027-03-13T15:00:00Z'); values[0].endAt = new Date('2027-03-13T16:00:00Z');
   values[1].startAt = new Date('2027-03-20T14:00:00Z'); values[1].endAt = new Date('2027-03-20T15:00:00Z');
@@ -104,6 +122,7 @@ test('upcoming edits preserve saved-zone wall clocks across DST and reject nonex
 });
 
 test('fingerprint binds content, scope and every target revision; joining does not invalidate preview and no-op has no changed fields', async () => {
+  const auth = publisher;
   const { values, series } = recurring(); const current = values[0]; let writes = 0;
   const dependencies: ActivityEditDependencies = { ...deps(current), findSeries: async () => series, findEditOccurrences: async () => values,
     saveEdit: async plan => { writes++; return { activityId: plan.activityId, updatedCount: plan.changes.filter(value => value.changedFields.length).length, revision: 1 }; } };
@@ -158,6 +177,7 @@ test('edit and immutable history commit together; stale snapshot, location loss 
 });
 
 test('a multi-date edit atomically saves every history and a single grouped event with per-occurrence participant snapshots', async () => {
+  const auth = publisher;
   const { values, series } = recurring(); const current = values[0], id = current._id.toHexString();
   const rows = [{ activityId: values[0]._id, userId: other, status: 'JOINED' },
     { activityId: values[1]._id, userId: other, status: 'LEFT' },
@@ -197,6 +217,61 @@ test('a multi-date edit atomically saves every history and a single grouped even
     fail = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), /grouped write failed/);
     assert.equal(committed.length, 3); assert.equal(staged.length, 0);
   } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
+});
+
+test('reactivating an ended community publication shares the creation lock and refuses a second active publication', async () => {
+  const ended = document(); ended.status = 'FINISHED'; ended.startAt = new Date('2098-12-30T12:00:00Z'); ended.endAt = new Date('2098-12-30T13:00:00Z');
+  const id = ended._id.toHexString(); const input = parsed(); const review = await preview(auth, id, input, deps(ended));
+  let existing: ActivityDocument | null = document(); let locked = false; let writes = 0;
+  const session = { withTransaction: async (operation: () => Promise<unknown>) => { locked = false; return operation(); } };
+  const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: any) => operation(session));
+  const dbMock = mock.method(Db.prototype, 'collection', (name: string) => ({
+    findOne: async (filter: any, options: any) => {
+      assert.equal(options.session, session);
+      if (name === 'campus_maps') return map;
+      if (filter._id) return ended;
+      assert.equal(locked, true); assert.equal(filter.createdByUserId, userId); assert.equal(filter.type, 'COMMUNITY_ACTIVITY');
+      return existing;
+    },
+    findOneAndUpdate: async (_filter: unknown, update: unknown, options: any) => {
+      assert.equal(name, 'campus_maps'); assert.equal(options.session, session);
+      assert.deepEqual(update, { $inc: { communityActivityCreationRevision: 1 } }); locked = true; return map;
+    },
+    find: () => ({ toArray: async () => [] }),
+    bulkWrite: async (operations: any[]) => {
+      assert.equal(operations[0].updateOne.filter.status, 'FINISHED');
+      assert.equal(operations[0].updateOne.update.$set.status, 'ACTIVE');
+      assert.equal(operations[0].updateOne.update.$push.changeHistory.before.status, 'FINISHED');
+      writes++; return { matchedCount: operations.length };
+    },
+  }));
+  try {
+    const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
+    await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now),
+      { status: 409, message: 'Solo puedes tener activa una actividad comunitaria.' });
+    assert.equal(writes, 0);
+    existing = null;
+    assert.equal((await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now)).updatedCount, 1);
+    assert.equal(writes, 1);
+  } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
+});
+
+test('finished ONE edits retain completion for past dates, reactivate future dates, bind status into hash and exclude moderation/deletion', async () => {
+  const value = document(); value.status = 'FINISHED';
+  value.startAt = new Date('2098-12-30T12:00:00Z'); value.endAt = new Date('2098-12-30T13:00:00Z');
+  const input = parsed({ ...body(), startAt: value.startAt.toISOString(), endAt: value.endAt.toISOString() });
+  const past = await preview(auth, value._id.toHexString(), input, deps(value));
+  assert.equal(past.changes[0].after.status, 'FINISHED');
+  const future = await preview(auth, value._id.toHexString(), parsed(), deps(value));
+  assert.equal(future.changes[0].after.status, 'ACTIVE'); assert.ok(future.changes[0].changedFields.includes('status'));
+  value.status = 'ACTIVE';
+  const legacy = await preview(auth, value._id.toHexString(), parsed(), deps(value));
+  assert.notEqual(legacy.previewHash, future.previewHash);
+  for (const status of ['HIDDEN', 'DELETED', 'CANCELLED']) {
+    value.status = status; await assert.rejects(preview(auth, value._id.toHexString(), input, deps(value)), { status: 404 });
+  }
+  value.status = 'FINISHED'; value.deletedAt = now;
+  await assert.rejects(preview(auth, value._id.toHexString(), input, deps(value)), { status: 404 });
 });
 
 test('HTTP authenticated owner preview and PATCH enforce confirmation; shared detail exposes editing only to creator', async () => {

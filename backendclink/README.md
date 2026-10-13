@@ -1,5 +1,9 @@
 # CampusLink Backend
 
+Ciclo de vida de actividades: [finalización automática y reactivación](docs/activities-lifecycle.md).
+Al llegar endAt, comunitarias/oficiales pasan a FINISHED en Mongo mediante el
+mantenimiento al arrancar y cada minuto, sin borrar documentos ni participaciones.
+
 Denuncias F2.6-09: [API, persistencia común y QA manual](docs/activities-reports.md). `POST /api/v1/reports/activities/:activityId` guarda PENDIENTE en `reporte_contenido`, con motivo libre, descripción opcional y copia del contenido; no modifica actividades ni inscripciones. Revisión administrativa corresponde a F2.6-10. Sin migraciones ni colecciones nuevas.
 
 Base API REST de F2.2-03 (GitHub #50). Node.js 22, TypeScript, Express 5, Supabase JS y driver oficial MongoDB. Las rutas se montan en /api/v1.
@@ -9,6 +13,8 @@ Actividades del mapa F2.6-01: `GET /api/v1/activities` requiere Bearer y autoriz
 Detalle F2.6-02 y participación mínima: [endpoints, contrato JOINED/LEFT, índice único y transacción](docs/activities-detail.md). `GET /api/v1/activities/:activityId` añade organizador y participación propia; `PUT /api/v1/activities/:activityId/participation` inscribe sin cuerpo ni identidad del cliente.
 
 Participación F2.6-07: [inscripción, retiro y consulta propia](docs/activities-participation.md). GET/DELETE en `/:activityId/participation` consultan el estado o retiran al usuario autenticado, incluso después del término. El retiro guarda LEFT y descuenta el contador una sola vez; la reinscripción vigente conserva el mismo registro. Sin nuevas colecciones.
+
+Interacciones F2.6-07/F2.7-01: [estado actual, log append-only y migración](docs/activities-interactions.md). JOINED/LEFT se registran junto al estado y contador en transacciones; VIEWED registra aperturas reales de ficha, sin contar tarjetas ni refresh. Métricas futuras consultan `activity_interactions`; el historial migrado está identificado como parcial.
 
 Notificaciones F2.6-08: [entrega durable y bandeja propia](docs/activities-notifications.md). Eventos pendientes embebidos en activities y entrega idempotente a notificacion existente. Una publicación de serie oficial avisa una vez por usuario; cada inicio de ocurrencia oficial recurrente avisa al campus. Cambios conjuntos de fechas se agrupan por usuario afectado, con motivos/cantidad propios. Bandeja GET/PUT lectura/DELETE bajo `/api/v1/users/me/notifications`; aplicar migración base `f2_6_08_notificaciones.sql`. Esta evolución no requiere migración adicional, colecciones nuevas ni cambios de RLS/permisos.
 
@@ -162,7 +168,7 @@ Flujo: routes → controller → service → repository → cliente compartido. 
 | marketplace/physicalgoods | Supabase: publicacion_recurso filtrada FISICO y recurso_fisico |
 | marketplace/elibrary | Supabase: publicacion_recurso filtrada DIGITAL y recurso_digital |
 | reports | Supabase: reporte_contenido; denuncias de contenido |
-| analytics | Supabase: interaccion_recurso y reporte; MongoDB: activities y activity_participation |
+| analytics | Supabase: interaccion_recurso y reporte; MongoDB: activities y activity_interactions |
 
 La carpeta auth contiene la integración de identidad. Login será un caso de uso de auth, junto con recuperación/renovación/cierre de sesión; no hay un segundo módulo login. users será responsable del perfil académico. reports gestiona denuncias; los informes analíticos y sus instantáneas pertenecen a analytics.
 
@@ -254,7 +260,7 @@ Decisión explícita del usuario (2026-10-08, GH-59/GH-61): ADMINISTRADOR tiene 
 
 ## Esquemas y verificaciones
 
-CampusLink_Schema.sql es un snapshot de referencia, no una migración ejecutable. No se ejecuta durante el arranque. Las tablas deben estar aplicadas mediante las migraciones de F2.2-01. El bootstrap documental requiere campus_maps, activities y activity_participation para las sondas actuales. El nombre singular activity_participation corresponde al modelo de Atlas informado por el usuario el 2026-10-08; el bootstrap documental histórico usa otro nombre y campos distintos para activities. No ejecutarlo para corregir conectividad.
+CampusLink_Schema.sql es un snapshot de referencia, no una migración ejecutable. No se ejecuta durante el arranque. Las tablas deben estar aplicadas mediante las migraciones de F2.2-01. Las sondas actuales requieren campus_maps, activities, activity_participation y activity_interactions. El nombre singular activity_participation corresponde al modelo de Atlas informado por el usuario el 2026-10-08; el bootstrap documental histórico usa otro nombre y campos distintos para activities. No ejecutarlo para corregir conectividad.
 
 Si querySrv falla con ECONNREFUSED, comprobar la resolución DNS del clúster. Durante el diagnóstico inicial ejecutado con Node directamente se necesitó un override DNS. La ejecución Docker actual se verificó con MONGODB_DNS_SERVERS vacío; conservarlo como opción si otra red lo requiere. El ajuste no cambia el DNS de Windows, la URI ni las credenciales, y no es obligatorio para otras redes. Reiniciar el backend tras cambiarlo; si se utiliza Docker, reconstruir/recrear el servicio para cargar el código y las variables nuevas.
 
@@ -273,13 +279,13 @@ curl.exe http://localhost:3000/api/v1/ready
 
 health devuelve el estado del proceso sin consultar bases. ready comprueba las dependencias de los siete módulos y devuelve 200 con data.status=ok cuando todas están disponibles, o 503 ante un fallo. Las rutas individuales están en la tabla de rutas. En producción o sin el opt-in de desarrollo, ready y los health de módulos responden 404.
 
-Las colecciones esperadas del modelo actual son campus_maps, activities, activity_participation, activity_interactions y moderation_logs. Las sondas de arranque requieren las tres primeras; las otras corresponden a operaciones futuras. Una colección existente vacía es válida; una ausente falla. La API no crea colecciones ni aplica migraciones durante el arranque. Versionar el modelo, sus validadores e índices corresponde a F2.2-02.
+Las colecciones esperadas del modelo actual son campus_maps, activities, activity_participation, activity_interactions y moderation_logs. Las sondas requieren las cuatro primeras; moderation_logs corresponde a moderación. Una colección existente vacía es válida; una ausente falla. La API no crea colecciones ni aplica migraciones durante el arranque. Versionar el modelo, sus validadores e índices corresponde a F2.2-02.
 
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
-- Completar idempotencia/historial de eventos para KPI; el health no demuestra cobertura analítica.
+- Completar eventos de recursos/transacciones/cuentas y tableros para KPI; el log de actividades ya registra VIEWED/JOINED/LEFT. El health no demuestra cobertura analítica.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
 
 ## Referencias técnicas

@@ -4,13 +4,15 @@ import { mongoClient } from '../../database/mongodb/client.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
 import { ApiError } from '../../services/apiError.js';
+import { accountCapabilities } from '../auth/auth.authorization.js';
+import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from './activities.policy.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityChangeDocument, ActivityEditResult, EditActivityInput } from './activities.edit.types.js';
 import { previewActivityEdit } from './activities.edit.service.js';
 import { changeNotification, groupedChangeNotification, participantsAtChange } from './activities.notifications.js';
 
 export const findEditableActivity = (campusId: string, activityId: string) => getMongoDb().collection<ActivityDocument>('activities')
-  .findOne({ campusId, _id: new ObjectId(activityId), status: 'ACTIVE', visibility: 'PUBLIC' });
+  .findOne({ campusId, _id: new ObjectId(activityId), status: { $in: ['ACTIVE', 'FINISHED'] }, visibility: 'PUBLIC', deletedAt: null });
 export const findEditOccurrences = (campusId: string, seriesId: string) => getMongoDb().collection<ActivityDocument>('activities')
   .find({ campusId, seriesId: new ObjectId(seriesId) }).sort({ occurrenceIndex: 1 }).toArray();
 
@@ -23,7 +25,8 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
     const transactionNow = new Date(Math.max(Date.now(), now.getTime()));
     const plan = await previewActivityEdit(auth, activityId, input, { now: () => transactionNow,
       getActiveMap: campusId => transactionDb.collection<CampusMapDocument>('campus_maps').findOne({ campusId, status: 'ACTIVE' }, { session }),
-      findEditable: (campusId, id) => transactionDb.collection<ActivityDocument>('activities').findOne({ campusId, _id: new ObjectId(id), status: 'ACTIVE', visibility: 'PUBLIC' }, { session }),
+      findEditable: (campusId, id) => transactionDb.collection<ActivityDocument>('activities').findOne({ campusId, _id: new ObjectId(id),
+        status: { $in: ['ACTIVE', 'FINISHED'] }, visibility: 'PUBLIC', deletedAt: null }, { session }),
       findSeries: async (campusId, id) => (await transactionDb.collection<ActivityDocument>('activities').findOne({ campusId,
         seriesId: new ObjectId(id), 'seriesDefinition._id': new ObjectId(id), 'seriesDefinition.status': 'ACTIVE',
         'seriesDefinition.visibility': 'PUBLIC' }, { session }))?.seriesDefinition ?? null,
@@ -31,6 +34,19 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
     });
     if (plan.previewHash !== input.previewHash) throw new ApiError(409, 'CONFLICT', 'Las actividades cambiaron. Revisa una nueva vista previa.');
     const changed = plan.changes.filter(value => value.changedFields.length);
+    const reactivatingCommunity = !accountCapabilities(auth).officialActivities && changed.some(change =>
+      change.before.type === 'COMMUNITY_ACTIVITY' && (change.before.status === 'FINISHED' || change.before.endAt <= transactionNow)
+      && change.after.status === 'ACTIVE');
+    if (reactivatingCommunity) {
+      // Share the creation lock so an expired publication cannot be revived alongside a new one.
+      const map = await transactionDb.collection<CampusMapDocument>('campus_maps').findOneAndUpdate(
+        { campusId: auth.campusId, status: 'ACTIVE' }, { $inc: { communityActivityCreationRevision: 1 } }, { session, returnDocument: 'after' });
+      if (!map) throw new ApiError(404, 'NOT_FOUND', 'Active campus map not found.');
+      if (await transactionDb.collection<ActivityDocument>('activities').findOne(
+        activeCommunityActivityFilter(auth.campusId, auth.userId, transactionNow), { session })) {
+        throw new ApiError(409, 'CONFLICT', COMMUNITY_ACTIVITY_LIMIT_MESSAGE);
+      }
+    }
     if (changed.length) {
       const participantRows = await transactionDb.collection<ActivityParticipationDocument>('activity_participation')
         .find({ campusId: auth.campusId, activityId: { $in: changed.map(change => new ObjectId(change.activityId)) } },
@@ -57,9 +73,10 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
         recipients.set(change.activityId, participantsAtChange(participants, auth.userId));
         operations.push({ updateOne: {
           filter: { _id: new ObjectId(change.activityId), campusId: auth.campusId, createdByUserId: auth.userId,
+            status: change.before.status, visibility: 'PUBLIC', deletedAt: null,
             ...(change.revision === 0 ? { $or: [{ editRevision: 0 }, { editRevision: { $exists: false } }] } : { editRevision: change.revision }) },
           update: { $set: { title: change.after.title, description: change.after.description, startAt: change.after.startAt, endAt: change.after.endAt,
-            location: change.after.location, editRevision: change.revision + 1, updatedAt: transactionNow },
+            location: change.after.location, status: change.after.status, editRevision: change.revision + 1, updatedAt: transactionNow },
             $push: { changeHistory: history } },
         } });
       }

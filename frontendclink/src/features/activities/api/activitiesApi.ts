@@ -1,10 +1,21 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 import type { Activity, ActivityDetail, ActivityLocationQuery, ActivityParticipation } from '../types/activity';
-import type { CreateActivityInput } from '../types/creation';
+import type { CreateActivityInput, CommunityActivityCreationAvailability } from '../types/creation';
 import type { CreateActivitySeriesInput, ActivityRecurrencePreview, CreatedActivitySeries, ActivitySeries } from '../types/recurrence';
 import type { ActivityEditPreview, ActivityEditResult, EditActivityInput } from '../types/editing';
 import type { ActivityParticipantsPage, ActivityDeletionResult } from '../types/activity';
 import { ACTIVITY_PARTICIPANTS_PAGE_SIZE } from '../types/activity';
+
+export async function fetchCommunityActivityCreationAvailability(campusId: string, signal?: AbortSignal): Promise<CommunityActivityCreationAvailability> {
+  const response = await authenticatedEnvelopeRequest<CommunityActivityCreationAvailability>('/api/v1/activities/community/creation-availability', { signal });
+  const value = response.data;
+  if (!value || value.campusId !== campusId || typeof value.canCreate !== 'boolean'
+    || (!value.canCreate && (typeof value.message !== 'string' || !value.message.trim()))
+    || (value.message !== undefined && (typeof value.message !== 'string' || value.message.length > 500))) {
+    throw new Error('No se pudo comprobar si puedes crear una actividad.');
+  }
+  return value;
+}
 
 export async function fetchActivityParticipants(campusId: string, activityId: string, page: number, signal?: AbortSignal): Promise<ActivityParticipantsPage> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
@@ -111,11 +122,11 @@ export async function fetchLocationActivities(campusId: string, query: ActivityL
   return response.data;
 }
 
-async function requestActivityDetail(campusId: string, activityId: string, register: boolean, signal?: AbortSignal): Promise<ActivityDetail> {
+async function requestActivityDetail(campusId: string, activityId: string, register: boolean, signal?: AbortSignal, operationId?: string): Promise<ActivityDetail> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
   const response = await authenticatedEnvelopeRequest<ActivityDetail>(
     `/api/v1/activities/${activityId}${register ? '/participation' : ''}`,
-    { method: register ? 'PUT' : 'GET', signal },
+    { method: register ? 'PUT' : 'GET', signal, ...(register && operationId ? { headers: { 'Idempotency-Key': operationId } } : {}) },
   );
   if (!response.data || response.data.id !== activityId.toLowerCase() || response.data.campusId !== campusId
     || typeof response.data.participation?.canLeave !== 'boolean'
@@ -129,13 +140,13 @@ async function requestActivityDetail(campusId: string, activityId: string, regis
 export const fetchActivityDetail = (campusId: string, activityId: string, signal?: AbortSignal) =>
   requestActivityDetail(campusId, activityId, false, signal);
 
-export const registerActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal) =>
-  requestActivityDetail(campusId, activityId, true, signal);
+export const registerActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal, operationId?: string) =>
+  requestActivityDetail(campusId, activityId, true, signal, operationId);
 
-async function requestOwnParticipation(campusId: string, activityId: string, method: 'GET' | 'DELETE', signal?: AbortSignal): Promise<ActivityParticipation> {
+async function requestOwnParticipation(campusId: string, activityId: string, method: 'GET' | 'DELETE', signal?: AbortSignal, operationId?: string): Promise<ActivityParticipation> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
   const response = await authenticatedEnvelopeRequest<ActivityParticipation>(
-    `/api/v1/activities/${activityId}/participation`, { method, signal });
+    `/api/v1/activities/${activityId}/participation`, { method, signal, ...(operationId ? { headers: { 'Idempotency-Key': operationId } } : {}) });
   const value = response.data;
   if (!value || value.activityId !== activityId.toLowerCase() || value.campusId !== campusId
     || !['JOINED', 'LEFT', 'NOT_JOINED'].includes(value.status)
@@ -150,5 +161,13 @@ async function requestOwnParticipation(campusId: string, activityId: string, met
 export const fetchActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal) =>
   requestOwnParticipation(campusId, activityId, 'GET', signal);
 
-export const withdrawActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal) =>
-  requestOwnParticipation(campusId, activityId, 'DELETE', signal);
+export const withdrawActivityParticipation = (campusId: string, activityId: string, signal?: AbortSignal, operationId?: string) =>
+  requestOwnParticipation(campusId, activityId, 'DELETE', signal, operationId);
+
+export async function recordViewedActivity(campusId: string, activityId: string, operationId: string, signal?: AbortSignal): Promise<void> {
+  const response = await authenticatedEnvelopeRequest<{ campusId: string; activityId: string; type: string; recorded: boolean }>(
+    `/api/v1/activities/${activityId}/interactions`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'VIEWED', operationId }) });
+  if (response.data?.campusId !== campusId || response.data.activityId !== activityId || response.data.type !== 'VIEWED'
+    || response.data.recorded !== true) throw new Error('No se pudo confirmar la interacción.');
+}

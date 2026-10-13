@@ -5,10 +5,13 @@ import { ACTIVITY_COLORS, type Activity } from '../types/activity';
 import { useActivityDetail } from '../hooks/useActivityDetail';
 import { ActivityParticipantCount } from './ActivityParticipantCount';
 import { ActivityDescription } from './ActivityDescription';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 export function ActivityCard({ activity, onPress }: {
   activity: Activity; onPress: () => void;
 }) {
+  const { identity } = useAuth();
+  const canViewOccurrences = identity?.capabilities.officialActivities === true;
   const { detail, ownParticipation, isLoading, error, refresh } = useActivityDetail(activity.id);
   const isJoined = detail?.participation.status === 'JOINED';
   const detailLinkLabel = (detail?.participation.status ?? ownParticipation?.status) === 'JOINED'
@@ -40,7 +43,7 @@ export function ActivityCard({ activity, onPress }: {
           accessibilityLabel={`${detailLinkLabel}: ${value.title}`} onPress={onPress} style={styles.summaryContent}>
           <Text style={styles.date}>Inicio: {new Date(value.startAt).toLocaleString('es-CL')}</Text>
           <Text style={styles.date}>Término: {new Date(value.endAt).toLocaleString('es-CL')}</Text>
-          {value.series ? <View style={[styles.seriesBadge, { borderColor: ACTIVITY_COLORS[value.type] }]}>
+          {canViewOccurrences && value.series ? <View style={[styles.seriesBadge, { borderColor: ACTIVITY_COLORS[value.type] }]}>
             <View accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               <Repeat2 size={15} color={ACTIVITY_COLORS[value.type]} strokeWidth={1.8} />
             </View>

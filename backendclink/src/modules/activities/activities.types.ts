@@ -46,6 +46,13 @@ export interface ActivityQuery {
   poiKey?: string;
 }
 
+export interface ActivityCreationOptions { limitActiveCommunity?: boolean }
+export interface CommunityActivityCreationAvailability {
+  campusId: string;
+  canCreate: boolean;
+  message?: string;
+}
+
 export interface CreateActivityInput {
   title: string;
   description: string;
@@ -115,6 +122,25 @@ export interface ActivityParticipationDocument {
   status: 'JOINED' | 'LEFT';
   joinedAt: Date;
   updatedAt: Date;
+  /** Legacy aliases remain readable; migration initializes the tracking fields without inventing history. */
+  firstJoinedAt?: Date | null;
+  lastJoinedAt?: Date;
+  lastLeftAt?: Date | null;
+  joinCount?: number;
+  leaveCount?: number;
+  historyComplete?: boolean;
+}
+
+export type ActivityInteractionType = 'VIEWED' | 'JOINED' | 'LEFT';
+export interface ActivityInteractionDocument {
+  _id: ObjectId;
+  activityId: ObjectId;
+  campusId: string;
+  userId: string;
+  type: ActivityInteractionType;
+  occurredAt: Date;
+  eventKey: string;
+  provenance: 'LIVE' | 'LEGACY_STATE';
 }
 
 export interface ActivityDetailDto extends ActivityDto {

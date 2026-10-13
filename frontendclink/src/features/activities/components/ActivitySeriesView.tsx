@@ -12,10 +12,11 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
   seriesId: string; currentActivityId: string; onBack: () => void; onSelect: (activityId: string) => void;
 }) {
   const { identity, session, refreshIdentity } = useAuth(); const [revision, setRevision] = useState(0);
-  const key = JSON.stringify([identity?.campusId, session?.access_token, seriesId, revision]);
+  const canViewOccurrences = identity?.capabilities.officialActivities === true;
+  const key = JSON.stringify([identity?.campusId, session?.access_token, canViewOccurrences, seriesId, revision]);
   const [state, setState] = useState<{ key: string; series: ActivitySeries | null; error: string | null }>({ key: '', series: null, error: null });
   useEffect(() => {
-    if (!identity?.campusId || !session?.access_token) return;
+    if (!canViewOccurrences || !identity?.campusId || !session?.access_token) return;
     const abort = new AbortController(); setState({ key, series: null, error: null });
     void fetchActivitySeries(identity.campusId, seriesId, abort.signal).then(series => {
       if (!abort.signal.aborted) setState({ key, series, error: null });
@@ -26,14 +27,18 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
       if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
     });
     return () => abort.abort();
-  }, [key, identity?.campusId, session?.access_token, seriesId, refreshIdentity]);
-  const series = state.key === key ? state.series : null; const error = state.key === key ? state.error : null;
+  }, [key, canViewOccurrences, identity?.campusId, session?.access_token, seriesId, refreshIdentity]);
+  const series = canViewOccurrences && state.key === key ? state.series : null; const error = state.key === key ? state.error : null;
   useEffect(() => {
     if (!series?.occurrences.length) return;
     const end = Math.min(...series.occurrences.map(value => Date.parse(value.endAt)));
     const timer = setTimeout(() => setRevision(value => value + 1), Math.min(2_147_483_647, Math.max(1, end - Date.now() + 1)));
     return () => clearTimeout(timer);
   }, [series]);
+  if (!canViewOccurrences) return <View style={styles.content}>
+    <Pressable accessibilityRole="button" onPress={onBack}><Text style={styles.link}>Volver a la actividad</Text></Pressable>
+    <Text accessibilityRole="alert" style={styles.text}>Necesitas permiso para publicar eventos oficiales en tu campus para consultar las ocurrencias.</Text>
+  </View>;
   return <View style={styles.content}>
     <Pressable accessibilityRole="button" onPress={onBack}><Text style={styles.link}>Volver a esta ocurrencia</Text></Pressable>
     {error ? <Text accessibilityRole="alert" style={styles.text}>{error}</Text> : !series ? <ActivityIndicator /> : <>

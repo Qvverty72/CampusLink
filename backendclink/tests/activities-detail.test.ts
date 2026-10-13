@@ -183,11 +183,13 @@ test('registration transaction preserves count on repeat and commits JOINED plus
     findOne: async (key: Record<string, unknown>, options: { session: unknown }) => {
       assert.deepEqual(key, { campusId, activityId: id, userId }); assert.equal(options.session, session); return own;
     },
-    updateOne: async (_key: unknown, update: { $set: ActivityParticipationDocument; $setOnInsert: ActivityParticipationDocument }, options: { session: unknown; upsert: boolean }) => {
+    updateOne: async (_key: unknown, update: { $set: ActivityParticipationDocument; $setOnInsert: ActivityParticipationDocument; $inc: { joinCount: number } }, options: { session: unknown; upsert: boolean }) => {
       assert.equal(options.session, session); assert.equal(options.upsert, true);
-      own = { ...update.$setOnInsert, ...update.$set }; assert.equal(own.status, 'JOINED');
+      own = { ...(own ?? update.$setOnInsert), ...update.$set, joinCount: (own?.joinCount ?? 0) + update.$inc.joinCount }; assert.equal(own.status, 'JOINED');
     },
-  } : name === 'campus_maps' ? {
+  } : name === 'activity_interactions' ? { insertOne: async (event: any, options: any) => {
+    assert.equal(options.session, session); assert.equal(event.type, 'JOINED'); assert.equal(event.userId, userId);
+  } } : name === 'campus_maps' ? {
     findOne: async (filter: Record<string, unknown>, options: { session: unknown }) => {
       assert.deepEqual(filter, { campusId, status: 'ACTIVE' }); assert.equal(options.session, session); return activeMap;
     },
@@ -196,7 +198,7 @@ test('registration transaction preserves count on repeat and commits JOINED plus
       assert.equal(filter.campusId, campusId); assert.equal(filter.status, 'ACTIVE'); assert.equal(options.session, session); return activity;
     },
     updateOne: async (_key: unknown, update: { $inc: { participantCount: number } }, options: { session: unknown }) => {
-      assert.equal(options.session, session); assert.equal(update.$inc.participantCount, 1); increments++;
+      assert.equal(options.session, session); assert.equal(update.$inc.participantCount, 1); increments++; return { matchedCount: 1 };
     },
   });
   try {
@@ -204,7 +206,7 @@ test('registration transaction preserves count on repeat and commits JOINED plus
     await registerActivityParticipation(campusId, id.toHexString(), userId, now);
     await registerActivityParticipation(campusId, id.toHexString(), userId, now);
     assert.equal(increments, 1);
-    own = participation('LEFT');
+    own = { ...participation('LEFT'), firstJoinedAt: now, lastJoinedAt: now, joinCount: 1, leaveCount: 1, lastLeftAt: now, historyComplete: true };
     await registerActivityParticipation(campusId, id.toHexString(), userId, now);
     assert.equal(increments, 2);
     activeMap = { ...map, buildings: [] };
