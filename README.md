@@ -150,6 +150,8 @@ El frontend no accede directamente a MongoDB. Los datos del mapa se solicitan me
 
 Actualmente el proyecto utiliza **Expo 57**, **React Native 0.86** y **React 19**.
 
+Los módulos funcionales del frontend se organizan en `api`, `components`, `hooks` y `types`, siguiendo `activities`. La [convención de estructura del frontend](frontendclink/src/features/README.md) describe las responsabilidades y los imports entre carpetas.
+
 ## Backend
 
 | Tecnología | Uso |
