@@ -1,5 +1,6 @@
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient } from './supabaseClient';
 import { authenticatedRequest } from '@/lib/api/authenticated-request';
+import type { RegistrationInput, RegistrationOption } from '../types/registration';
 
 // Keep the verified exchange in memory if the SDK cannot install the session immediately.
 // Persistence remains exclusively the SDK's responsibility.
@@ -15,20 +16,6 @@ async function restoreRegistrationSession(): Promise<boolean> {
     pendingSession = null;
     return true;
   } catch { return false; }
-}
-
-export interface RegistrationOption {
-  dominio: string;
-  institucion_id: string;
-  institucion_nombre: string;
-  campus_id: string;
-  campus_nombre: string;
-}
-export interface RegistrationInput {
-  email: string;
-  password: string;
-  fullName: string;
-  campusId: string;
 }
 
 async function registrationRequest<T>(endpoint: 'registration-options' | 'register' | 'register/confirm' | 'register/resend', init: RequestInit = {}): Promise<T> {

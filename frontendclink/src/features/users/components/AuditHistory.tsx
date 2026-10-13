@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link } from 'expo-router';
-import { useAuth } from '@/features/auth/AuthProvider';
-import { AuthApiError } from '@/lib/api/authenticated-request';
-import { authStyles as styles } from '@/features/auth/form.styles';
-import { accessLabels, loadAccessCampuses } from './access';
-import { auditLabels, loadAuditEntries, loadAuditEntry, type AuditEntry, type AuditDetail } from './audit';
+import { authStyles as styles } from '@/features/auth/components/form.styles';
+import { accessLabels } from '../types/access';
+import { auditLabels } from '../types/audit';
+import { useAuditHistory } from '../hooks/useAuditHistory';
 
 function Snapshot({ title, value }: { title: string; value: Record<string, unknown> | null }) {
   const display = (item: unknown) => item === null ? 'Sin valor' : accessLabels[String(item)] ?? auditLabels[String(item)] ?? String(item);
@@ -24,63 +22,9 @@ function Snapshot({ title, value }: { title: string; value: Record<string, unkno
 }
 
 export function AuditHistoryScreen() {
-  const auth = useAuth();
-  const [campuses,setCampuses] = useState<{ id: string; name: string }[]>([]);
-  const [campusId,setCampusId] = useState('');
-  const [page,setPage] = useState(1);
-  const [entries,setEntries] = useState<AuditEntry[]>([]);
-  const [hasMore,setHasMore] = useState(false);
-  const [selected,setSelected] = useState<AuditDetail | null>(null);
-  const [loading,setLoading] = useState(true);
-  const [error,setError] = useState('');
-  const [reload,setReload] = useState(0);
-  const pending = useRef<AbortController | null>(null);
-  const loadedIdentity = useRef<string | null>(null);
+  const { campuses, campusId, page, setPage, entries, hasMore, selected, setSelected, loading,
+    error, setReload, select, selectCampus } = useAuditHistory();
   const date = (value: string) => new Date(value).toLocaleString();
-  function fail(reason: unknown) {
-    setError(reason instanceof AuthApiError && reason.status === 403 ? 'Tu acceso a este campus ya no está disponible.'
-      : reason instanceof AuthApiError && reason.status === 401 ? 'Tu sesión venció. Inicia sesión nuevamente.'
-      : reason instanceof AuthApiError && reason.status === 404 ? 'El registro no está disponible en este campus.'
-      : 'No se pudo consultar el historial. Inténtalo nuevamente.');
-    if (reason instanceof AuthApiError && [401,403].includes(reason.status)) {
-      setEntries([]); setSelected(null); setHasMore(false); void auth.refreshIdentity();
-    }
-  }
-  // Context changes cancel requests and erase the previous actor's history immediately.
-  const identityKey = auth.identity ? JSON.stringify([auth.identity.userId,auth.identity.campusId,auth.identity.roles]) : '';
-  useEffect(() => {
-    const controller = new AbortController();
-    pending.current?.abort();
-    if (loadedIdentity.current !== identityKey) {
-      setCampuses([]); setCampusId(''); setPage(1); loadedIdentity.current = identityKey;
-    }
-    setEntries([]); setSelected(null); setHasMore(false); setLoading(true); setError('');
-    void loadAccessCampuses(controller.signal).then(rows => {
-      if (controller.signal.aborted) return;
-      setCampuses(rows); setCampusId(current => rows.some(row => row.id === current) ? current : rows[0]?.id ?? ''); setLoading(false);
-    }).catch(reason => { if (!controller.signal.aborted) { fail(reason); setLoading(false); } });
-    return () => controller.abort();
-  }, [identityKey,reload]);
-  useEffect(() => {
-    if (!campusId) return;
-    const controller = new AbortController(); pending.current?.abort(); pending.current = controller;
-    setLoading(true); setError(''); setSelected(null); setEntries([]); setHasMore(false);
-    void loadAuditEntries(campusId,page,controller.signal).then(result => {
-      if (controller.signal.aborted) return;
-      setEntries(result.data); setHasMore(result.meta.hasMore); setLoading(false);
-    }).catch(reason => { if (!controller.signal.aborted) { fail(reason); setLoading(false); } });
-    return () => controller.abort();
-  }, [campusId,page,reload]);
-  useEffect(() => () => pending.current?.abort(), []);
-  async function select(id: string) {
-    pending.current?.abort(); const controller = new AbortController(); pending.current = controller;
-    setSelected(null); setError(''); setLoading(true);
-    try {
-      const detail = await loadAuditEntry(campusId,id,controller.signal);
-      if (!controller.signal.aborted) setSelected(detail);
-    } catch (reason) { if (!controller.signal.aborted) fail(reason); }
-    finally { if (!controller.signal.aborted) setLoading(false); }
-  }
   return <ScrollView style={styles.page} contentContainerStyle={styles.container}>
     <Link href="/profile" style={styles.link}>Volver a mi perfil</Link>
     <Text style={styles.brand}>CAMPUSLINK</Text>
@@ -89,7 +33,7 @@ export function AuditHistoryScreen() {
     <Text style={styles.label}>Campus</Text>
     <View style={local.choices}>{campuses.map(campus => <Pressable key={campus.id} accessibilityRole="button"
       accessibilityState={{ selected: campus.id === campusId }} style={[local.choice,campus.id === campusId && local.active]}
-      onPress={() => { if (campus.id !== campusId) { pending.current?.abort(); setSelected(null); setEntries([]); setPage(1); setCampusId(campus.id); } }}>
+      onPress={() => selectCampus(campus.id)}>
       <Text style={styles.description}>{campus.name}</Text>
     </Pressable>)}</View>
     {loading && <ActivityIndicator color="#74C69D" accessibilityLabel="Consultando historial" />}

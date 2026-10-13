@@ -11,7 +11,7 @@ import { CampusMapViewport } from '@/three/components/CampusMapViewport';
 import { FloorInfoModal } from '@/features/activities/components/FloorInfoModal';
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useMapStore } from '@/three/store/mapStore';
 import { ApiClientError } from '@/three/api/mapApi';
 import { useLocationActivities } from '@/features/activities/hooks/useLocationActivities';

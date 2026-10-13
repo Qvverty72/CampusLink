@@ -5,7 +5,7 @@ import { ACTIVITY_COLORS, type Activity } from '../types/activity';
 import { useActivityDetail } from '../hooks/useActivityDetail';
 import { ActivityParticipantCount } from './ActivityParticipantCount';
 import { ActivityDescription } from './ActivityDescription';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 export function ActivityCard({ activity, onPress }: {
   activity: Activity; onPress: () => void;

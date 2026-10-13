@@ -1,3 +1,5 @@
+import type { Session } from '@supabase/supabase-js';
+
 export interface AuthAssignment { id: string; name: string; campusId: string }
 
 // GET /api/v1/auth/me: PostgreSQL data, never claims supplied in user_metadata.
@@ -22,4 +24,14 @@ export interface AuthIdentity {
     analytics: boolean;
     reports: boolean;
   };
+}
+
+export type AuthStatus = 'loading' | 'signedOut' | 'ready' | 'forbidden' | 'error' | 'unconfigured';
+export interface AuthContextValue {
+  session: Session | null;
+  identity: AuthIdentity | null;
+  status: AuthStatus;
+  error: string | null;
+  refreshIdentity: () => void;
+  signOut: () => Promise<void>;
 }

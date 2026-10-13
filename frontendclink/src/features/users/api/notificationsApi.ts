@@ -1,10 +1,7 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
-export interface ActivityNotification {
-  id: string; activityId: string; seriesId?: string; type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED' | 'OFFICIAL_EVENT_STARTED';
-  title: string; message: string; createdAt: string; readAt: string | null;
-}
-export interface NotificationPage { items: ActivityNotification[]; nextCursor: string | null }
+import type { NotificationPage } from '../types/notification';
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function fetchNotifications(cursor?: string, signal?: AbortSignal): Promise<NotificationPage> {

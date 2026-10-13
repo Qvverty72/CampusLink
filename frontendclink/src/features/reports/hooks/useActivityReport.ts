@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
-import { submitActivityReport, type ActivityReportInput, type ActivityReportReceipt } from '../api/reportsApi';
+import { submitActivityReport } from '../api/reportsApi';
+import type { ActivityReportInput, ActivityReportReceipt } from '../types/activityReport';
 
 export function useActivityReport(activityId: string) {
   const { identity, session, refreshIdentity } = useAuth();

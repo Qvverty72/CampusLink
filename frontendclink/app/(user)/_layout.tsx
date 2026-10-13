@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
-import { useAuth } from '@/features/auth/AuthProvider';
-import { canManageAccess } from '@/features/users/access';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { canManageAccess } from '@/features/users/types/access';
 
 /** Navigation for welcome, authentication, account and profile screens. */
 export default function UserLayout() {

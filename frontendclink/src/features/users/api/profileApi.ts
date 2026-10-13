@@ -1,13 +1,7 @@
 import { AuthApiError, authenticatedRequest } from '@/lib/api/authenticated-request';
 
-export interface AcademicProfile {
-  fullName: string; campusId: string; campusName: string;
-  careers: { id: string; nombre: string }[]; updatedAt: string;
-}
-export interface AcademicOptions {
-  campuses: { id: string; name: string }[];
-  careers: { id: string; name: string; campusIds: string[] }[];
-}
+import type { AcademicOptions, AcademicProfile } from '../types/profile';
+
 export const loadAcademicProfile = (signal: AbortSignal) =>
   authenticatedRequest<AcademicProfile>('/api/v1/users/me/profile', { signal });
 export const loadAcademicOptions = (signal: AbortSignal) =>

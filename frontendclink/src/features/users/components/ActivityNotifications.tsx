@@ -1,12 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
 import { Link } from 'expo-router';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useAuth } from '@/features/auth/AuthProvider';
-import { AuthApiError } from '@/lib/api/authenticated-request';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { ActivityDetail } from '@/features/activities/components/ActivityDetail';
 import { ActivityRefreshScrollView } from '@/features/activities/components/ActivityRefreshScrollView';
-import { fetchNotifications, updateNotification, type ActivityNotification } from './notifications';
+import { useActivityNotifications } from '../hooks/useActivityNotifications';
 
 export function NotificationsScreen() {
   const { identity, session } = useAuth();
@@ -14,47 +12,7 @@ export function NotificationsScreen() {
 }
 
 function NotificationsContent() {
-  const { refreshIdentity } = useAuth();
-  const [items, setItems] = useState<ActivityNotification[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activityId, setActivityId] = useState<string | null>(null);
-  const pending = useRef<AbortController | null>(null);
-  const mounted = useRef(true);
-  const handleError = (reason: unknown) => {
-    setError(reason instanceof AuthApiError ? reason.message : 'No se pudo confirmar la operación. Actualiza las notificaciones.');
-    if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
-  };
-  async function load(next?: string) {
-    if (pending.current || !mounted.current) return;
-    const abort = new AbortController(); pending.current = abort; setBusy(true); setError(null);
-    try {
-      const page = await fetchNotifications(next, abort.signal);
-      if (!abort.signal.aborted) {
-        setItems(current => next ? [...new Map([...current, ...page.items].map(item => [item.id, item])).values()] : page.items);
-        setCursor(page.nextCursor);
-      }
-    } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
-    finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
-  }
-  useEffect(() => {
-    mounted.current = true; void load();
-    return () => { mounted.current = false; pending.current?.abort(); pending.current = null; };
-  }, []);
-  async function update(item: ActivityNotification, remove: boolean) {
-    if (pending.current || !mounted.current) return;
-    const abort = new AbortController(); pending.current = abort; setBusy(true); setError(null);
-    try {
-      await updateNotification(item.id, remove, abort.signal);
-      if (!abort.signal.aborted) {
-        setItems(current => remove ? current.filter(row => row.id !== item.id)
-          : current.map(row => row.id === item.id ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row));
-        if (!remove) setActivityId(item.activityId);
-      }
-    } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
-    finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
-  }
+  const { items, cursor, busy, error, activityId, setActivityId, load, update } = useActivityNotifications();
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content}>
       <Link href="/profile" asChild><Pressable accessibilityRole="button"><Text style={[styles.link, styles.headerLink]}>Volver a mi perfil</Text></Pressable></Link>

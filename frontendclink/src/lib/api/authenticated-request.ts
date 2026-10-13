@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '@/features/auth/supabase';
+import { getSupabaseClient } from '@/features/auth/api/supabaseClient';
 
 export class AuthApiError extends Error {
   constructor(public readonly status: number, public readonly serverMessage?: string) {

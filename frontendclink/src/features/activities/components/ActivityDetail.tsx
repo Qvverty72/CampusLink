@@ -15,7 +15,7 @@ import { ActivityDescription } from './ActivityDescription';
 import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
 import { useActivityRefresh, useActivityScrollReset } from './ActivityRefreshScrollView';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { recordViewedActivity } from '../api/activitiesApi';
 import { activityOperationId } from '../types/interaction';
 import { AuthApiError } from '@/lib/api/authenticated-request';

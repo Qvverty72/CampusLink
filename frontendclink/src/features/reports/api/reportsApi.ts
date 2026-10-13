@@ -1,9 +1,6 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
-export interface ActivityReportInput { reason: string; description?: string }
-export interface ActivityReportReceipt {
-  id: string; activityId: string; campusId: string; status: 'PENDIENTE'; reportedAt: string;
-}
+import type { ActivityReportInput, ActivityReportReceipt } from '../types/activityReport';
 
 export async function submitActivityReport(campusId: string, activityId: string, input: ActivityReportInput,
   signal?: AbortSignal): Promise<ActivityReportReceipt> {

@@ -1,1 +1,1 @@
-export { NotificationsScreen as default } from '@/features/users/ActivityNotifications';
+export { NotificationsScreen as default } from '@/features/users/components/ActivityNotifications';

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { GlassSurface } from '@/components/GlassSurface';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { APP_COLORS } from '@/types/colors';
 import { BottomNavigationIcon } from './BottomNavigationIcon';
 import { router, type Href, usePathname } from 'expo-router';

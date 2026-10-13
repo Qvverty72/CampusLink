@@ -4,7 +4,7 @@ import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ChevronRight, Clock3, MapPin, RefreshCw, X, type LucideIcon } from 'lucide-react-native';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchActivitySeries } from '../api/activitiesApi';
 import { recurrenceSummary, type ActivitySeries } from '../types/recurrence';

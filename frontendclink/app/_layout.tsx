@@ -1,7 +1,8 @@
 import '../src/global.css';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'react-native';
-import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
+import { AuthProvider } from '@/features/auth/components/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 export default function RootLayout() {
   return <AuthProvider><AppNavigation /></AuthProvider>;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchActivityDetail, fetchActivityParticipation, registerActivityParticipation, withdrawActivityParticipation, deleteActivity } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityParticipation } from '../types/activity';

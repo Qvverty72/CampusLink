@@ -1,7 +1,7 @@
 import { APP_COLORS } from '@/types/colors';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { createCommunityActivity, createOfficialEvent, previewActivitySeries, createActivitySeries, fetchCommunityActivityCreationAvailability } from '../api/activitiesApi';
 import type { ActivityDetail, ActivityLocationQuery } from '../types/activity';

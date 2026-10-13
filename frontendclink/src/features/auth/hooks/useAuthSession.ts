@@ -1,22 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import { AuthApiError, authenticatedRequest } from '@/lib/api/authenticated-request';
-import { getSupabaseClient } from './supabase';
-import type { AuthIdentity } from './auth.types';
+import { AuthApiError } from '@/lib/api/authenticated-request';
+import { loadAuthIdentity } from '../api/authApi';
+import { getSupabaseClient } from '../api/supabaseClient';
+import type { AuthContextValue, AuthIdentity, AuthStatus } from '../types/auth';
 
-type AuthStatus = 'loading' | 'signedOut' | 'ready' | 'forbidden' | 'error' | 'unconfigured';
-interface AuthContextValue {
-  session: Session | null;
-  identity: AuthIdentity | null;
-  status: AuthStatus;
-  error: string | null;
-  refreshIdentity: () => void;
-  signOut: () => Promise<void>;
-}
-const AuthContext = createContext<AuthContextValue | null>(null);
-
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function useAuthSession(): AuthContextValue {
   const [session, setSession] = useState<Session | null>(null);
   const [identity, setIdentity] = useState<AuthIdentity | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
@@ -89,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIdentity(null);
     setError(null);
     setStatus('loading');
-    void authenticatedRequest<AuthIdentity>('/api/v1/auth/me', { signal: abort.signal })
+    void loadAuthIdentity(abort.signal)
       .then(value => {
         if (abort.signal.aborted) return;
         if (value.userId !== session.user.id || value.profile.id !== session.user.id) {
@@ -107,13 +97,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => abort.abort();
   }, [session, restored, revision]);
 
-  return <AuthContext.Provider value={{ session, identity, status, error, refreshIdentity, signOut }}>
-    {children}
-  </AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used inside AuthProvider');
-  return context;
+  return { session, identity, status, error, refreshIdentity, signOut };
 }

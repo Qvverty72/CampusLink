@@ -1,5 +1,3 @@
-import { authenticatedEnvelopeRequest, authenticatedRequest } from '@/lib/api/authenticated-request';
-
 export interface AuditEntry {
   id: string; actor_usuario_id: string | null; institucion_id: string; campus_id: string;
   entidad_tipo: string; entidad_id: string; accion: string; created_at: string;
@@ -8,12 +6,6 @@ export interface AuditDetail extends AuditEntry {
   justificacion_accion: string | null; reporte_contenido_id: string | null;
   datos_antes: Record<string, unknown> | null; datos_despues: Record<string, unknown> | null;
 }
-const path = (campusId: string) => '/api/v1/users/access/campuses/' + encodeURIComponent(campusId) + '/audit';
-export const loadAuditEntries = (campusId: string, page: number, signal: AbortSignal) =>
-  authenticatedEnvelopeRequest<AuditEntry[], { page: number; limit: number; hasMore: boolean }>(path(campusId), { signal },
-    new URLSearchParams({ page: String(page), limit: '20' }));
-export const loadAuditEntry = (campusId: string, id: string, signal: AbortSignal) =>
-  authenticatedRequest<AuditDetail>(path(campusId) + '/' + encodeURIComponent(id), { signal });
 
 export const auditLabels: Record<string,string> = {
   ASIGNAR_ROL: 'Asignación de rol', REVOCAR_ROL: 'Revocación de rol',

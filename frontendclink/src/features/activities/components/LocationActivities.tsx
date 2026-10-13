@@ -7,7 +7,7 @@ import { ACTIVITY_COLORS, filterLocationActivities, type Activity, type Activity
 import { ActivityCard } from './ActivityCard';
 import { ActivityListSkeleton } from './ActivityListSkeleton';
 import { ActivityDetail } from './ActivityDetail';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { CreateActivityForm } from './CreateActivityForm';
 import { ACTIVITY_DESCRIPTION_OPTIONS, type ActivityLocationOption } from '../types/creation';
 import { ActivityContentTransition } from './ActivityContentTransition';

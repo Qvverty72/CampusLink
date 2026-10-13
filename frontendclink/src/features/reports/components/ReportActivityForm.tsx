@@ -2,7 +2,7 @@ import { APP_COLORS } from '@/types/colors';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useActivityReport } from '../hooks/useActivityReport';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 
 /** Embedded in the existing activity modal, not a new route or administrative screen. */
 export function ReportActivityForm({ activityId, title, onBack }: {

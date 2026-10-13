@@ -1,2 +1,1 @@
-import { CampusAccessScreen } from '@/features/users/CampusAccess';
-export default CampusAccessScreen;
+export { CampusAccessScreen as default } from '@/features/users/components/CampusAccess';

@@ -1,1 +1,1 @@
-export { AuditHistoryScreen as default } from '@/features/users/AuditHistory';
+export { AuditHistoryScreen as default } from '@/features/users/components/AuditHistory';

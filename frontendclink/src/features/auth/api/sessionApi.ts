@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient } from './supabaseClient';
 
 async function sessionRequest<T>(endpoint: 'login' | 'recover' | 'recover/confirm', body: object): Promise<T> {
   const base = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
