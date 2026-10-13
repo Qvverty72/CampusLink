@@ -5,7 +5,7 @@ import { APP_COLORS } from '@/types/colors';
 /** Material chosen for the navigation bar, shared by floating map controls. */
 export const GLASS_MATERIAL = {
   blurIntensity: 35,
-  surfaceTint: 'rgba(255, 255, 255, 0.80)',
+  surfaceTint: 'rgba(255, 255, 255, 0.9)',
 } as const;
 
 type GlassSurfaceProps = ViewProps & {
