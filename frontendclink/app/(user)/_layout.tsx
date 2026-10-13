@@ -20,6 +20,7 @@ export default function UserLayout() {
       <Stack.Protected guard={auth.status === 'ready' && canManageAccess(auth.identity?.roles ?? [])}>
         <Stack.Screen name="access" />
         <Stack.Screen name="audit" />
+        <Stack.Screen name="moderation" />
       </Stack.Protected>
     </Stack>
   );

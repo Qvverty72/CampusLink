@@ -1,16 +1,32 @@
 import { createModuleHealthCheck } from '../../services/module-health.js';
 import { probeReportsDependencies } from './reports.repository.js';
-import type { ReportsHealth } from './reports.types.js';
-import type { ActivityReportReceipt, ActivityReportSnapshot, ReportActivityInput, ReportsDependencies } from './reports.types.js';
+import type { ReportsHealth, ActivityReportReceipt, ActivityReportSnapshot, ReportActivityInput,
+  ReportsDependencies, ContentReportReceipt, ReportContentInput } from './reports.types.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { spatialBuildings } from '../activities/activities.location.js';
 import { toVisibleActivity } from '../activities/activities.policy.js';
 import { ApiError } from '../../services/apiError.js';
-import { parseActivityReport } from './reports.validation.js';
+import { parseActivityReport, parseContentReport } from './reports.validation.js';
+import { requireCampusCapability } from '../auth/auth.authorization.js';
 
 export const getReportsHealth: () => Promise<ReportsHealth> =
   createModuleHealthCheck('reports', probeReportsDependencies);
+
+export async function reportContent(auth: VerifiedAuthConnection, input: ReportContentInput,
+  dependencies: ReportsDependencies = {}): Promise<ContentReportReceipt> {
+  const parsed = parseContentReport(input);
+  if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los datos de la denuncia.', { details: parsed.issues });
+  requireCampusCapability(auth, auth.campusId, 'general');
+  const { targetType, targetId, reason, description } = parsed.data;
+  if (targetType === 'ACTIVIDAD') {
+    const receipt = await reportActivity(auth, targetId, { reason, ...(description ? { description } : {}) }, dependencies);
+    const { activityId, ...fields } = receipt;
+    return { ...fields, targetType, targetId: activityId };
+  }
+  const save = dependencies.saveContentReport ?? (await import('./reports.repository.js')).saveContentReport;
+  return save({ ...parsed.data, userId: auth.userId, accountCampusId: auth.campusId });
+}
 
 export async function reportActivity(auth: VerifiedAuthConnection, activityId: string, input: ReportActivityInput,
   dependencies: ReportsDependencies = {}): Promise<ActivityReportReceipt> {

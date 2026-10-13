@@ -1,14 +1,21 @@
 import type { RequestHandler } from 'express';
 import { sendModuleHealth } from '../../services/health-response.js';
-import { getReportsHealth, reportActivity } from './reports.service.js';
+import { getReportsHealth, reportActivity, reportContent } from './reports.service.js';
 import { sendSuccess } from '../../services/api-response.js';
 import { getValidatedRequest } from '../../middleware/validateRequest.js';
 import type { AuthLocals } from '../auth/auth.types.js';
-import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
+import type { ReportActivityInput, ReportContentInput, ReportsDependencies } from './reports.types.js';
 
 export const getReportsHealthController: RequestHandler = async (_request, response) => {
   sendModuleHealth(response, await getReportsHealth());
 };
+
+export function createContentReportController(dependencies: ReportsDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { body } = getValidatedRequest<{ body: ReportContentInput }>(response);
+    sendSuccess(response, await reportContent(response.locals.auth, body, dependencies), 201);
+  };
+}
 
 export function createActivityReportController(dependencies: ReportsDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {

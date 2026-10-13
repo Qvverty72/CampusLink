@@ -1,6 +1,20 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
+import { isReportTarget, isContentReportReceipt } from '../types/report';
+import type { ReportInput, ReportTarget, ContentReportReceipt } from '../types/report';
 
-export interface ActivityReportInput { reason: string; description?: string }
+export async function submitContentReport(target: ReportTarget, input: ReportInput,
+  signal?: AbortSignal): Promise<ContentReportReceipt> {
+  if (!isReportTarget(target)) throw new Error('Elemento de la denuncia inválido.');
+  const response = await authenticatedEnvelopeRequest<ContentReportReceipt>('/api/v1/reports', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetType: target.targetType, targetId: target.targetId, reason: input.reason,
+      ...(input.description !== undefined ? { description: input.description } : {}) }), signal,
+  });
+  if (!isContentReportReceipt(response.data, target)) throw new Error('No se pudo confirmar el envío de la denuncia.');
+  return response.data;
+}
+
+export type ActivityReportInput = ReportInput;
 export interface ActivityReportReceipt {
   id: string; activityId: string; campusId: string; status: 'PENDIENTE'; reportedAt: string;
 }

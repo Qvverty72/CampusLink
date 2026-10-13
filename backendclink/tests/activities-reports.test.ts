@@ -33,6 +33,7 @@ const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
 const transaction = async <T>(operation: (client: PoolClient) => Promise<T>): Promise<T> =>
   db.transaction(client => operation(client as unknown as PoolClient));
 let reportActivity: typeof import('../src/modules/reports/reports.service.js').reportActivity;
+let reportContent: typeof import('../src/modules/reports/reports.service.js').reportContent;
 let saveActivityReport: typeof import('../src/modules/reports/reports.repository.js').saveActivityReport;
 const deps = (value = document()): ReportsDependencies => ({ now: () => now,
   getActiveMap: async campus => { assert.equal(campus, campusId); return map; },
@@ -42,14 +43,18 @@ const deps = (value = document()): ReportsDependencies => ({ now: () => now,
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://reports-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  await db.exec(`CREATE TABLE public.campus(id uuid PRIMARY KEY);
-    CREATE TABLE public.perfil_usuario(id uuid PRIMARY KEY,campus_id uuid REFERENCES public.campus(id),estado_cuenta text,deleted_at timestamptz);`);
+  await db.exec(`CREATE TABLE public.campus(id uuid PRIMARY KEY,activo boolean NOT NULL DEFAULT true);
+    CREATE TABLE public.perfil_usuario(id uuid PRIMARY KEY,campus_id uuid REFERENCES public.campus(id),estado_cuenta text,
+      deleted_at timestamptz,verificado_en timestamptz DEFAULT now());
+    CREATE TABLE public.rol(id uuid PRIMARY KEY,nombre text);
+    CREATE TABLE public.usuario_rol(id uuid PRIMARY KEY,perfil_usuario_id uuid,rol_id uuid,campus_id uuid,revocado_en timestamptz);`);
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   const definition = /CREATE TABLE public\.reporte_contenido \([\s\S]*?\n\);/.exec(schema)?.[0];
   assert.ok(definition); await db.exec(definition);
-  await db.query('INSERT INTO campus VALUES ($1),($2)', [campusId, otherCampus]);
-  await db.query("INSERT INTO perfil_usuario VALUES ($1,$2,'ACTIVA',NULL)", [userId, campusId]);
+  await db.query('INSERT INTO campus (id) VALUES ($1),($2)', [campusId, otherCampus]);
+  await db.query("INSERT INTO perfil_usuario (id,campus_id,estado_cuenta,deleted_at) VALUES ($1,$2,'ACTIVA',NULL)", [userId, campusId]);
   ({ reportActivity } = await import('../src/modules/reports/reports.service.js'));
+  ({ reportContent } = await import('../src/modules/reports/reports.service.js'));
   ({ saveActivityReport } = await import('../src/modules/reports/reports.repository.js'));
 });
 after(async () => { await db.close(); await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
@@ -74,6 +79,17 @@ test('community and official reports use the common SQL table with server identi
     assert.equal(receipt.reportedAt, new Date(row.reportado_en as string).toISOString());
     assert.deepEqual(Object.keys(receipt).sort(), ['activityId', 'campusId', 'id', 'reportedAt', 'status']);
   }
+});
+
+test('common content API reuses activity visibility, snapshot and persistence without requiring moderation privileges', async () => {
+  const receipt = await reportContent(auth, { targetType: 'ACTIVIDAD', targetId: id.toHexString(), reason: 'Comportamiento indebido' }, deps());
+  assert.equal(receipt.targetType, 'ACTIVIDAD'); assert.equal(receipt.targetId, id.toHexString());
+  assert.equal('activityId' in receipt, false); assert.equal('snapshot' in receipt, false); assert.equal('userId' in receipt, false);
+  const row = (await db.query<Record<string, unknown>>('SELECT * FROM reporte_contenido WHERE id=$1', [receipt.id])).rows[0];
+  assert.equal(row.entidad_tipo, 'ACTIVIDAD'); assert.equal(row.entidad_id, id.toHexString()); assert.equal(row.reportante_id, userId);
+  await assert.rejects(reportContent(auth, { targetType: 'ACTIVIDAD', targetId: id.toHexString(), reason: 'Motivo' }, {
+    ...deps(), findActivity: async () => null,
+  }), { status: 404 });
 });
 
 test('snapshot preserves reported content and occurrence after edits; submission does not mutate Mongo content/participation/history', async () => {
@@ -170,6 +186,15 @@ test('HTTP report is authenticated, scoped, validated and private; no admin/repo
     const receipt = (await response.json()).data;
     assert.equal(receipt.campusId, campusId); assert.equal(receipt.activityId, id.toHexString()); assert.equal(receipt.status, 'PENDIENTE');
     assert.equal('snapshot' in receipt, false); assert.equal('userId' in receipt, false); assert.equal(saves, 1);
+    const commonUrl = url.slice(0, url.indexOf('/activities/'));
+    assert.equal((await originalFetch(commonUrl, { method: 'POST' })).status, 401);
+    const commonResponse = await originalFetch(commonUrl, { method: 'POST', headers,
+      body: JSON.stringify({ targetType: 'ACTIVIDAD', targetId: id.toHexString(), reason: 'Motivo común' }) });
+    assert.equal(commonResponse.status, 201); assert.equal(commonResponse.headers.get('cache-control'), 'no-store');
+    const commonReceipt = (await commonResponse.json()).data;
+    assert.equal(commonReceipt.targetType, 'ACTIVIDAD'); assert.equal(commonReceipt.targetId, id.toHexString());
+    assert.equal(commonReceipt.status, 'PENDIENTE'); assert.equal(saves, 2);
+    assert.equal('snapshot' in commonReceipt, false); assert.equal('userId' in commonReceipt, false);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
