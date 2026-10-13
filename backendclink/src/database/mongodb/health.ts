@@ -1,7 +1,7 @@
 import { env } from '../../config/env.js';
 import { connectMongoDB, getMongoDB } from './client.js';
 
-export type MongoProbeCollection = 'campus_maps' | 'activities' | 'activity_participation';
+export type MongoProbeCollection = 'campus_maps' | 'activities' | 'activity_participation' | 'activity_interactions';
 export async function probeMongoCollections(names: readonly MongoProbeCollection[]): Promise<void> {
   await connectMongoDB();
   const db = getMongoDB();

@@ -21,6 +21,8 @@ export interface CampusMapDocument {
   buildings: unknown[];
   createdAt: Date;
   updatedAt: Date;
+  /** Transactional serialization for limited community publication; independent of map content/version. */
+  communityActivityCreationRevision?: number;
 }
 
 import type { ModuleHealth } from '../../types/api.types.js';

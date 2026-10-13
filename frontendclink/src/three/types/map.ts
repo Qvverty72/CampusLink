@@ -19,6 +19,22 @@ export type BuildingId =
   | 'cti'
   | 'gym';
 
+/** Punto de interés recibido dentro de un piso del mapa activo. */
+export interface PointOfInterestDefinition {
+  poiKey: string;
+  name: string;
+  type: string;
+  icon: string;
+  description?: string | null;
+  /** Nombres de archivo empaquetados en assets/images/poimages; no rutas del dispositivo. */
+  imageKeys?: string[];
+  /** Coordenadas relativas al piso; conserva el vínculo espacial del documento. */
+  position: { x: number; y: number; z: number };
+  isFixed: boolean;
+  isVisible: boolean;
+  deletedAt?: string | null;
+}
+
 /** Metadata descriptiva de un piso; no contiene geometría de Three.js. */
 export interface FloorDefinition {
   /** Unique identifier, e.g. 'ebuilding-floor-1' */
@@ -33,6 +49,8 @@ export interface FloorDefinition {
   name: string;
   /** Description shown in the modal */
   description: string;
+  /** El mapa de API siempre las incluye; opcional para la configuración mock histórica. */
+  pois?: PointOfInterestDefinition[];
 }
 
 /** Configuración lógica de un edificio y de la vista de cámara que lo encuadra. */

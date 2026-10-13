@@ -4,7 +4,11 @@
     "slug": "campuslink",
     "scheme": "campuslink",
     "userInterfaceStyle": "automatic",
-    "plugins": ["expo-router", "expo-asset"],
+    "plugins": [
+      "expo-router",
+      "expo-asset",
+      "@react-native-community/datetimepicker"
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": false

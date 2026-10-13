@@ -13,6 +13,7 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
     "@supabase/supabase-js": "latest",
     "cors": "latest",
     "dotenv": "latest",
