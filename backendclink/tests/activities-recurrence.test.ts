@@ -236,9 +236,8 @@ test('series transaction embeds its template without new collections and rolls b
     const official = committed[6].documents as ActivityDocument[];
     assert.equal(official.length, 4); assert.equal((committed[7].documents as ActivityParticipationDocument[]).length, 4);
     const notices = official.flatMap(value => value.notificationEvents ?? []);
-    assert.equal(notices.length, 1); assert.equal(notices[0].key, `series:${official[0].seriesId}:published`);
-    assert.equal(notices[0].title, `Nuevo evento recurrente: ${official[0].title} · 4 fechas`);
-    assert.equal(official[0].notificationEvents!.length, 1); assert.equal(official[1].notificationEvents!.length, 0);
+    assert.equal(notices.length, 0, 'future official occurrences are announced only when each starts');
+    assert.equal(official[0].notificationEvents!.length, 0); assert.equal(official[1].notificationEvents!.length, 0);
     assert.equal(committed.filter(row => row.name === 'activity_interactions').length, 8);
     fail = true; await assert.rejects(createActivitySeries(auth, input, basicDeps()), /Enrollment failed/); assert.equal(committed.length, 12); assert.equal(staged.length, 0);
     activeMap = { ...map, buildings: [] }; await assert.rejects(createActivitySeries(auth, input, basicDeps()), { status: 400 }); assert.equal(committed.length, 12);

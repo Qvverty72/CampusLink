@@ -1,7 +1,7 @@
 import type { Activity, ActivityDetail } from './activity';
 import { localActivityTimestamp, validateActivityDraft, type ActivityDraft, type ActivityLocationOption, type CreateActivityInput } from './creation';
 
-export interface EditActivityInput extends CreateActivityInput { scope: 'ONE' | 'UPCOMING'; expectedRevision: number; previewHash?: string }
+export interface EditActivityInput extends CreateActivityInput { scope: 'ONE'; expectedRevision: number; previewHash?: string }
 interface Snapshot extends CreateActivityInput { type: Activity['type'] }
 export interface ActivityEditPreview { campusId: string; activityId: string; scope: EditActivityInput['scope']; previewHash: string; timeZone?: string;
   changes: { activityId: string; index?: number; revision: number; before: Snapshot; after: Snapshot; changedFields: string[] }[] }
@@ -16,7 +16,7 @@ export function activityEditDraft(activity: Activity): ActivityDraft {
     poiKey: activity.location.poiKey ?? '', customLabel: activity.location.customLabel ?? '' };
 }
 
-export function validateActivityEditDraft(draft: ActivityDraft, activity: ActivityDetail, locations: ActivityLocationOption[], scope: EditActivityInput['scope']):
+export function validateActivityEditDraft(draft: ActivityDraft, activity: ActivityDetail, locations: ActivityLocationOption[]):
   { input: EditActivityInput; error?: never } | { error: string; input?: never } {
   if (!activity.editing) return { error: 'Solo el creador puede editar esta publicación.' };
   const original = activityEditDraft(activity);
@@ -25,5 +25,5 @@ export function validateActivityEditDraft(draft: ActivityDraft, activity: Activi
   const endAt = draft.endDate === original.endDate && draft.endTime === original.endTime ? activity.endAt : localActivityTimestamp(draft.endDate, draft.endTime);
   const parsed = validateActivityDraft(draft, locations, Date.now(), { allowEnded: true, timestamps: { startAt, endAt } });
   if (!parsed.input) return { error: parsed.error };
-  return { input: { ...parsed.input, scope, expectedRevision: activity.editing.revision } };
+  return { input: { ...parsed.input, scope: 'ONE', expectedRevision: activity.editing.revision } };
 }

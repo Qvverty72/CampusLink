@@ -7,7 +7,7 @@ import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto } from './activities.types.js';
 import type { ActivityDocument, ActivityDto } from './activities.types.js';
 import type { ActivityParticipationDto } from './activities.types.js';
-import { requireCampusCapability, accountCapabilities } from '../auth/auth.authorization.js';
+import { requireCampusCapability } from '../auth/auth.authorization.js';
 import { participationDto } from './activities.participation.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,7 +34,7 @@ export async function getAvailableActivity(auth: VerifiedAuthConnection, activit
 
 export async function getActivityDetail(auth: VerifiedAuthConnection, activityId: string,
   dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
-  const { document, activity, now } = await getAvailableActivity(auth, activityId, dependencies);
+  const { document, activity } = await getAvailableActivity(auth, activityId, dependencies);
   const participationLookup = dependencies.findParticipation ?? (await import('./activities.detail.repository.js')).findOwnParticipation;
   const organizerLookup = async () => {
     if (document.createdByUserId === auth.userId) return { name: auth.profile.nombre_completo };
@@ -57,7 +57,7 @@ export async function getActivityDetail(auth: VerifiedAuthConnection, activityId
     ...(Number.isSafeInteger(document.participantCount) && document.participantCount >= 0
       ? { participantCount: document.participantCount } : {}),
     ...(document.createdByUserId === auth.userId && Number.isSafeInteger(document.editRevision ?? 0) && (document.editRevision ?? 0) >= 0
-      ? { editing: { revision: document.editRevision ?? 0, canEditUpcoming: accountCapabilities(auth).officialActivities && !!activity.series && document.startAt > now } } : {}),
+      ? { editing: { revision: document.editRevision ?? 0, canEditUpcoming: false } } : {}),
     participation: { status, canJoin: status !== 'JOINED', canLeave: status === 'JOINED' && document.createdByUserId !== auth.userId },
     ...(bannerUrl ? { bannerUrl } : {}), ...(category ? { category } : {}), ...(tags.length ? { tags } : {}) };
 }

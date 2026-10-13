@@ -11,7 +11,7 @@ import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 import type { PendingActivityNotification } from '../src/modules/activities/activities.notifications.repository.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityChangeDocument } from '../src/modules/activities/activities.edit.types.js';
-import { publicationNotifications, changeNotification, groupedChangeNotification, startedNotification, participantsAtChange } from '../src/modules/activities/activities.notifications.js';
+import { publicationNotifications, changeNotification, groupedChangeNotification, occurrencePublicationNotification, participantsAtChange } from '../src/modules/activities/activities.notifications.js';
 
 const db = new PGlite();
 const campusId = randomUUID(), otherCampus = randomUUID(), userId = randomUUID(), second = randomUUID(), foreign = randomUUID();
@@ -92,21 +92,22 @@ test('durable event keys distinguish occurrences/revisions; community creation e
   assert.notEqual(changeNotification({ ...history, revision: 2 }, [userId]).key, changed.key);
 });
 
-test('ten official dates produce one series publication and its inbox target retains series identity', async () => {
+test('saving ten future official dates emits no early publication; an actual start targets its concrete occurrence', async () => {
   const seriesId = new ObjectId();
   const events = Array.from({ length: 10 }, (_, index) => publicationNotifications({ _id: new ObjectId(),
     title: 'Prueba', type: 'OFFICIAL_EVENT', seriesId, occurrenceIndex: index + 1, occurrenceCount: 10 } as ActivityDocument, now)).flat();
-  assert.equal(events.length, 1);
-  assert.equal(events[0].title, 'Nuevo evento recurrente: Prueba · 10 fechas');
-  assert.equal(events[0].key, `series:${seriesId}:published`);
-  const publication = { ...task(), event: events[0] };
+  assert.equal(events.length, 0);
+  const event = occurrencePublicationNotification({ _id: new ObjectId(), title: 'Prueba', startAt: now } as ActivityDocument);
+  assert.equal(event.title, 'Prueba');
+  const publication = { ...task(), event };
   await sql.deliverActivityNotification(publication, null, transaction);
   await sql.deliverActivityNotification(publication, null, transaction);
-  const rows = (await db.query('SELECT * FROM notificacion WHERE actividad_evento_clave=$1', [events[0].key])).rows;
+  const rows = (await db.query('SELECT * FROM notificacion WHERE actividad_evento_clave=$1', [event.key])).rows;
   assert.equal(rows.length, 2, 'one per active campus profile, not ten');
   const page = await operation(auth, {}, transaction); assert.ok('items' in page);
-  const item = page.items.find(item => item.title === events[0].title)!;
-  assert.equal(item.seriesId, seriesId.toHexString()); assert.equal(item.activityId, publication.activityId);
+  const item = page.items.find(item => item.title === event.title)!;
+  assert.equal(item.seriesId, undefined); assert.equal(item.activityId, publication.activityId);
+  assert.equal(item.message, 'Se publicó un evento oficial en tu campus.');
   assert.deepEqual(publicationNotifications({ _id: id, type: 'COMMUNITY_ACTIVITY', seriesId, occurrenceIndex: 1 } as ActivityDocument, now), []);
 });
 
@@ -139,11 +140,42 @@ test('one grouped edit delivers one personalized notice per affected user with n
   assert.equal((await db.query('SELECT id FROM notificacion WHERE actividad_evento_clave=$1', [empty.event.key])).rows.length, 0);
 });
 
-test('official start broadcasts once to the campus while community changes stay participant scoped', async () => {
+test('legacy series and start notices hide generated recurrence text without rewriting stored history or user titles', async () => {
+  const series = new ObjectId();
+  const legacy = { ...task(), event: { ...task().event, key: `series:${series}:published`,
+    title: 'Nuevo evento recurrente: Prueba recurrente · 3 fechas',
+    message: 'Se publicó una serie de 3 fechas de «Prueba recurrente» en tu campus. Consulta la ocurrencia vigente o próxima.' } };
+  // Simulate already delivered SQL history, not just pending Mongo events.
+  await db.query(`INSERT INTO notificacion(destinatario_id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,campus_id,actividad_evento_clave,leida_en)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$6)`, [userId, legacy.activityId, legacy.event.type, legacy.event.title,
+    legacy.event.message, now, campusId, legacy.event.key]);
+  const started = { ...task(), event: { ...task().event, key: `activity:${new ObjectId()}:started`,
+    type: 'OFFICIAL_EVENT_STARTED' as const, title: 'Comenzó el evento oficial: Prueba recurrente',
+    message: 'Ya comenzó la ocurrencia 2 de 3 de «Prueba recurrente».' } };
+  await sql.deliverActivityNotification(started, null, transaction);
+  const authorTitle = 'Nuevo evento recurrente: Título del autor · 3 fechas';
+  const authored = { ...task(), event: { ...task().event, key: `series:${new ObjectId()}:published`, title: authorTitle } };
+  await sql.deliverActivityNotification(authored, null, transaction);
+  const page = await operation(auth, {}, transaction); assert.ok('items' in page);
+  const legacyItem = page.items.find(item => item.activityId === legacy.activityId && item.title === 'Prueba recurrente' && item.readAt)!;
+  assert.ok(legacyItem); assert.equal(legacyItem.message, 'Se publicó un evento oficial en tu campus.');
+  assert.equal(legacyItem.seriesId, undefined); assert.equal(legacyItem.createdAt, now.toISOString());
+  const startItem = page.items.find(item => item.type === 'OFFICIAL_EVENT_STARTED')!;
+  assert.equal(startItem.title, 'Prueba recurrente'); assert.equal(startItem.message, 'Ya comenzó el evento oficial en tu campus.');
+  assert.ok(page.items.some(item => item.title === authorTitle), 'do not strip recurrence words authored in the activity title');
+  const stored = (await db.query<{ titulo: string; mensaje: string }>('SELECT titulo,mensaje FROM notificacion WHERE id=$1', [legacyItem.id])).rows[0];
+  assert.equal(stored.titulo, legacy.event.title); assert.equal(stored.mensaje, legacy.event.message);
+  await operation(auth, { id: legacyItem.id, remove: true }, transaction);
+  await sql.deliverActivityNotification(legacy, null, transaction);
+  const after = await operation(auth, {}, transaction); assert.ok('items' in after);
+  assert.equal(after.items.some(item => item.id === legacyItem.id), false);
+});
+
+test('each occurrence start broadcasts an ordinary publication once to the campus', async () => {
   const document = { _id: new ObjectId(), title: 'Prueba', startAt: now, occurrenceIndex: 2, occurrenceCount: 10 } as ActivityDocument;
-  const start = { ...task(), activityId: document._id.toHexString(), event: startedNotification(document) };
+  const start = { ...task(), activityId: document._id.toHexString(), event: occurrencePublicationNotification(document) };
   let detection = 0, participantLookups = 0;
-  const deps = { enqueueStarted: async () => { detection++; }, pending: async () => [start],
+  const deps = { enqueuePublished: async () => { detection++; }, pending: async () => [start],
     participants: async () => { participantLookups++; return [userId]; },
     deliver: (value: PendingActivityNotification, users: string[] | null) => sql.deliverActivityNotification(value, users, transaction),
     acknowledge: async () => {} };
@@ -151,43 +183,102 @@ test('official start broadcasts once to the campus while community changes stay 
   assert.equal(detection, 2); assert.equal(participantLookups, 0);
   const rows = (await db.query<{ destinatario_id: string; mensaje: string }>('SELECT * FROM notificacion WHERE actividad_evento_clave=$1', [start.event.key])).rows;
   assert.deepEqual(rows.map(row => row.destinatario_id).sort(), [userId, second].sort());
-  assert.match(rows[0].mensaje, /ocurrencia 2 de 10/);
+  assert.equal(rows[0].mensaje, 'Se publicó un evento oficial en tu campus.');
+  assert.equal(start.event.type, 'OFFICIAL_EVENT_PUBLISHED'); assert.equal(start.event.title, document.title);
   await dispatch(deps, () => true); assert.equal(detection, 2);
 });
 
-test('server start detection respects actual dates, public location, official-only scope and atomic once-per-occurrence keys', async () => {
+test('Monday and Wednesday starts each notify once, with no early notice at Monday expiry and independent overlapping starts', async () => {
   const start = new Date(now.getTime() - 1000), end = new Date(now.getTime() + 3600000);
   const base: ActivityDocument = { _id: new ObjectId(), campusId, createdByUserId: userId, title: 'Inicio', description: 'Descripción',
-    type: 'OFFICIAL_EVENT', status: 'ACTIVE', visibility: 'PUBLIC', seriesId: new ObjectId(), occurrenceIndex: 2, occurrenceCount: 10,
+    type: 'OFFICIAL_EVENT', status: 'ACTIVE', visibility: 'PUBLIC', seriesId: new ObjectId(), occurrenceIndex: 1, occurrenceCount: 4,
     originalStartAt: start, startAt: start, endAt: end, createdAt: new Date(start.getTime() - 1000), updatedAt: now,
     participantCount: 1, location: { buildingKey: 'a', floorKey: 'a-1' } };
-  const documents = [base, { ...base, _id: new ObjectId(), type: 'COMMUNITY_ACTIVITY' },
-    { ...base, _id: new ObjectId(), startAt: end }, { ...base, _id: new ObjectId(), endAt: now },
-    { ...base, _id: new ObjectId(), visibility: 'HIDDEN' }, { ...base, _id: new ObjectId(), createdAt: start },
-    { ...base, _id: new ObjectId(), location: { ...base.location, poiKey: 'hidden' } }];
-  let emitted = 0; const keys = new Set<string>(); const queries: any[] = [];
+  base.notificationEvents = [{ key: `series:${base.seriesId}:published`, type: 'OFFICIAL_EVENT_PUBLISHED', title: base.title,
+    reasons: [], occurredAt: new Date(start.getTime() - 2000), deliveredAt: new Date(start.getTime() - 1000), status: 'DELIVERED' }];
+  const next: ActivityDocument = { ...base, _id: new ObjectId(), occurrenceIndex: 2,
+    startAt: new Date(end.getTime() + 3600000), endAt: new Date(end.getTime() + 7200000), notificationEvents: [] };
+  const overlap: ActivityDocument = { ...next, _id: new ObjectId(), occurrenceIndex: 3,
+    startAt: new Date(next.startAt.getTime() + 1), endAt: new Date(next.endAt.getTime() + 3600000), notificationEvents: [] };
+  const legacy: ActivityDocument = { ...next, _id: new ObjectId(), occurrenceIndex: 4,
+    startAt: overlap.endAt, endAt: new Date(overlap.endAt.getTime() + 3600000),
+    notificationEvents: [{ key: 'legacy-start', type: 'OFFICIAL_EVENT_STARTED', title: 'Antiguo',
+      reasons: [], occurredAt: overlap.endAt, status: 'DELIVERED' }] };
+  const invalid = (overrides: Partial<ActivityDocument>): ActivityDocument => ({ ...base, _id: new ObjectId(),
+    seriesId: new ObjectId(), notificationEvents: [], ...overrides });
+  const documents = [overlap, legacy, next, base, invalid({ type: 'COMMUNITY_ACTIVITY' }),
+    invalid({ endAt: start }), invalid({ visibility: 'HIDDEN' }), invalid({ status: 'FINISHED' }),
+    invalid({ deletedAt: now }), invalid({ startAt: end, endAt: end }), invalid({ campusId: otherCampus }),
+    invalid({ location: { ...base.location, poiKey: 'hidden' } })];
+  const emitted: string[] = [], queries: any[] = [];
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
     assert.ok(['activities', 'campus_maps'].includes(name));
-    return name === 'campus_maps' ? { findOne: async () => ({ campusId, status: 'ACTIVE', buildings: [
+    return name === 'campus_maps' ? { findOne: async (filter: any) => filter.campusId !== campusId ? null : ({ campusId, status: 'ACTIVE', buildings: [
       { id: 'a', name: 'A', floors: [{ id: 'a-1', name: 'Piso 1', pois: [{ poiKey: 'hidden', name: 'Oculto', isVisible: false }] }] },
     ] }) } : {
       find: (filter: unknown) => { queries.push(filter); return { toArray: async () => documents }; },
       updateOne: async (filter: any, update: any) => {
-        assert.equal(filter._id, base._id); assert.equal(filter.type, 'OFFICIAL_EVENT');
-        assert.equal(filter.startAt, start); assert.equal(filter.endAt, end);
-        const key = update.$push.notificationEvents.key; assert.equal(filter['notificationEvents.key'].$ne, key);
+        const document = documents.find(row => row._id.equals(filter._id))!;
+        assert.ok([base, next, overlap].includes(document)); assert.equal(filter.type, 'OFFICIAL_EVENT');
+        assert.equal(filter.startAt, document.startAt); assert.equal(filter.endAt, document.endAt);
+        assert.equal(filter.notificationEvents.$not.$elemMatch.$or[0].key, `activity:${document._id}:started`);
+        const event = update.$push.notificationEvents;
+        assert.equal(event.key, `activity:${document._id}:started`); assert.equal(event.title, document.title);
+        assert.equal(event.type, 'OFFICIAL_EVENT_PUBLISHED');
         assert.deepEqual(Object.keys(update), ['$push']);
-        if (!keys.has(key)) { keys.add(key); emitted++; }
+        if (!document.notificationEvents!.some(row => row.key === event.key)) {
+          document.notificationEvents!.push(event); emitted.push(document._id.toHexString());
+        }
       },
     };
   });
   try {
-    const { enqueueStartedOfficialOccurrences } = await import('../src/modules/activities/activities.notifications.repository.js');
-    await enqueueStartedOfficialOccurrences(now); await enqueueStartedOfficialOccurrences(now);
-    assert.equal(emitted, 1);
+    const { enqueuePublishedOfficialOccurrences: enqueue } = await import('../src/modules/activities/activities.notifications.repository.js');
+    await enqueue(new Date(start.getTime() - 1)); assert.deepEqual(emitted, [], 'first future occurrence is not announced early');
+    await enqueue(start); await enqueue(now); await enqueue(new Date(end.getTime() - 1));
+    assert.deepEqual(emitted, [base._id.toHexString()], 'Monday start announces the first occurrence even after an old premature publication');
+    await enqueue(end); await enqueue(end);
+    assert.deepEqual(emitted, [base._id.toHexString()], 'Monday expiry does not announce Wednesday');
+    await enqueue(new Date(next.startAt.getTime() - 1)); assert.equal(emitted.length, 1);
+    await enqueue(next.startAt); await enqueue(next.startAt);
+    assert.deepEqual(emitted, [base._id.toHexString(), next._id.toHexString()], 'Wednesday sends a fresh notice only at its start');
+    assert.equal(next.notificationEvents![0].occurredAt.getTime(), next.startAt.getTime());
+    await enqueue(overlap.startAt); assert.equal(emitted.length, 3, 'every overlapping occurrence notifies at its own start');
+    await enqueue(next.endAt); await enqueue(next.endAt);
+    assert.deepEqual(emitted, [base._id.toHexString(), next._id.toHexString(), overlap._id.toHexString()]);
+    await enqueue(overlap.endAt); await enqueue(legacy.endAt);
+    assert.equal(emitted.length, 3, 'legacy start counts as already announced and completely ended instances are never replayed');
     assert.equal(queries[0].type, 'OFFICIAL_EVENT'); assert.equal(queries[0].seriesId.$type, 'objectId');
-    assert.deepEqual(queries[0].startAt, { $lte: now }); assert.deepEqual(queries[0].endAt, { $gt: now });
-    assert.deepEqual(queries[0].$expr, { $gt: ['$startAt', '$createdAt'] });
+    assert.deepEqual(queries[0].startAt, { $lte: new Date(start.getTime() - 1) });
+    assert.deepEqual(queries[0].endAt, { $gt: new Date(start.getTime() - 1) });
+  } finally { dbMock.mock.restore(); }
+});
+
+test('legacy pending recurring publications wait until actual start while changes and individual publications remain deliverable', async () => {
+  const start = new Date(now.getTime() + 3600000), seriesId = new ObjectId();
+  const publication = { ...task().event, key: `series:${seriesId}:published` };
+  const change = task('ACTIVITY_CHANGED').event;
+  const future = { _id: id, campusId, seriesId, startAt: start, createdByUserId: userId, createdAt: now,
+    notificationEvents: [publication, change] } as ActivityDocument;
+  const single = { ...future, _id: new ObjectId(), seriesId: undefined, notificationEvents: [task().event] };
+  const queries: any[] = [];
+  const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
+    assert.equal(name, 'activities');
+    return { find: (query: any, options: any) => {
+      queries.push(query); assert.equal(options.projection.startAt, 1); assert.equal(options.projection.seriesId, 1);
+      return { sort: () => ({ limit: () => ({ toArray: async () => [future, single] }) }) };
+    } };
+  });
+  try {
+    const { findPendingActivityNotifications: pending } = await import('../src/modules/activities/activities.notifications.repository.js');
+    const before = await pending(now);
+    assert.deepEqual(before.map(row => row.event.key), [change.key, single.notificationEvents[0].key]);
+    const atStart = await pending(start);
+    const deferred = atStart.find(row => row.event.key === publication.key)!;
+    assert.equal(deferred.activityId, future._id.toHexString()); assert.equal(deferred.event.occurredAt.getTime(), start.getTime());
+    assert.equal(publication.occurredAt, now, 'persisted legacy event is not rewritten by the read');
+    assert.equal(queries[0].$or.length, 3, 'exclude deferred-only documents before the 25-document limit');
+    assert.deepEqual(queries[0].$or[1].startAt, { $lte: now });
   } finally { dbMock.mock.restore(); }
 });
 

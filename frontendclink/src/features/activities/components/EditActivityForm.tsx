@@ -6,7 +6,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { previewActivityEdit, saveActivityEdit } from '../api/activitiesApi';
 import type { ActivityDetail } from '../types/activity';
 import { isActivityDescriptionAllowed, type ActivityDraft, type ActivityLocationOption } from '../types/creation';
-import { activityEditDraft, validateActivityEditDraft, type EditActivityInput } from '../types/editing';
+import { activityEditDraft, validateActivityEditDraft } from '../types/editing';
 import { ActivityFields } from './ActivityFields';
 
 export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
@@ -15,9 +15,6 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
   const { identity, refreshIdentity } = useAuth(); const [draft, setDraft] = useState(() => activityEditDraft(activity));
   const allowCustomDescription = identity?.capabilities.officialActivities === true;
   const canViewOccurrences = identity?.capabilities.officialActivities === true;
-  const [scope, setScope] = useState<EditActivityInput['scope']>('ONE');
-  const effectiveScope = canViewOccurrences ? scope : 'ONE';
-  useEffect(() => { if (!canViewOccurrences) setScope('ONE'); }, [canViewOccurrences]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false); const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
@@ -30,7 +27,7 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
     if (!isActivityDescriptionAllowed(draft.description, allowCustomDescription, activity.description)) {
       setError('Selecciona una descripción para la actividad.'); return;
     }
-    const parsed = validateActivityEditDraft(draft, activity, locations, effectiveScope);
+    const parsed = validateActivityEditDraft(draft, activity, locations);
     if (!parsed.input) { setError(parsed.error); return; }
     const abort = new AbortController(); request.current = abort; setBusy(true); setError(null);
     let saving = false;
@@ -57,17 +54,6 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
     </TouchableOpacity>
     <Text accessibilityRole="header" style={styles.heading}>Editar {canViewOccurrences && activity.series ? 'ocurrencia' : 'actividad'}</Text>
     <Text style={styles.text}>Conserva sus inscripciones y su tipo {activity.type === 'OFFICIAL_EVENT' ? 'oficial' : 'comunitario'}. Los cambios quedan en su historial.</Text>
-    {canViewOccurrences && activity.series ? <View style={styles.form}>
-      <Text style={styles.label}>Aplicar cambios a</Text>
-      <View style={styles.choices}>
-        {(['ONE', ...(activity.editing?.canEditUpcoming ? ['UPCOMING'] : [])] as EditActivityInput['scope'][]).map(value =>
-          <Pressable key={value} disabled={busy} accessibilityRole="radio" accessibilityState={{ selected: scope === value, disabled: busy }}
-            onPress={() => { setScope(value); setError(null); }} style={[styles.choice, scope === value && styles.selected]}>
-            <Text style={scope === value ? styles.saveText : styles.text}>{value === 'ONE' ? 'Solo esta ocurrencia' : 'Esta y las próximas sin comenzar'}</Text>
-          </Pressable>)}
-      </View>
-      {scope === 'UPCOMING' ? <Text style={styles.text}>Aplica el contenido y lugar a las próximas desde esta ocurrencia. Las nuevas fechas desplazan las ya programadas en la zona de la serie. Las pasadas y en curso se conservan.</Text> : null}
-    </View> : null}
     <ActivityFields draft={draft} change={change} disabled={busy} locations={locations} organizer={activity.organizer?.name} locationDropdowns
       existingContent={{ description: activity.description, customLabel: activity.location.customLabel ?? '' }}
       allowCustomDescription={allowCustomDescription} />
@@ -79,8 +65,6 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
   </View>;
 }
 const styles = StyleSheet.create({ form: { gap: 12, paddingVertical: 12 }, heading: { fontWeight: '700', fontSize: 18, color: '#0F172A' },
-  label: { fontWeight: '600', color: '#0F172A' }, text: { color: '#475569', lineHeight: 21 }, link: { color: APP_COLORS.PRIMARY, fontWeight: '700' },
-  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, choice: { borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 10 },
-  selected: { backgroundColor: APP_COLORS.PRIMARY, borderColor: APP_COLORS.PRIMARY }, disabled: { opacity: 0.5 },
+  text: { color: '#475569', lineHeight: 21 }, link: { color: APP_COLORS.PRIMARY, fontWeight: '700' }, disabled: { opacity: 0.5 },
   back: { minHeight: 44, paddingVertical: 12 },
   save: { backgroundColor: APP_COLORS.PRIMARY, padding: 14, alignItems: 'center', borderRadius: 8 }, saveText: { color: '#FFFFFF', fontWeight: '700' }, error: { color: '#B91C1C' } });

@@ -7,8 +7,6 @@ import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar
 import { ActivityDetail } from '@/features/activities/components/ActivityDetail';
 import { ActivityRefreshScrollView } from '@/features/activities/components/ActivityRefreshScrollView';
 import { fetchNotifications, updateNotification, type ActivityNotification } from './notifications';
-import { fetchActivitySeries } from '@/features/activities/api/activitiesApi';
-import { selectActivityOccurrences } from '@/features/activities/types/activity';
 
 export function NotificationsScreen() {
   const { identity, session } = useAuth();
@@ -16,7 +14,7 @@ export function NotificationsScreen() {
 }
 
 function NotificationsContent() {
-  const { identity, refreshIdentity } = useAuth();
+  const { refreshIdentity } = useAuth();
   const [items, setItems] = useState<ActivityNotification[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,15 +50,7 @@ function NotificationsContent() {
       if (!abort.signal.aborted) {
         setItems(current => remove ? current.filter(row => row.id !== item.id)
           : current.map(row => row.id === item.id ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row));
-        if (!remove) {
-          if (item.seriesId && identity?.campusId) {
-            const series = await fetchActivitySeries(identity.campusId, item.seriesId, abort.signal);
-            if (abort.signal.aborted) return;
-            const next = selectActivityOccurrences(series.occurrences)[0];
-            if (!next) { setError('Esta serie ya no tiene fechas vigentes disponibles.'); return; }
-            setActivityId(next.id);
-          } else setActivityId(item.activityId);
-        }
+        if (!remove) setActivityId(item.activityId);
       }
     } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
     finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
@@ -86,7 +76,7 @@ function NotificationsContent() {
       {cursor ? <Pressable disabled={busy} accessibilityRole="button" onPress={() => { void load(cursor); }}><Text style={[styles.link, styles.headerLink]}>Cargar más</Text></Pressable> : null}
     </ScrollView>
     <Modal visible={!!activityId} transparent animationType="slide" onRequestClose={() => setActivityId(null)}>
-      <View style={styles.overlay}><ActivityRefreshScrollView style={styles.modal} contentContainerStyle={{ padding: 20 }}>
+      <View style={styles.overlay}><ActivityRefreshScrollView style={styles.modal} contentContainerStyle={{ padding: 20 }} onClose={() => setActivityId(null)}>
         {activityId ? <ActivityDetail key={activityId} activityId={activityId} onBack={() => setActivityId(null)}
           onSelectOccurrence={setActivityId} /> : null}
       </ActivityRefreshScrollView></View>

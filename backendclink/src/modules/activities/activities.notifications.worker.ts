@@ -1,22 +1,22 @@
-import { enqueueStartedOfficialOccurrences, findPendingActivityNotifications, findNotificationParticipants, markNotificationDelivered,
+import { enqueuePublishedOfficialOccurrences, findPendingActivityNotifications, findNotificationParticipants, markNotificationDelivered,
   type PendingActivityNotification } from './activities.notifications.repository.js';
 import { deliverActivityNotification } from '../users/notifications.repository.js';
 import { finishEndedActivities } from './activities.lifecycle.js';
 
 export interface NotificationDeliveryDependencies {
-  enqueueStarted?: () => Promise<void>;
+  enqueuePublished?: () => Promise<void>;
   pending: () => Promise<PendingActivityNotification[]>;
   participants: (task: PendingActivityNotification) => Promise<string[]>;
   deliver: (task: PendingActivityNotification, participants: string[] | null) => Promise<void>;
   acknowledge: (task: PendingActivityNotification) => Promise<void>;
 }
 const defaults: NotificationDeliveryDependencies = { pending: findPendingActivityNotifications,
-  enqueueStarted: enqueueStartedOfficialOccurrences,
+  enqueuePublished: enqueuePublishedOfficialOccurrences,
   participants: findNotificationParticipants, deliver: deliverActivityNotification, acknowledge: markNotificationDelivered };
 
 export async function dispatchActivityNotifications(dependencies = defaults, stopped = () => false): Promise<{ delivered: number; failed: number }> {
   if (stopped()) return { delivered: 0, failed: 0 };
-  await dependencies.enqueueStarted?.();
+  await dependencies.enqueuePublished?.();
   const tasks = await dependencies.pending();
   let delivered = 0, failed = 0;
   for (const task of tasks) {

@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import { getMongoDb } from '../../config/mongodb.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityNotificationEvent } from './activities.notifications.js';
-import { startedNotification } from './activities.notifications.js';
+import { occurrencePublicationNotification } from './activities.notifications.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
 import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
@@ -15,39 +15,55 @@ export interface PendingActivityNotification {
   createdAt: Date;
 }
 
-/** Server-side start detection, including existing series; never replay fully ended dates. */
-export async function enqueueStartedOfficialOccurrences(now = new Date()): Promise<void> {
+/** Each actual start announces its concrete occurrence, independently of the list representative. */
+export async function enqueuePublishedOfficialOccurrences(now = new Date()): Promise<void> {
   const db = getMongoDb();
   const activities = db.collection<ActivityDocument>('activities');
   const documents = await activities.find({ type: 'OFFICIAL_EVENT', status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,
     seriesId: { $type: 'objectId' }, startAt: { $lte: now }, endAt: { $gt: now },
-    $expr: { $gt: ['$startAt', '$createdAt'] },
-    notificationEvents: { $not: { $elemMatch: { type: 'OFFICIAL_EVENT_STARTED' } } },
   }).toArray();
   const maps = new Map<string, CampusMapDocument | null>();
   for (const document of documents) {
-    if (document.type !== 'OFFICIAL_EVENT' || !document.seriesId || !(document.createdAt instanceof Date)
-      || !(document.startAt instanceof Date) || document.startAt > now || document.startAt <= document.createdAt) continue;
+    if (document.type !== 'OFFICIAL_EVENT' || !document.seriesId
+      || !(document.startAt instanceof Date) || document.startAt > now) continue;
     if (!maps.has(document.campusId)) maps.set(document.campusId,
       await db.collection<CampusMapDocument>('campus_maps').findOne({ campusId: document.campusId, status: 'ACTIVE' }));
     const map = maps.get(document.campusId);
     if (!map || map.campusId !== document.campusId || map.status !== 'ACTIVE'
       || !toVisibleActivity(document, document.campusId, now, spatialBuildings(map))) continue;
-    const event = startedNotification(document);
+    const event = occurrencePublicationNotification(document);
+    // Old premature DELIVERED publications do not replace the requested start notice.
+    // Old PENDING publications are deferred below and serve as this instance's start notice.
+    const announced = { $or: [
+      { key: event.key }, { type: 'OFFICIAL_EVENT_STARTED' },
+      { type: 'OFFICIAL_EVENT_PUBLISHED', status: 'PENDING' },
+      { type: 'OFFICIAL_EVENT_PUBLISHED', occurredAt: { $gte: document.startAt } },
+      { type: 'OFFICIAL_EVENT_PUBLISHED', deliveredAt: { $gte: document.startAt } },
+    ] };
+    if (document.notificationEvents?.some(previous => previous.key === event.key || previous.type === 'OFFICIAL_EVENT_STARTED'
+      || (previous.type === 'OFFICIAL_EVENT_PUBLISHED' && (previous.status === 'PENDING'
+        || previous.occurredAt >= document.startAt || (previous.deliveredAt && previous.deliveredAt >= document.startAt))))) continue;
     // Exact dates protect against a concurrent edit; a conditional push protects concurrent workers/restarts.
     await activities.updateOne({ _id: document._id, campusId: document.campusId, type: 'OFFICIAL_EVENT',
       status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null, seriesId: document.seriesId,
-      startAt: document.startAt, endAt: document.endAt, 'notificationEvents.key': { $ne: event.key } },
+      startAt: document.startAt, endAt: document.endAt,
+      notificationEvents: { $not: { $elemMatch: announced } } },
     { $push: { notificationEvents: event } });
   }
 }
 
-export async function findPendingActivityNotifications(): Promise<PendingActivityNotification[]> {
+export async function findPendingActivityNotifications(now = new Date()): Promise<PendingActivityNotification[]> {
   const documents = await getMongoDb().collection<ActivityDocument>('activities')
-    .find({ 'notificationEvents.status': 'PENDING' }, { projection: { _id: 1, campusId: 1,
-      notificationEvents: 1, createdByUserId: 1, createdAt: 1 } }).sort({ createdAt: 1, _id: 1 }).limit(25).toArray();
-  return documents.flatMap(document => (document.notificationEvents ?? []).filter(event => event.status === 'PENDING')
-    .map(event => ({ activityId: document._id.toHexString(), campusId: document.campusId, event,
+    .find({ 'notificationEvents.status': 'PENDING', $or: [
+      { seriesId: { $not: { $type: 'objectId' } } }, { startAt: { $lte: now } },
+      { notificationEvents: { $elemMatch: { status: 'PENDING', type: { $ne: 'OFFICIAL_EVENT_PUBLISHED' } } } },
+    ] }, { projection: { _id: 1, campusId: 1,
+      notificationEvents: 1, createdByUserId: 1, createdAt: 1, seriesId: 1, startAt: 1 } }).sort({ createdAt: 1, _id: 1 }).limit(25).toArray();
+  return documents.flatMap(document => (document.notificationEvents ?? []).filter(event => event.status === 'PENDING'
+    && !(document.seriesId && event.type === 'OFFICIAL_EVENT_PUBLISHED' && document.startAt > now))
+    .map(event => ({ activityId: document._id.toHexString(), campusId: document.campusId,
+      event: document.seriesId && event.type === 'OFFICIAL_EVENT_PUBLISHED' && event.occurredAt < document.startAt
+        ? { ...event, occurredAt: document.startAt } : event,
       creatorId: document.createdByUserId, createdAt: document.createdAt }))).slice(0, 100);
 }
 

@@ -3,16 +3,38 @@ import { createContext, forwardRef, useCallback, useContext, useEffect, useLayou
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, View, type ScrollViewProps } from 'react-native';
 
 type ViewRefresh = { onRefresh: () => void; refreshing: boolean; enabled: boolean; label: string };
-const RefreshContext = createContext<((state: ViewRefresh | null) => void) | null>(null);
+const RefreshContext = createContext<{
+  register: (state: ViewRefresh | null) => void;
+  resetScroll: () => void;
+  closeModal?: () => void;
+  setHeaderVisible?: (visible: boolean) => void;
+} | null>(null);
 const PULL_THRESHOLD = 64;
 
 /** Register one visible data view; unmounted views and forms never compete for refresh. */
 export function useActivityRefresh(onRefresh: () => void, refreshing: boolean, enabled: boolean, label = 'la ficha') {
-  const register = useContext(RefreshContext);
+  const register = useContext(RefreshContext)?.register;
   useLayoutEffect(() => {
     register?.({ onRefresh, refreshing, enabled, label });
     return () => register?.(null);
   }, [register, onRefresh, refreshing, enabled, label]);
+}
+
+/** Reset the existing modal scroll only when its visible screen changes. */
+export function useActivityScrollReset(viewKey: string) {
+  const resetScroll = useContext(RefreshContext)?.resetScroll;
+  useLayoutEffect(() => { resetScroll?.(); }, [resetScroll, viewKey]);
+}
+
+/** A compact screen owns its close button; restore the outer header on departure. */
+export function useActivityCompactHeader() {
+  const controls = useContext(RefreshContext);
+  const setHeaderVisible = controls?.setHeaderVisible;
+  useLayoutEffect(() => {
+    setHeaderVisible?.(false);
+    return () => setHeaderVisible?.(true);
+  }, [setHeaderVisible]);
+  return controls?.closeModal;
 }
 
 /** Mount alongside a list or overview, including its loading and error states. */
@@ -22,11 +44,16 @@ export function ActivityRefreshRegistration({ onRefresh, refreshing, enabled, la
 }
 
 /** Own the existing modal scroll, with native refresh and a touch equivalent for RN Web. */
-export const ActivityRefreshScrollView = forwardRef<ScrollView, ScrollViewProps>(function ActivityRefreshScrollView(
-  { children, ...props }, forwardedRef,
+type ActivityScrollProps = ScrollViewProps & {
+  onClose?: () => void;
+  onHeaderVisibilityChange?: (visible: boolean) => void;
+};
+export const ActivityRefreshScrollView = forwardRef<ScrollView, ActivityScrollProps>(function ActivityRefreshScrollView(
+  { children, onClose, onHeaderVisibilityChange, ...props }, forwardedRef,
 ) {
   const scroll = useRef<ScrollView | null>(null);
   const [state, register] = useState<ViewRefresh | null>(null);
+  const resetScroll = useCallback(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, []);
   const latest = useRef(state);
   latest.current = state;
   const locked = useRef(false);
@@ -99,7 +126,7 @@ export const ActivityRefreshScrollView = forwardRef<ScrollView, ScrollViewProps>
   const refreshing = requested && Boolean(state?.refreshing);
   const active = Boolean(state?.enabled);
   const label = state?.label ?? 'el contenido';
-  return <RefreshContext.Provider value={register}>
+  return <RefreshContext.Provider value={{ register, resetScroll, closeModal: onClose, setHeaderVisible: onHeaderVisibilityChange }}>
     <ScrollView {...props} ref={assignRef} alwaysBounceVertical={props.alwaysBounceVertical ?? true}
       accessibilityHint={active ? `Desliza hacia abajo desde el inicio para actualizar ${label}.` : props.accessibilityHint}
       accessibilityActions={active ? [{ name: 'activate', label: `Actualizar ${label}` }] : props.accessibilityActions}

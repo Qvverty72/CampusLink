@@ -18,6 +18,8 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
   const [activityType, setActivityType] = useState<Activity['type'] | null>(null);
   const open = activityType !== null;
   const [detailOpen, setDetailOpen] = useState(false);
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const close = useCallback(() => setActivityType(null), []);
   const scroll = useRef<ScrollView>(null);
   const resetScroll = useCallback(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, []);
   useLayoutEffect(resetScroll, [detailOpen, resetScroll]);
@@ -42,7 +44,7 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
     </View>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setActivityType(null)}>
       <View style={styles.overlay}><View style={styles.card}>
-        <View style={styles.header}>
+        {headerVisible ? <View style={styles.header}>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar actividades" hitSlop={12}
             onPress={() => setActivityType(null)} style={styles.closeIconButton}>
             <View pointerEvents="none" accessible={false} aria-hidden accessibilityElementsHidden
@@ -50,8 +52,9 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
               <X size={16} color="#475569" strokeWidth={1.7} />
             </View>
           </Pressable>
-        </View>
-        <ActivityRefreshScrollView ref={scroll} style={styles.scroll} keyboardShouldPersistTaps="handled">
+        </View> : null}
+        <ActivityRefreshScrollView ref={scroll} style={[styles.scroll, !headerVisible && styles.compactScroll]}
+          onClose={close} onHeaderVisibilityChange={setHeaderVisible} keyboardShouldPersistTaps="handled">
           {activityType ? <LocationActivities key={`${buildingKey ?? 'campus'}:${activityType}`} state={state}
             activityType={activityType} query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} locations={activityLocations(map)}
             onDetailVisibilityChange={setDetailOpen} onEditOpen={resetScroll} onPageChange={resetScroll} /> : null}
@@ -69,4 +72,5 @@ const styles = StyleSheet.create({
   closeIconButton: { position: 'absolute', right: 0, top: 0, width: 32, height: 32, borderRadius: 16,
     backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   scroll: { flex: 1, marginVertical: 12 },
+  compactScroll: { marginVertical: 0 },
 });

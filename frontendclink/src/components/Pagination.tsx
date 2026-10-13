@@ -38,14 +38,15 @@ export function getPaginationItems(page: number, totalPages: number, numberBudge
   return items;
 }
 
-export function Pagination({ page, totalPages, onPageChange, label = 'Paginación' }: {
+export function Pagination({ page, totalPages, onPageChange, label = 'Paginación', showSinglePage = false }: {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
   label?: string;
+  showSinglePage?: boolean;
 }) {
   const [width, setWidth] = useState(280);
-  if (totalPages <= 1) return null;
+  if (totalPages <= 0 || (totalPages <= 1 && !showSinglePage)) return null;
   const current = Math.max(1, Math.min(page, totalPages));
   // Reserve two arrows, two gaps, pill padding and up to two ellipses.
   const numberBudget = Math.max(1, Math.min(6,

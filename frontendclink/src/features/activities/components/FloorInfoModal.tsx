@@ -42,6 +42,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
   const [activityType, setActivityType] = useState<Activity['type'] | null>(null);
   const [selectedPoiKey, setSelectedPoiKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [headerVisible, setHeaderVisible] = useState(true);
   const scroll = useRef<ScrollView>(null);
   const resetScroll = useCallback(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, []);
   const query = { buildingKey: floor.buildingId, floorKey: floor.id };
@@ -57,7 +58,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
   useLayoutEffect(resetScroll, [viewKey, detailOpen, resetScroll]);
 
   return <View style={styles.card}>
-    <View style={detailOpen ? styles.detailHeader : styles.header}>
+    {headerVisible ? <View style={detailOpen ? styles.detailHeader : styles.header}>
       {!detailOpen ? <View style={styles.headerText}>
         <Text accessibilityRole="header" style={styles.title}>{selectedPoi ? 'Información del punto de interés' : activityType ? 'Detalle de actividades' : 'Información del piso'}</Text>
         <Text style={styles.subtitle}>{floor.name}</Text>
@@ -69,8 +70,9 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
           <X size={16} color="#475569" strokeWidth={1.7} />
         </View>
       </Pressable>
-    </View>
-    <ActivityRefreshScrollView ref={scroll} style={styles.scroll}
+    </View> : null}
+    <ActivityRefreshScrollView ref={scroll} style={[styles.scroll, !headerVisible && styles.compactScroll]}
+      onClose={onClose} onHeaderVisibilityChange={setHeaderVisible}
       contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <ActivityContentTransition transitionKey={viewKey} style={styles.transitionContent}>
       {selectedPoi ? <PointOfInterestDetail key={selectedPoi.poiKey} poi={selectedPoi}
@@ -128,6 +130,7 @@ const styles = StyleSheet.create({
   subtitle: { textAlign: 'center', fontSize: 14, color: '#64748B', lineHeight: 20 },
   closeButton: { position: 'absolute', right: 0, top: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   scroll: { flex: 1, marginVertical: 18 },
+  compactScroll: { marginVertical: 0 },
   content: { gap: 20, paddingBottom: 4 },
   transitionContent: { gap: 20 },
   overview: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' },

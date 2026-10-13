@@ -330,8 +330,8 @@ común ve la actividad representante y conserva ficha/inscripción, sin textos d
 ocurrencias en tarjeta, ficha o acciones de edición/eliminación. Revocar capacidad
 cierra la vista de serie y aborta consultas; la clave de SeriesView incluye la
 capacidad para no reutilizar datos privilegiados. GET de serie requiere la misma
-capacidad en backend. El editor oculta ONE/UPCOMING y usa ONE sin permiso; preview
-y guardado UPCOMING también están protegidos, con propiedad/campus conservados.
+capacidad en backend. El editor siempre usa ONE sin selector de alcance; preview
+y guardado rechazan grupos para todos los perfiles, con propiedad/campus conservados.
 No genera puntos en la escena ni agrupa datos persistidos o participaciones. La
 metadata interna series y la API de listado/detalle se mantienen para agrupación
 y relevo automático de representante.
@@ -356,21 +356,22 @@ modificadas y permite guardar con una sola acción. Al pulsar Guardar valida el
 borrador y obtiene automáticamente el hash del servidor antes del PATCH, sin
 botón de revisión ni confirmación intermedia. Durante ambas solicitudes bloquea
 los controles y evita doble envío; cancelar/desmontar aborta el flujo. Una ocurrencia puede
-editarse aunque esté en curso; una futura permite editar esta y las próximas sin
-comenzar. Las fechas se trasladan en la zona guardada de la serie, conservando las
-pasadas, IDs e inscripciones. La regla de creación permanece como referencia
+editarse aunque esté en curso y solo cambia el ID abierto. No hay selector ni
+edición de próximas en grupo; otras fechas, IDs e inscripciones se conservan.
+La regla de creación permanece como referencia
 histórica; el listado muestra las fechas reales editadas de cada ocurrencia.
 
 Guardar refresca ficha y consulta compartida del campus, incluidos los resúmenes
 por edificio. No modifica la selección, las geometrías ni los stores 3D.
 F2.6-08 usa el historial y eventos embebidos para notificaciones in-app; la bandeja
 se abre desde Mi perfil y reutiliza ActivityDetail en modal. Una publicación de serie
-oficial aparece como «Nuevo evento recurrente: título · N fechas» y recibe seriesId
-opcional; al tocarla consulta la serie y abre la ocurrencia vigente o próxima por
-inicio real. Cambios conjuntos producen un aviso por usuario con su cantidad/motivos
-y destino afectado. OFFICIAL_EVENT_STARTED muestra «Evento oficial en curso» y abre
-su instancia concreta; backend lo genera al inicio de cada fecha recurrente oficial
-para el campus. Comunitarias solo notifican cambios a participantes. Avisos anteriores
+oficial aparece con título y mensaje normales de publicación individual, sin textos
+de recurrencia ni número/total. Backend anuncia cada ocurrencia al inicio real,
+incluida la primera; guardar fechas futuras o vencer la anterior no anticipa el aviso. Todos abren su activityId
+concreto, sin consultar el navegador de serie protegido por capacidad oficial.
+Cambios conjuntos producen un aviso por usuario con su cantidad/motivos y destino
+afectado. OFFICIAL_EVENT_STARTED solo se conserva como tipo histórico. Comunitarias
+solo notifican cambios a participantes. Avisos anteriores
 siguen conservados; carga/lectura/eliminación mantienen sus contratos y no hay push
 externo ni actualización streaming. No crea puntos 3D.
 Ese historial está embebido en `activities.changeHistory`; la definición original

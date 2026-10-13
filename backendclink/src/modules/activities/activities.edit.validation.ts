@@ -8,7 +8,7 @@ export function editActivityParser(save = false): RequestParser {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return { success: false, issues: [{ field: 'body', message: 'Define los cambios de la actividad.' }] };
     const { scope, expectedRevision, previewHash, ...fields } = input as Record<string, unknown>;
     const base = parseCreateActivity(fields); const issues: ApiErrorDetail[] = base.success ? [] : [...base.issues];
-    if (!['ONE', 'UPCOMING'].includes(scope as string)) issues.push({ field: 'scope', message: 'Elige esta ocurrencia o esta y las próximas.' });
+    if (scope !== 'ONE') issues.push({ field: 'scope', message: 'Solo se permite editar una actividad u ocurrencia individual.' });
     if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 0) issues.push({ field: 'expectedRevision', message: 'Vuelve a cargar la ficha antes de editar.' });
     if (save ? typeof previewHash !== 'string' || !/^[0-9a-f]{64}$/.test(previewHash) : previewHash !== undefined) {
       issues.push({ field: 'previewHash', message: 'Revisa una vista previa actual antes de guardar.' });

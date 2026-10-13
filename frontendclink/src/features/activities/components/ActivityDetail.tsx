@@ -1,7 +1,7 @@
 import { APP_COLORS } from '@/types/colors';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MapPinSearch, SquarePen, Trash, type LucideIcon } from 'lucide-react-native';
+import { MapPinSearch, Repeat2, SquarePen, Trash, type LucideIcon } from 'lucide-react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity, type ActivityDetail as ActivityDetailData } from '../types/activity';
 import { ActivitySeriesView } from './ActivitySeriesView';
@@ -14,7 +14,7 @@ import { ActivityDetailSkeleton } from './ActivityDetailSkeleton';
 import { ActivityDescription } from './ActivityDescription';
 import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
-import { useActivityRefresh } from './ActivityRefreshScrollView';
+import { useActivityRefresh, useActivityScrollReset } from './ActivityRefreshScrollView';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { recordViewedActivity } from '../api/activitiesApi';
 import { activityOperationId } from '../types/interaction';
@@ -70,6 +70,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   const [editing, setEditing] = useState<ActivityDetailData | null>(null);
   const [reporting, setReporting] = useState<{ id: string; title: string } | null>(null);
   const editingOpen = Boolean(editing && locations);
+  useActivityScrollReset(`${activityId}:${canViewOccurrences && showSeries ? 'series' : 'detail'}`);
   useLayoutEffect(() => {
     if (editingOpen) onEditOpen?.();
   }, [editingOpen, onEditOpen]);
@@ -124,9 +125,8 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
           </View>
           {canViewOccurrences && detail.series ? <View style={styles.series}>
             <Text style={styles.text}>Ocurrencia {detail.series.index} de {detail.series.total} · Serie recurrente</Text>
-            {onSelectOccurrence ? <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => setShowSeries(true)} style={styles.action}>
-              <Text style={styles.link}>Ver serie y otras ocurrencias</Text>
-            </TouchableOpacity> : null}
+            {onSelectOccurrence ? <DetailActionButton icon={Repeat2} disabled={busy}
+              label="Ver serie y otras ocurrencias" onPress={() => setShowSeries(true)} /> : null}
           </View> : null}
           <ActivityParticipants key={detail.id} activityId={detail.id}
             canLeave={detail.participation.status === 'JOINED' && detail.participation.canLeave}
@@ -138,7 +138,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
           <View style={styles.management}>
             {detail.editing ? <>
               {locations?.length ? <DetailActionButton icon={SquarePen} disabled={busy}
-                label={`Editar ${canViewOccurrences && detail.series ? 'ocurrencia o próximas' : 'actividad'}`}
+                label={`Editar ${canViewOccurrences && detail.series ? 'esta ocurrencia' : 'actividad'}`}
                 onPress={() => setEditing(detail)} /> : null}
               {confirmDelete ? <View style={styles.confirmation}>
                 <Text style={styles.heading}>¿Eliminar {canViewOccurrences && detail.series ? 'esta ocurrencia' : 'esta actividad'}?</Text>

@@ -8,15 +8,14 @@ import { accountCapabilities } from '../auth/auth.authorization.js';
 import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from './activities.policy.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityChangeDocument, ActivityEditResult, EditActivityInput } from './activities.edit.types.js';
-import { previewActivityEdit } from './activities.edit.service.js';
-import { changeNotification, groupedChangeNotification, participantsAtChange } from './activities.notifications.js';
+import { previewActivityEdit, requireIndividualEdit } from './activities.edit.service.js';
+import { changeNotification, participantsAtChange } from './activities.notifications.js';
 
 export const findEditableActivity = (campusId: string, activityId: string) => getMongoDb().collection<ActivityDocument>('activities')
   .findOne({ campusId, _id: new ObjectId(activityId), status: { $in: ['ACTIVE', 'FINISHED'] }, visibility: 'PUBLIC', deletedAt: null });
-export const findEditOccurrences = (campusId: string, seriesId: string) => getMongoDb().collection<ActivityDocument>('activities')
-  .find({ campusId, seriesId: new ObjectId(seriesId) }).sort({ occurrenceIndex: 1 }).toArray();
 
 export async function commitActivityEdit(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput, now: Date): Promise<ActivityEditResult> {
+  requireIndividualEdit(input.scope);
   const db = getMongoDb();
   const operationId = new ObjectId();
   const result = await mongoClient.withSession(session => session.withTransaction(async () => {
@@ -27,10 +26,6 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
       getActiveMap: campusId => transactionDb.collection<CampusMapDocument>('campus_maps').findOne({ campusId, status: 'ACTIVE' }, { session }),
       findEditable: (campusId, id) => transactionDb.collection<ActivityDocument>('activities').findOne({ campusId, _id: new ObjectId(id),
         status: { $in: ['ACTIVE', 'FINISHED'] }, visibility: 'PUBLIC', deletedAt: null }, { session }),
-      findSeries: async (campusId, id) => (await transactionDb.collection<ActivityDocument>('activities').findOne({ campusId,
-        seriesId: new ObjectId(id), 'seriesDefinition._id': new ObjectId(id), 'seriesDefinition.status': 'ACTIVE',
-        'seriesDefinition.visibility': 'PUBLIC' }, { session }))?.seriesDefinition ?? null,
-      findEditOccurrences: (campusId, id) => transactionDb.collection<ActivityDocument>('activities').find({ campusId, seriesId: new ObjectId(id) }, { session }).toArray(),
     });
     if (plan.previewHash !== input.previewHash) throw new ApiError(409, 'CONFLICT', 'Las actividades cambiaron. Revisa una nueva vista previa.');
     const changed = plan.changes.filter(value => value.changedFields.length);
@@ -80,10 +75,9 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
             $push: { changeHistory: history } },
         } });
       }
-      // One durable event per operation; histories and every revision remain per occurrence.
-      Object.assign(operations[0].updateOne.update.$push, { notificationEvents: changed.length === 1
-        ? changeNotification(histories[0], recipients.get(histories[0].activityId.toHexString())!)
-        : groupedChangeNotification(histories, recipients) });
+      Object.assign(operations[0].updateOne.update.$push, {
+        notificationEvents: changeNotification(histories[0], recipients.get(histories[0].activityId.toHexString())!),
+      });
       const update = await transactionDb.collection<ActivityDocument>('activities').bulkWrite(operations, { session });
       if (update.matchedCount !== changed.length) throw new ApiError(409, 'CONFLICT', 'La actividad cambió. Recarga la ficha antes de editar.');
     }

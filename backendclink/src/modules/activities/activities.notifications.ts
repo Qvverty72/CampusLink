@@ -15,13 +15,8 @@ export interface ActivityNotificationEvent {
 }
 
 export function publicationNotifications(activity: ActivityDocument, now: Date): ActivityNotificationEvent[] {
-  if (activity.seriesId) {
-    if (activity.type !== 'OFFICIAL_EVENT' || activity.occurrenceIndex !== 1) return [];
-    return [{ key: `series:${activity.seriesId.toHexString()}:published`, type: 'OFFICIAL_EVENT_PUBLISHED',
-      title: `Nuevo evento recurrente: ${activity.title} · ${activity.occurrenceCount} fechas`,
-      message: `Se publicó una serie de ${activity.occurrenceCount} fechas de «${activity.title}» en tu campus. Consulta la ocurrencia vigente o próxima.`,
-      reasons: [], occurredAt: now, status: 'PENDING' }];
-  }
+  // Series are announced by the worker when each occurrence starts, including the first.
+  if (activity.seriesId) return [];
   return activity.type === 'OFFICIAL_EVENT' ? [{ key: `activity:${activity._id.toHexString()}:published`,
     type: 'OFFICIAL_EVENT_PUBLISHED', title: activity.title, reasons: [], occurredAt: now, status: 'PENDING' }] : [];
 }
@@ -45,11 +40,9 @@ export function groupedChangeNotification(histories: ActivityChangeDocument[], r
     recipientIds: [...deliveries.keys()], deliveries: [...deliveries.values()] };
 }
 
-export function startedNotification(activity: ActivityDocument): ActivityNotificationEvent {
-  return { key: `activity:${activity._id.toHexString()}:started`, type: 'OFFICIAL_EVENT_STARTED',
-    title: `Comenzó el evento oficial: ${activity.title}`,
-    message: `Ya comenzó la ocurrencia ${activity.occurrenceIndex} de ${activity.occurrenceCount} de «${activity.title}».`,
-    reasons: [], occurredAt: activity.startAt, status: 'PENDING' };
+export function occurrencePublicationNotification(activity: ActivityDocument): ActivityNotificationEvent {
+  return { key: `activity:${activity._id.toHexString()}:started`, type: 'OFFICIAL_EVENT_PUBLISHED',
+    title: activity.title, reasons: [], occurredAt: activity.startAt, status: 'PENDING' };
 }
 
 export function changeNotification(history: ActivityChangeDocument, recipientIds: string[]): ActivityNotificationEvent {

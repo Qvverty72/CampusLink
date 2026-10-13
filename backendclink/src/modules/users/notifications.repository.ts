@@ -4,11 +4,27 @@ import type { PendingActivityNotification } from '../activities/activities.notif
 import type { ActivityNotificationDto, NotificationPage } from './notifications.types.js';
 
 const reasonLabels = { DATES_CHANGED: 'fechas', LOCATION_CHANGED: 'ubicación', CONTENT_CHANGED: 'información' };
+const publicationMessage = 'Se publicó un evento oficial en tu campus.';
+
+/** Preserve stored notices while presenting old generated series text as a concrete event. */
+function publicNotificationContent(type: ActivityNotificationDto['type'], title: string, message: string, key: string) {
+  if (type === 'OFFICIAL_EVENT_PUBLISHED') {
+    const legacyTitle = /^series:[0-9a-f]{24}:published$/.test(key) && /^Se publicó una serie de \d+ fechas de «/.test(message)
+      ? /^Nuevo evento recurrente: ([\s\S]*) · \d+ fechas$/.exec(title)?.[1] : undefined;
+    return { title: legacyTitle ?? title, message: publicationMessage };
+  }
+  if (type === 'OFFICIAL_EVENT_STARTED') return {
+    title: /^Ya comenzó la ocurrencia \d+ de \d+ de «/.test(message)
+      ? title.replace(/^Comenzó el evento oficial: /, '') : title,
+    message: 'Ya comenzó el evento oficial en tu campus.',
+  };
+  return { title, message };
+}
 
 /** ON CONFLICT includes logically deleted rows, preventing their resurrection on retry. */
 export async function deliverActivityNotification(task: PendingActivityNotification, participants: string[] | null,
   transaction = withPostgresTransaction): Promise<void> {
-  const message = task.event.type === 'OFFICIAL_EVENT_PUBLISHED' ? 'Se publicó un evento oficial en tu campus.'
+  const message = task.event.type === 'OFFICIAL_EVENT_PUBLISHED' ? publicationMessage
     : `Cambió la actividad en la que participas: ${task.event.reasons.map(reason => reasonLabels[reason]).join(', ')}.`;
   await transaction(async client => {
     if (task.event.deliveries) {
@@ -27,13 +43,14 @@ export async function deliverActivityNotification(task: PendingActivityNotificat
       [task.campusId, task.event.type, task.event.title, task.event.occurredAt, task.event.key, JSON.stringify(rows)]);
       return;
     }
+    const content = publicNotificationContent(task.event.type, task.event.title, task.event.message ?? message, task.event.key);
     await client.query(`INSERT INTO public.notificacion
       (destinatario_id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,campus_id,actividad_evento_clave)
       SELECT p.id,$2,$3,$4,$5,$6,$1,$7 FROM public.perfil_usuario p
       WHERE p.campus_id=$1 AND p.estado_cuenta='ACTIVA' AND p.deleted_at IS NULL
         AND ($8::uuid[] IS NULL OR p.id=ANY($8::uuid[]))
       ON CONFLICT (destinatario_id,actividad_evento_clave) WHERE actividad_evento_clave IS NOT NULL DO NOTHING`,
-    [task.campusId, task.activityId, task.event.type, task.event.title, task.event.message ?? message, task.event.occurredAt, task.event.key, participants]);
+    [task.campusId, task.activityId, task.event.type, content.title, content.message, task.event.occurredAt, task.event.key, participants]);
   });
 }
 
@@ -47,9 +64,9 @@ export async function listOwnNotifications(client: PoolClient, userId: string, c
         (SELECT created_at,id FROM public.notificacion WHERE id=$3 AND destinatario_id=$1 AND campus_id=$2))
     ORDER BY created_at DESC,id DESC LIMIT 31`, [userId, campusId, cursor ?? null]);
   const items = result.rows.slice(0, 30).map(row => {
-    const seriesId = /^series:([0-9a-f]{24}):published$/.exec(row.actividad_evento_clave)?.[1];
-    return { id: row.id, activityId: row.actividad_id, ...(seriesId ? { seriesId } : {}),
-      type: row.tipo_notificacion, title: row.titulo, message: row.mensaje, createdAt: row.created_at.toISOString(), readAt: row.leida_en?.toISOString() ?? null };
+    const content = publicNotificationContent(row.tipo_notificacion, row.titulo, row.mensaje, row.actividad_evento_clave);
+    return { id: row.id, activityId: row.actividad_id, type: row.tipo_notificacion, ...content,
+      createdAt: row.created_at.toISOString(), readAt: row.leida_en?.toISOString() ?? null };
   });
   return { items, nextCursor: result.rows.length > 30 ? items.at(-1)!.id : null };
 }

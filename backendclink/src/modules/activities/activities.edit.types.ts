@@ -3,7 +3,7 @@ import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDocument, CreateActivityInput } from './activities.types.js';
 
 export interface EditActivityInput extends CreateActivityInput {
-  scope: 'ONE' | 'UPCOMING'; expectedRevision: number; previewHash?: string;
+  scope: 'ONE'; expectedRevision: number; previewHash?: string;
 }
 export interface ActivitySnapshot extends Omit<CreateActivityInput, 'location'> {
   type: string; status?: string; deletedAt?: Date; location: ActivityDocument['location'];
@@ -18,12 +18,12 @@ export interface ActivityEditResult { activityId: string; updatedCount: number; 
 /** Embedded in ActivityDocument.changeHistory; never stored in a new collection. */
 export interface ActivityChangeDocument {
   _id: ObjectId; operationId: ObjectId; campusId: string; activityId: ObjectId; seriesId?: ObjectId;
-  actorUserId: string; revision: number; scope: EditActivityInput['scope']; changedAt: Date;
+  // Historical group edits remain readable; new edit inputs only accept ONE.
+  actorUserId: string; revision: number; scope: 'ONE' | 'UPCOMING'; changedAt: Date;
   before: ActivitySnapshot; after: ActivitySnapshot; changedFields: string[];
   notificationReasons: ('DATES_CHANGED' | 'LOCATION_CHANGED' | 'CONTENT_CHANGED')[];
 }
 export interface ActivityEditDependencies extends ActivityDependencies {
   findEditable?: (campusId: string, activityId: string) => Promise<ActivityDocument | null>;
-  findEditOccurrences?: (campusId: string, seriesId: string) => Promise<ActivityDocument[]>;
   saveEdit?: (plan: ActivityEditPreview) => Promise<ActivityEditResult>;
 }

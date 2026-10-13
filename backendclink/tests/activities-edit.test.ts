@@ -41,7 +41,7 @@ test('edit parser rejects identity/type/series/participation overrides, invalid 
   for (const key of ['type', 'campusId', 'createdByUserId', 'organizer', 'participantCount', 'status', 'seriesId', 'recurrence', 'editRevision']) {
     assert.equal(editActivityParser()({ ...body(), [key]: 'override' }).success, false);
   }
-  for (const change of [{ scope: 'ALL' }, { expectedRevision: -1 }, { expectedRevision: 0.5 }, { startAt: '2099-02-30T00:00:00Z' }]) {
+  for (const change of [{ scope: 'UPCOMING' }, { scope: 'ALL' }, { expectedRevision: -1 }, { expectedRevision: 0.5 }, { startAt: '2099-02-30T00:00:00Z' }]) {
     assert.equal(editActivityParser()({ ...body(), ...change }).success, false);
   }
   assert.equal(editActivityParser(true)(body()).success, false);
@@ -80,58 +80,55 @@ function recurring() {
   return { values, series };
 }
 
-test('upcoming preview shifts existing local calendar dates from selected index, preserves past/ongoing IDs, and rejects moving future instances into past', async () => {
-  const auth = publisher;
-  const { values, series } = recurring(); const current = values[1]; const fixedNow = new Date('2099-01-05T12:30:00Z');
-  const dependencies = { ...deps(current), now: () => fixedNow, findSeries: async () => series, findEditOccurrences: async () => values };
-  const input = parsed({ ...body(), scope: 'UPCOMING', startAt: '2099-01-13T14:00:00Z', endAt: '2099-01-13T15:00:00Z' });
-  const result = await preview(auth, current._id.toHexString(), input, dependencies);
-  assert.equal(result.changes.length, 2); assert.equal(result.changes[0].activityId, current._id.toHexString());
-  assert.equal(result.changes[1].after.startAt.toISOString(), '2099-01-20T14:00:00.000Z');
-  assert.equal(values[0].startAt.toISOString(), '2099-01-05T12:00:00.000Z'); assert.equal(values[0].participantCount, 7);
-  await assert.rejects(preview(auth, values[0]._id.toHexString(), input, { ...dependencies, findEditable: async () => values[0] }), { status: 400 });
-  await assert.rejects(preview(auth, current._id.toHexString(), { ...input, startAt: fixedNow, endAt: new Date(fixedNow.getTime() + 3600000) }, dependencies), { status: 400 });
-});
-
-test('ordinary owners can edit one activity but cannot inspect or save upcoming occurrences without local official capability', async () => {
-  const { values, series } = recurring(); const current = values[0]; let reads = 0; let writes = 0;
-  const dependencies = { ...deps(current), findSeries: async () => { reads++; return series; }, findEditOccurrences: async () => values,
-    saveEdit: async () => { writes++; throw new Error('Must not save'); } };
-  const upcoming = parsed({ ...body(), scope: 'UPCOMING' });
-  for (const context of [auth, { ...publisher, permissions: [] }, { ...publisher, roles: [] },
-    { ...publisher, permissions: [{ ...publisher.permissions[0], campusId: other }] }]) {
-    await assert.rejects(preview(context, current._id.toHexString(), upcoming, dependencies), { status: 403 });
-    await assert.rejects(edit(context, current._id.toHexString(), { ...upcoming, previewHash: 'a'.repeat(64) }, dependencies), { status: 403 });
+test('recurring edits plan only the selected instance and never read or alter other occurrences or the series template', async () => {
+  const { values, series } = recurring(); const current = values[1]; const original = JSON.stringify({ values, series });
+  const dependencies = { ...deps(current), findSeries: async () => { throw new Error('Must not read series'); } };
+  const input = parsed({ ...body(), startAt: '2099-01-13T14:00:00Z', endAt: '2099-01-13T15:00:00Z' });
+  for (const context of [auth, publisher]) {
+    const result = await preview(context, current._id.toHexString(), input, dependencies);
+    assert.equal(result.scope, 'ONE'); assert.equal(result.changes.length, 1);
+    assert.equal(result.changes[0].activityId, current._id.toHexString());
+    assert.equal(result.changes[0].after.startAt.toISOString(), input.startAt.toISOString());
+    assert.equal(result.changes[0].after.endAt.toISOString(), input.endAt.toISOString());
+    assert.equal(JSON.stringify({ values, series }), original);
   }
-  assert.equal(reads, 0); assert.equal(writes, 0);
-  assert.equal((await preview(auth, current._id.toHexString(), parsed(), dependencies)).changes.length, 1);
+  const { getActivityDetail } = await import('../src/modules/activities/activities.detail.service.js');
+  const detail = await getActivityDetail(publisher, current._id.toHexString(), {
+    ...dependencies, findActivity: async () => current, findParticipation: async () => null,
+  });
+  assert.equal(detail.editing?.canEditUpcoming, false, 'Even official publishers only edit a single occurrence');
 });
 
-test('upcoming edits preserve saved-zone wall clocks across DST and reject nonexistent shifted hours', async () => {
-  const auth = publisher;
-  const { values, series } = recurring(); series.recurrence.timeZone = 'America/New_York';
-  values[0].startAt = new Date('2027-03-13T15:00:00Z'); values[0].endAt = new Date('2027-03-13T16:00:00Z');
-  values[1].startAt = new Date('2027-03-20T14:00:00Z'); values[1].endAt = new Date('2027-03-20T15:00:00Z');
-  values.splice(2); values.forEach(value => { value.occurrenceCount = 2; }); series.occurrenceCount = 2;
-  const dependencies = { ...deps(values[0]), now: () => new Date('2027-03-01T00:00:00Z'), findSeries: async () => series, findEditOccurrences: async () => values };
-  const result = await preview(auth, values[0]._id.toHexString(), parsed({ ...body(), scope: 'UPCOMING', startAt: '2027-03-13T16:00:00Z', endAt: '2027-03-13T17:00:00Z' }), dependencies);
-  assert.equal(result.changes[1].after.startAt.toISOString(), '2027-03-20T15:00:00.000Z');
-  values[0].startAt = new Date('2027-03-13T06:30:00Z'); values[0].endAt = new Date('2027-03-13T08:30:00Z');
-  values[1].startAt = new Date('2027-03-14T05:30:00Z'); values[1].endAt = new Date('2027-03-14T07:30:00Z');
-  await assert.rejects(preview(auth, values[0]._id.toHexString(), parsed({ ...body(), scope: 'UPCOMING', startAt: '2027-03-13T07:30:00Z', endAt: '2027-03-13T08:30:00Z' }), dependencies), { status: 400 });
+test('all roles reject legacy group edits before reading data, saving or opening a transaction', async () => {
+  const current = document(); let reads = 0; let writes = 0;
+  const forbidden = { ...parsed(), scope: 'UPCOMING', previewHash: 'a'.repeat(64) } as unknown as EditActivityInput;
+  const dependencies: ActivityEditDependencies = { now: () => now,
+    getActiveMap: async () => { reads++; return map; }, findEditable: async () => { reads++; return current; },
+    saveEdit: async () => { writes++; throw new Error('Must not save'); },
+  };
+  const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
+  const sessionMock = mock.method(MongoClient.prototype, 'withSession', async () => { throw new Error('Must not open a transaction'); });
+  try {
+    for (const context of [auth, publisher, { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }] }]) {
+      await assert.rejects(preview(context, current._id.toHexString(), forbidden, dependencies), { status: 400 });
+      await assert.rejects(edit(context, current._id.toHexString(), forbidden, dependencies), { status: 400 });
+      await assert.rejects(commitActivityEdit(context, current._id.toHexString(), forbidden, now), { status: 400 });
+    }
+    assert.equal(reads, 0); assert.equal(writes, 0); assert.equal(sessionMock.mock.callCount(), 0);
+  } finally { sessionMock.mock.restore(); }
 });
 
-test('fingerprint binds content, scope and every target revision; joining does not invalidate preview and no-op has no changed fields', async () => {
+test('fingerprint binds selected content and revision; sibling edits and participation do not invalidate the individual preview', async () => {
   const auth = publisher;
-  const { values, series } = recurring(); const current = values[0]; let writes = 0;
-  const dependencies: ActivityEditDependencies = { ...deps(current), findSeries: async () => series, findEditOccurrences: async () => values,
+  const { values } = recurring(); const current = values[0]; let writes = 0;
+  const dependencies: ActivityEditDependencies = { ...deps(current),
     saveEdit: async plan => { writes++; return { activityId: plan.activityId, updatedCount: plan.changes.filter(value => value.changedFields.length).length, revision: 1 }; } };
-  const input = parsed({ ...body(), scope: 'UPCOMING' }); const first = await preview(auth, current._id.toHexString(), input, dependencies);
+  const input = parsed(); const first = await preview(auth, current._id.toHexString(), input, dependencies);
   current.participantCount++; current.updatedAt = new Date();
   assert.equal((await preview(auth, current._id.toHexString(), input, dependencies)).previewHash, first.previewHash);
   await assert.rejects(edit(auth, current._id.toHexString(), { ...input, title: 'Different', previewHash: first.previewHash }, dependencies), { status: 409 });
   values[1].editRevision = 1;
-  await assert.rejects(edit(auth, current._id.toHexString(), { ...input, previewHash: first.previewHash }, dependencies), { status: 409 }); assert.equal(writes, 0);
+  assert.equal((await preview(auth, current._id.toHexString(), input, dependencies)).previewHash, first.previewHash); assert.equal(writes, 0);
   current.editRevision = 1; await assert.rejects(preview(auth, current._id.toHexString(), input, dependencies), { status: 409 });
   const noop = await preview(auth, current._id.toHexString(), { ...input, title: current.title, description: current.description,
     location: { buildingKey: 'h', floorKey: 'f2' }, startAt: current.startAt, endAt: current.endAt, expectedRevision: 1, scope: 'ONE' }, dependencies);
@@ -176,14 +173,10 @@ test('edit and immutable history commit together; stale snapshot, location loss 
   } finally { sessionMock.mock.restore(); collectionMock.mock.restore(); }
 });
 
-test('a multi-date edit atomically saves every history and a single grouped event with per-occurrence participant snapshots', async () => {
-  const auth = publisher;
-  const { values, series } = recurring(); const current = values[0], id = current._id.toHexString();
-  const rows = [{ activityId: values[0]._id, userId: other, status: 'JOINED' },
-    { activityId: values[1]._id, userId: other, status: 'LEFT' },
-    { activityId: values[2]._id, userId: other, status: 'JOINED' }];
-  const input = parsed({ ...body(), scope: 'UPCOMING' });
-  const review = await preview(auth, id, input, { ...deps(current), findSeries: async () => series, findEditOccurrences: async () => values });
+test('a recurring edit atomically writes one selected history and notification, preserving siblings and participation', async () => {
+  const { values, series } = recurring(); const current = values[1], id = current._id.toHexString();
+  const original = JSON.stringify({ values, series }); const input = parsed();
+  const review = await preview(publisher, id, input, deps(current));
   let staged: any[] = [], committed: any[] = []; let fail = false;
   const session = { withTransaction: async (operation: () => Promise<unknown>) => {
     staged = []; try { const result = await operation(); committed.push(...staged); return result; } finally { staged = []; }
@@ -191,31 +184,32 @@ test('a multi-date edit atomically saves every history and a single grouped even
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: (value: typeof session) => Promise<unknown>) => operation(session));
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => {
     assert.ok(['activities', 'activity_participation', 'campus_maps'].includes(name));
-    return { findOne: async (filter: any) => name === 'campus_maps' ? map : filter['seriesDefinition._id'] ? { seriesDefinition: series } : current,
-      find: (filter: any) => ({ toArray: async () => {
-        if (name === 'activity_participation') { assert.deepEqual(filter.activityId.$in, values.map(value => value._id)); return rows; }
-        return values;
-      } }), bulkWrite: async (operations: any[]) => {
-        staged.push(...operations); if (fail) throw new Error('grouped write failed'); return { matchedCount: operations.length };
-      } };
+    return { findOne: async (filter: any) => {
+      if (name === 'campus_maps') return map;
+      assert.equal(filter._id.toHexString(), id); assert.equal(filter.seriesId, undefined);
+      return current;
+    }, find: (filter: any) => ({ toArray: async () => {
+      assert.equal(name, 'activity_participation'); assert.deepEqual(filter.activityId.$in, [current._id]);
+      return [{ activityId: current._id, userId: other, status: 'JOINED' }];
+    } }), bulkWrite: async (operations: any[]) => {
+      assert.equal(operations.length, 1); assert.equal(operations[0].updateOne.filter._id.toHexString(), id);
+      staged.push(...operations); if (fail) throw new Error('individual write failed'); return { matchedCount: operations.length };
+    } };
   });
   try {
     const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
-    const result = await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now);
-    assert.equal(result.updatedCount, 3); assert.equal(committed.length, 3);
-    const histories = committed.map(operation => operation.updateOne.update.$push.changeHistory);
-    assert.equal(new Set(histories.map(history => history.operationId.toHexString())).size, 1);
-    assert.deepEqual(histories.map(history => history.activityId), values.map(value => value._id));
-    const notices = committed.flatMap(operation => operation.updateOne.update.$push.notificationEvents ?? []);
-    assert.equal(notices.length, 1); assert.match(notices[0].key, /^operation:[0-9a-f]{24}:changed$/);
-    assert.equal(notices[0].deliveries.length, 2);
-    assert.equal(notices[0].deliveries.find((delivery: any) => delivery.recipientId === userId).dateCount, 3);
-    assert.equal(notices[0].deliveries.find((delivery: any) => delivery.recipientId === other).dateCount, 2, 'LEFT on second instance stays out');
-    assert.equal(notices[0].deliveries.find((delivery: any) => delivery.recipientId === other).activityId, id);
-    assert.equal(new Set(notices[0].recipientIds).size, 2);
-    committed.forEach(operation => { assert.equal(operation.updateOne.update.$set.participantCount, undefined); assert.equal(operation.updateOne.update.$set.seriesDefinition, undefined); });
-    fail = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), /grouped write failed/);
-    assert.equal(committed.length, 3); assert.equal(staged.length, 0);
+    const result = await commitActivityEdit(publisher, id, { ...input, previewHash: review.previewHash }, now);
+    assert.equal(result.updatedCount, 1); assert.equal(committed.length, 1);
+    const update = committed[0].updateOne.update;
+    assert.equal(update.$push.changeHistory.activityId.toHexString(), id); assert.equal(update.$push.changeHistory.scope, 'ONE');
+    assert.equal(update.$push.notificationEvents.key, 'activity:' + id + ':revision:1');
+    assert.deepEqual(update.$push.notificationEvents.recipientIds.sort(), [userId, other].sort());
+    for (const field of ['participantCount', 'seriesDefinition', 'seriesId', 'occurrenceIndex', 'originalStartAt', 'changeHistory']) {
+      assert.equal(update.$set[field], undefined);
+    }
+    assert.equal(JSON.stringify({ values, series }), original);
+    fail = true; await assert.rejects(commitActivityEdit(publisher, id, { ...input, previewHash: review.previewHash }, now), /individual write failed/);
+    assert.equal(committed.length, 1); assert.equal(staged.length, 0);
   } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
 });
 
@@ -290,6 +284,8 @@ test('HTTP authenticated owner preview and PATCH enforce confirmation; shared de
   try {
     assert.equal((await originalFetch(url, { method: 'PATCH' })).status, 401);
     assert.equal((await post({ ...body(), type: 'OFFICIAL_EVENT' })).status, 400);
+    assert.equal((await post({ ...body(), scope: 'UPCOMING' })).status, 400);
+    assert.equal((await originalFetch(url, { method: 'PATCH', headers, body: JSON.stringify({ ...body(), scope: 'UPCOMING', previewHash: 'a'.repeat(64) }) })).status, 400);
     const response = await post(body()); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
     const review = (await response.json()).data;
     assert.equal((await originalFetch(url, { method: 'PATCH', headers, body: JSON.stringify(body()) })).status, 400);
@@ -307,9 +303,9 @@ test('edit form retains precise unchanged timestamps and allows correcting ended
     startAt: '2000-01-05T12:00:30.123Z', endAt: '2000-01-05T13:00:45.456Z', location: { buildingKey: 'h', buildingName: 'H', floorKey: 'f2', floorName: 'Piso 2' },
     organizer: { name: 'Creador' }, participation: { status: 'JOINED' as const, canJoin: false }, editing: { revision: 0, canEditUpcoming: false } };
   const locations = [{ id: 'h', name: 'H', floors: [{ id: 'f2', name: 'Piso 2', pois: [] }] }];
-  const parsedDraft = validateActivityEditDraft({ ...activityEditDraft(activity), title: 'Cambiada' }, activity, locations, 'ONE');
-  assert.ok(parsedDraft.input); assert.equal(parsedDraft.input.startAt, activity.startAt); assert.equal(parsedDraft.input.endAt, activity.endAt);
-  assert.ok(validateActivityEditDraft(activityEditDraft(activity), { ...activity, editing: undefined }, locations, 'ONE').error);
+  const parsedDraft = validateActivityEditDraft({ ...activityEditDraft(activity), title: 'Cambiada' }, activity, locations);
+  assert.ok(parsedDraft.input); assert.equal(parsedDraft.input.scope, 'ONE'); assert.equal(parsedDraft.input.startAt, activity.startAt); assert.equal(parsedDraft.input.endAt, activity.endAt);
+  assert.ok(validateActivityEditDraft(activityEditDraft(activity), { ...activity, editing: undefined }, locations).error);
   const short = { ...activity, endAt: '2000-01-05T12:00:45.456Z' };
-  assert.equal(validateActivityEditDraft(activityEditDraft(short), short, locations, 'ONE').input?.endAt, short.endAt);
+  assert.equal(validateActivityEditDraft(activityEditDraft(short), short, locations).input?.endAt, short.endAt);
 });
