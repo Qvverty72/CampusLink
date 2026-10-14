@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../services/api-response.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../../services/pagination.js';
+import { createPaginatedResult } from '../../../services/pagination.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import type { PhysicalgoodsMediaRow } from './physicalgoods.types.js';
 import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgoodsId } from './physicalgoods.validation.js';
 import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto,
-  signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
+  signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
+import { parsePhysicalgoodsSearch } from './physicalgoods.search.validation.js';
 import { findPhysicalgoodsCategory, findPhysicalgoodsImages, findPhysicalgoodsMedia, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
   retirePhysicalgoodsImage, setPhysicalgoodsPrincipal, touchPhysicalgoods, updatePhysicalgoodsCategory } from './physicalgoods.images.repository.js';
 
@@ -22,7 +23,7 @@ function canEdit(auth: VerifiedAuthConnection, row: PhysicalgoodsMediaRow) {
 }
 function mediaDto(row: PhysicalgoodsMediaRow) {
   return { id: row.id, title: row.titulo, category: { id: row.categoria_id, name: row.categoria_nombre },
-    modality: row.modalidad, price: row.modalidad === 'VENTA' ? Number(row.precio) : null, status: row.estado_publicacion };
+    modality: row.modalidad, price: row.modalidad === 'VENTA' ? Number(row.precio) : null, status: row.estado_publicacion, condition: row.estado_uso };
 }
 async function editPhysicalgoods<T>(auth: VerifiedAuthConnection, id: string, operation: (client: PoolClient, row: PhysicalgoodsMediaRow) => Promise<T>) {
   requireCampusCapability(auth, auth.campusId, 'general');
@@ -56,14 +57,16 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
 }
 export async function getPhysicalgoodsResources(auth: VerifiedAuthConnection, query: unknown) {
   requireCampusCapability(auth, auth.campusId, 'general');
-  const values = query as Record<string, unknown>;
-  const pagination = parsePaginationQuery(query);
-  if (!pagination.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa la paginación.', { details: pagination.issues });
-  if (Object.keys(values).some(key => !['categoryId', 'mine', 'page', 'limit'].includes(key)) || (values.mine !== undefined && values.mine !== 'true')) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros.');
-  const categoryId = values.categoryId === undefined ? null : physicalgoodsId(values.categoryId, 'categoryId');
+  const { filters, pagination } = parsePhysicalgoodsSearch(query);
   return dependency(async () => {
-    const rows = await withPhysicalgoodsTransaction(client => listPhysicalgoodsMedia(client, auth.campusId, categoryId, values.mine === 'true' ? auth.userId : null, pagination.data));
-    return createPaginatedResult(rows.map(mediaDto), pagination.data);
+    const rows = await withPhysicalgoodsTransaction(client => listPhysicalgoodsMedia(client, auth.campusId, filters, filters.mine ? auth.userId : null, pagination));
+    const result = createPaginatedResult(rows, pagination);
+    for (const row of result.data) {
+      if (row.photo_storage_path && (row.photo_bucket_id !== PHYSICALGOODS_BUCKET || !row.photo_storage_path.startsWith(auth.campusId + '/'))) throw new Error('Invalid stored photo');
+    }
+    const paths = [...new Set(result.data.flatMap(row => row.photo_storage_path ? [row.photo_storage_path] : []))];
+    const urls = await signPhysicalgoodsSearchPhotos(paths);
+    return { data: result.data.map(row => ({ ...mediaDto(row), imageUrl: row.photo_storage_path ? urls.get(row.photo_storage_path) ?? null : null })), meta: result.meta };
   });
 }
 export async function addPhysicalgoodsImage(auth: VerifiedAuthConnection, publicationId: unknown, body: unknown) {

@@ -88,6 +88,19 @@ export async function signPrincipalPhoto(path: string) {
   return result.data.signedUrl;
 }
 
+export async function signPhysicalgoodsSearchPhotos(paths: string[]) {
+  if (!paths.length) return new Map<string, string>();
+  const result = await createServerSupabaseClient().storage.from(PHYSICALGOODS_BUCKET).createSignedUrls(paths, 60);
+  if (result.error || result.data.length !== paths.length) throw new Error('Photo access unavailable');
+  const urls = new Map<string, string>();
+  for (const photo of result.data) {
+    if (photo.error || !photo.path || !paths.includes(photo.path) || !photo.signedUrl) throw new Error('Photo access unavailable');
+    urls.set(photo.path, photo.signedUrl);
+  }
+  if (urls.size !== paths.length) throw new Error('Photo access unavailable');
+  return urls;
+}
+
 export function probePhysicalgoodsDependencies(): Promise<DependencyChecks> {
   return inspectDependencies({
     supabase: () => probeSupabaseTables([{"table":"publicacion_recurso","resourceType":"FISICO"},{"table":"recurso_fisico","column":"publicacion_id"}]),

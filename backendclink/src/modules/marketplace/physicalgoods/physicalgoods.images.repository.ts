@@ -1,10 +1,10 @@
 import type { PoolClient } from 'pg';
 import type { PaginationParams } from '../../../types/api.js';
-import type { PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PrincipalPhoto } from './physicalgoods.types.js';
+import type { PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
 import { PHYSICALGOODS_BUCKET } from './physicalgoods.repository.js';
 
 const mediaProjection = `p.id,p.campus_id,p.propietario_id,p.titulo,p.modalidad,p.precio,p.estado_publicacion,
-  r.categoria_id,c.nombre AS categoria_nombre`;
+  r.categoria_id,r.estado_uso,c.nombre AS categoria_nombre`;
 const mediaJoins = `FROM public.publicacion_recurso p JOIN public.recurso_fisico r ON r.publicacion_id=p.id
   JOIN public.categoria_recurso_fisico c ON c.id=r.categoria_id`;
 
@@ -13,12 +13,24 @@ export async function findPhysicalgoodsMedia(client: PoolClient, publicationId: 
     WHERE p.id=$1 AND p.campus_id=$2 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL
     AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO') ${lock ? 'FOR UPDATE OF p,r' : ''}`, [publicationId, campusId])).rows[0] ?? null;
 }
-export async function listPhysicalgoodsMedia(client: PoolClient, campusId: string, categoryId: string | null, ownerId: string | null, pagination: PaginationParams) {
-  return (await client.query<PhysicalgoodsMediaRow>(`SELECT ${mediaProjection} ${mediaJoins}
-    WHERE p.campus_id=$1 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL
-    AND (p.estado_publicacion='DISPONIBLE' OR ($3::uuid IS NOT NULL AND p.estado_publicacion IN ('RESERVADO','FINALIZADO')))
+export async function listPhysicalgoodsMedia(client: PoolClient, campusId: string, filters: PhysicalgoodsSearchFilters, ownerId: string | null, pagination: PaginationParams) {
+  // Treat user %/_/backslashes as literal text, not SQL wildcard operators.
+  const patterns = filters.q ? filters.q.split(' ').map(word => '%' + word.replace(/[\\%_]/g, '\\$&') + '%') : [];
+  return (await client.query<PhysicalgoodsSearchRow>(`SELECT ${mediaProjection},photo.bucket_id AS photo_bucket_id,photo.storage_path AS photo_storage_path ${mediaJoins}
+    LEFT JOIN LATERAL (SELECT a.bucket_id,a.storage_path FROM public.archivo_publicacion a
+      WHERE a.publicacion_id=p.id AND a.tipo_archivo='IMAGEN' AND a.orden=0 AND a.deleted_at IS NULL
+      ORDER BY a.created_at,a.id LIMIT 1) photo ON true
+    WHERE p.campus_id=$1 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL AND p.estado_publicacion='DISPONIBLE'
     AND ($2::uuid IS NULL OR r.categoria_id=$2) AND ($3::uuid IS NULL OR p.propietario_id=$3)
-    ORDER BY p.publicado_en DESC,p.id DESC LIMIT $4 OFFSET $5`, [campusId, categoryId, ownerId, pagination.limit + 1, pagination.offset])).rows;
+    AND concat_ws(' ',p.titulo,p.descripcion) ILIKE ALL($4::text[])
+    AND ($5::text IS NULL OR p.modalidad=$5) AND ($6::text IS NULL OR r.estado_uso=$6)
+    AND ($7::uuid IS NULL OR EXISTS(SELECT 1 FROM public.publicacion_carrera pc WHERE pc.publicacion_id=p.id AND pc.carrera_id=$7))
+    AND ($8::uuid IS NULL OR EXISTS(SELECT 1 FROM public.publicacion_asignatura pa WHERE pa.publicacion_id=p.id AND pa.asignatura_id=$8))
+    AND (($9::numeric IS NULL AND $10::numeric IS NULL) OR (p.modalidad='VENTA'
+      AND ($9::numeric IS NULL OR p.precio >= $9) AND ($10::numeric IS NULL OR p.precio <= $10)))
+    ORDER BY p.publicado_en DESC,p.id DESC LIMIT $11 OFFSET $12`,
+    [campusId, filters.categoryId, ownerId, patterns, filters.modality, filters.condition, filters.careerId, filters.subjectId,
+      filters.minPrice, filters.maxPrice, pagination.limit + 1, pagination.offset])).rows;
 }
 export async function findPhysicalgoodsImages(client: PoolClient, publicationId: string) {
   return (await client.query<PhysicalgoodsImageRow>(`SELECT id,bucket_id,storage_path,nombre_original,mime_type,tamano_bytes,orden

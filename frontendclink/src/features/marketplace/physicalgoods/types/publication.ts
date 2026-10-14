@@ -40,7 +40,24 @@ export interface PhysicalgoodsResource {
   modality: 'VENTA' | 'DONACION';
   price: number | null;
   status: string;
+  condition: typeof resourceConditions[number]['value'];
+  imageUrl?: string | null;
 }
+
+export interface PhysicalgoodsSearchFilters {
+  q: string;
+  categoryId: string;
+  modality: string;
+  condition: string;
+  careerId: string;
+  subjectId: string;
+  minPrice: string;
+  maxPrice: string;
+  mine: boolean;
+}
+export const emptyPhysicalgoodsFilters: PhysicalgoodsSearchFilters = {
+  q: '', categoryId: '', modality: '', condition: '', careerId: '', subjectId: '', minPrice: '', maxPrice: '', mine: false,
+};
 export interface PhysicalgoodsGallery extends PhysicalgoodsResource {
   canEdit: boolean;
   images: { id: string; name: string; principal: boolean; url: string }[];

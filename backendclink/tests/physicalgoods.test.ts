@@ -23,6 +23,8 @@ let closePostgres: () => Promise<void>;
 let imagesService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.images.service.js');
 let storageCalls: { method: string; path: string; body?: unknown }[];
 let uploads: string[], removals: string[], signed: string[];
+let signedPaths: string[];
+let failSign = false;
 let failUpload = false, failInsert = false, failRemove = false, publicBucket = false, missingBucket = false, lostCommit = false;
 let onUpload: (() => Promise<void>) | null = null;
 
@@ -59,7 +61,14 @@ before(async () => {
       return failRemove ? Response.json({ statusCode: 500, message: 'private Storage failure' }, { status: 500 }) : Response.json([]);
     }
     if (url.pathname.startsWith('/storage/v1/object/sign/')) {
-      signed.push(url.pathname); assert.deepEqual(JSON.parse(String(init?.body)), { expiresIn: 60 });
+      signed.push(url.pathname);
+      const body = JSON.parse(String(init?.body));
+      if (Array.isArray(body.paths)) {
+        assert.equal(body.expiresIn, 60); signedPaths.push(...body.paths);
+        return failSign ? Response.json({ statusCode: 500, message: 'private Storage failure' }, { status: 500 })
+          : Response.json(body.paths.map((path: string) => ({ path, error: null, signedURL: '/object/sign/publication-images/' + path + '?token=temporary' })));
+      }
+      assert.deepEqual(body, { expiresIn: 60 });
       return Response.json({ signedURL: '/object/sign/publication-images/mock?token=temporary' });
     }
     assert.equal(method, 'POST'); assert.equal(headers.get('content-type'), 'image/png'); assert.equal(headers.get('x-upsert'), 'false');
@@ -94,6 +103,7 @@ before(async () => {
 });
 beforeEach(async () => {
   storageCalls = []; uploads = []; removals = []; signed = [];
+  signedPaths = []; failSign = false;
   failUpload = failInsert = failRemove = publicBucket = missingBucket = lostCommit = false; onUpload = null;
   const userId = randomUUID();
   await db.query('insert into auth.users values($1)', [userId]);
@@ -359,3 +369,94 @@ async function otherActor(): Promise<VerifiedAuthConnection> {
   await db.query("insert into perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) values($1,$2,$3,'Other',now())", [userId, institution, campus]);
   return { ...auth, userId, roles: [], profile: { ...auth.profile, id: userId } };
 }
+
+test('search matches case-insensitive words across name/description and escapes wildcard characters as literal text', async () => {
+  const book = await create(auth, input({ title: 'Libro integral', description: 'Ejercicios profesionales' }));
+  const literal = await create(auth, input({ title: 'Material 100% _literal_ \\ especial', description: 'Otra publicación' }));
+  const find = async (q: string) => (await imagesService.getPhysicalgoodsResources(auth, { q, mine: 'true' })).data.map(row => row.id);
+  assert.deepEqual(await find(' LIBRO    profesionales '), [book.id]);
+  assert.deepEqual(await find('integ EJERC'), [book.id]);
+  for (const q of ['100%', '_literal_', '\\']) assert.deepEqual(await find(q), [literal.id]);
+  assert.deepEqual(await find("' OR 1=1 --"), []);
+  assert.deepEqual(await find('libro otra'), []);
+});
+test('search combines category, modality, condition, career, subject and inclusive sale price range without duplicate academic matches', async () => {
+  const target = await create(auth, input({ title: 'Target resource', condition: 'NUEVO', price: 2000 }));
+  await create(auth, input({ title: 'Wrong condition', condition: 'USADO', price: 2000 }));
+  await create(auth, input({ title: 'Wrong price', condition: 'NUEVO', price: 3000 }));
+  const extraCareer = randomUUID(), extraSubject = randomUUID();
+  await db.query("insert into carrera(id,institucion_id,nombre) values($1,$2,'Extra career')", [extraCareer, institution]);
+  await db.query("insert into asignatura(id,nombre,codigo) values($1,'Extra subject',$2)", [extraSubject, extraSubject]);
+  await db.query('insert into publicacion_carrera values($1,$2)', [target.id, extraCareer]);
+  await db.query('insert into publicacion_asignatura values($1,$2)', [target.id, extraSubject]);
+  const filters = { mine: 'true', categoryId: category, modality: 'VENTA', condition: 'NUEVO', careerId: career, subjectId: subject, minPrice: '2000', maxPrice: '2000', limit: '1' };
+  const result = await imagesService.getPhysicalgoodsResources(auth, filters);
+  assert.deepEqual(result.data.map(row => row.id), [target.id]); assert.equal(result.meta.hasMore, false);
+  assert.equal(result.data[0].condition, 'NUEVO'); assert.ok(result.data[0].imageUrl);
+  assert.deepEqual((await imagesService.getPhysicalgoodsResources(auth, { ...filters, careerId: extraCareer, subjectId: extraSubject })).data.map(row => row.id), [target.id]);
+  assert.equal((await imagesService.getPhysicalgoodsResources(auth, { ...filters, careerId: randomUUID() })).data.length, 0);
+});
+test('price filtering selects sales only, donation has no displayed price and invalid price/range/enum/identifier queries fail before Storage', async () => {
+  const sale = await create(auth, input({ price: 5000 }));
+  const donation = await create(auth, input({ modality: 'DONACION', price: null }));
+  assert.deepEqual((await imagesService.getPhysicalgoodsResources(auth, { mine: 'true', minPrice: '0', maxPrice: '5000' })).data.map(row => row.id), [sale.id]);
+  const gifts = await imagesService.getPhysicalgoodsResources(auth, { mine: 'true', modality: 'DONACION' });
+  assert.deepEqual(gifts.data.map(row => row.id), [donation.id]); assert.equal(gifts.data[0].price, null);
+  const calls = storageCalls.length;
+  for (const query of [{ q: ['book'] }, { q: 'a'.repeat(201) }, { q: 'bad\nquery' }, { modality: 'BOTH' }, { condition: 'AVAILABLE' },
+    { careerId: 'bad' }, { subjectId: 'bad' }, { minPrice: '-1' }, { maxPrice: 'NaN' }, { minPrice: 'Infinity' }, { minPrice: '100', maxPrice: '99' },
+    { modality: 'DONACION', minPrice: '0' }, { minPrice: ['1', '2'] }, { maxPrice: '9007199254740992' }, { ownerId: auth.userId }, { status: 'RESERVADO' }]) {
+    await assert.rejects(imagesService.getPhysicalgoodsResources(auth, query), { status: 400 });
+  }
+  assert.equal(storageCalls.length, calls);
+});
+test('search only discovers available physical resources in the current campus including mine and never signs excluded results', async () => {
+  const marker = 'scope-' + auth.userId;
+  const visible = await create(auth, input({ title: marker }));
+  const excluded: string[] = [];
+  for (const state of ['RESERVADO', 'FINALIZADO', 'OCULTO', 'CANCELADO']) {
+    const row = await create(auth, input({ title: marker })); excluded.push(row.id);
+    await db.query('update publicacion_recurso set estado_publicacion=$1 where id=$2', [state, row.id]);
+  }
+  for (const update of ['campus_id=$2', "tipo_recurso='DIGITAL'", 'deleted_at=now()']) {
+    const row = await create(auth, input({ title: marker })); excluded.push(row.id);
+    await db.query('update publicacion_recurso set ' + update + ' where id=$1', update.includes('$2') ? [row.id, otherCampus] : [row.id]);
+  }
+  const found = await imagesService.getPhysicalgoodsResources(auth, { q: marker });
+  assert.deepEqual(found.data.map(row => row.id), [visible.id]);
+  assert.deepEqual((await imagesService.getPhysicalgoodsResources(auth, { q: marker, mine: 'true' })).data.map(row => row.id), [visible.id]);
+  assert.ok(signedPaths.every(path => path.includes(visible.id)));
+  await db.query("update publicacion_recurso set estado_publicacion='RESERVADO' where id=$1", [visible.id]);
+  assert.equal((await imagesService.getPhysicalgoodsResources(auth, { q: marker })).data.length, 0);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth, visible.id)).status, 'RESERVADO');
+});
+test('search uses stable pagination and signs only principal photos in the returned page with no metadata/paths in resource DTO', async () => {
+  const first = await create(auth, input()), second = await create(auth, input());
+  const firstPage = await imagesService.getPhysicalgoodsResources(auth, { mine: 'true', limit: '1' });
+  assert.equal(firstPage.data.length, 1); assert.equal(firstPage.meta.hasMore, true); assert.equal(signedPaths.length, 1);
+  assert.ok(signedPaths[0].includes(firstPage.data[0].id));
+  const next = await imagesService.getPhysicalgoodsResources(auth, { mine: 'true', limit: '1', page: '2' });
+  assert.equal(next.meta.hasMore, false); assert.notEqual(next.data[0].id, firstPage.data[0].id);
+  assert.deepEqual(new Set([firstPage.data[0].id, next.data[0].id]), new Set([first.id, second.id]));
+  assert.doesNotMatch(JSON.stringify(firstPage.data), /storage_path|photo_bucket_id|propietario_id/);
+  assert.equal((await imagesService.getPhysicalgoodsResources(auth, { mine: 'true', page: '999' })).data.length, 0);
+});
+test('search private image signing failures are safe and an absent principal reference still gives a recognizable result', async () => {
+  const saved = await create(auth, input()); failSign = true;
+  await assert.rejects(imagesService.getPhysicalgoodsResources(auth, { mine: 'true' }), { status: 503 });
+  failSign = false; await db.query('update archivo_publicacion set deleted_at=now() where publicacion_id=$1', [saved.id]);
+  const result = await imagesService.getPhysicalgoodsResources(auth, { mine: 'true' });
+  assert.equal(result.data[0].title, 'Calculadora'); assert.equal(result.data[0].imageUrl, null);
+});
+test('HTTP search validates composed filters and uses updated current campus/account for the same bearer token', async () => {
+  const saved = await create(auth, input({ title: 'Search HTTP case' }));
+  const get = (query: string, authorization = 'Bearer ' + token) => originalFetch(base + '?' + query, { headers: { Authorization: authorization } });
+  const response = await get('q=Search%20HTTP&modality=VENTA&condition=BUEN_ESTADO&careerId=' + career + '&subjectId=' + subject + '&minPrice=15000&maxPrice=15000');
+  assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual((await response.json()).data.map((row: { id: string }) => row.id), [saved.id]);
+  assert.equal((await get('q=Search', '')).status, 401);
+  assert.equal((await get('minPrice=-1')).status, 400);
+  current.profile.campus_id = otherCampus; current.campusId = otherCampus;
+  const foreign = await get('q=Search%20HTTP'); assert.equal(foreign.status, 200); assert.equal((await foreign.json()).data.length, 0);
+  current.profile.estado_cuenta = 'SUSPENDIDA'; assert.equal((await get('q=Search')).status, 403);
+});

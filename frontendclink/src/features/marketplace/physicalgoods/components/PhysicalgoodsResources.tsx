@@ -1,24 +1,27 @@
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { PublicationImages } from './PublicationImages';
+import { PhysicalgoodsSearchFilters } from './PhysicalgoodsSearchFilters';
+import { resourceConditions } from '../types/publication';
 
 export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled} onPress={action} style={[styles.button, disabled && styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
   return <View style={styles.card}>
     <Text style={styles.title}>Recursos del campus</Text>
-    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: r.mine }} onPress={() => r.setMine(!r.mine)}><Text style={styles.action}>{r.mine ? '☑' : '☐'} Solo mis publicaciones</Text></Pressable>
-    <Text style={styles.label}>Filtrar por categoría</Text>
-    <View style={styles.choices}>{[{ id: '', name: 'Todas las categorías' }, ...(r.options?.categories ?? [])].map(category => <Pressable key={category.id} accessibilityRole="radio" accessibilityState={{ checked: r.category === category.id }} accessibilityLabel={`Filtro: ${category.name}`} onPress={() => r.setCategory(category.id)} style={[styles.choice, r.category === category.id && styles.selected]}><Text style={styles.action}>{category.name}</Text></Pressable>)}</View>
+    <PhysicalgoodsSearchFilters resources={r} />
     {r.loading && <ActivityIndicator accessibilityLabel="Cargando recursos" />}
     {r.error && <Text accessibilityRole="alert" style={styles.error}>{r.error}</Text>}
     {button('Actualizar recursos', r.reload, r.loading)}
-    {r.page && !r.page.data.length && <Text style={styles.text}>No hay publicaciones para este filtro.</Text>}
+    {r.page && !r.page.data.length && <Text style={styles.text}>No encontramos recursos disponibles que coincidan con tu búsqueda.</Text>}
     {r.page?.data.map(resource => <View key={resource.id} style={styles.resource}>
+      {resource.imageUrl && <Image source={{ uri: resource.imageUrl }} style={styles.thumbnail} accessibilityLabel={`Imagen principal de ${resource.title}`} />}
       <Text style={styles.label}>{resource.title}</Text><Text style={styles.text}>{resource.category.name}</Text>
+      <Text style={styles.text}>Condición: {resourceConditions.find(condition => condition.value === resource.condition)?.label}</Text>
       <Text style={styles.text}>{resource.modality === 'DONACION' ? 'Donación' : `Venta · ${resource.price?.toLocaleString('es-CL')} CLP`}</Text>
-      {button(`Ver imágenes de ${resource.title}`, () => r.open(resource.id))}
+      {button(`Ver detalle de ${resource.title}`, () => r.open(resource.id))}
     </View>)}
     <View style={styles.choices}>{button('Página anterior', () => r.setNumber(r.number - 1), r.loading || r.number === 1)}{button('Página siguiente', () => r.setNumber(r.number + 1), r.loading || !r.page?.meta.hasMore)}</View>
+    {r.page && <Text style={styles.text}>Página {r.page.meta.page}</Text>}
     <Modal visible={Boolean(r.selectedId)} onRequestClose={r.close} animationType="slide">
       <ScrollView contentContainerStyle={styles.modal} keyboardShouldPersistTaps="handled">
         {button('Cerrar imágenes', r.close, r.busy)}
@@ -27,6 +30,7 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
         {button('Actualizar imágenes', r.reloadGallery, r.busy || r.galleryLoading)}
         {r.gallery && <>
           <Text style={styles.title}>{r.gallery.title}</Text><Text style={styles.label}>Categoría: {r.gallery.category.name}</Text>
+          <Text style={styles.text}>Estado: {r.gallery.status.toLowerCase()}</Text>
           {r.gallery.images.map((image, index) => <View key={image.id} style={styles.resource}>
             <Image source={{ uri: image.url }} style={styles.image} accessibilityLabel={`Imagen ${index + 1} de ${r.gallery!.title}`} />
             {image.principal && <Text style={styles.label}>Imagen principal</Text>}
@@ -57,5 +61,6 @@ const styles = StyleSheet.create({
   choice: { borderColor: '#C8D7E0', borderWidth: 1, borderRadius: 10, padding: 10 }, selected: { borderColor: '#0B6E75', backgroundColor: '#E3F2F0' },
   button: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#C8D7E0', marginVertical: 4 }, action: { color: '#0B6E75', fontSize: 15 },
   resource: { borderColor: '#C8D7E0', borderWidth: 1, padding: 14, borderRadius: 12, gap: 8 }, image: { height: 220, width: '100%', resizeMode: 'contain', borderRadius: 10 },
+  thumbnail: { width: '100%', height: 160, resizeMode: 'contain', borderRadius: 8, backgroundColor: '#F4F7F9' },
   error: { color: '#AD3029', fontSize: 15, lineHeight: 23 }, disabled: { opacity: 0.5 },
 });

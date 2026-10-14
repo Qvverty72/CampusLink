@@ -1,16 +1,19 @@
 import { authenticatedEnvelopeRequest, authenticatedRequest, AuthApiError } from '@/lib/api/authenticated-request';
 import type { PublicationCreated, PublicationInput, PublicationOptions } from '../types/publication';
-import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, PublicationPhoto } from '../types/publication';
+import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, PhysicalgoodsSearchFilters, PublicationPhoto } from '../types/publication';
 
 const path = '/api/v1/marketplace/physicalgoods';
 const resourcePath = (id: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Publicación inválida.');
   return path + '/' + id;
 };
-export function loadPhysicalgoodsResources(categoryId: string, mine: boolean, page: number, signal: AbortSignal): Promise<PhysicalgoodsPage> {
+export function loadPhysicalgoodsResources(filters: PhysicalgoodsSearchFilters, page: number, signal: AbortSignal): Promise<PhysicalgoodsPage> {
   const query = new URLSearchParams({ page: String(page), limit: '10' });
-  if (categoryId) query.set('categoryId', categoryId);
-  if (mine) query.set('mine', 'true');
+  for (const key of ['q', 'categoryId', 'modality', 'condition', 'careerId', 'subjectId', 'minPrice', 'maxPrice'] as const) {
+    const value = filters[key].trim();
+    if (value) query.set(key, ['minPrice', 'maxPrice'].includes(key) ? value.replace(',', '.') : value);
+  }
+  if (filters.mine) query.set('mine', 'true');
   return authenticatedEnvelopeRequest<PhysicalgoodsResource[], PhysicalgoodsPage['meta']>(path, { signal }, query);
 }
 export const loadPhysicalgoodsGallery = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsGallery>(resourcePath(id) + '/images', { signal });

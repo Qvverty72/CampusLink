@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -13,13 +14,20 @@ export function PhysicalGoodsScreen() {
 }
 function PhysicalgoodsContent() {
   const resources = usePhysicalgoodsResources();
+  const [publishing, setPublishing] = useState(false);
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.eyebrow}>MARKETPLACE</Text>
-      <Text style={styles.title}>Publicar un recurso</Text>
-      <Text style={styles.description}>Vende o dona un recurso físico a tu comunidad.</Text>
-      <PublicationForm onPublished={resources.reload} onGallery={resources.open} />
-      <PhysicalgoodsResources resources={resources} />
+      <Text style={styles.title}>Marketplace</Text>
+      <Text style={styles.description}>Busca, vende o dona recursos físicos en tu campus.</Text>
+      <View style={styles.choices}>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: !publishing }} style={!publishing ? styles.button : styles.secondaryButton} onPress={() => setPublishing(false)}><Text style={!publishing ? styles.buttonText : styles.action}>Explorar recursos</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: publishing }} style={publishing ? styles.button : styles.secondaryButton} onPress={() => setPublishing(true)}><Text style={publishing ? styles.buttonText : styles.action}>Publicar un recurso</Text></Pressable>
+      </View>
+      <View style={publishing ? undefined : { display: 'none' }}>
+        <PublicationForm onPublished={resources.reload} onGallery={id => { setPublishing(false); resources.open(id); }} />
+      </View>
+      <View style={publishing ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} /></View>
     </ScrollView>
     <BottomNavigationBar activeItemId="physicalgoods" />
   </View>;

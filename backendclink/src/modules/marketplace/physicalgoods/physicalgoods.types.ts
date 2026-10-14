@@ -42,6 +42,23 @@ export interface PhysicalgoodsMediaRow {
   modalidad: 'VENTA' | 'DONACION';
   precio: string | null;
   estado_publicacion: string;
+  estado_uso: PhysicalgoodsCondition;
+}
+
+export interface PhysicalgoodsSearchFilters {
+  q: string;
+  categoryId: string | null;
+  modality: 'VENTA' | 'DONACION' | null;
+  condition: PhysicalgoodsCondition | null;
+  careerId: string | null;
+  subjectId: string | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  mine: boolean;
+}
+export interface PhysicalgoodsSearchRow extends PhysicalgoodsMediaRow {
+  photo_bucket_id: string | null;
+  photo_storage_path: string | null;
 }
 export interface PhysicalgoodsImageRow {
   id: string;
