@@ -24,13 +24,20 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
     {r.page && <Text style={styles.text}>Página {r.page.meta.page}</Text>}
     <Modal visible={Boolean(r.selectedId)} onRequestClose={r.close} animationType="slide">
       <ScrollView contentContainerStyle={styles.modal} keyboardShouldPersistTaps="handled">
-        {button('Cerrar imágenes', r.close, r.busy)}
-        {r.galleryLoading && <ActivityIndicator accessibilityLabel="Cargando imágenes" />}
+        {button('Cerrar detalle', r.close, r.busy)}
+        {r.galleryLoading && <ActivityIndicator accessibilityLabel="Cargando detalle del recurso" />}
         {r.galleryError && <Text accessibilityRole="alert" style={styles.error}>{r.galleryError}</Text>}
-        {button('Actualizar imágenes', r.reloadGallery, r.busy || r.galleryLoading)}
+        {button('Actualizar detalle', r.reloadGallery, r.busy || r.galleryLoading)}
         {r.gallery && <>
           <Text style={styles.title}>{r.gallery.title}</Text><Text style={styles.label}>Categoría: {r.gallery.category.name}</Text>
+          <Text style={styles.label}>Descripción</Text><Text style={styles.text}>{r.gallery.description}</Text>
+          <Text style={styles.text}>Condición: {resourceConditions.find(condition => condition.value === r.gallery!.condition)?.label}</Text>
+          <Text style={styles.text}>{r.gallery.modality === 'DONACION' ? 'Modalidad: Donación' : `Modalidad: Venta · ${r.gallery.price?.toLocaleString('es-CL')} CLP`}</Text>
+          <Text style={styles.text}>Publicado por: {r.gallery.owner.fullName}</Text>
+          <Text style={styles.text}>Campus para el intercambio: {r.gallery.campus.name}</Text>
           <Text style={styles.text}>Estado: {r.gallery.status.toLowerCase()}</Text>
+          <Text style={styles.label}>{r.gallery.acceptsRequests ? 'Disponible para recibir solicitudes.' : 'Este recurso no está disponible para recibir solicitudes.'}</Text>
+          {!r.gallery.images.length && <Text style={styles.text}>No hay fotografías disponibles para este recurso.</Text>}
           {r.gallery.images.map((image, index) => <View key={image.id} style={styles.resource}>
             <Image source={{ uri: image.url }} style={styles.image} accessibilityLabel={`Imagen ${index + 1} de ${r.gallery!.title}`} />
             {image.principal && <Text style={styles.label}>Imagen principal</Text>}

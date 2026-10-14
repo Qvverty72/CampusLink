@@ -36,7 +36,7 @@ export function usePhysicalgoodsResources() {
   useEffect(() => {
     if (!selectedId) return;
     const abort = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
-    setGalleryLoading(true);
+    setGalleryLoading(true); setGallery(null);
     void loadPhysicalgoodsGallery(selectedId, abort.signal).then(result => {
       if (abort.signal.aborted) return;
       setGallery(result);

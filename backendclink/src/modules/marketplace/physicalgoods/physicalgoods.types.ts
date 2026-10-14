@@ -60,6 +60,11 @@ export interface PhysicalgoodsSearchRow extends PhysicalgoodsMediaRow {
   photo_bucket_id: string | null;
   photo_storage_path: string | null;
 }
+export interface PhysicalgoodsDetailRow extends PhysicalgoodsMediaRow {
+  descripcion: string;
+  campus_nombre: string;
+  propietario_nombre: string;
+}
 export interface PhysicalgoodsImageRow {
   id: string;
   bucket_id: string;

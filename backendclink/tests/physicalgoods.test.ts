@@ -69,7 +69,8 @@ before(async () => {
           : Response.json(body.paths.map((path: string) => ({ path, error: null, signedURL: '/object/sign/publication-images/' + path + '?token=temporary' })));
       }
       assert.deepEqual(body, { expiresIn: 60 });
-      return Response.json({ signedURL: '/object/sign/publication-images/mock?token=temporary' });
+      return failSign ? Response.json({ statusCode: 500, message: 'private Storage failure' }, { status: 500 })
+        : Response.json({ signedURL: '/object/sign/publication-images/mock?token=temporary' });
     }
     assert.equal(method, 'POST'); assert.equal(headers.get('content-type'), 'image/png'); assert.equal(headers.get('x-upsert'), 'false');
     const bytes = Buffer.from(init?.body as Uint8Array); assert.deepEqual(bytes, Buffer.from(png, 'base64'));
@@ -459,4 +460,76 @@ test('HTTP search validates composed filters and uses updated current campus/acc
   current.profile.campus_id = otherCampus; current.campusId = otherCampus;
   const foreign = await get('q=Search%20HTTP'); assert.equal(foreign.status, 200); assert.equal((await foreign.json()).data.length, 0);
   current.profile.estado_cuenta = 'SUSPENDIDA'; assert.equal((await get('q=Search')).status, 403);
+});
+
+test('physical detail exposes current description, condition, sale price, campus and only minimal public owner data', async () => {
+  const saved = await create(auth, input({ condition: 'NUEVO' }));
+  await imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo });
+  await db.query(`update perfil_usuario set nombre_completo='Current public name',foto_path='private-avatar',
+    fecha_nacimiento='2000-01-01',region_origen='Private region',comuna_origen='Private district',genero='OTRO' where id=$1`, [auth.userId]);
+  await db.query("update publicacion_recurso set descripcion='Actual description from database' where id=$1", [saved.id]);
+  const viewer = await otherActor(), detail = await imagesService.getPhysicalgoodsGallery(viewer, saved.id);
+  assert.equal(detail.title, 'Calculadora'); assert.equal(detail.description, 'Actual description from database');
+  assert.equal(detail.condition, 'NUEVO'); assert.equal(detail.modality, 'VENTA'); assert.equal(detail.price, 15000);
+  assert.deepEqual(detail.category, { id: category, name: 'Material académico' });
+  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Current public name' });
+  assert.deepEqual(detail.campus, { id: campus, name: 'Home' });
+  assert.equal(detail.status, 'DISPONIBLE'); assert.equal(detail.acceptsRequests, true); assert.equal(detail.canEdit, false);
+  assert.equal(detail.images.length, 2); assert.equal(detail.images[0].principal, true); assert.equal(detail.expiresIn, 60);
+  assert.deepEqual(Object.keys(detail).sort(), ['acceptsRequests','campus','canEdit','category','condition','description','expiresIn','id','images','modality','owner','price','status','title'].sort());
+  assert.doesNotMatch(JSON.stringify(detail), /private-avatar|Private region|Private district|fecha_nacimiento|foto_path|email|storage_path|bucket_id|genero|verificado_en/);
+});
+
+test('donation detail has no sale price and publication campus stays original after owner changes campus', async () => {
+  const saved = await create(auth, input({ modality: 'DONACION', price: null })), viewer = await otherActor();
+  await db.query('update perfil_usuario set campus_id=$2 where id=$1', [auth.userId, otherCampus]);
+  const detail = await imagesService.getPhysicalgoodsGallery(viewer, saved.id);
+  assert.equal(detail.modality, 'DONACION'); assert.equal(detail.price, null); assert.equal(detail.acceptsRequests, true);
+  assert.deepEqual(detail.campus, { id: campus, name: 'Home' }); assert.equal(detail.owner.id, auth.userId);
+  const calls = signed.length;
+  await assert.rejects(imagesService.getPhysicalgoodsGallery({ ...auth, campusId: otherCampus, profile: { ...auth.profile, campus_id: otherCampus } }, saved.id), { status: 404 });
+  assert.equal(signed.length, calls);
+});
+
+test('detail rechecks current state and data after discovery and no longer accepts requests when reserved or completed', async () => {
+  const saved = await create(auth, input());
+  assert.equal((await imagesService.getPhysicalgoodsResources(auth, { mine: 'true' })).data[0].status, 'DISPONIBLE');
+  for (const state of ['RESERVADO', 'FINALIZADO', 'DISPONIBLE']) {
+    await db.query('update publicacion_recurso set estado_publicacion=$2,descripcion=$3 where id=$1', [saved.id, state, 'Updated ' + state]);
+    const detail = await imagesService.getPhysicalgoodsGallery(auth, saved.id);
+    assert.equal(detail.status, state); assert.equal(detail.description, 'Updated ' + state);
+    assert.equal(detail.acceptsRequests, state === 'DISPONIBLE');
+  }
+  await db.query('update publicacion_recurso set deleted_at=now() where id=$1', [saved.id]);
+  const calls = signed.length;
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(auth, saved.id), { status: 404 });
+  assert.equal(signed.length, calls);
+});
+
+test('HTTP detail requires identity and current account/campus, conceals excluded resources and keeps no-store envelope', async () => {
+  const saved = await create(auth, input());
+  const get = (id: string, authorization = 'Bearer ' + token) => originalFetch(base + '/' + id + '/images', { headers: { Authorization: authorization } });
+  assert.equal((await get(saved.id, '')).status, 401); assert.equal((await get('invalid')).status, 400);
+  const response = await get(saved.id); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal((await response.json()).data.owner.id, auth.userId);
+  let calls = signed.length;
+  for (const update of ["tipo_recurso='DIGITAL'", "estado_publicacion='OCULTO'", "estado_publicacion='CANCELADO'", 'deleted_at=now()']) {
+    await db.query('update publicacion_recurso set ' + update + ' where id=$1', [saved.id]);
+    const hidden = await get(saved.id); assert.equal(hidden.status, 404); assert.equal((await hidden.json()).error.code, 'NOT_FOUND');
+    await db.query("update publicacion_recurso set tipo_recurso='FISICO',estado_publicacion='DISPONIBLE',deleted_at=null where id=$1", [saved.id]);
+  }
+  assert.equal(signed.length, calls);
+  current.campusId = otherCampus; current.profile.campus_id = otherCampus; assert.equal((await get(saved.id)).status, 404);
+  current.campusId = campus; current.profile.campus_id = campus;
+  current.profile.estado_cuenta = 'SUSPENDIDA'; assert.equal((await get(saved.id)).status, 403); assert.equal(signed.length, calls);
+});
+
+test('detail safely reports private image failures and validates persisted campus paths before signing', async () => {
+  const saved = await create(auth, input()); failSign = true;
+  const response = await originalFetch(base + '/' + saved.id + '/images', { headers: { Authorization: 'Bearer ' + token } });
+  assert.equal(response.status, 503); const body = await response.json(); assert.equal(body.error.code, 'DEPENDENCY_UNAVAILABLE');
+  assert.doesNotMatch(JSON.stringify(body), /private Storage|secret|storage_path|password/);
+  failSign = false; const calls = signed.length;
+  await db.query('update archivo_publicacion set storage_path=$2 where publicacion_id=$1', [saved.id, otherCampus + '/foreign-private.png']);
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(auth, saved.id), { status: 503 }); assert.equal(signed.length, calls);
 });

@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { PaginationParams } from '../../../types/api.js';
-import type { PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
+import type { PhysicalgoodsDetailRow, PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
 import { PHYSICALGOODS_BUCKET } from './physicalgoods.repository.js';
 
 const mediaProjection = `p.id,p.campus_id,p.propietario_id,p.titulo,p.modalidad,p.precio,p.estado_publicacion,
@@ -12,6 +12,13 @@ export async function findPhysicalgoodsMedia(client: PoolClient, publicationId: 
   return (await client.query<PhysicalgoodsMediaRow>(`SELECT ${mediaProjection} ${mediaJoins}
     WHERE p.id=$1 AND p.campus_id=$2 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL
     AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO') ${lock ? 'FOR UPDATE OF p,r' : ''}`, [publicationId, campusId])).rows[0] ?? null;
+}
+export async function findPhysicalgoodsDetail(client: PoolClient, publicationId: string, campusId: string) {
+  return (await client.query<PhysicalgoodsDetailRow>(`SELECT ${mediaProjection},p.descripcion,
+    campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
+    JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
+    WHERE p.id=$1 AND p.campus_id=$2 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL
+    AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO')`, [publicationId, campusId])).rows[0] ?? null;
 }
 export async function listPhysicalgoodsMedia(client: PoolClient, campusId: string, filters: PhysicalgoodsSearchFilters, ownerId: string | null, pagination: PaginationParams) {
   // Treat user %/_/backslashes as literal text, not SQL wildcard operators.

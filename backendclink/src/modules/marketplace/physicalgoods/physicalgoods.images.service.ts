@@ -9,7 +9,7 @@ import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgood
 import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto,
   signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { parsePhysicalgoodsSearch } from './physicalgoods.search.validation.js';
-import { findPhysicalgoodsCategory, findPhysicalgoodsImages, findPhysicalgoodsMedia, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
+import { findPhysicalgoodsCategory, findPhysicalgoodsDetail, findPhysicalgoodsImages, findPhysicalgoodsMedia, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
   retirePhysicalgoodsImage, setPhysicalgoodsPrincipal, touchPhysicalgoods, updatePhysicalgoodsCategory } from './physicalgoods.images.repository.js';
 
 async function dependency<T>(operation: () => Promise<T>): Promise<T> {
@@ -43,7 +43,7 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
   const id = physicalgoodsId(publicationId, 'publicationId');
   return dependency(async () => {
     const result = await withPhysicalgoodsTransaction(async client => {
-      const row = await findPhysicalgoodsMedia(client, id, auth.campusId);
+      const row = await findPhysicalgoodsDetail(client, id, auth.campusId);
       if (!row) throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible en tu campus.');
       return { row, images: await findPhysicalgoodsImages(client, id) };
     });
@@ -52,7 +52,10 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
       if (image.bucket_id !== PHYSICALGOODS_BUCKET || !image.storage_path.startsWith(auth.campusId + '/')) throw new Error('Invalid stored image');
       images.push({ id: image.id, name: image.nombre_original, principal: image.orden === 0, url: await signPrincipalPhoto(image.storage_path) });
     }
-    return { ...mediaDto(result.row), canEdit: canEdit(auth, result.row), images, expiresIn: 60 };
+    return { ...mediaDto(result.row), description: result.row.descripcion,
+      campus: { id: result.row.campus_id, name: result.row.campus_nombre },
+      owner: { id: result.row.propietario_id, fullName: result.row.propietario_nombre },
+      acceptsRequests: result.row.estado_publicacion === 'DISPONIBLE', canEdit: canEdit(auth, result.row), images, expiresIn: 60 };
   });
 }
 export async function getPhysicalgoodsResources(auth: VerifiedAuthConnection, query: unknown) {
