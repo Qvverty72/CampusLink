@@ -281,6 +281,22 @@ health devuelve el estado del proceso sin consultar bases. ready comprueba las d
 
 Las colecciones esperadas del modelo actual son campus_maps, activities, activity_participation, activity_interactions y moderation_logs. Las sondas requieren las cuatro primeras; moderation_logs corresponde a moderación. Una colección existente vacía es válida; una ausente falla. La API no crea colecciones ni aplica migraciones durante el arranque. Versionar el modelo, sus validadores e índices corresponde a F2.2-02.
 
+## Publicación de recursos físicos (F2.4-01)
+
+El módulo usa las tablas existentes `publicacion_recurso`, `recurso_fisico`, `archivo_publicacion`, `publicacion_carrera` y `publicacion_asignatura`. Las reglas permanecen en el servicio Express; el repositorio usa el pool PostgreSQL y Supabase Storage. Requiere `SUPABASE_DB_URL` y la clave de servidor ya existentes, además del bucket privado `publication-images`. No crea buckets, tablas ni columnas durante el arranque.
+
+- `GET /api/v1/marketplace/physicalgoods/options`: campus vigente, categorías activas y asociaciones académicas ofrecidas en ese campus.
+- `POST /api/v1/marketplace/physicalgoods`: cuerpo JSON con `title`, `description`, `condition` (`NUEVO`, `BUEN_ESTADO`, `USADO`, `DETERIORADO`), `categoryId`, `modality` (`VENTA`, `DONACION`), `price` y `careerId`/`subjectId` opcionales. `photo` contiene `name`, `mimeType` y `base64`. Venta exige precio numérico finito mayor que cero; donación exige precio ausente o null. La foto obligatoria admite JPEG/PNG/WebP hasta 5 MB, con validación de firma y codificación. Responde 201 con la publicación en `data`, estado `DISPONIBLE` y moneda CLP del esquema.
+- `GET /api/v1/marketplace/physicalgoods/:publicationId/photo`: devuelve `data.url` firmada durante 60 segundos, después de comprobar campus, tipo físico y estado visible. El path/bucket se leen del registro; el cliente no los decide.
+
+Los tres endpoints requieren sesión, cuenta habilitada y capacidad general del campus actual. El backend deriva propietario/campus y rechaza campos de ubicación, cantidad y privilegios. La carga usa un path exclusivo generado por el servidor. Después de cargar revalida perfil/roles/campus y catálogo dentro de la transacción; todas las relaciones se guardan o revierten juntas. Un fallo limpia la foto salvo que un COMMIT haya quedado confirmado por su referencia persistida. Si falla también la limpieza o no puede determinarse el resultado del COMMIT, se registra únicamente el UUID generado para revisión operativa; no se exponen credenciales ni se elimina una foto que puede estar referenciada.
+
+Aplicar `src/database/supabase/migrations/f2_4_01_publicacion_fisica.sql` en instalaciones que aún no tengan estos permisos/RLS. El script es repetible y solo habilita RLS y ajusta privilegios de las tablas existentes para impedir acceso directo desde anon/authenticated; no contiene reglas de negocio ni modifica datos. En el proyecto configurado se verificó RLS activo y ausencia de lectura directa pública el 2026-10-13, sin ejecutar cambios remotos.
+
+La categoría identifica el tipo de objeto físico, independientemente de condición, precio o carrera. El catálogo aprobado se carga mediante `src/database/supabase/migrations/f2_4_01_categorias_recurso_fisico.sql`: Libros y textos, Apuntes y material impreso, Materiales académicos, Instrumentos y herramientas, Tecnología y accesorios, Indumentaria académica y Otros. Solo inserta nombres ausentes en la tabla existente y conserva IDs/datos al repetirse. Las siete categorías se cargaron activas en el proyecto configurado el 2026-10-13. El formulario las consulta desde la API; usar Actualizar opciones después de cargar el catálogo.
+
+Expo organiza el formulario en `features/marketplace/physicalgoods/{api,components,hooks,types}`. `expo-image-picker` compatible con SDK 57 permite seleccionar una foto en web/Android/iOS; el plugin configura permiso de fotos y deshabilita permisos de cámara/micrófono. La política de foto fue aprobada por el usuario para GH-38; la entrada F2.2-05 debe sincronizar esa decisión. Búsqueda, detalle completo, edición, múltiples fotos y transacciones pertenecen a sus tickets posteriores.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
