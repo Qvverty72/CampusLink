@@ -8,7 +8,8 @@ export interface TableProbe {
   resourceType?: 'DIGITAL' | 'FISICO';
 }
 
-// Discard all returned rows. An empty result is a successful read, including under RLS.
+// Descarta filas; una consulta vacía cuenta como lectura correcta, incluso bajo RLS.
+/** Comprueba que las tablas usadas por los módulos responden sin conservar datos consultados. */
 export async function probeSupabaseTables(tables: readonly TableProbe[]): Promise<void> {
   await Promise.all(tables.map(async ({ table, column = 'id', resourceType }) => {
     let query = supabaseTechnical.from(table).select(column).limit(1);

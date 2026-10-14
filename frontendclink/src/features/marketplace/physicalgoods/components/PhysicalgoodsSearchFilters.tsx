@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { resourceConditions, type PhysicalgoodsSearchFilters } from '../types/publication';
 
+/** Vincula los filtros con la búsqueda y validación del hook de recursos. */
 export function PhysicalgoodsSearchFilters({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
   const [expanded, setExpanded] = useState(false);
   const choices = (key: Exclude<keyof PhysicalgoodsSearchFilters, 'mine'>, label: string, options: { value: string; name: string }[]) => <>

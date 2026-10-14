@@ -12,13 +12,13 @@ import type { BuildingId, MapState } from '@/three/types/map';
 // Cada consumidor usa un selector pequeño para rerenderizarse solo cuando cambia
 // la porción de estado que necesita; la animación por frame permanece en refs.
 export const useMapStore = create<MapState>((set) => ({
-  // ─── Initial State ─────────────────────────────────────────────────────────
+  // ─── Estado inicial ─────────────────────────────────────────────────────────
   selectedBuilding: null,
   selectedFloor: null,
   isExploded: false,
   isFloorModalOpen: false,
 
-  // ─── Actions ───────────────────────────────────────────────────────────────
+  // ─── Acciones ──────────────────────────────────────────────────────────────
 
   /** Selecciona un edificio y deja el estado listo para zoom + exploded view. */
   selectBuilding: (buildingId: BuildingId) =>

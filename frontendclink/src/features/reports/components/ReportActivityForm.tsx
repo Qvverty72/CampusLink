@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { useActivityReport } from '../hooks/useActivityReport';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 
-/** Embedded in the existing activity modal, not a new route or administrative screen. */
+/** Presenta la denuncia dentro del modal existente de actividades. */
 export function ReportActivityForm({ activityId, title, onBack }: {
   activityId: string; title: string; onBack: () => void;
 }) {

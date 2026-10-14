@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 
+/** Construye un snapshot estable de publicación e imágenes para auditoría, sin bytes ni rutas de Storage. */
 export async function physicalgoodsSnapshot(client: PoolClient, id: string) {
   const row = (await client.query(`SELECT p.id,p.campus_id,p.propietario_id,p.tipo_recurso,p.titulo,p.descripcion,p.modalidad,p.precio,p.moneda,
     p.estado_publicacion,p.deleted_at,to_char(p.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
@@ -9,6 +10,7 @@ export async function physicalgoodsSnapshot(client: PoolClient, id: string) {
     WHERE publicacion_id=$1 AND tipo_archivo='IMAGEN' ORDER BY orden,created_at,id`, [id])).rows;
   return { ...row, images };
 }
+/** Inserta el cambio auditado en la misma transacción que modificó la publicación o sus imágenes. */
 export async function auditPhysicalgoods(client: PoolClient, auth: VerifiedAuthConnection, id: string,
   action: 'PUBLICAR_PUBLICACION' | 'EDITAR_PUBLICACION' | 'RETIRAR_PUBLICACION', before: unknown, after: unknown) {
   await client.query(`INSERT INTO public.auditoria(actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion,datos_antes,datos_despues)

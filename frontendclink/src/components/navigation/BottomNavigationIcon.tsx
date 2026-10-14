@@ -17,7 +17,7 @@ interface BottomNavigationIconProps {
   size?: number;
 }
 
-/** Lucide icons are decorative; the navigation tab provides its accessible label. */
+/** Los íconos Lucide son decorativos; la pestaña aporta la etiqueta accesible. */
 export function BottomNavigationIcon({
   id,
   color,

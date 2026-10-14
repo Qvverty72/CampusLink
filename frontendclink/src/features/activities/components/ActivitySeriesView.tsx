@@ -13,7 +13,7 @@ import { useActivityCompactHeader, useActivityRefresh, useActivityScrollReset } 
 
 const OCCURRENCES_PER_PAGE = 5;
 
-/** Placeholder slots match one page; they never claim a real occurrence count. */
+/** Los marcadores ocupan una página sin afirmar una cantidad real de ocurrencias. */
 function ActivitySeriesSkeleton({ closeAction }: { closeAction: ReactNode }) {
   return <View style={styles.content}>
     <Skeleton label="Cargando serie y ocurrencias">
@@ -63,7 +63,7 @@ function scheduleLabel(activity: Activity, timeZone: string): string {
   return `${start.toLocaleTimeString('es-CL', timeOptions)} – ${sameDay ? '' : `${end.toLocaleDateString('es-CL', dateOptions)}, `}${end.toLocaleTimeString('es-CL', timeOptions)}`;
 }
 
-/** Keep the reference's simple rows; reveal metadata only when an occurrence differs. */
+/** Mantiene filas compactas y muestra metadata solo cuando una ocurrencia difiere. */
 function OccurrenceRow({ activity, reference, timeZone, current, now, onPress }: {
   activity: Activity; reference: Activity; timeZone: string; current: boolean; now: number; onPress: () => void;
 }) {
@@ -97,7 +97,7 @@ function OccurrenceRow({ activity, reference, timeZone, current, now, onPress }:
   </TouchableOpacity>;
 }
 
-/** Series stays in the current modal. Participation always belongs to the selected activity ID. */
+/** La serie permanece en el modal actual; la participación pertenece al ID de actividad elegido. */
 export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSelect }: {
   seriesId: string; currentActivityId: string; onBack: () => void; onSelect: (activityId: string) => void;
 }) {

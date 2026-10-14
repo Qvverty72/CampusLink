@@ -16,7 +16,8 @@ async function probeMapDependencies(): Promise<DependencyChecks> {
 
 export const getMapHealth: () => Promise<MapHealth> = createModuleHealthCheck('maps', probeMapDependencies);
 
-// Preserve the active-map DTO; do not expose a map with an absent/inactive campus reference.
+// Conserva el DTO del mapa activo y descarta referencias a campus inexistentes o inactivos.
+/** Busca un mapa ACTIVE solo después de confirmar que el campus de referencia sigue activo. */
 export async function getActiveMap(campusId: string) {
   const { findActiveMapByCampusId, isActiveCampus } = await import('./map.repository.js');
   if (!await isActiveCampus(campusId)) return null;
@@ -24,13 +25,13 @@ export async function getActiveMap(campusId: string) {
 }
 
 export async function getAuthorizedActiveMap(auth: VerifiedAuthConnection, campusId: string, lookup: ActiveMapLookup = getActiveMap) {
-  // Browsing the map follows the current profile campus, including after a move.
+  // La consulta sigue el campus actual del perfil, incluso si el usuario se cambió de campus.
   if (campusId.toLowerCase() !== auth.campusId) {
     throw new ApiError(403, 'FORBIDDEN', 'Solo puedes consultar el mapa de tu campus vigente.');
   }
   requireCampusCapability(auth, auth.campusId, 'general');
   const map = await lookup(auth.campusId);
-  // Inspect the actual document as well as the requested path before exposing it.
+  // Comprueba el documento obtenido, además del parámetro, antes de exponerlo.
   if (!map || map.campusId !== auth.campusId || map.status !== 'ACTIVE') {
     throw new ApiError(404, 'NOT_FOUND', 'Active campus map not found.');
   }

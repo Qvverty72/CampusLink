@@ -3,6 +3,7 @@ import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResourc
 import { useEditPhysicalgoods } from '../hooks/useEditPhysicalgoods';
 import { resourceConditions } from '../types/publication';
 
+/** Expone edición y administración de fotos según permisos entregados por la API. */
 export function PhysicalgoodsEditor({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
   const edit = useEditPhysicalgoods(r);
   const { draft,setDraft,confirm,setConfirm,error } = edit;

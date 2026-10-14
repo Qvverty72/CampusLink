@@ -3,6 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaV
 
 import { useRegistration } from '../hooks/useRegistration';
 
+/** Flujo institucional con selección de campus, verificación y finalización de perfil. */
 export function RegisterScreen() {
   const { auth, options, catalogLoading, setCatalogRevision, email, setEmail, fullName, setFullName,
     password, setPassword, setCampusId, pendingEmail, setPendingEmail, code, setCode, busy,

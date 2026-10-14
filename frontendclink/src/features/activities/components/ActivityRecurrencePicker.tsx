@@ -13,7 +13,7 @@ function Icon({ icon: Glyph, size = 20, color = APP_COLORS.PRIMARY }: { icon: Lu
   </View>;
 }
 
-/** Stage a simple rule and review authoritative dates before handing its hash to creation. */
+/** Prepara una regla y muestra fechas calculadas por el servidor antes de usar su hash al crear. */
 export function ActivityRecurrencePicker({ value, onChange, disabled, timeZone, startDate, onPreview, previewContext = '' }: {
   value: ActivityRecurrenceDraft; onChange: (value: ActivityRecurrenceDraft, preview?: ActivityRecurrencePreview) => void;
   disabled: boolean; timeZone: string; startDate: string;

@@ -27,6 +27,10 @@ export interface ActivityDependencies {
   deleteActivity?: (auth: VerifiedAuthConnection, activityId: string, expectedRevision: number, now: Date) => Promise<ActivityDeletionResult>;
 }
 
+/**
+ * Lista actividades visibles del campus actual y valida sus ubicaciones contra el mapa activo.
+ * Los filtros se aplican en MongoDB y se comprueban de nuevo al construir el DTO.
+ */
 export async function getActivities(auth: VerifiedAuthConnection, query: ActivityQuery, dependencies: ActivityDependencies = {}): Promise<ActivityDto[]> {
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const buildings = spatialBuildings(map);

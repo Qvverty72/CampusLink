@@ -10,6 +10,7 @@ export const getReportsHealthController: RequestHandler = async (_request, respo
   sendModuleHealth(response, await getReportsHealth());
 };
 
+/** Crea el adaptador HTTP de denuncia usando parámetros y cuerpo previamente validados. */
 export function createActivityReportController(dependencies: ReportsDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
     const { params, body } = getValidatedRequest<{ params: { activityId: string }; body: ReportActivityInput }>(response);

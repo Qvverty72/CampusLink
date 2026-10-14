@@ -2,6 +2,7 @@ export const resourceConditions = [
   { value: 'NUEVO', label: 'Nuevo' }, { value: 'BUEN_ESTADO', label: 'Buen estado' },
   { value: 'USADO', label: 'Usado' }, { value: 'DETERIORADO', label: 'Deteriorado' },
 ] as const;
+/** Foto local preparada para envío; el contrato omite URI y transmite base64 al API. */
 export interface PublicationPhoto {
   name: string;
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
@@ -14,6 +15,7 @@ export interface PublicationOptions {
   careers: { id: string; name: string }[];
   subjects: { id: string; name: string; careerIds: string[] }[];
 }
+/** Entrada de publicación; precio nulo representa donación y foto es la principal inicial. */
 export interface PublicationInput {
   title: string;
   description: string;

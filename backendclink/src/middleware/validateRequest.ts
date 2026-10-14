@@ -10,7 +10,7 @@ import type {
 
 export type RequestParsers = Partial<Record<RequestSection, RequestParser>>;
 
-/** Validates configured request sections before the route controller runs. */
+/** Valida las secciones configuradas antes del controlador y reúne los errores en una respuesta. */
 export function validateRequest(parsers: RequestParsers): RequestHandler {
   return (request, response, next) => {
     const parsed: ValidatedRequest = {};
@@ -42,7 +42,7 @@ export function validateRequest(parsers: RequestParsers): RequestHandler {
   };
 }
 
-/** Reads the values produced by the route's preceding validateRequest middleware. */
+/** Lee los valores normalizados que dejó el `validateRequest` previo de la ruta. */
 export function getValidatedRequest<T>(response: Response): T {
   const validatedRequest = response.locals.validatedRequest as T | undefined;
   if (validatedRequest === undefined) {

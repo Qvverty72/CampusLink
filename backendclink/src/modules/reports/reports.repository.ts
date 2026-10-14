@@ -14,7 +14,7 @@ export function probeReportsDependencies(): Promise<DependencyChecks> {
 export async function saveActivityReport(report: NewActivityReport,
   transaction = withPostgresTransaction): Promise<ActivityReportReceipt> {
   return transaction(async client => {
-    // A concurrent campus move or suspension must not turn stale identity into a new report.
+    // Una suspensión o cambio de campus concurrente no debe permitir guardar con contexto vencido.
     const profile = await client.query(`SELECT id FROM public.perfil_usuario WHERE id=$1 AND campus_id=$2
       AND estado_cuenta='ACTIVA' AND deleted_at IS NULL FOR SHARE`, [report.userId, report.campusId]);
     if (profile.rows.length !== 1) throw new ApiError(403, 'FORBIDDEN', 'Tu cuenta o campus cambió. Actualiza la sesión.');

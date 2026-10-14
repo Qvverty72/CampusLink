@@ -25,6 +25,7 @@ export async function findActiveMapByCampusId(
     .findOne({ campusId, status: 'ACTIVE' });
 }
 
+/** Comprueba tablas y colección que necesita la consulta del mapa activo. */
 export function probeMapDependencies(): Promise<DependencyChecks> {
   return inspectDependencies({
     supabase: () => probeSupabaseTables([{ table: 'campus' }]),
@@ -32,7 +33,8 @@ export function probeMapDependencies(): Promise<DependencyChecks> {
   });
 }
 
-// Technical reference check only: this is not authorization by campus.
+// Comprueba la referencia técnica; esta consulta por sí sola no autoriza acceso al campus.
+/** Indica si existe un campus activo en Supabase; no comprueba permisos del usuario. */
 export async function isActiveCampus(campusId: string): Promise<boolean> {
   const { data, error } = await createServerSupabaseClient().from('campus')
     .select('id').eq('id', campusId).eq('activo', true).limit(1);

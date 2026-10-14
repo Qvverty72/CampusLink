@@ -4,6 +4,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { loadAcademicOptions, loadAcademicProfile, saveAcademicProfile } from '../api/profileApi';
 import type { AcademicOptions, AcademicProfile } from '../types/profile';
 
+/** Carga perfil y catálogo, valida selecciones y guarda con detección de conflicto. */
 export function useAcademicProfile() {
   const auth = useAuth();
   const [profile, setProfile] = useState<AcademicProfile | null>(null);

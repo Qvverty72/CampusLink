@@ -9,6 +9,7 @@ import type { ActivityDetailDto, ActivityDocument, ActivityType, CreateActivityI
 import type { CommunityActivityCreationAvailability } from './activities.types.js';
 import { COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from './activities.policy.js';
 
+/** Indica si el usuario puede publicar y, si no es oficial, si ya mantiene un cupo comunitario ocupado. */
 export async function getCommunityActivityCreationAvailability(auth: VerifiedAuthConnection,
   dependencies: ActivityDependencies = {}): Promise<CommunityActivityCreationAvailability> {
   requireCampusCapability(auth, auth.campusId, 'general');
@@ -22,18 +23,19 @@ export async function getCommunityActivityCreationAvailability(auth: VerifiedAut
   return { campusId: auth.campusId, canCreate: !existing, ...(existing ? { message: COMMUNITY_ACTIVITY_LIMIT_MESSAGE } : {}) };
 }
 
+/** Publica una actividad comunitaria aplicando la autorización y el límite de cupo vigentes. */
 export async function createCommunityActivity(auth: VerifiedAuthConnection, input: CreateActivityInput,
   dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
   return publishActivity(auth, input, 'COMMUNITY_ACTIVITY', dependencies);
 }
 
-/** Role alone is insufficient; the existing campus matrix includes the approved admin exception. */
+/** El rol por sí solo no basta; la matriz de campus vigente también considera la excepción administrativa configurada. */
 export async function createOfficialEvent(auth: VerifiedAuthConnection, input: CreateActivityInput,
   dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
   return publishActivity(auth, input, 'OFFICIAL_EVENT', dependencies);
 }
 
-/** Shared authorization/preparation for single activities and recurring series. */
+/** Prepara un documento común a actividades únicas y series, verificando cuenta, permiso y ubicación. */
 export async function prepareActivityDocument(auth: VerifiedAuthConnection, input: CreateActivityInput, type: ActivityType,
   dependencies: ActivityDependencies): Promise<ActivityDocument> {
   if (auth.profile.campus_id !== auth.campusId || (type === 'COMMUNITY_ACTIVITY' && !auth.profile.verificado_en)) {
@@ -55,7 +57,7 @@ export async function prepareActivityDocument(auth: VerifiedAuthConnection, inpu
   };
 }
 
-/** Type is selected by the authorized entry point, never by the request body. */
+/** El tipo lo elige el punto de entrada autorizado, nunca el cuerpo de la solicitud. */
 async function publishActivity(auth: VerifiedAuthConnection, input: CreateActivityInput, type: ActivityType,
   dependencies: ActivityDependencies): Promise<ActivityDetailDto> {
   const document = await prepareActivityDocument(auth, input, type, dependencies);

@@ -6,7 +6,7 @@ import type { ActivityNotificationDto, NotificationPage } from './notifications.
 const reasonLabels = { DATES_CHANGED: 'fechas', LOCATION_CHANGED: 'ubicación', CONTENT_CHANGED: 'información' };
 const publicationMessage = 'Se publicó un evento oficial en tu campus.';
 
-/** Preserve stored notices while presenting old generated series text as a concrete event. */
+/** Conserva las notificaciones guardadas y presenta avisos antiguos de series como eventos concretos. */
 function publicNotificationContent(type: ActivityNotificationDto['type'], title: string, message: string, key: string) {
   if (type === 'OFFICIAL_EVENT_PUBLISHED') {
     const legacyTitle = /^series:[0-9a-f]{24}:published$/.test(key) && /^Se publicó una serie de \d+ fechas de «/.test(message)
@@ -21,7 +21,7 @@ function publicNotificationContent(type: ActivityNotificationDto['type'], title:
   return { title, message };
 }
 
-/** ON CONFLICT includes logically deleted rows, preventing their resurrection on retry. */
+/** El conflicto incluye filas retiradas lógicamente para que un reintento no las reactive. */
 export async function deliverActivityNotification(task: PendingActivityNotification, participants: string[] | null,
   transaction = withPostgresTransaction): Promise<void> {
   const message = task.event.type === 'OFFICIAL_EVENT_PUBLISHED' ? publicationMessage

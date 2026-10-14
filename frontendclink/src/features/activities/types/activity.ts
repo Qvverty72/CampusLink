@@ -1,6 +1,6 @@
 import { APP_COLORS } from '../../../types/colors';
 
-/** Public read contract. Spatial keys reference map data, not GLB node names. */
+/** Contrato de lectura; las claves espaciales apuntan al mapa, no a nodos GLB. */
 export interface Activity {
   id: string;
   campusId: string;
@@ -56,7 +56,7 @@ export interface ActivityDeletionResult {
   activityId: string; campusId: string; revision: number; deletedAt: string;
 }
 
-/** Choose one real activity per series before spatial filters; never merge participation or IDs. */
+/** Elige una ocurrencia real por serie antes de filtrar; conserva IDs y participación propios. */
 export function selectActivityOccurrences(activities: Activity[], now = Date.now()): Activity[] {
   const ordered = activities.filter(activity => Number.isFinite(Date.parse(activity.startAt))
     && Date.parse(activity.startAt) < Date.parse(activity.endAt) && Date.parse(activity.endAt) > now)
@@ -72,6 +72,7 @@ export function selectActivityOccurrences(activities: Activity[], now = Date.now
   });
 }
 
+/** Filtra por edificio, piso o POI y descarta actividades ya terminadas. */
 export function filterLocationActivities(activities: Activity[], query: ActivityLocationQuery, now = Date.now()): Activity[] {
   return activities.filter(activity => Date.parse(activity.endAt) > now
     && (!query.buildingKey || activity.location.buildingKey === query.buildingKey)

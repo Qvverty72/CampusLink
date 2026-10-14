@@ -1,7 +1,7 @@
 import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../types/api.js';
 import type { ActivityQuery } from './activities.types.js';
 
-/** Only spatial filters are accepted. Campus and visibility come from server policy. */
+/** Acepta solo filtros espaciales; campus y visibilidad provienen de la política del servidor. */
 export const parseActivityQuery: RequestParser = (input: unknown): ValidationResult<ActivityQuery> => {
   const query = typeof input === 'object' && input !== null
     ? input as Record<string, unknown> : {};
@@ -36,7 +36,7 @@ export const parseActivityId: RequestParser = (input: unknown) => {
     : { success: false, issues: [{ field: 'activityId', message: 'A 24-character ObjectId is required.' }] };
 };
 
-/** Identity, campus and desired participation state are owned by the server. */
+/** Identidad, campus y estado de participación solicitado son responsabilidad del servidor. */
 export const parseEmptyActivityInput: RequestParser = (input: unknown) => {
   if (input === undefined || (typeof input === 'object' && input !== null && !Array.isArray(input) && Object.keys(input).length === 0)) {
     return { success: true, data: {} };

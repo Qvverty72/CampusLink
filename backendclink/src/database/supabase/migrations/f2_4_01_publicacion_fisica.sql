@@ -1,5 +1,5 @@
--- F2.4-01: existing tables only. Business operations go through the authenticated API.
--- Run as database owner. No rows, tables or columns are added/removed by this script.
+-- F2.4-01: solo usa tablas existentes; las operaciones de negocio pasan por la API autenticada.
+-- Ejecutar como propietario. No agrega ni elimina filas, tablas o columnas.
 begin;
 alter table public.publicacion_recurso enable row level security;
 alter table public.recurso_fisico enable row level security;

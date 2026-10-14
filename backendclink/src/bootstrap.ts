@@ -23,8 +23,10 @@ const defaults: BootstrapDependencies = {
   }),
 };
 
-// Do not listen until every module can read its required tables/collections.
-// A failure at any stage closes the pool before propagating a safe startup error.
+/**
+ * Conecta las bases, comprueba las dependencias obligatorias y recién entonces abre el puerto.
+ * Si una etapa falla, cierra las conexiones y sustituye el error para no exponer detalles.
+ */
 export async function startApi(dependencies: BootstrapDependencies = defaults): Promise<Server> {
   try {
     await dependencies.connect();
@@ -41,7 +43,7 @@ export async function stopApi(server: Server): Promise<void> {
   try {
     await new Promise<void>((resolve, reject) => {
       server.close(error => error ? reject(error) : resolve());
-      // Bounded shutdown even if a client leaves a connection open.
+      // Limita el cierre aunque algún cliente mantenga abierta una conexión HTTP.
       const timer = setTimeout(() => server.closeAllConnections(), env.databaseTimeoutMs);
       timer.unref();
       server.once('close', () => clearTimeout(timer));

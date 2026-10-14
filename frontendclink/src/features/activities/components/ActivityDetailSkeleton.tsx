@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import { ACTIVITY_PARTICIPANTS_PAGE_SIZE } from '../types/activity';
 
-/** Full-sheet layout built from the same loading primitives as other modules. */
+/** Estructura de carga de ficha completa, compuesta con los marcadores compartidos. */
 export function ActivityDetailSkeleton() {
   return <Skeleton label="Cargando ficha" contentStyle={styles.content}>
     <View style={styles.header}>

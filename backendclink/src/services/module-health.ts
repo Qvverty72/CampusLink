@@ -1,7 +1,8 @@
 import { env } from '../config/env.js';
 import type { DependencyChecks, ModuleHealth, ModuleName } from '../types/api.types.js';
 
-// Deduplicate concurrent probes and cache briefly, including failures, to bound polling load.
+// Agrupa sondas concurrentes y conserva brevemente también los fallos para limitar la carga de sondeo.
+/** Crea una sonda por módulo con caché breve y una sola ejecución simultánea. */
 export function createModuleHealthCheck<M extends ModuleName>(
   module: M, probe: () => Promise<DependencyChecks>, ttlMs = env.healthCacheTtlMs,
 ): () => Promise<ModuleHealth<M>> {

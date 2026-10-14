@@ -1,7 +1,7 @@
-// Manual inventory for GH-46 / F2.1-05. NOT a startup migration.
-// Run in mongosh / Compass shell, after selecting the existing database.
-// Preview by default; set globalThis.POI_INVENTORY_APPLY = true to write.
-// Only updates campus_maps; never creates collections, maps, buildings or floors.
+// Inventario manual de GH-46 / F2.1-05; no es una migración de arranque.
+// Ejecutar en mongosh o Compass después de seleccionar la base existente.
+// Por defecto muestra una vista previa; para escribir se requiere POI_INVENTORY_APPLY = true.
+// Solo actualiza `campus_maps`; no crea colecciones, mapas, edificios ni pisos.
 (() => {
   const campusId = globalThis.POI_INVENTORY_CAMPUS_ID ?? '22222222-2222-4222-8222-222222222222';
   const apply = globalThis.POI_INVENTORY_APPLY === true;
@@ -381,7 +381,7 @@
   const map = maps[0];
   if (map.deletedAt || !Array.isArray(map.buildings)) fail('Map is inactive or malformed.');
 
-  // Preflight the complete document before preparing any write. No guessed indices.
+  // Valida el documento completo antes de preparar escrituras; no supone índices de arreglo.
   const keys = new Map();
   const buildingIds = new Set();
   for (const building of map.buildings) {
@@ -423,7 +423,7 @@
       inserted: [], updated: [], deactivated: [], preservedExtra: [] };
 
     if (entry.pois.length === 0) {
-      // Explicit user decision: "Nada" means zero visible POI; preserve all records.
+      // Decisión explícita del usuario: «Nada» significa cero POI visibles; conserva todos los registros.
       for (let index = 0; index < next.length; index++) {
         if (next[index].isVisible !== false) {
           next[index] = { ...next[index], isVisible: false, updatedAt: now };
@@ -441,7 +441,7 @@
           poi.poiKey === spec.poiKey || normalize(poi.name) === normalize(spec.name));
         if (matches.length > 1) fail('Ambiguous existing POI: ' + spec.poiKey);
         if (matches.length === 0) {
-          // Coordinates deliberately provisional; do not use for individual 3D markers yet.
+          // Coordenadas deliberadamente provisionales; aún no sirven para marcadores 3D individuales.
           next.push({ ...spec, position: { x: 0, y: 0, z: 0 }, positionPending: true,
             isFixed: true, isVisible: true, createdAt: now, updatedAt: now });
           keys.set(spec.poiKey, { buildingId: building.id, floorId: floor.id });
@@ -454,7 +454,7 @@
         if (!validPosition(poi.position)) fail('Existing POI has invalid coordinates: ' + poi.poiKey);
         if (poi.imageKeys !== undefined && (!Array.isArray(poi.imageKeys)
           || poi.imageKeys.some((key) => typeof key !== 'string'))) fail('Invalid imageKeys: ' + poi.poiKey);
-        // Match by key OR unambiguous name within this floor. Never rename historical keys.
+        // Coincide por clave o nombre inequívoco dentro del piso; no renombra claves históricas.
         const candidate = { ...poi, name: spec.name, isVisible: true,
           type: poi.type || spec.type, icon: poi.icon || spec.icon,
           description: poi.description || spec.description,
@@ -480,7 +480,7 @@
   if (!apply) { print('Preview only. Set POI_INVENTORY_APPLY = true and load again to apply.'); return; }
 
   set.updatedAt = now;
-  // One atomic write; compare the original hierarchy to reject concurrent edits.
+  // Una escritura atómica compara la jerarquía original para rechazar ediciones concurrentes.
   const result = collection.updateOne(
     { _id: map._id, campusId, status: 'ACTIVE', buildings: map.buildings,
       deletedAt: map.deletedAt ?? null },

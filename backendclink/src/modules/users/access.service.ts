@@ -36,6 +36,7 @@ async function transaction<T>(operation: (repository: Repository) => Promise<T>)
   }
 }
 function version(profile: AccessProfile, snapshot: AccessSnapshot) {
+  // El hash incluye estado y asignaciones activas; el cliente no decide qué datos versiona.
   return createHash('sha256').update(JSON.stringify({ userId: profile.id, campusId: profile.campus_id,
     accountState: profile.estado_cuenta, updatedAt: profile.updated_at, roles: snapshot.roles.map(row => row.id).sort(),
     permissions: snapshot.permissions.map(row => row.id).sort() })).digest('hex');
@@ -57,6 +58,7 @@ export function parseAccessUpdate(body: unknown): AccessUpdate {
   if (typeof input.version !== 'string' || !/^[0-9a-f]{64}$/.test(input.version)) throw invalid('Recarga los accesos antes de guardar.');
   return { roleIds: ids(input.roleIds), permissionIds: ids(input.permissionIds), version: input.version };
 }
+/** Devuelve solo los campus activos donde el usuario conserva una asignación de administrador. */
 export async function getAccessCampuses(auth: VerifiedAuthConnection) {
   return transaction(async repository => {
     requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
@@ -66,6 +68,7 @@ export async function getAccessCampuses(auth: VerifiedAuthConnection) {
       .map(row => ({ id: row.id, name: row.nombre }));
   });
 }
+/** Comprueba que el catálogo fijo esperado exista antes de permitir asignaciones. */
 async function catalog(repository: Repository) {
   const rows = await repository.catalog();
   const roles = rows.roles.filter(row => ROLE_NAMES.includes(row.nombre));
@@ -75,6 +78,7 @@ async function catalog(repository: Repository) {
   }
   return { roles, permissions };
 }
+/** Devuelve el catálogo tras validar alcance administrativo sobre el campus solicitado. */
 export async function getAccessCatalog(auth: VerifiedAuthConnection, rawCampusId: unknown) {
   const campusId = uuid(rawCampusId);
   return transaction(async repository => {
@@ -83,6 +87,7 @@ export async function getAccessCatalog(auth: VerifiedAuthConnection, rawCampusId
     return catalog(repository);
   });
 }
+/** Lista perfiles del campus autorizado con paginación y una proyección mínima. */
 export async function listAccessUsers(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown) {
   const campusId = uuid(rawCampusId);
   const pagination = parsePaginationQuery(query);
@@ -94,6 +99,7 @@ export async function listAccessUsers(auth: VerifiedAuthConnection, rawCampusId:
     return createPaginatedResult(users.map(row => ({ userId: row.id, fullName: row.nombre_completo, accountState: row.estado_cuenta, campusId })), pagination.data);
   });
 }
+/** Lista snapshots históricos del campus sin reconstruirlos desde los datos actuales. */
 export async function listAuditEntries(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown) {
   const campusId = uuid(rawCampusId);
   const pagination = parsePaginationQuery(query);
@@ -104,6 +110,7 @@ export async function listAuditEntries(auth: VerifiedAuthConnection, rawCampusId
     return createPaginatedResult(await repository.auditEntries(campus, pagination.data.limit + 1, pagination.data.offset), pagination.data);
   });
 }
+/** Lee una auditoría del campus autorizado y filtra sus campos antes de exponerla. */
 export async function getAuditEntry(auth: VerifiedAuthConnection, rawCampusId: unknown, rawAuditId: unknown) {
   const campusId = uuid(rawCampusId), auditId = uuid(rawAuditId);
   return transaction(async repository => {
@@ -124,6 +131,7 @@ async function target(repository: Repository, auth: VerifiedAuthConnection, camp
   }
   return { campus, profile };
 }
+/** Consulta los permisos del usuario solo dentro del campus de la ruta y del administrador. */
 export async function getUserAccess(auth: VerifiedAuthConnection, rawCampusId: unknown, rawUserId: unknown) {
   const campusId = uuid(rawCampusId), userId = uuid(rawUserId);
   return transaction(async repository => {
@@ -131,6 +139,10 @@ export async function getUserAccess(auth: VerifiedAuthConnection, rawCampusId: u
     return detail(profile, campusId, await repository.snapshot(userId, campusId));
   });
 }
+/**
+ * Aplica altas y revocaciones de asignaciones en una transacción y registra cada cambio.
+ * La versión impide sobrescribir cambios concurrentes y el catálogo limita nuevas concesiones.
+ */
 export async function updateUserAccess(auth: VerifiedAuthConnection, rawCampusId: unknown, rawUserId: unknown, body: unknown) {
   const campusId = uuid(rawCampusId), userId = uuid(rawUserId), input = parseAccessUpdate(body);
   return transaction(async repository => {
@@ -141,7 +153,7 @@ export async function updateUserAccess(auth: VerifiedAuthConnection, rawCampusId
     const changes: { action: string; assignmentId: string; catalogId: string }[] = [];
     for (const [kind, selected, choices] of [['roles', input.roleIds, available.roles], ['permissions', input.permissionIds, available.permissions]] as const) {
       const current = before[kind];
-      // Existing out-of-catalog grants may be preserved or revoked; no new unknown privilege can be granted.
+      // Se pueden conservar o revocar asignaciones históricas fuera del catálogo, pero no crear privilegios nuevos con ellas.
       if (selected.some(id => !choices.some(row => row.id === id) && !current.some(row => row.catalog_id === id))) throw invalid('El rol o permiso no pertenece al catálogo disponible.');
       for (const row of current.filter(row => !selected.includes(row.catalog_id))) {
         await repository.revoke(kind, row.id);
@@ -169,6 +181,10 @@ export function parseAccountStateUpdate(body: unknown): AccountStateUpdate {
   return { accountState: input.accountState as AccountStateUpdate['accountState'], version: input.version };
 }
 
+/**
+ * Suspende o desactiva una cuenta con versión vigente y registra el cambio de estado.
+ * Al desactivar, también retira lógicamente sus publicaciones físicas activas en cualquier campus.
+ */
 export async function updateAccountState(auth: VerifiedAuthConnection, rawCampusId: unknown, rawUserId: unknown, body: unknown) {
   const campusId = uuid(rawCampusId), userId = uuid(rawUserId), input = parseAccountStateUpdate(body);
   return transaction(async repository => {
@@ -177,8 +193,8 @@ export async function updateAccountState(auth: VerifiedAuthConnection, rawCampus
     if (version(profile, snapshot) !== input.version) throw new ApiError(409, 'CONFLICT', 'El usuario o sus accesos cambiaron. Recarga antes de confirmar.');
     if (profile.estado_cuenta === input.accountState) return detail(profile, campusId, snapshot);
     if (profile.estado_cuenta === 'DESACTIVADA') throw new ApiError(409, 'CONFLICT', 'La cuenta ya está desactivada. Recarga el usuario.');
-    // Include previous-campus publications: disabling an account applies to its
-    // active physical listings globally, while their campus and history stay intact.
+    // Incluye publicaciones de campus anteriores: la desactivación alcanza todas las publicaciones físicas
+    // activas, aunque conserva el campus de origen y su historial.
     const publications = input.accountState === 'DESACTIVADA'
       ? (await repository.lockPhysicalPublications(userId)).filter(row => ['DISPONIBLE','RESERVADO','OCULTO'].includes(row.estado_publicacion)) : [];
     const changedAt = await repository.setAccountState(userId, input.accountState);

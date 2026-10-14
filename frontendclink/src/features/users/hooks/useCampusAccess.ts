@@ -4,6 +4,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { loadAccessCampuses, loadAccessCatalog, loadAccessUsers, loadUserAccess, saveUserAccess, saveAccountState } from '../api/accessApi';
 import type { AccessCatalog, AccessUser, UserAccess, AccountStateAction } from '../types/access';
 
+/** Coordina administración por campus, asignaciones versionadas y cambio de estado de cuenta. */
 export function useCampusAccess() {
   const auth = useAuth();
   const [campuses, setCampuses] = useState<{ id: string; name: string }[]>([]);

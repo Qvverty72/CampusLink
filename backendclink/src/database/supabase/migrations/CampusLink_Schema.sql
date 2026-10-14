@@ -1,5 +1,7 @@
--- WARNING: This schema is for context only and is not meant to be run.
--- Table order and constraints may not be valid for execution.
+-- ADVERTENCIA: este esquema es solo de referencia; no está preparado para ejecutarse.
+-- El orden de tablas y restricciones puede no ser válido para una instalación.
+
+-- Institución, campus y oferta académica: las tablas puente representan relaciones muchos-a-muchos.
 
 CREATE TABLE public.institucion (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -60,6 +62,7 @@ CREATE TABLE public.carrera_asignatura (
   CONSTRAINT carrera_asignatura_carrera_id_fkey FOREIGN KEY (carrera_id) REFERENCES public.carrera(id),
   CONSTRAINT carrera_asignatura_asignatura_id_fkey FOREIGN KEY (asignatura_id) REFERENCES public.asignatura(id)
 );
+-- Perfil y asignaciones por campus; los roles/permisos se registran como concesiones revocables.
 CREATE TABLE public.perfil_usuario (
   id uuid NOT NULL,
   institucion_id uuid NOT NULL,
@@ -143,6 +146,7 @@ CREATE TABLE public.usuario_permiso (
   CONSTRAINT usuario_permiso_campus_id_fkey FOREIGN KEY (campus_id) REFERENCES public.campus(id),
   CONSTRAINT usuario_permiso_otorgado_por_id_fkey FOREIGN KEY (otorgado_por_id) REFERENCES public.perfil_usuario(id)
 );
+-- Publicaciones comparten propietario, campus, modalidad y estado; cada subtipo tiene su propia tabla.
 CREATE TABLE public.publicacion_recurso (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   campus_id uuid NOT NULL,
@@ -210,6 +214,7 @@ CREATE TABLE public.publicacion_asignatura (
   CONSTRAINT publicacion_asignatura_publicacion_id_fkey FOREIGN KEY (publicacion_id) REFERENCES public.publicacion_recurso(id),
   CONSTRAINT publicacion_asignatura_asignatura_id_fkey FOREIGN KEY (asignatura_id) REFERENCES public.asignatura(id)
 );
+-- Solicitudes y transacciones preservan el estado del intercambio y sus participantes.
 CREATE TABLE public.mensaje_solicitud (
   codigo text NOT NULL,
   descripcion text NOT NULL,
@@ -286,6 +291,7 @@ CREATE TABLE public.acceso_recurso_digital (
   CONSTRAINT acceso_recurso_digital_publicacion_id_fkey FOREIGN KEY (publicacion_id) REFERENCES public.publicacion_recurso(id),
   CONSTRAINT acceso_recurso_digital_receptor_id_fkey FOREIGN KEY (receptor_id) REFERENCES public.perfil_usuario(id)
 );
+-- Notificaciones, interacciones, denuncias, auditoría e informes guardan actividad derivada e histórica.
 CREATE TABLE public.notificacion (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   destinatario_id uuid NOT NULL,

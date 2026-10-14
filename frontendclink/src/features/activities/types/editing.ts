@@ -7,6 +7,7 @@ export interface ActivityEditPreview { campusId: string; activityId: string; sco
   changes: { activityId: string; index?: number; revision: number; before: Snapshot; after: Snapshot; changedFields: string[] }[] }
 export interface ActivityEditResult { activityId: string; updatedCount: number; revision: number }
 
+/** Convierte fechas ISO de la actividad a los campos locales que muestra el formulario. */
 export function activityEditDraft(activity: Activity): ActivityDraft {
   const fields = (value: string) => { const date = new Date(value); const pad = (number: number) => String(number).padStart(2, '0');
     return { date: `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`, time: `${pad(date.getHours())}:${pad(date.getMinutes())}` }; };
@@ -16,11 +17,12 @@ export function activityEditDraft(activity: Activity): ActivityDraft {
     poiKey: activity.location.poiKey ?? '', customLabel: activity.location.customLabel ?? '' };
 }
 
+/** Conserva instantes sin cambios y adjunta revisión esperada para edición optimista. */
 export function validateActivityEditDraft(draft: ActivityDraft, activity: ActivityDetail, locations: ActivityLocationOption[]):
   { input: EditActivityInput; error?: never } | { error: string; input?: never } {
   if (!activity.editing) return { error: 'Solo el creador puede editar esta publicación.' };
   const original = activityEditDraft(activity);
-  // Keep exact seconds/milliseconds when users only change another field.
+  // Conserva segundos y milisegundos si el usuario solo modifica otro campo.
   const startAt = draft.startDate === original.startDate && draft.startTime === original.startTime ? activity.startAt : localActivityTimestamp(draft.startDate, draft.startTime);
   const endAt = draft.endDate === original.endDate && draft.endTime === original.endTime ? activity.endAt : localActivityTimestamp(draft.endDate, draft.endTime);
   const parsed = validateActivityDraft(draft, locations, Date.now(), { allowEnded: true, timestamps: { startAt, endAt } });

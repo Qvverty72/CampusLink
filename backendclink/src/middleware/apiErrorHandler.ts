@@ -23,7 +23,7 @@ function isPayloadTooLarge(error: unknown): error is BodyParserError {
   return error instanceof Error && 'type' in error && error.type === 'entity.too.large';
 }
 
-/** Converts thrown application and parser errors to the public API contract. */
+/** Convierte errores de aplicación y del analizador JSON al contrato público de la API. */
 export const apiErrorHandler: ErrorRequestHandler = (
   error: unknown,
   _request,

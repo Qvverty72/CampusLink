@@ -1,6 +1,8 @@
 import { env } from '../config/env.js';
 
-// Driver connection setup (notably SRV DNS) is not always covered by operation timeouts.
+// La carrera temporal no cancela la operación subyacente; cubre inicializaciones del driver,
+// como la resolución DNS SRV, que pueden quedar fuera de los límites propios del driver.
+/** Rechaza al superar el plazo configurado; la operación original puede seguir ejecutándose. */
 export async function withDeadline<T>(operation: Promise<T>, timeoutMs = env.databaseTimeoutMs): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

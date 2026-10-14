@@ -3,6 +3,7 @@ export interface AccessAssignment { id: string; catalog_id: string; nombre: stri
 export interface UserAccess extends AccessUser { roles: AccessAssignment[]; permissions: AccessAssignment[]; version: string }
 export interface AccessCatalog { roles: { id: string; nombre: string }[]; permissions: { id: string; nombre: string }[] }
 export interface AccessInput { roleIds: string[]; permissionIds: string[]; version: string }
+/** Determina si la identidad actual contiene el rol administrativo requerido por la UI. */
 export const canManageAccess = (roles: { name: string }[]) => roles.some(role => role.name === 'ADMINISTRADOR');
 
 export type AccountStateAction = 'SUSPENDIDA' | 'DESACTIVADA';

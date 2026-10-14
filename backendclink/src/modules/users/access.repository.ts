@@ -10,7 +10,7 @@ export function withAccessTransaction<T>(operation: (repository: ReturnType<type
   return withPostgresTransaction(client => operation(accessRepository(client)));
 }
 
-// SQL and locks only. Authorization, desired state and audit decisions belong to the service.
+// Contiene SQL y bloqueos; autorización, estado deseado y decisiones de auditoría pertenecen al servicio.
 export function accessRepository(client: AccessConnection) {
   return {
     auditEntries: async (campus: AccessCampus, limit: number, offset: number) => (await client.query<AuditEntry>(
@@ -49,7 +49,7 @@ export function accessRepository(client: AccessConnection) {
          AND up.revocado_en IS NULL ORDER BY up.id FOR SHARE OF up,p`, [userId, campusId])).rows,
     }),
     revoke: async (kind: AccessKind, id: string) => {
-      // Identifiers come exclusively from these constants, never request input.
+      // Los identificadores salen solo de estas constantes, nunca de datos recibidos en la solicitud.
       const table = kind === 'roles' ? 'usuario_rol' : 'usuario_permiso';
       await client.query(`UPDATE public.${table} SET revocado_en=clock_timestamp() WHERE id=$1 AND revocado_en IS NULL`, [id]);
     },

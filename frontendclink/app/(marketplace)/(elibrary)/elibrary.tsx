@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 
+/** Pantalla de biblioteca digital que actualmente presenta el estado base del módulo. */
 export default function ELibraryScreen() {
   return (
     <View style={styles.container}>

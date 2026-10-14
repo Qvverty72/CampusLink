@@ -15,6 +15,11 @@ import type { ActivityDependencies } from '../src/modules/activities/activities.
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
 import { recurrenceDraftRule } from '../../frontendclink/src/features/activities/types/recurrence.js';
 
+/**
+ * Fija un mapa/cuenta y fechas lejanas para probar calendario sin depender de la hora real.
+ * Los casos de integración simulan escrituras Mongo; una prueba final conserva el driver
+ * real en la ruta de sesión/transacción y sustituye solo la conexión de red.
+ */
 const campusId = '22222222-2222-4222-8222-222222222222', userId = '11111111-1111-4111-8111-111111111111';
 const other = '33333333-3333-4333-8333-333333333333'; const now = new Date('2099-01-01T00:00:00Z');
 const auth: VerifiedAuthConnection = { userId, campusId,
@@ -66,7 +71,7 @@ test('monthly rules skip nonexistent dates visibly, preserve anchor day after sk
 test('selected ISO weekdays start at the first marked date on/after the lower bound and normalize into a stable fingerprint', () => {
   const input = { ...body(), startAt: '2099-01-05T12:00:00.000Z', endAt: '2099-01-05T13:00:00.000Z',
     recurrence: { ...body().recurrence, weekdays: [4, 2], until: '2099-01-19' } };
-  // 2099-01-05 is Monday: do not materialize it when only Tuesday/Thursday are marked.
+  // El 5 de enero de 2099 cae lunes: no debe materializarse si solo se eligen martes y jueves.
   const result = expand(input);
   assert.deepEqual(result.occurrences.map(value => value.startAt.substring(0, 10)), ['2099-01-06', '2099-01-08', '2099-01-13', '2099-01-15']);
   assert.deepEqual(result.recurrence.weekdays, [2, 4]);
@@ -259,7 +264,7 @@ test('series insertMany reaches driver dispatch with a real CSOT transaction ins
   });
   try {
     const preview = await previewActivitySeries(auth, parsed(), basicDeps());
-    // withSession/withTransaction/insertMany remain the real driver, including the client deadline.
+    // withSession/withTransaction/insertMany siguen siendo del driver real, incluido el deadline del cliente.
     await assert.rejects(createActivitySeries(auth, parsed({ ...body(), previewHash: preview.previewHash }, true), basicDeps()), error => error === sentinel);
     assert.equal(dispatched, 1);
   } finally { connectMock.mock.restore(); dbMock.mock.restore(); }

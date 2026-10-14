@@ -20,6 +20,7 @@ function validateCampus(auth: VerifiedAuthConnection, catalog: PhysicalgoodsCata
     throw new ApiError(403, 'FORBIDDEN', 'Tu campus no está disponible para publicar.');
   }
 }
+/** Obtiene catálogos disponibles para el campus actual después de verificar el permiso general. */
 export async function getPhysicalgoodsOptions(auth: VerifiedAuthConnection) {
   requireCampusCapability(auth, auth.campusId, 'general');
   return dependency(() => withPhysicalgoodsTransaction(async client => {
@@ -30,14 +31,18 @@ export async function getPhysicalgoodsOptions(auth: VerifiedAuthConnection) {
   }));
 }
 
+/**
+ * Crea una publicación y su referencia de imagen, con auditoría dentro de la transacción SQL.
+ * Sube primero a Storage para no retener bloqueos durante I/O y compensa archivos sin referencia ante fallos.
+ */
 export async function createPhysicalgoods(auth: VerifiedAuthConnection, body: unknown): Promise<PhysicalgoodsCreated> {
   requireCampusCapability(auth, auth.campusId, 'general');
   const { input, photo } = parsePhysicalgoods(body);
   const id = randomUUID();
   const extension = photo.mimeType === 'image/jpeg' ? 'jpg' : photo.mimeType === 'image/png' ? 'png' : 'webp';
   const path = `${auth.campusId}/${auth.userId}/${id}/principal.${extension}`;
-  // Store the bytes before opening the DB transaction so network I/O holds no SQL locks.
-  // A failed/ambiguous upload is also cleaned using the unique server-owned path.
+  // Sube los bytes antes de abrir la transacción SQL para no mantener bloqueos durante I/O de red.
+  // Ante carga fallida o ambigua, limpia la ruta única generada por el servidor si no tiene referencia.
   let attemptedPersistence = false;
   try {
     await uploadPrincipalPhoto(path, photo);
@@ -62,7 +67,7 @@ export async function createPhysicalgoods(auth: VerifiedAuthConnection, body: un
     });
   } catch (error) {
     try {
-      // COMMIT can succeed while its acknowledgement is lost. Preserve referenced bytes.
+      // COMMIT puede confirmarse y perderse su respuesta; conserva los bytes que ya tengan referencia.
       if (!attemptedPersistence || !await principalPhotoHasReference(path)) await removePrincipalPhoto(path);
     } catch { console.error('Physical resource photo cleanup unavailable', { publicationId: id }); }
     if (error instanceof ApiError) throw error;
@@ -70,6 +75,7 @@ export async function createPhysicalgoods(auth: VerifiedAuthConnection, body: un
   }
 }
 
+/** Genera un enlace firmado de corta duración tras comprobar campus y referencia privada. */
 export async function getPhysicalgoodsPhoto(auth: VerifiedAuthConnection, publicationId: unknown) {
   requireCampusCapability(auth, auth.campusId, 'general');
   const id = physicalgoodsId(publicationId, 'publicationId');

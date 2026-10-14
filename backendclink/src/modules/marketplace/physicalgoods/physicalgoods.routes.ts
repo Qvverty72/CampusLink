@@ -4,13 +4,13 @@ import { requireAuthentication } from '../../auth/auth.middleware.js';
 import { addPhysicalgoodsImageController, changePhysicalgoodsCategoryController, changePhysicalgoodsPrincipalController, deletePhysicalgoodsImageController, getPhysicalgoodsGalleryController, getPhysicalgoodsResourcesController } from './physicalgoods.controller.js';
 import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from './physicalgoods.controller.js';
 
-// Technical diagnostics only; business routes must declare authentication/authorization.
+// Solo expone diagnósticos técnicos; las rutas de negocio requieren autenticación.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getPhysicalgoodsHealthController);
   router.get('/options', requireAuthentication, getPhysicalgoodsOptionsController);
   router.get('/', requireAuthentication, getPhysicalgoodsResourcesController);
-  // Base64 for one bounded photo keeps web/native on the same JSON contract.
+  // Base64 de una foto con tamaño limitado mantiene un mismo contrato JSON para web y nativo.
   router.post('/', requireAuthentication, json({ limit: '7mb' }), createPhysicalgoodsController);
   router.get('/:publicationId/photo', requireAuthentication, getPhysicalgoodsPhotoController);
   router.get('/:publicationId/images', requireAuthentication, getPhysicalgoodsGalleryController);

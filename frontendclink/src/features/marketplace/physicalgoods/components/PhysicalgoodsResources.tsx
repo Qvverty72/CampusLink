@@ -5,6 +5,7 @@ import { PhysicalgoodsSearchFilters } from './PhysicalgoodsSearchFilters';
 import { resourceConditions } from '../types/publication';
 import { PhysicalgoodsEditor } from './PhysicalgoodsEditor';
 
+/** Muestra el listado paginado y la galería del recurso seleccionado. */
 export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled} onPress={action} style={[styles.button, disabled && styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
   return <View style={styles.card}>

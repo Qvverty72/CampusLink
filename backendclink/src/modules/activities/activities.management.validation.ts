@@ -1,5 +1,6 @@
 import type { RequestParser, ApiErrorDetail } from '../../types/api.js';
 
+/** Acepta únicamente página y tamaño de página, con topes para mantener acotada la consulta. */
 export const parseActivityParticipantsQuery: RequestParser = input => {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     return { success: false, issues: [{ field: 'query', message: 'Invalid pagination.' }] };
@@ -21,6 +22,7 @@ export const parseActivityParticipantsQuery: RequestParser = input => {
   return issues.length ? { success: false, issues } : { success: true, data };
 };
 
+/** Exige solo la revisión esperada para que la retirada no borre una versión distinta. */
 export const parseActivityDeletion: RequestParser = input => {
   const body = typeof input === 'object' && input !== null && !Array.isArray(input) ? input as Record<string, unknown> : null;
   return body && Object.keys(body).length === 1 && Number.isSafeInteger(body.expectedRevision)

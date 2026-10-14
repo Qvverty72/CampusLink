@@ -4,17 +4,18 @@ import type { ActivityDocument, ActivityDto, ActivityQuery } from './activities.
 
 export const COMMUNITY_ACTIVITY_LIMIT_MESSAGE = 'Solo puedes tener activa una actividad comunitaria.';
 
-/** Future and ongoing publications reserve the creator's slot across the entire campus. */
+/** Las publicaciones futuras o vigentes reservan el cupo del creador en todo el campus. */
 export function activeCommunityActivityFilter(campusId: string, userId: string, now: Date): Filter<ActivityDocument> {
   return { ...visibleActivityFilter(campusId, now), createdByUserId: userId, type: 'COMMUNITY_ACTIVITY' };
 }
 
-/** The same publication policy applies to lists, direct detail and registration. */
+/** La misma política de publicación rige listados, detalle directo e inscripciones. */
 export function visibleActivityFilter(campusId: string, now: Date): Filter<ActivityDocument> {
   return { campusId, status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,
     type: { $in: ['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'] }, endAt: { $gt: now } };
 }
 
+/** Valida la publicación y resuelve su ubicación antes de crear el DTO visible para el cliente. */
 export function toVisibleActivity(document: ActivityDocument, campusId: string, now: Date,
   buildings: ReturnType<typeof spatialBuildings>, query: ActivityQuery = {}): ActivityDto | null {
   if (document.campusId !== campusId || document.status !== 'ACTIVE' || document.visibility !== 'PUBLIC'

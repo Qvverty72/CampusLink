@@ -1,6 +1,6 @@
--- Apply after F2.3-01/02 on existing tables using a database-owner connection.
--- Catalog data follows the actor/capability contract approved in GH-59.
--- No tables, columns, business functions or business triggers are introduced.
+-- Aplicar después de F2.3-01/02 sobre tablas existentes, con una conexión propietaria.
+-- El catálogo sigue el contrato de actores/capacidades aprobado en GH-59.
+-- No agrega tablas, columnas, funciones de negocio ni triggers.
 begin;
 
 insert into public.rol(nombre,descripcion) values
@@ -13,7 +13,7 @@ insert into public.permiso(nombre,descripcion) values
   ('ACCEDER_REPORTERIA','Acceder a Reportería')
 on conflict (nombre) do nothing;
 
--- Fail on pre-existing duplicate active grants; preserve all historical data for review.
+-- Los índices únicos fallan si hay asignaciones activas duplicadas; conserva el historial para revisión.
 create unique index if not exists usuario_rol_vigente_unique
   on public.usuario_rol(perfil_usuario_id,campus_id,rol_id) where revocado_en is null;
 create unique index if not exists usuario_permiso_vigente_unique
@@ -25,8 +25,8 @@ alter table public.auditoria enable row level security;
 alter table public.rol_permiso enable row level security;
 revoke all on public.auditoria, public.rol_permiso from anon,authenticated;
 revoke insert,update,delete,truncate,references,trigger on public.usuario_rol,public.usuario_permiso,public.rol,public.permiso from anon,authenticated;
--- Existing F2.3-01 policies still expose only one's own current assignments.
--- Only the trusted server connection can administer grants; Express owns authorization.
+-- Las políticas F2.3-01 siguen mostrando solo las asignaciones vigentes propias.
+-- Solo la conexión confiable del servidor administra asignaciones; Express decide la autorización.
 grant select,insert,update on public.usuario_rol,public.usuario_permiso to service_role;
 grant select,update on public.perfil_usuario,public.campus,public.rol,public.permiso to service_role;
 grant insert on public.auditoria to service_role;

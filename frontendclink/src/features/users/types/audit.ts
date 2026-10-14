@@ -1,7 +1,9 @@
+/** Fila mínima de auditoría acotada al campus seleccionado. */
 export interface AuditEntry {
   id: string; actor_usuario_id: string | null; institucion_id: string; campus_id: string;
   entidad_tipo: string; entidad_id: string; accion: string; created_at: string;
 }
+/** Detalle con snapshots históricos filtrados por el backend. */
 export interface AuditDetail extends AuditEntry {
   justificacion_accion: string | null; reporte_contenido_id: string | null;
   datos_antes: Record<string, unknown> | null; datos_despues: Record<string, unknown> | null;

@@ -6,6 +6,7 @@ import { ActivityDetail } from '@/features/activities/components/ActivityDetail'
 import { ActivityRefreshScrollView } from '@/features/activities/components/ActivityRefreshScrollView';
 import { useActivityNotifications } from '../hooks/useActivityNotifications';
 
+/** Pantalla de notificaciones; los cambios visibles esperan confirmación del servidor. */
 export function NotificationsScreen() {
   const { identity, session } = useAuth();
   return <NotificationsContent key={JSON.stringify([identity?.userId, identity?.campusId, session?.access_token])} />;

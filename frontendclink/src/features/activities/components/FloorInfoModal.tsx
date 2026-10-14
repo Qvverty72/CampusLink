@@ -1,5 +1,5 @@
 import { APP_COLORS } from '@/types/colors';
-/** Native floor information and activities browser; map stores supply selection only. */
+/** Presenta información de piso, POI y actividades usando metadatos del mapa activo. */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { X } from 'lucide-react-native';
@@ -49,7 +49,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
   const entries = filterLocationActivities(activities.activities, query);
   const hasCounts = !activities.isLoading && !activities.error;
   const pois = (floor.pois ?? []).filter(poi => poi.isVisible === true && !poi.deletedAt);
-  // Resolve from the current floor rather than retaining a stale POI object.
+  // Resuelve el POI sobre el piso actual en lugar de conservar una referencia obsoleta.
   const selectedPoi = pois.find(poi => poi.poiKey === selectedPoiKey);
   const viewKey = selectedPoi ? `poi:${selectedPoi.poiKey}` : activityType ?? 'floor-information';
   useEffect(() => {

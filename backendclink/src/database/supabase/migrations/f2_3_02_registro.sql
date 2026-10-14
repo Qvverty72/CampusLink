@@ -1,10 +1,10 @@
--- F2.3-02. Apply after f2_3_01_autenticacion.sql as database owner.
--- Express owns admission, verification, provisioning and retries.
--- Structural integrity, essential isolation and MVP catalog data only.
+-- Aplicar después de f2_3_01_autenticacion.sql, con conexión propietaria.
+-- Express administra admisión, verificación, provisión y reintentos.
+-- Esta migración aporta integridad estructural, aislamiento y datos mínimos de catálogo.
 BEGIN;
 
--- Remove only the temporary table added by the previous F2.3-02 draft.
--- Preserve the transaction and ask for review if it contains any registrations.
+-- Retira solo la tabla temporal agregada por un borrador anterior de F2.3-02.
+-- Si contiene registros, aborta la transacción para que se revisen antes de limpiarla.
 DO $$
 DECLARE pending_rows bigint;
 BEGIN
@@ -17,14 +17,14 @@ BEGIN
   END IF;
 END $$;
 
--- dominio_institucional already belongs to the existing CampusLink schema.
+-- `dominio_institucional` ya pertenece al esquema existente de CampusLink.
 ALTER TABLE public.dominio_institucional ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.dominio_institucional FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.dominio_institucional TO service_role;
 GRANT SELECT ON public.institucion, public.campus TO service_role;
 GRANT SELECT, INSERT ON public.perfil_usuario TO service_role;
 
--- A campus/institution pair must be structurally consistent.
+-- La pareja campus/institución debe ser coherente según la clave foránea compuesta.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.campus'::regclass AND conname = 'campus_id_institucion_unique') THEN
@@ -36,7 +36,7 @@ BEGIN
   END IF;
 END $$;
 
--- Reuse DUOC UC already present for the map; no fictitious campuses.
+-- Reutiliza la institución DuocUC existente para el mapa; no crea campus ficticios.
 DO $$
 DECLARE duoc_id uuid; matches integer;
 BEGIN

@@ -16,6 +16,7 @@ import { ActivityRefreshRegistration } from './ActivityRefreshScrollView';
 const PAGE_SIZE = 5;
 const ACTIVITY_TYPES = ['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY'] as const;
 
+/** Navega actividades por ubicación y limita las acciones según capacidades de la identidad. */
 export function LocationActivities(props: {
   state: ActivitiesState; query?: ActivityLocationQuery; onExplore?: (activity: Activity) => void;
   locations?: ActivityLocationOption[];
@@ -26,7 +27,7 @@ export function LocationActivities(props: {
   onPageChange?: () => void;
 }) {
   const { identity, session } = useAuth();
-  // Remount the browser/form on campus or session change, clearing drafts and obsolete responses.
+  // Reinicia navegador y formulario ante cambio de campus o sesión, y descarta borradores/respuestas obsoletos.
   return <LocationActivitiesContent key={JSON.stringify([identity?.campusId, session?.access_token])} {...props}
     canCreate={!!identity?.capabilities.general && !!identity?.profile.verificado_en}
     canPublishOfficial={!!identity?.capabilities.officialActivities} />;
@@ -50,7 +51,7 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
   const communityDescription = activityType === 'COMMUNITY_ACTIVITY' ? descriptionFilter : null;
   const activities = filterLocationActivities(state.activities, query);
   const types = activityType ? [activityType] : ACTIVITY_TYPES;
-  // Preserve the existing official/community grouping, with a single five-item limit.
+  // Conserva los grupos oficial/comunitario y aplica un único límite de cinco elementos.
   const filtered = types.flatMap(type => activities.filter(activity => activity.type === type
     && (communityDescription === null || activity.description === communityDescription)));
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -66,7 +67,7 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
     if (selectedId || creating || state.isLoading || state.error) setDescriptionMenuOpen(false);
   }, [selectedId, creating, state.isLoading, state.error]);
   useEffect(() => {
-    // Loading clears the shared array temporarily: retain the page until results arrive.
+    // La carga vacía temporalmente la colección compartida; conserva la página hasta recibir resultados.
     if (!state.isLoading && !state.error) setPage(previous => Math.min(previous, totalPages));
   }, [state.isLoading, state.error, totalPages]);
   useLayoutEffect(() => {

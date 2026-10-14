@@ -5,6 +5,7 @@ import {
   type RuntimeMapData,
 } from '../api/mapApi';
 
+/** Estado remoto del mapa activo y operaciones para cargarlo o descartarlo. */
 interface MapDataState {
   data: RuntimeMapData | null;
   isLoading: boolean;
@@ -13,6 +14,7 @@ interface MapDataState {
   clearMap: () => void;
 }
 
+// Solo se mantiene una carga en curso: un campus nuevo cancela la petición previa.
 let pending: { campusId: string; abort: AbortController } | null = null;
 
 export const useMapDataStore = create<MapDataState>((set, get) => ({
@@ -20,12 +22,17 @@ export const useMapDataStore = create<MapDataState>((set, get) => ({
   isLoading: false,
   error: null,
 
+  /** Cancela la carga vigente y elimina datos de campus anteriores de la UI. */
   clearMap: () => {
     pending?.abort.abort();
     pending = null;
     set({ data: null, isLoading: false, error: null });
   },
 
+  /**
+   * Carga el mapa del campus y descarta respuestas obsoletas.
+   * Propaga errores de autenticación/autorización; otros fallos quedan en `error`.
+   */
   loadMap: async (campusId, accessToken) => {
     if (!accessToken?.trim()) {
       get().clearMap();

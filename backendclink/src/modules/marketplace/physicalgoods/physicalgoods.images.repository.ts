@@ -22,7 +22,7 @@ export async function findPhysicalgoodsDetail(client: PoolClient, publicationId:
     AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO')`, [publicationId, campusId])).rows[0] ?? null;
 }
 export async function listPhysicalgoodsMedia(client: PoolClient, campusId: string, filters: PhysicalgoodsSearchFilters, ownerId: string | null, pagination: PaginationParams) {
-  // Treat user %/_/backslashes as literal text, not SQL wildcard operators.
+  // Trata %, _ y barras invertidas del usuario como texto literal, no como comodines SQL.
   const patterns = filters.q ? filters.q.split(' ').map(word => '%' + word.replace(/[\\%_]/g, '\\$&') + '%') : [];
   return (await client.query<PhysicalgoodsSearchRow>(`SELECT ${mediaProjection},photo.bucket_id AS photo_bucket_id,photo.storage_path AS photo_storage_path ${mediaJoins}
     LEFT JOIN LATERAL (SELECT a.bucket_id,a.storage_path FROM public.archivo_publicacion a

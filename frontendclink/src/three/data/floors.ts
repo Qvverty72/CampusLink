@@ -1,18 +1,19 @@
 /**
- * Configuración lógica y metadata local del mapa 3D actual.
+ * Configuración lógica y metadata local histórica de la maqueta del mapa 3D.
  *
  * El GLB aporta geometría y materiales; este archivo decide cómo agrupar sus nodos
  * en edificios/pisos interactivos, qué transforms conservar, cómo enfocar la cámara
- * y qué texto mostrar. Hoy es la fuente del frontend y del seed MongoDB.
+ * y qué texto mostrar. El flujo activo carga esta información desde `mapApi.ts`;
+ * este archivo conserva la configuración local de la maqueta y no participa en ese flujo.
  *
- * La integración futura reemplazará estas estructuras productivas con la respuesta
- * de `GET /api/v1/maps/:campusId/active`. El GLB seguirá siendo un asset local y
- * `meshName`/`subMeshes` continuarán enlazando la respuesta con sus nodos.
+ * `GET /api/v1/maps/:campusId/active` proporciona la configuración del flujo actual.
+ * El GLB sigue siendo un recurso local y `meshName`/`subMeshes` enlazan metadatos
+ * con sus nodos de geometría.
  */
 
 import type { BuildingId, BuildingConfig, FloorDefinition, FloorMeshConfig } from '@/three/types/map';
 
-// ─── Building → Floor Names ───────────────────────────────────────────────────
+// ─── Edificios y nombres de pisos ──────────────────────────────────────────────
 
 /**
  * Ordena los pisos dentro de cada edificio. El orden define tanto el nivel lógico
@@ -56,7 +57,7 @@ export const buildingFloors: Record<BuildingId, string[]> = {
   gym: ['gym_floor1'],
 };
 
-// ─── Floor Mesh Configurations (positions + sub-meshes from gltfjsx) ──────────
+// ─── Configuraciones de mallas de piso (posiciones y submallas de gltfjsx) ─────
 
 /**
  * Reconstruye cada piso lógico a partir de varios submeshes del GLB.
@@ -344,7 +345,7 @@ export const floorMeshConfigs: FloorMeshConfig[] = [
   },
 ];
 
-// ─── Building Configurations ───────────────────────────────────────────────────
+// ─── Configuraciones de edificios ──────────────────────────────────────────────
 
 /**
  * Metadata por edificio y encuadre de cámara en world space.
@@ -424,7 +425,7 @@ export const buildingConfigs: Record<BuildingId, BuildingConfig> = {
   },
 };
 
-// ─── Helper: mesh name → BuildingId ────────────────────────────────────────────
+// ─── Ayudantes: nombre de malla a BuildingId ───────────────────────────────────
 
 /** Resuelve el edificio dueño de un meshName sin depender de la geometría Three.js. */
 export function getBuildingForMesh(meshName: string): BuildingId | null {
@@ -443,11 +444,11 @@ export function getFloorIndex(meshName: string): number {
   return buildingFloors[buildingId].indexOf(meshName);
 }
 
-// ─── Floor Data (Mock) ─────────────────────────────────────────────────────────
+// ─── Datos de pisos de la maqueta ──────────────────────────────────────────────
 
 /**
- * Metadata mock consumida por el modal. Nombres, descripciones y futuros POI deben
- * provenir del mapa ACTIVE de la API; no están embebidos en la geometría del GLB.
+ * Metadata local de la maqueta. El modal del flujo actual recibe nombres,
+ * descripciones y POI del mapa ACTIVE de la API, no de este objeto ni del GLB.
  */
 export const floorData: Record<string, FloorDefinition> = {
   // Cabin 01

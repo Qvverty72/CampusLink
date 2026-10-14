@@ -85,7 +85,7 @@ test('official type and identity are server-owned, organizer comes from profile,
   }));
   assert.deepEqual(detail.organizer, { name: 'Organizador oficial' });
   assert.deepEqual(detail.participation, { status: 'JOINED', canJoin: false, canLeave: false }); assert.equal(detail.location.poiName, 'Sala de reuniones');
-  // Institutional verification is required for COMMUNITY; official publication follows its specific role/permission.
+  // COMMUNITY exige verificación institucional; OFFICIAL aplica su rol y permiso específicos.
   for (const key of ['type', 'campusId', 'createdByUserId', 'organizer', 'organizerId', 'participantCount', 'roles', 'permissions']) {
     assert.equal(parseCreateActivity({ ...body(), [key]: 'override' }).success, false);
   }

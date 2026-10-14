@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import type { Activity } from '../types/activity';
 
-/** Decorative previews of the list layout, without inventing activity data or counts. */
+/** Vista decorativa de la lista sin inventar datos ni cantidades de actividades. */
 export function ActivityListSkeleton({ activityType }: { activityType?: Activity['type'] }) {
   return <Skeleton label="Cargando actividades" contentStyle={styles.content}>
       {activityType === 'COMMUNITY_ACTIVITY' ? <View style={styles.filter}>

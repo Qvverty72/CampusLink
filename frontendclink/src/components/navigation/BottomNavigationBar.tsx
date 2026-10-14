@@ -17,7 +17,7 @@ export interface BottomNavigationItem {
   id: string;
   label: string;
   href?: Href;
-  /** Optional custom icon, replacing the default icon for this item. */
+  /** Ícono opcional que reemplaza el predeterminado para este elemento. */
   icon?: ReactNode;
 }
 
@@ -43,7 +43,7 @@ const BAR_RADIUS = 32;
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
-/** Floating navigation with blur confined to the rounded pill. */
+/** Navegación flotante con el desenfoque limitado a la barra redondeada. */
 export function BottomNavigationBar({
   items = DEFAULT_BOTTOM_NAVIGATION_ITEMS,
   activeItemId,

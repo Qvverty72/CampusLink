@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import type { ModuleHealth } from '../types/api.types.js';
 import { sendError, sendSuccess } from './api-response.js';
 
+/** Evita almacenar respuestas de salud y asigna 503 cuando falta alguna dependencia. */
 export function sendModuleHealth(response: Response, health: ModuleHealth): void {
   response.setHeader('Cache-Control', 'no-store');
   if (health.status === 'unavailable') {

@@ -15,7 +15,10 @@ export interface AppDependencies {
   diagnosticsEnabled?: boolean;
 }
 
-/** Builds the HTTP application separately from the process and database bootstrap. */
+/**
+ * Ensambla middleware y rutas HTTP sin iniciar conexiones ni abrir el puerto.
+ * La separación permite montar la aplicación con dependencias simuladas en pruebas.
+ */
 export function createApp(dependencies: AppDependencies = {}): Express {
   const app = express();
 
@@ -23,7 +26,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   app.use(cors());
   const jsonParser = express.json();
   app.use((request, response, next) => {
-    // Photo upload routes parse their bounded larger bodies after authentication.
+    // Las cargas de fotos analizan su cuerpo, con límite ampliado, después de autenticar.
     if (request.method === 'POST' && /^\/api\/v1\/marketplace\/physicalgoods(?:\/[^/]+\/images)?\/?$/i.test(request.path)) next();
     else jsonParser(request, response, next);
   });

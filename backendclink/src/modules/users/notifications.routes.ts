@@ -5,6 +5,7 @@ import { sendSuccess } from '../../services/apiResponse.js';
 import { ownNotificationOperation } from './notifications.service.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Monta operaciones de notificaciones propias detrás del middleware de autenticación. */
 export function createNotificationsRouter(operation = ownNotificationOperation): Router {
   const router = Router();
   router.use(requireAuthentication);

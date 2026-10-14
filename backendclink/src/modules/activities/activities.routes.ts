@@ -13,6 +13,7 @@ import { createCommunityActivityAvailabilityController } from './activities.cont
 import { createActivityViewController } from './activities.controller.js';
 import { parseActivityParticipantsQuery, parseActivityDeletion } from './activities.management.validation.js';
 
+/** Registra lecturas y mutaciones de actividades con autenticación y validadores específicos por ruta. */
 export function createActivitiesRouter(dependencies: ActivityEditDependencies = {}): Router {
   const router = Router();
   router.post('/:activityId/interactions', requireAuthentication,

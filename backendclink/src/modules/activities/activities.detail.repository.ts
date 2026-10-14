@@ -44,7 +44,7 @@ export async function findActivityOrganizer(userId: string): Promise<{ name: str
   return data?.nombre_completo?.trim() ? { name: data.nombre_completo.trim() } : null;
 }
 
-/** Participation and its counter commit together; the unique index prevents duplicate users. */
+/** La participación y el contador se confirman juntos; el índice único evita duplicar personas. */
 export async function registerActivityParticipation(campusId: string, activityId: string, userId: string, now: Date, operationId?: string): Promise<void> {
   const db = getMongoDb();
   const participations = db.collection<ActivityParticipationDocument>('activity_participation');
@@ -55,7 +55,7 @@ export async function registerActivityParticipation(campusId: string, activityId
     const activities = db.collection<ActivityDocument>('activities');
     const activity = await activities.findOne({ ...visibleActivityFilter(campusId, transactionNow), _id }, { session });
     const map = await db.collection<CampusMapDocument>('campus_maps').findOne({ campusId, status: 'ACTIVE' }, { session });
-    // A location may have been disabled since the detail was read; check the transaction snapshot too.
+    // La ubicación pudo deshabilitarse tras leer el detalle; se vuelve a comprobar en la instantánea transaccional.
     if (!activity || !map || !toVisibleActivity(activity, campusId, transactionNow, spatialBuildings(map))) {
       throw new ApiError(404, 'NOT_FOUND', 'Activity not available.');
     }
@@ -78,7 +78,7 @@ export async function registerActivityParticipation(campusId: string, activityId
       $setOnInsert: { activityId: _id, userId, campusId, firstJoinedAt: transactionNow,
         lastLeftAt: null, leaveCount: 0, historyComplete: true },
     }, { session, upsert: true });
-    // Writing the activity also serializes competing registrations in the transaction.
+    // La escritura de la actividad serializa inscripciones que compiten dentro de la transacción.
     const updated = await activities.updateOne({ _id, campusId }, { $inc: { participantCount: 1 }, $set: { updatedAt: transactionNow } }, { session });
     if (updated.matchedCount !== 1) throw new ApiError(409, 'CONFLICT', 'Activity participation changed. Retry the request.');
     await appendActivityInteraction(db, { activityId: _id, campusId, userId, type: 'JOINED', occurredAt: transactionNow, provenance: 'LIVE',
@@ -86,7 +86,7 @@ export async function registerActivityParticipation(campusId: string, activityId
   }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } }));
   try { await register(); }
   catch (error) {
-    // A competing upsert can finish first. The aborted transaction must not increment again.
+    // Otra operación puede completar el upsert primero; la transacción abortada no debe incrementar otra vez.
     if (error instanceof MongoServerError && error.code === 11000) {
       if (operationId && await hasActivityInteraction(db, activityInteractionKey(_id, campusId, userId, 'JOINED', 0, operationId),
         _id, campusId, userId, 'JOINED')) return;
@@ -98,7 +98,7 @@ export async function registerActivityParticipation(campusId: string, activityId
   }
 }
 
-/** Leaving retains the row and its last joinedAt; repeat requests never decrement twice. */
+/** Conserva la fila y la fecha de ingreso; las solicitudes repetidas no descuentan dos veces. */
 export async function withdrawActivityParticipation(campusId: string, activityId: string,
   userId: string, now: Date, operationId?: string): Promise<ActivityParticipationDto> {
   const db = getMongoDb();
@@ -121,7 +121,7 @@ export async function withdrawActivityParticipation(campusId: string, activityId
     }
     const ownState = current && participationDto(current, campusId, activityId, userId);
     if (ownState?.status === 'LEFT') return ownState;
-    // Withdrawal is also available after expiry or hiding; it exposes no activity content.
+    // Se permite retirarse tras vencimiento u ocultamiento; esta respuesta no expone contenido de actividad.
     if (!current) {
       return { campusId, activityId, status: 'NOT_JOINED' as const, canLeave: false };
     }
@@ -136,7 +136,7 @@ export async function withdrawActivityParticipation(campusId: string, activityId
       $inc: { leaveCount: 1 },
       $setOnInsert: { ...key, joinedAt },
     }, { session, upsert: true });
-    // The shared activity write serializes joins and leaves, including different users.
+    // La escritura compartida de la actividad serializa altas y bajas, incluso entre personas distintas.
     const update = await activities.updateOne({ _id, campusId, participantCount: { $gte: 1 } },
       { $inc: { participantCount: -1 }, $set: { updatedAt: transactionNow } }, { session });
     if (update.matchedCount !== 1) throw new ApiError(409, 'CONFLICT', 'Activity participation changed. Retry the request.');
@@ -149,7 +149,7 @@ export async function withdrawActivityParticipation(campusId: string, activityId
     if (!result) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Activity withdrawal was not confirmed.');
     return result;
   } catch (error) {
-    // Concurrent participation writes may collide instead of being retried by MongoDB.
+    // Las escrituras concurrentes de participación pueden colisionar sin reintento automático de MongoDB.
     if (error instanceof MongoServerError && error.code === 11000) {
       const current = await findOwnParticipation(campusId, activityId, userId);
       if (operationId && await hasActivityInteraction(db, activityInteractionKey(_id, campusId, userId, 'LEFT', 0, operationId),

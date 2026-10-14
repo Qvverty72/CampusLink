@@ -4,6 +4,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaV
 import { authStyles as styles } from './form.styles';
 import { useRecovery } from '../hooks/useRecovery';
 
+/** Flujo de recuperación con solicitud de código y confirmación de nueva contraseña. */
 export function RecoveryScreen() {
   const { email, setEmail, pendingEmail, setPendingEmail, code, setCode, password, setPassword,
     confirmation, setConfirmation, busy, done, error, setError, notice, setNotice, request, confirm } = useRecovery();

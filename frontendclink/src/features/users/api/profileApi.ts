@@ -2,10 +2,13 @@ import { AuthApiError, authenticatedRequest } from '@/lib/api/authenticated-requ
 
 import type { AcademicOptions, AcademicProfile } from '../types/profile';
 
+/** Carga el perfil académico de la identidad de la sesión. */
 export const loadAcademicProfile = (signal: AbortSignal) =>
   authenticatedRequest<AcademicProfile>('/api/v1/users/me/profile', { signal });
+/** Carga campus y carreras disponibles para validar la edición del perfil. */
 export const loadAcademicOptions = (signal: AbortSignal) =>
   authenticatedRequest<AcademicOptions>('/api/v1/users/me/profile-options', { signal });
+/** Guarda el perfil con `updatedAt` como control de concurrencia optimista. */
 export async function saveAcademicProfile(input: { fullName: string; campusId: string; careerIds: string[]; updatedAt: string }, signal: AbortSignal) {
   try {
     return await authenticatedRequest('/api/v1/users/me/profile', { method: 'PATCH', signal,

@@ -4,6 +4,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { submitActivityReport } from '../api/reportsApi';
 import type { ActivityReportInput, ActivityReportReceipt } from '../types/activityReport';
 
+/** Aísla el estado del envío por identidad y aborta la denuncia si cambia la sesión o actividad. */
 export function useActivityReport(activityId: string) {
   const { identity, session, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;
@@ -16,6 +17,7 @@ export function useActivityReport(activityId: string) {
     return () => { request.current?.abort(); request.current = null; };
   }, [key]);
 
+  /** Envía una sola denuncia por intento activo y expone el recibo únicamente para su clave vigente. */
   const submit = async (input: ActivityReportInput) => {
     if (!campusId || !session || request.current || state.key !== key || state.receipt) return;
     const abort = new AbortController(); request.current = abort;

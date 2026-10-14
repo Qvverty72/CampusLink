@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 
+/** Prueba RLS con un usuario autenticado y una política permisiva heredada preexistente. */
 const db = new PGlite();
 const alice = '11111111-1111-4111-8111-111111111111';
 const bob = '22222222-2222-4222-8222-222222222222';
@@ -27,7 +28,7 @@ before(async () => {
     assert.ok(sql, name);
     await db.exec(sql);
   }
-  // The new restrictive boundary must also resist an older permissive read policy.
+  // El nuevo límite restrictivo también debe prevalecer sobre una política de lectura permisiva anterior.
   await db.exec('alter table perfil_usuario enable row level security; create policy older_open_read on perfil_usuario for select to authenticated using (true);');
   await db.exec(await readFile('src/database/supabase/migrations/f2_3_01_autenticacion.sql', 'utf8'));
   await db.exec(`

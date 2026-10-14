@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PointOfInterestDefinition } from '../types/map';
 import { poiTypeLabel } from '../utils/pointOfInterest';
 
-/** Uses the floor modal's stable container and already authorized active-map data. */
+/** Presenta la ficha del POI usando datos del mapa activo ya autorizados por el backend. */
 export function PointOfInterestDetail({ poi, buildingName, floorName, onBack }: {
   poi: PointOfInterestDefinition; buildingName: string; floorName: string; onBack: () => void;
 }) {

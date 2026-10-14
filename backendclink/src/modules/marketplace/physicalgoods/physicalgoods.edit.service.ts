@@ -11,6 +11,7 @@ async function dependency<T>(operation: () => Promise<T>) {
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo guardar la publicación.');
   }
 }
+/** Actualiza contenido solo para el propietario y solo si coincide la versión leída por el cliente. */
 export async function updatePhysicalgoods(auth: VerifiedAuthConnection, publicationId: unknown, body: unknown) {
   const id = physicalgoodsId(publicationId, 'publicationId'), input = parsePhysicalgoodsUpdate(body);
   return dependency(() => editPhysicalgoods(auth, id, async (client, row) => {
@@ -22,6 +23,7 @@ export async function updatePhysicalgoods(auth: VerifiedAuthConnection, publicat
     return { id };
   }, true));
 }
+/** Retira lógicamente una publicación del propietario usando control de versión optimista. */
 export async function withdrawPhysicalgoods(auth: VerifiedAuthConnection, publicationId: unknown, body: unknown) {
   const id = physicalgoodsId(publicationId, 'publicationId'), { updatedAt } = parsePhysicalgoodsVersion(body);
   return dependency(() => editPhysicalgoods(auth, id, async (client, row) => {

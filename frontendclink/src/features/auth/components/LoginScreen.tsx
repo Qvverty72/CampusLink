@@ -4,6 +4,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaV
 import { authStyles as styles } from './form.styles';
 import { useLogin } from '../hooks/useLogin';
 
+/** Formulario de acceso conectado al hook que intercambia credenciales por sesión. */
 export function LoginScreen() {
   const { auth, email, setEmail, password, setPassword, busy, setBusy, error, submit } = useLogin();
   if (auth.status === 'ready') return <Redirect href="/profile" />;

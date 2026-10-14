@@ -3,6 +3,7 @@ import { useAuth } from './useAuth';
 import { completeInstitutionalRegistration, confirmInstitutionalEmail, getRegistrationOptions, registerInstitutionalAccount, resendInstitutionalConfirmation } from '../api/registrationApi';
 import type { RegistrationOption } from '../types/registration';
 
+/** Coordina catálogo, registro, verificación de correo y finalización del perfil. */
 export function useRegistration() {
   const auth = useAuth();
   const [options, setOptions] = useState<RegistrationOption[]>([]);

@@ -2,11 +2,15 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * Registra imágenes locales de POI como imports literales que Metro puede empaquetar.
+ * Omite variantes de densidad `@Nx` y solo reescribe el índice generado cuando cambia.
+ */
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const imagesDirectory = resolve(root, 'assets/images/poimages');
 const outputPath = resolve(root, 'src/three/assets/poiImages.generated.ts');
 
-// Metro requires literal paths. Density variants belong to their base asset.
+// Metro requiere rutas literales; las variantes de densidad se representan con su recurso base.
 const entries = await readdir(imagesDirectory, { withFileTypes: true });
 const files = entries
   .filter(entry => entry.isFile() && /\.(png|jpe?g|webp)$/i.test(entry.name)

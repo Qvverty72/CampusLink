@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { requestRecovery, resetPassword } from '../api/sessionApi';
 
+/** Coordina solicitud del código y confirmación de cambio de contraseña. */
 export function useRecovery() {
   const [email, setEmail] = useState('');
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);

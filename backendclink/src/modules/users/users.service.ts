@@ -19,6 +19,7 @@ async function dependency<T>(operation: () => PromiseLike<T>): Promise<T> {
   }
 }
 
+/** Lee el perfil propio y limita la respuesta a los datos académicos expuestos por la pantalla. */
 export async function getAcademicProfile(auth: VerifiedAuthConnection) {
   authorize(auth);
   const result = await dependency(() => findAcademicProfile(auth.userId));
@@ -32,6 +33,7 @@ export async function getAcademicProfile(auth: VerifiedAuthConnection) {
     careers: row.usuario_carrera.flatMap(link => link.carrera ? [link.carrera] : []), updatedAt: row.updated_at };
 }
 
+/** Lista campus y carreras activas de la institución y las carreras ofrecidas en cada campus. */
 export async function getAcademicOptions(auth: VerifiedAuthConnection) {
   authorize(auth);
   const result = await dependency(() => findAcademicOptions(auth.profile.institucion_id));
@@ -43,6 +45,7 @@ export async function getAcademicOptions(auth: VerifiedAuthConnection) {
       .filter(link => link.carrera_id === row.id && campuses.some(campus => campus.id === link.campus_id)).map(link => link.campus_id) })) };
 }
 
+/** Acepta únicamente nombre, campus, carreras y versión; normaliza UUID y rechaza duplicados. */
 export function parseProfileUpdate(body: unknown): ProfileUpdate {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('Revisa los datos del perfil.');
   const values = body as Record<string, unknown>;
@@ -58,6 +61,10 @@ export function parseProfileUpdate(body: unknown): ProfileUpdate {
   return { fullName: values.fullName.trim(), campusId: values.campusId.toLowerCase(), careerIds, updatedAt: values.updatedAt };
 }
 
+/**
+ * Actualiza el perfil bajo bloqueos y versión optimista; verifica cuenta, campus y oferta académica.
+ * La transacción evita guardar asociaciones parciales si falla una validación o escritura.
+ */
 export async function updateAcademicProfile(auth: VerifiedAuthConnection, body: unknown) {
   authorize(auth);
   const input = parseProfileUpdate(body);

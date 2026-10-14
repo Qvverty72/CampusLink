@@ -10,6 +10,7 @@ export interface MapRouterOptions {
   diagnosticsEnabled?: boolean;
 }
 
+/** Registra lectura del mapa activo y, si se habilitan, diagnósticos técnicos del módulo. */
 export function createMapRouter(options: MapRouterOptions = {}): Router {
   const mapRouter = Router();
 

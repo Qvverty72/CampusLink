@@ -1,10 +1,10 @@
-// Additive migration for the actual CampusLink schema. Never run legacy bootstrap001.
+// Migración aditiva para el esquema actual de CampusLink; no ejecutar el bootstrap legado 001.
 if (!db.getCollectionNames().includes('activities') || !db.getCollectionNames().includes('activity_participation')) {
   throw new Error('activities and activity_participation must exist first.');
 }
-// Series definition is embedded in activities; never create another collection.
-// Individual activities have no seriesId and remain outside this partial unique index.
-// Duplicates must be reviewed, never deleted automatically by a migration.
+// La definición de serie se almacena en `activities`; no se crea otra colección.
+// Las actividades individuales no tienen `seriesId` y quedan fuera del índice parcial.
+// Revisar duplicados manualmente; la migración no los elimina.
 db.activities.createIndex({ seriesId: 1, occurrenceIndex: 1 }, {
   name: 'series_occurrence_uq', unique: true, partialFilterExpression: { seriesId: { $type: 'objectId' } },
 });

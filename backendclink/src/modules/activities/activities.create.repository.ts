@@ -14,7 +14,7 @@ export async function findActiveCommunityActivity(campusId: string, userId: stri
   return getMongoDb().collection<ActivityDocument>('activities').findOne(activeCommunityActivityFilter(campusId, userId, now));
 }
 
-/** Publish and enroll the creator atomically, rechecking the location in the transaction snapshot. */
+/** Publica y registra al creador en una transacción, revalidando ubicación y cupo en su instantánea. */
 export async function insertActivity(document: ActivityDocument, options: ActivityCreationOptions = {}): Promise<ActivityDto> {
   const db = getMongoDb();
   await requireParticipationIndex(db);
@@ -22,8 +22,8 @@ export async function insertActivity(document: ActivityDocument, options: Activi
     const now = new Date(Math.max(document.createdAt.getTime(), Date.now()));
     const maps = db.collection<CampusMapDocument>('campus_maps');
     const limited = document.type === 'COMMUNITY_ACTIVITY' && options.limitActiveCommunity === true;
-    // A shared write forces competing snapshots to retry before checking the creator's quota.
-    // Counting alone permits write skew: different inserted activity IDs do not conflict.
+    // La escritura compartida obliga a reintentar instantáneas concurrentes antes de revisar el cupo.
+    // Contar sin esa escritura permitiría una anomalía de escritura: los IDs insertados no colisionan.
     const map = limited
       ? await maps.findOneAndUpdate({ campusId: document.campusId, status: 'ACTIVE' },
         { $inc: { communityActivityCreationRevision: 1 } }, { session, returnDocument: 'after' })

@@ -5,6 +5,7 @@ import { loadAccessCampuses } from '../api/accessApi';
 import { loadAuditEntries, loadAuditEntry } from '../api/auditApi';
 import type { AuditEntry, AuditDetail } from '../types/audit';
 
+/** Carga auditoría por campus y limpia el historial al cambiar identidad o permisos. */
 export function useAuditHistory() {
   const auth = useAuth();
   const [campuses,setCampuses] = useState<{ id: string; name: string }[]>([]);
@@ -27,7 +28,7 @@ export function useAuditHistory() {
       setEntries([]); setSelected(null); setHasMore(false); void auth.refreshIdentity();
     }
   }
-  // Context changes cancel requests and erase the previous actor's history immediately.
+  // Un cambio de identidad o contexto cancela peticiones y borra enseguida el historial anterior.
   const identityKey = auth.identity ? JSON.stringify([auth.identity.userId,auth.identity.campusId,auth.identity.roles]) : '';
   useEffect(() => {
     const controller = new AbortController();

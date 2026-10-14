@@ -8,7 +8,7 @@ interface SpatialBuilding { id: string; name: string; floors: SpatialFloor[]; de
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** Read identifiers from map data; meshName never participates in activity references. */
+/** Extrae identificadores de dominio del mapa; `meshName` no forma parte de las referencias. */
 export function spatialBuildings(map: CampusMapDocument): SpatialBuilding[] {
   return map.buildings.flatMap(value => {
     if (!record(value) || typeof value.id !== 'string' || typeof value.name !== 'string'

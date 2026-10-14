@@ -10,6 +10,7 @@ import { ActivityFields } from './ActivityFields';
 import { ActivityRecurrencePicker } from './ActivityRecurrencePicker';
 import { recurrenceDraftRule, type ActivityRecurrenceDraft, type ActivityRecurrencePreview } from '../types/recurrence';
 
+/** Valida el borrador y, en series, exige una vista previa del servidor antes de publicar. */
 export function CreateActivityForm({ locations, initialLocation, onCreated, official = false }: {
   locations: ActivityLocationOption[]; initialLocation: ActivityLocationQuery;
   onCreated: (activity: ActivityDetail) => void; official?: boolean;

@@ -1,4 +1,4 @@
-/** Request identity only. Server authorization always comes from the authenticated account. */
+/** Genera una clave de idempotencia; la autorización siempre procede de la cuenta autenticada. */
 export function activityOperationId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, value => {

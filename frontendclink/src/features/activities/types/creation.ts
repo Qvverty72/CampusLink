@@ -1,12 +1,12 @@
 export const ACTIVITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;
 
-/** Form choices for accounts without the current campus's official publication capability. */
+/** Opciones del formulario para cuentas sin capacidad de publicación oficial en el campus. */
 export const ACTIVITY_DESCRIPTION_OPTIONS: readonly string[] = [
   'Grupo de estudio', 'Actividad de deporte', 'Taller', 'Charla o conferencia',
   'Actividad cultural', 'Encuentro comunitario', 'Jornada informativa',
 ];
 
-/** UI selection policy; existing text can be kept after the capability is lost. */
+/** Regla del formulario: conserva el texto original si se perdió la capacidad durante la edición. */
 export function isActivityDescriptionAllowed(description: string, allowCustom: boolean, originalDescription?: string): boolean {
   return allowCustom || ACTIVITY_DESCRIPTION_OPTIONS.includes(description) || description === originalDescription;
 }
@@ -20,7 +20,7 @@ export interface CommunityActivityCreationAvailability {
   campusId: string; canCreate: boolean; message?: string;
 }
 
-/** Domain catalog supplied by the map adapter; no meshes or rendering state. */
+/** Catálogo de dominio que entrega el adaptador del mapa, sin meshes ni estado de renderizado. */
 export interface ActivityLocationOption {
   id: string; name: string;
   floors: { id: string; name: string; pois: { id: string; name: string }[] }[];
@@ -31,7 +31,7 @@ export interface ActivityDraft {
   buildingKey: string; floorKey: string; poiKey: string; customLabel: string;
 }
 
-/** Interpret the explicitly labelled local date/time and reject rollover or a DST gap. */
+/** Interpreta fecha y hora local; rechaza desbordes de calendario y horas inexistentes por DST. */
 export function localActivityTimestamp(dateText: string, timeText: string): string | null {
   const date = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dateText.trim());
   const time = /^(\d{2}):(\d{2})$/.exec(timeText.trim());
@@ -44,6 +44,7 @@ export function localActivityTimestamp(dateText: string, timeText: string): stri
   return result.toISOString();
 }
 
+/** Valida contenido, horario y claves espaciales antes de construir el contrato de creación. */
 export function validateActivityDraft(draft: ActivityDraft, locations: ActivityLocationOption[], now = Date.now(),
   options: { allowEnded?: boolean; timestamps?: { startAt: string | null; endAt: string | null } } = {}):
   { input: CreateActivityInput; error?: never } | { error: string; input?: never } {

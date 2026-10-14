@@ -4,6 +4,7 @@ import { authStyles as styles } from '@/features/auth/components/form.styles';
 import { accessLabels } from '../types/access';
 import { useCampusAccess } from '../hooks/useCampusAccess';
 
+/** Interfaz de administración de asignaciones y estados de cuenta por campus. */
 export function CampusAccessScreen() {
   const { auth, campuses, campusId, setCampusId, page, setPage, users, hasMore, catalog, selected,
     roleIds, setRoleIds, permissionIds, setPermissionIds, loading, saving, accountAction, setAccountAction,

@@ -6,11 +6,12 @@ const POI_TYPE_LABELS: Record<string, string> = {
   SERVICE: 'Servicio', OTHER: 'Otro',
 };
 
+/** Etiquetas visibles para tipos conocidos; los valores nuevos se muestran tal cual. */
 export function poiTypeLabel(type: string): string {
   return Object.hasOwn(POI_TYPE_LABELS, type) ? POI_TYPE_LABELS[type] : type;
 }
 
-/** Only registered local files can be displayed; Mongo never supplies require paths. */
+/** Resuelve solo imágenes empaquetadas; la API no controla rutas `require` locales. */
 export function poiImages(imageKeys?: string[]) {
   if (!Array.isArray(imageKeys)) return [];
   return [...new Set(imageKeys.filter((key): key is string => typeof key === 'string')

@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Shared navigation for physical goods and the digital library. */
+/** Navegación compartida por bienes físicos y biblioteca digital. */
 export default function MarketplaceLayout() {
   return (
     <Stack

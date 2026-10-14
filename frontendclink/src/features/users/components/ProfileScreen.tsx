@@ -5,6 +5,7 @@ import { useProfile } from '../hooks/useProfile';
 import { AcademicProfileSection } from './AcademicProfile';
 import { canManageAccess } from '../types/access';
 
+/** Reúne identidad, perfil académico, permisos visibles y cierre de sesión. */
 export function ProfileScreen() {
   const { auth, closing, identity, roleLabel, functions, signOut } = useProfile();
   return (

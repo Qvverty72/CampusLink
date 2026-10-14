@@ -26,6 +26,10 @@ function mediaDto(row: PhysicalgoodsMediaRow) {
   return { id: row.id, title: row.titulo, category: { id: row.categoria_id, name: row.categoria_nombre },
     modality: row.modalidad, price: row.modalidad === 'VENTA' ? Number(row.precio) : null, status: row.estado_publicacion, condition: row.estado_uso };
 }
+/**
+ * Revalida perfil, campus y permisos bajo bloqueo antes de modificar una publicación.
+ * Las llamadas de contenido/retirada pueden exigir propietario; otras operaciones admiten admin del campus.
+ */
 export async function editPhysicalgoods<T>(auth: VerifiedAuthConnection, id: string, operation: (client: PoolClient, row: PhysicalgoodsMediaRow) => Promise<T>, ownerOnly = false) {
   requireCampusCapability(auth, auth.campusId, 'general');
   return withPhysicalgoodsTransaction(async client => {
@@ -47,6 +51,7 @@ export async function editPhysicalgoods<T>(auth: VerifiedAuthConnection, id: str
     return result;
   });
 }
+/** Devuelve metadatos y enlaces firmados de imágenes válidas de una publicación del campus. */
 export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publicationId: unknown) {
   requireCampusCapability(auth, auth.campusId, 'general');
   const id = physicalgoodsId(publicationId, 'publicationId');
@@ -68,6 +73,7 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
       canEdit: canEdit(auth, result.row), images, expiresIn: 60 };
   });
 }
+/** Busca publicaciones disponibles del campus, pagina antes de firmar sus imágenes y aplica filtros del usuario. */
 export async function getPhysicalgoodsResources(auth: VerifiedAuthConnection, query: unknown) {
   requireCampusCapability(auth, auth.campusId, 'general');
   const { filters, pagination } = parsePhysicalgoodsSearch(query);
@@ -87,7 +93,7 @@ export async function addPhysicalgoodsImage(auth: VerifiedAuthConnection, public
   const id = physicalgoodsId(publicationId, 'publicationId'), photo = parsePhysicalgoodsPhotoUpload(body), imageId = randomUUID();
   const extension = photo.mimeType === 'image/jpeg' ? 'jpg' : photo.mimeType === 'image/png' ? 'png' : 'webp';
   const path = `${auth.campusId}/${auth.userId}/${id}/${imageId}.${extension}`;
-  // Check ownership before Storage, then recheck account/grants and publication under the write lock.
+  // Comprueba acceso antes de Storage y vuelve a validar cuenta, permisos y publicación bajo bloqueo de escritura.
   await dependency(() => editPhysicalgoods(auth, id, async () => {}));
   let attemptedPersistence = false;
   return dependency(async () => {

@@ -6,7 +6,7 @@ import { getAccessCampusesController, getAccessCatalogController, listAccessUser
 import { listAuditEntriesController, getAuditEntryController } from './access.controller.js';
 import { createNotificationsRouter } from './notifications.routes.js';
 
-// Technical diagnostics only; business routes must declare authentication/authorization.
+// Los diagnósticos son técnicos; las rutas de negocio verifican identidad y contexto.
 export function createUsersRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
   router.use('/me/notifications', createNotificationsRouter());
@@ -14,7 +14,7 @@ export function createUsersRouter(diagnosticsEnabled: boolean): Router {
   router.get('/me/profile', requireAuthentication, getAcademicProfileController);
   router.get('/me/profile-options', requireAuthentication, getAcademicOptionsController);
   router.patch('/me/profile', requireAuthentication, updateAcademicProfileController);
-  // Service rechecks the current administrator assignment for each requested campus.
+  // El servicio vuelve a comprobar la asignación administrativa vigente en cada campus solicitado.
   router.get('/access/campuses', requireAuthentication, getAccessCampusesController);
   router.get('/access/campuses/:campusId/audit', requireAuthentication, listAuditEntriesController);
   router.get('/access/campuses/:campusId/audit/:auditId', requireAuthentication, getAuditEntryController);

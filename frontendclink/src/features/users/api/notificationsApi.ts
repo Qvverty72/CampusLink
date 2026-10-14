@@ -4,6 +4,7 @@ import type { NotificationPage } from '../types/notification';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Lee una página cursorada y valida IDs, tipos y marcas de tiempo antes de exponerla. */
 export async function fetchNotifications(cursor?: string, signal?: AbortSignal): Promise<NotificationPage> {
   const query = new URLSearchParams(); if (cursor) query.set('cursor', cursor);
   const response = await authenticatedEnvelopeRequest<NotificationPage>('/api/v1/users/me/notifications', { signal }, query);
@@ -18,6 +19,7 @@ export async function fetchNotifications(cursor?: string, signal?: AbortSignal):
   return value;
 }
 
+/** Marca como leída o elimina la notificación y verifica el acuse de identidad. */
 export async function updateNotification(id: string, remove: boolean, signal?: AbortSignal): Promise<void> {
   if (!uuid.test(id)) throw new Error('Notificación inválida.');
   const result = await authenticatedEnvelopeRequest<{ id: string }>(`/api/v1/users/me/notifications/${id}${remove ? '' : '/read'}`,

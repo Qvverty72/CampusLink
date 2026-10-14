@@ -11,6 +11,7 @@ import { initialActivityParticipation } from './activities.participation.js';
 import { appendActivityInteraction, activityInteractionKey } from './activities.interactions.js';
 import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivitySeriesDocument } from './activities.types.js';
 
+/** Inserta plantilla, ocurrencias, participación inicial e interacciones en una sola transacción. */
 export async function insertActivitySeries(series: ActivitySeriesDocument, documents: ActivityDocument[]): Promise<ActivityDto[]> {
   const db = getMongoDb(); await requireParticipationIndex(db);
   const indexes = await db.collection('activities').indexes();
@@ -18,9 +19,8 @@ export async function insertActivitySeries(series: ActivitySeriesDocument, docum
     && Object.keys(index.key).length === 2 && JSON.stringify(index.partialFilterExpression) === JSON.stringify({ seriesId: { $type: 'objectId' } })
     && !index.sparse)) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'El índice de ocurrencias no está configurado.');
   const result = await mongoClient.withSession(session => session.withTransaction(async () => {
-    // Driver 7.6 insertMany re-passes an inherited per-operation timeoutMS.
-    // This handle keeps the same pool/database/options; the transaction's session
-    // owns the inherited client deadline, so no operation overrides it.
+    // El `insertMany` del driver 7.6 vuelve a pasar un timeout por operación heredado.
+    // Este handle conserva pool, base y opciones; la sesión controla el plazo de la transacción.
     const transactionDb = mongoClient.db(db.databaseName, { ...db.options, timeoutMS: undefined });
     const now = new Date(Math.max(series.createdAt.getTime(), Date.now()));
     const map = await db.collection<CampusMapDocument>('campus_maps').findOne({ campusId: series.campusId, status: 'ACTIVE' }, { session });
@@ -47,5 +47,6 @@ export async function findActivitySeries(campusId: string, seriesId: string): Pr
   return (await getMongoDb().collection<ActivityDocument>('activities').findOne({ campusId, seriesId: id,
     'seriesDefinition._id': id, 'seriesDefinition.status': 'ACTIVE', 'seriesDefinition.visibility': 'PUBLIC' }))?.seriesDefinition ?? null;
 }
+/** Busca únicamente las ocurrencias que siguen visibles según la misma política del listado. */
 export const findActivitySeriesOccurrences = (campusId: string, seriesId: string, now: Date) => getMongoDb().collection<ActivityDocument>('activities')
   .find({ ...visibleActivityFilter(campusId, now), seriesId: new ObjectId(seriesId) }).sort({ startAt: 1, _id: 1 }).toArray();

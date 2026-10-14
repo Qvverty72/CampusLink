@@ -4,6 +4,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchNotifications, updateNotification } from '../api/notificationsApi';
 import type { ActivityNotification } from '../types/notification';
 
+/** Pagina notificaciones y refleja lecturas/eliminaciones solo tras el acuse del servidor. */
 export function useActivityNotifications() {
   const { refreshIdentity } = useAuth();
   const [items, setItems] = useState<ActivityNotification[]>([]);

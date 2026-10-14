@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Navigation for welcome, authentication, account and profile screens. */
+/** Navegación de bienvenida, autenticación, cuenta y perfil. */
 export default function LoginLayout() {
   return (
     <Stack

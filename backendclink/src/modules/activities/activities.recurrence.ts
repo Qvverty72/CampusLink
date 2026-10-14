@@ -5,7 +5,7 @@ import type { ActivityRecurrencePreview, CreateActivitySeriesInput, ActivityType
 
 export const RECURRENCE_LIMITS = { occurrences: 200, interval: 52, years: 2 } as const;
 
-/** Calendar steps keep start/end wall clocks, including multi-day occurrences, in the saved IANA zone. */
+/** Calcula fechas de calendario conservando hora de inicio y duración en la zona IANA guardada. */
 export function expandActivityRecurrence(input: CreateActivitySeriesInput, campusId: string, type: ActivityType,
   now: Date): ActivityRecurrencePreview {
   const rule = input.recurrence;
@@ -23,7 +23,7 @@ export function expandActivityRecurrence(input: CreateActivitySeriesInput, campu
   for (let period = 0; period <= 732; period++) {
     let date: Temporal.PlainDate;
     if (rule.frequency === 'WEEKLY' && rule.weekdays) {
-      // Scan from the lower bound; interval counts ISO weeks anchored to its Monday.
+      // Recorre desde la fecha inicial; el intervalo cuenta semanas ISO ancladas en su lunes.
       date = firstDate.add({ days: period });
       if (Temporal.PlainDate.compare(date, until) > 0) break;
       const week = Math.floor((period + firstDate.dayOfWeek - 1) / 7);

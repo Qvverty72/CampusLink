@@ -10,7 +10,10 @@ export function probeAnalyticsDependencies(): Promise<DependencyChecks> {
   });
 }
 
-/** Foundation for authorized future reports: event counts, never current JOINED rows as historical metrics. */
+/**
+ * Cuenta eventos ocurridos en `[from, until)` para un campus.
+ * Usa el registro histórico de interacciones, no el estado JOINED actual como métrica pasada.
+ */
 export async function countActivityInteractions(campusId: string, from: Date, until: Date) {
   if (!campusId || !Number.isFinite(from.getTime()) || !Number.isFinite(until.getTime()) || until <= from) throw new Error('Invalid metric scope.');
   const { getMongoDb } = await import('../../config/mongodb.js');

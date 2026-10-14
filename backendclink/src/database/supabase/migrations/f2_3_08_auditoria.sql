@@ -1,5 +1,5 @@
--- Existing audit history only. Apply after F2.3-05 with a database-owner connection.
--- Express authorizes every campus; Expo must never read this table directly.
+-- Actúa sobre el historial de auditoría existente; aplicar después de F2.3-05 como propietario.
+-- Express autoriza cada campus; Expo no debe leer esta tabla directamente.
 begin;
 alter table public.auditoria enable row level security;
 revoke all on public.auditoria from public, anon, authenticated;

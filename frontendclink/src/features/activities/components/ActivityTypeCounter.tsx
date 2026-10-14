@@ -11,7 +11,7 @@ export const ACTIVITY_TYPES = ['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY'] as const;
 const MAP_BADGE_SIZE = 48;
 const MAP_ICON_SIZE = 36;
 
-/** Decorative Lucide icons; the parent button carries the accessible label. */
+/** Los íconos Lucide son decorativos; el botón padre aporta la etiqueta accesible. */
 function ActivityTypeIcon({ type, color }: { type: Activity['type']; color: string }) {
   const Icon = type === 'OFFICIAL_EVENT' ? CalendarDays : UsersRound;
   return <View accessible={false} aria-hidden accessibilityElementsHidden
@@ -20,7 +20,7 @@ function ActivityTypeIcon({ type, color }: { type: Activity['type']; color: stri
   </View>;
 }
 
-/** One count/action shared by floor information and the map's compact controls. */
+/** Contador/acción compartido por la información del piso y los controles compactos del mapa. */
 export function ActivityTypeCounter({ type, count, loading, scope, onPress, variant = 'floor' }: {
   type: Activity['type']; count: number | null; loading: boolean; scope: string;
   onPress: () => void; variant?: 'floor' | 'map';

@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Navigation for report listings and future report detail screens. */
+/** Navegación para denuncias y sus vistas de detalle. */
 export default function ReportsLayout() {
   return (
     <Stack

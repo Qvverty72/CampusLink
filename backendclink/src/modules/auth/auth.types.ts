@@ -1,5 +1,6 @@
 import type { ModuleHealth } from '../../types/api.types.js';
 export type AuthHealth = ModuleHealth<'auth'>;
+/** Proyección del perfil institucional consultada desde PostgreSQL. */
 export interface AuthProfile {
   id: string;
   campus_id: string;
@@ -15,7 +16,9 @@ export interface AuthAssignmentRow {
   rol?: { id: string; nombre: string } | null;
   permiso?: { id: string; nombre: string } | null;
 }
+/** Rol o permiso vigente asociado a un campus para la solicitud. */
 export interface AuthAssignment { id: string; name: string; campusId: string }
+/** Contexto verificado de base de datos; middleware lo adjunta a la solicitud Express. */
 export interface VerifiedAuthConnection {
   userId: string;
   campusId: string;
@@ -24,6 +27,7 @@ export interface VerifiedAuthConnection {
   permissions: AuthAssignment[];
 }
 export interface AuthLocals { auth: VerifiedAuthConnection }
+/** Identidad confirmada por Supabase Auth antes de consultar el perfil institucional. */
 export interface VerifiedIdentity {
   userId: string;
   email: string;
@@ -31,6 +35,7 @@ export interface VerifiedIdentity {
   registration: { fullName: unknown; campusId: unknown };
 }
 export interface IdentityLocals { identity: VerifiedIdentity }
+/** Entrada validada del registro institucional; todavía no representa un perfil persistido. */
 export interface RegistrationInput {
   email: string;
   password: string;
@@ -38,6 +43,7 @@ export interface RegistrationInput {
   campusId: string;
 }
 
+/** Opción derivada del catálogo institucional vigente que recibe el cliente de registro. */
 export interface RegistrationOption {
   dominio: string;
   institucion_id: string;

@@ -35,7 +35,7 @@ function parsePositiveInteger(
   return { value: parsed };
 }
 
-/** Parses page/limit from an Express query object, applying the public defaults. */
+/** Analiza `page` y `limit`, aplica los valores públicos por defecto y calcula el desplazamiento seguro. */
 export function parsePaginationQuery(
   input: unknown,
 ): ValidationResult<PaginationParams> {
@@ -74,7 +74,7 @@ export function parsePaginationQuery(
   return { success: true, data: { page, limit, offset } };
 }
 
-/** Trims a limit+1 database result and creates the agreed list metadata. */
+/** Recorta el resultado consultado con un elemento adicional y construye los metadatos de paginación. */
 export function createPaginatedResult<T>(
   fetchedItems: readonly T[],
   pagination: PaginationParams,

@@ -1,6 +1,8 @@
 // Bootstrap de persistencia documental de CampusLink; se ejecuta manualmente con
 // mongosh y puede repetirse para aplicar los validadores vigentes a colecciones existentes.
 // Los UUID apuntan lógicamente a Supabase; los ObjectId enlazan documentos de MongoDB.
+// Este archivo describe el bootstrap legado. No usarlo sobre las colecciones actuales:
+// las migraciones 002 en adelante corresponden al esquema singular que usa la API vigente.
 const targetDbName = process.env.MONGODB_DB_NAME || 'campuslink';
 db = db.getSiblingDB(targetDbName);
 

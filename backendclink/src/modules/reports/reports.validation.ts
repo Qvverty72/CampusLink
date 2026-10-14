@@ -1,7 +1,7 @@
 import type { RequestParser, ApiErrorDetail, ValidationResult } from '../../types/api.js';
 import type { ReportActivityInput } from './reports.types.js';
 
-/** Only the account's reason/description; identities, snapshots and state belong to the server. */
+/** Acepta motivo y descripción; identidad, snapshot y estado se asignan exclusivamente en el servidor. */
 export const parseActivityReport: RequestParser = (input: unknown): ValidationResult<ReportActivityInput> => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return { success: false, issues: [{ field: 'body', message: 'Se requiere un motivo para la denuncia.' }] };

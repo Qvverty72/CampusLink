@@ -15,10 +15,10 @@ export interface ActivityEditPreview {
   timeZone?: string; changes: ActivityEditChange[];
 }
 export interface ActivityEditResult { activityId: string; updatedCount: number; revision: number }
-/** Embedded in ActivityDocument.changeHistory; never stored in a new collection. */
+/** Se embebe en `ActivityDocument.changeHistory`; no crea una colección adicional. */
 export interface ActivityChangeDocument {
   _id: ObjectId; operationId: ObjectId; campusId: string; activityId: ObjectId; seriesId?: ObjectId;
-  // Historical group edits remain readable; new edit inputs only accept ONE.
+  // Los cambios grupales históricos siguen siendo legibles; las nuevas entradas solo aceptan ONE.
   actorUserId: string; revision: number; scope: 'ONE' | 'UPCOMING'; changedAt: Date;
   before: ActivitySnapshot; after: ActivitySnapshot; changedFields: string[];
   notificationReasons: ('DATES_CHANGED' | 'LOCATION_CHANGED' | 'CONTENT_CHANGED')[];

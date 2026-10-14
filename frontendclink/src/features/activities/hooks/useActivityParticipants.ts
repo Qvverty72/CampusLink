@@ -4,6 +4,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchActivityParticipants } from '../api/activitiesApi';
 import type { ActivityParticipantsPage } from '../types/activity';
 
+/** Consulta una página de inscritos para el campus actual y cancela la petición al cambiar de vista. */
 export function useActivityParticipants(activityId: string, refreshKey: string) {
   const { identity, session, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;

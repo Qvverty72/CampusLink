@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Navigation for analytics dashboards and future metric detail screens. */
+/** Navegación de los paneles analíticos y sus vistas de detalle. */
 export default function AnalyticsLayout() {
   return (
     <Stack

@@ -10,12 +10,13 @@ function getPool(): Pool {
       connectionTimeoutMillis: env.databaseTimeoutMs, query_timeout: env.databaseTimeoutMs + 1000, idleTimeoutMillis: 10000,
       ssl: local ? undefined : { rejectUnauthorized: true },
     });
-    // Driver errors may contain connection details. Never log their raw contents.
+    // Los errores del driver pueden contener datos de conexión; nunca se registran sin filtrar.
     pool.on('error', () => console.error('PostgreSQL connection unavailable'));
   }
   return pool;
 }
 
+/** Ejecuta la operación con timeouts locales y revierte cualquier error antes de liberar el cliente. */
 export async function withPostgresTransaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await getPool().connect();
   let destroy = false;
@@ -31,6 +32,7 @@ export async function withPostgresTransaction<T>(operation: (client: PoolClient)
   } finally { client.release(destroy); }
 }
 
+/** Cierra el pool actual y permite que una inicialización posterior cree uno nuevo. */
 export async function closePostgres(): Promise<void> {
   const current = pool; pool = undefined;
   if (current) await current.end();

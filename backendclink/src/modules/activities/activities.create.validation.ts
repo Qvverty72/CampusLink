@@ -5,7 +5,7 @@ export const ACTIVITY_CONTENT_LIMITS = { title: 120, description: 2000, customLa
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** ISO UTC timestamps only: reject Date normalization of nonexistent calendar dates. */
+/** Solo acepta fechas ISO UTC; rechaza la normalización automática de fechas de calendario inexistentes. */
 function timestamp(value: unknown): Date | null {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) return null;
   const date = new Date(value);

@@ -5,7 +5,7 @@ import { ACTIVITY_CONTENT_LIMITS, ACTIVITY_DESCRIPTION_OPTIONS, type ActivityDra
 import type { ActivityLocationQuery } from '../types/activity';
 import { ActivityDateTimeField } from './ActivityDateTimeField';
 
-/** Shared domain fields for creation/editing; location catalog never contains meshes. */
+/** Campos de dominio compartidos por alta/edición; el catálogo de lugares no contiene mallas. */
 export function ActivityFields({ draft, change, disabled, locations, organizer, firstOccurrence = false, creationLocation, existingContent, locationDropdowns = false, allowCustomDescription = false }: {
   draft: ActivityDraft; change: (field: keyof ActivityDraft, value: string) => void; disabled: boolean;
   locations: ActivityLocationOption[]; organizer?: string; firstOccurrence?: boolean;

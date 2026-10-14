@@ -5,7 +5,7 @@ import type { ApiErrorCode, ApiErrorStatus } from '../types/api.js';
 
 export { ApiError };
 
-/** Compatibility facade for existing modules; all responses use the shared F2.2-04 helpers. */
+/** Fachada de compatibilidad: los módulos existentes delegan en los helpers de respuesta comunes. */
 export function sendSuccess<T>(
   response: Response,
   data: T,

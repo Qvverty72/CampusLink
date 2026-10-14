@@ -4,7 +4,7 @@ import { Keyboard, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } f
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { formatPickerValue, pickerDate, type ActivityDateTimeFieldProps } from '../types/dateTime';
 
-/** Both platforms block the form while choosing: system dialog on Android, modal on iOS. */
+/** Bloquea el formulario mientras se elige: diálogo del sistema en Android y modal en iOS. */
 export function ActivityDateTimeField({ label, mode, value, disabled, onChange, displayValue }: ActivityDateTimeFieldProps) {
   const [selection, setSelection] = useState<Date | null>(null);
   const androidOpen = useRef(false);

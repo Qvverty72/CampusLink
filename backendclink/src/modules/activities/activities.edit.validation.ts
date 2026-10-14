@@ -3,6 +3,7 @@ import { parseCreateActivity } from './activities.create.validation.js';
 import type { CreateActivityInput } from './activities.types.js';
 import type { EditActivityInput } from './activities.edit.types.js';
 
+/** Crea el validador de vista previa o guardado; al guardar exige el hash de esa vista previa. */
 export function editActivityParser(save = false): RequestParser {
   return (input: unknown): ValidationResult<EditActivityInput> => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return { success: false, issues: [{ field: 'body', message: 'Define los cambios de la actividad.' }] };

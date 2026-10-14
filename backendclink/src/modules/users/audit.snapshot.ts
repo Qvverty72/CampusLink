@@ -1,4 +1,4 @@
-// Public historical fields only. Never forward arbitrary stored JSON or join live data.
+// Solo campos históricos autorizados: no reenvía JSON arbitrario ni lo combina con datos actuales.
 const fields = ['id','institucion_id','campus_id','nombre_completo','estado_cuenta','deleted_at','updated_at',
   'assignmentId','catalogId','action','perfil_usuario_id','rol_id','permiso_id','revocado_en',
   'asignado_por_id','otorgado_por_id','asignado_en','otorgado_en',

@@ -16,7 +16,7 @@ export function ActivityCard({ activity, onPress }: {
   const isJoined = detail?.participation.status === 'JOINED';
   const detailLinkLabel = (detail?.participation.status ?? ownParticipation?.status) === 'JOINED'
     ? 'Ver detalles e inscritos' : 'Ver detalles y ubicación';
-  // Once a detail is unavailable, do not keep displaying the old list's public content.
+  // Si el detalle deja de estar disponible, no conserva contenido público de la lista anterior.
   if (error) return <View style={styles.unavailable}>
     <Text accessibilityRole="alert" style={styles.text}>{error}</Text>
     {ownParticipation?.status === 'JOINED' ? <>

@@ -6,6 +6,7 @@ import { pickPublicationPhotos } from '../api/photoPicker';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PublicationOptions, PublicationPhoto } from '../types/publication';
 import { emptyPhysicalgoodsFilters, type PhysicalgoodsSearchFilters } from '../types/publication';
 
+/** Coordina filtros, paginación, galería, imágenes y mutaciones de publicaciones físicas. */
 export function usePhysicalgoodsResources() {
   const auth = useAuth();
   const [options, setOptions] = useState<PublicationOptions | null>(null), [page, setPage] = useState<PhysicalgoodsPage | null>(null);
@@ -46,6 +47,7 @@ export function usePhysicalgoodsResources() {
       .finally(() => { if (!abort.signal.aborted) setGalleryLoading(false); });
     return () => { abort.abort(); if (timer) clearTimeout(timer); };
   }, [selectedId, galleryRevision]);
+  /** Serializa cambios de galería/categoría y recarga recursos tras cada operación. */
   async function change(operation: (signal: AbortSignal) => Promise<unknown>) {
     if (running.current || !selectedId || !gallery?.canEdit) return;
     const abort = new AbortController(); mutation.current = abort; running.current = true; setBusy(true); setGalleryError(null);
@@ -56,12 +58,14 @@ export function usePhysicalgoodsResources() {
       if (!abort.signal.aborted) { setBusy(false); setGalleryRevision(value => value + 1); setRevision(value => value + 1); }
     }
   }
+  /** Añade fotos seleccionadas solo si la publicación activa no cambió durante el picker. */
   async function selectPhotos() {
     if (running.current) return;
     const forPublication = selectedId;
     try { const result = await pickPublicationPhotos(); if (mounted.current && selectedRef.current === forPublication && !running.current) setDraftImages(previous => [...previous, ...result]); }
     catch (reason) { if (mounted.current) report(reason, setGalleryError); }
   }
+  /** Sube las fotos en orden y conserva el resto de la cola si una petición se interrumpe. */
   async function upload() {
     let left = draftImages;
     await change(async signal => {
@@ -73,6 +77,7 @@ export function usePhysicalgoodsResources() {
     });
   }
   function close() { if (running.current) return; setSelectedId(null); setGallery(null); setDraftImages([]); setGalleryError(null); }
+  /** Valida límites de precio y aplica una nueva búsqueda desde la página inicial. */
   function search() {
     const min = filters.minPrice.trim().replace(',', '.'), max = filters.maxPrice.trim().replace(',', '.');
     if ([min, max].some(value => value && (!/^\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)) || Number(value) > Number.MAX_SAFE_INTEGER))) { setError('Ingresa precios de filtro válidos, mayores o iguales que cero.'); return; }

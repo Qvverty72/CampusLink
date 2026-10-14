@@ -9,6 +9,7 @@ import { sendModuleHealth } from '../../services/health-response.js';
 import { getMapHealth } from './map.service.js';
 import type { AuthLocals } from '../auth/auth.types.js';
 
+/** Crea un controlador que usa parámetros ya validados y delega el permiso al servicio. */
 export function createGetActiveMapController(
   lookup: ActiveMapLookup = getActiveMap,
 ): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {

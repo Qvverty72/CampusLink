@@ -145,7 +145,7 @@ test('legacy series and start notices hide generated recurrence text without rew
   const legacy = { ...task(), event: { ...task().event, key: `series:${series}:published`,
     title: 'Nuevo evento recurrente: Prueba recurrente · 3 fechas',
     message: 'Se publicó una serie de 3 fechas de «Prueba recurrente» en tu campus. Consulta la ocurrencia vigente o próxima.' } };
-  // Simulate already delivered SQL history, not just pending Mongo events.
+  // Simula historial SQL ya entregado, no solo eventos Mongo pendientes.
   await db.query(`INSERT INTO notificacion(destinatario_id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,campus_id,actividad_evento_clave,leida_en)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$6)`, [userId, legacy.activityId, legacy.event.type, legacy.event.title,
     legacy.event.message, now, campusId, legacy.event.key]);

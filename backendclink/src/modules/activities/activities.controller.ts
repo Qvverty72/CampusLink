@@ -25,6 +25,7 @@ import type { ActivityEditDependencies, EditActivityInput } from './activities.e
 import { getActivityParticipants, deleteOwnActivity } from './activities.management.service.js';
 import type { ActivityParticipantsQuery } from './activities.types.js';
 
+/** Adapta el listado paginado de participantes al sobre HTTP común. */
 export function createActivityParticipantsController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
     const { params, query } = getValidatedRequest<{ params: { activityId: string }; query: ActivityParticipantsQuery }>(response);
@@ -32,6 +33,7 @@ export function createActivityParticipantsController(dependencies: ActivityDepen
   };
 }
 
+/** Adapta la retirada lógica del propietario usando la revisión esperada. */
 export function createActivityDeletionController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
     const { params, body } = getValidatedRequest<{ params: { activityId: string }; body: { expectedRevision: number } }>(response);
@@ -39,6 +41,7 @@ export function createActivityDeletionController(dependencies: ActivityDependenc
   };
 }
 
+/** Comparte el controlador de vista previa y guardado; la ruta decide cuál servicio se ejecuta. */
 export function createActivityEditController(dependencies: ActivityEditDependencies = {}, preview = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
     const { body, params } = getValidatedRequest<{ body: EditActivityInput; params: { activityId: string } }>(response);
@@ -46,6 +49,7 @@ export function createActivityEditController(dependencies: ActivityEditDependenc
   };
 }
 
+/** Publica una serie o su vista previa; el tipo oficial lo determina la ruta, no el cuerpo. */
 export function createActivitySeriesController(dependencies: ActivityDependencies = {}, official = false, preview = false): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
     const { body } = getValidatedRequest<{ body: CreateActivitySeriesInput }>(response);

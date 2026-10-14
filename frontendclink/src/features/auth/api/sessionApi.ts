@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './supabaseClient';
 
+/** Envía operaciones públicas de sesión y adapta fallos HTTP a mensajes de UI. */
 async function sessionRequest<T>(endpoint: 'login' | 'recover' | 'recover/confirm', body: object): Promise<T> {
   const base = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
   if (!base) throw new Error('La autenticación no está disponible.');
@@ -21,6 +22,7 @@ async function sessionRequest<T>(endpoint: 'login' | 'recover' | 'recover/confir
   return (await response.json() as { data: T }).data;
 }
 
+/** Autentica contra el backend y entrega la sesión recibida al SDK de Supabase. */
 export async function loginAccount(email: string, password: string) {
   const client = getSupabaseClient();
   if (!client) throw new Error('La autenticación no está disponible.');
@@ -29,10 +31,12 @@ export async function loginAccount(email: string, password: string) {
   if (error || !data.session) throw new Error('No se pudo guardar la sesión. Intenta iniciar sesión nuevamente.');
 }
 
+/** Solicita un código de recuperación sin revelar si el correo tiene cuenta. */
 export async function requestRecovery(email: string) {
   await sessionRequest('recover', { email });
 }
 
+/** Confirma el código y envía la nueva contraseña al endpoint de recuperación. */
 export async function resetPassword(email: string, code: string, password: string) {
   await sessionRequest('recover/confirm', { email, code, password });
 }

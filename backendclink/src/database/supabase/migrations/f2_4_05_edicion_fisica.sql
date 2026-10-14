@@ -1,4 +1,4 @@
--- Existing tables/columns only. Apply after the previous physicalgoods/audit migrations.
+-- Usa tablas y columnas existentes; aplicar después de las migraciones previas de recursos físicos y auditoría.
 BEGIN;
 ALTER TABLE public.auditoria DROP CONSTRAINT IF EXISTS auditoria_accion_check;
 ALTER TABLE public.auditoria ADD CONSTRAINT auditoria_accion_check CHECK (accion IN (

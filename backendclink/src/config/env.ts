@@ -16,7 +16,10 @@ function integer(input: Environment, name: string, fallback: number, min: number
   return value;
 }
 
-// Pure parser: errors name the setting, never its value or credentials.
+/**
+ * Valida y normaliza la configuración sin leer el proceso global.
+ * Los errores identifican el ajuste, pero nunca revelan su valor ni credenciales.
+ */
 export function loadEnv(input: Environment) {
   const mongodbUri = required(input, 'MONGODB_URI');
   if (!/^mongodb(?:\+srv)?:\/\//.test(mongodbUri)) {

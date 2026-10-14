@@ -1,6 +1,7 @@
 import { withDeadline } from '../services/deadline.js';
 import type { DependencyChecks } from '../types/api.types.js';
 
+/** Ejecuta sondas en paralelo y convierte cada fallo en estado sin filtrar datos privados. */
 export async function inspectDependencies(probes: {
   supabase: () => Promise<void>;
   mongodb?: () => Promise<void>;

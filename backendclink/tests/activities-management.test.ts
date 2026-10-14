@@ -167,7 +167,7 @@ test('viewer is first before pagination, without duplicate rows, including legac
       assert.equal(new Set(all).size, 10);
     }
     let page = await repository.findActivityParticipants(value, { page: 1, pageSize: 7 }, other);
-    assert.equal(page.rows[0].key, 'creator'); // The viewing legacy creator is already a participant.
+    assert.equal(page.rows[0].key, 'creator'); // El creador heredado que consulta ya participa.
     own.status = 'LEFT';
     page = await repository.findActivityParticipants(value, { page: 1, pageSize: 7 }, userId);
     assert.equal(page.total, 9); assert.equal(page.rows[0].key, 'creator');

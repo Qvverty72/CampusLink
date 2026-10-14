@@ -64,7 +64,8 @@ export function probeAuthDependencies(): Promise<DependencyChecks> {
   });
 }
 
-// Auth is checked independently from public-table probes; never query auth.users via Data API.
+// Auth se verifica aparte de las tablas públicas; no consultar `auth.users` mediante Data API.
+/** Verifica el access token con Supabase Auth, que es la fuente de identidad del usuario. */
 export async function findAuthUser(accessToken: string) {
   return supabaseAuth.auth.getUser(accessToken);
 }

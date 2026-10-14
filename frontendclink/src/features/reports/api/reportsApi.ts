@@ -2,6 +2,7 @@ import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
 import type { ActivityReportInput, ActivityReportReceipt } from '../types/activityReport';
 
+/** Envía una denuncia y valida que el recibo corresponda al campus y actividad solicitados. */
 export async function submitActivityReport(campusId: string, activityId: string, input: ActivityReportInput,
   signal?: AbortSignal): Promise<ActivityReportReceipt> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');

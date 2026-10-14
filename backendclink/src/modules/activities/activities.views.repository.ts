@@ -8,6 +8,7 @@ import { toVisibleActivity, visibleActivityFilter } from './activities.policy.js
 import { spatialBuildings } from './activities.location.js';
 import { appendActivityInteraction, activityInteractionKey, hasActivityInteraction } from './activities.interactions.js';
 
+/** Registra una vista idempotente solo si actividad y ubicación siguen visibles en la misma instantánea. */
 export async function recordActivityView(campusId: string, activityId: string, userId: string, now: Date, operationId: string): Promise<void> {
   const db = getMongoDb(); const id = new ObjectId(activityId);
   const eventKey = activityInteractionKey(id, campusId, userId, 'VIEWED', 0, operationId);

@@ -2,7 +2,7 @@ import type { ObjectId } from 'mongodb';
 import type { ActivityChangeDocument } from './activities.edit.types.js';
 import type { ActivityNotificationEvent } from './activities.notifications.js';
 
-/** Current activities document supplied by the project owner, not the legacy bootstrap. */
+/** Documento persistido de actividad con metadatos de ubicación, participación, edición y recurrencia. */
 export interface ActivityDocument {
   _id: ObjectId;
   campusId: string;
@@ -36,16 +36,18 @@ export interface ActivityDocument {
   editRevision?: number;
   changeHistory?: ActivityChangeDocument[];
   notificationEvents?: ActivityNotificationEvent[];
-  /** Canonical creation template, embedded only in occurrence 1. */
+  /** Plantilla canónica de creación, embebida solo en la ocurrencia 1. */
   seriesDefinition?: ActivitySeriesDocument;
 }
 
+/** Filtros espaciales que comparten el listado y las consultas por ubicación. */
 export interface ActivityQuery {
   buildingKey?: string;
   floorKey?: string;
   poiKey?: string;
 }
 
+/** Excepción interna para crear sin límite comunitario cuando la política lo permite. */
 export interface ActivityCreationOptions { limitActiveCommunity?: boolean }
 export interface CommunityActivityCreationAvailability {
   campusId: string;
@@ -61,13 +63,14 @@ export interface CreateActivityInput {
   location: { buildingKey: string; floorKey: string; poiKey?: string; customLabel?: string };
 }
 
+/** Regla civil de recurrencia: conserva zona horaria y fechas exclusivas del calendario. */
 export interface ActivityRecurrenceRule {
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
   interval: number;
   until: string;
   timeZone: string;
   excludedDates: string[];
-  /** Optional ISO weekdays (Monday=1, Sunday=7), only for weekly rules. Omitted preserves legacy anchoring. */
+  /** Días ISO opcionales (lunes=1, domingo=7), solo para reglas semanales; omitido conserva el anclaje anterior. */
   weekdays?: number[];
 }
 export interface CreateActivitySeriesInput extends CreateActivityInput {
@@ -93,6 +96,7 @@ export interface ActivitySeriesDto {
 
 export type ActivityType = 'COMMUNITY_ACTIVITY' | 'OFFICIAL_EVENT';
 
+/** Contrato público del listado; omite datos internos de persistencia y participantes. */
 export interface ActivityDto {
   id: string;
   campusId: string;
@@ -122,7 +126,7 @@ export interface ActivityParticipationDocument {
   status: 'JOINED' | 'LEFT';
   joinedAt: Date;
   updatedAt: Date;
-  /** Legacy aliases remain readable; migration initializes the tracking fields without inventing history. */
+  /** Conserva lectura de alias legados; la migración inicializa contadores sin inventar eventos pasados. */
   firstJoinedAt?: Date | null;
   lastJoinedAt?: Date;
   lastLeftAt?: Date | null;
@@ -144,7 +148,7 @@ export interface ActivityInteractionDocument {
 }
 
 export interface ActivityDetailDto extends ActivityDto {
-  /** Omitted when legacy data has no valid stored count. */
+  /** Se omite cuando los datos antiguos no contienen un conteo válido. */
   participantCount?: number;
   editing?: { revision: number; canEditUpcoming: boolean };
   organizer: { name: string } | null;
@@ -154,7 +158,7 @@ export interface ActivityDetailDto extends ActivityDto {
   tags?: string[];
 }
 
-/** Own participation only; does not expose an ended or hidden activity's content. */
+/** Participación propia; no expone contenido de actividades finalizadas u ocultas. */
 export interface ActivityParticipationDto {
   activityId: string;
   campusId: string;
@@ -171,7 +175,7 @@ export interface ActivityParticipantsPage extends ActivityParticipantsQuery {
   activityId: string; campusId: string; total: number;
   participants: { key: string; name: string | null; isCurrentUser: boolean }[];
 }
-/** Internal identifiers are resolved to names before returning a public page. */
+/** Los identificadores internos se resuelven a nombres antes de devolver la página pública. */
 export interface ActivityParticipantsRecords extends ActivityParticipantsQuery {
   total: number; rows: { key: string; userId: string }[];
 }

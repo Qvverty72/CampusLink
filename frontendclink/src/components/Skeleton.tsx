@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Platform, StyleSheet, View,
   type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 
-/** Shared loading surface: one pulse and accessible announcement per group of placeholders. */
+/** Superficie de carga compartida: un pulso y un anuncio accesible por grupo de marcadores. */
 export function Skeleton({ children, label = 'Cargando contenido', style, contentStyle }: {
   children: ReactNode; label?: string; style?: StyleProp<ViewStyle>; contentStyle?: StyleProp<ViewStyle>;
 }) {
@@ -47,7 +47,7 @@ export function Skeleton({ children, label = 'Cargando contenido', style, conten
   </View>;
 }
 
-/** A neutral line, circle or rectangle. Combine inside Skeleton to match the final content. */
+/** Línea, círculo o rectángulo neutro que se combina para imitar el contenido final. */
 export function SkeletonBlock({ width = '100%', height = 16, borderRadius = 6, style }: {
   width?: DimensionValue; height?: DimensionValue; borderRadius?: number; style?: StyleProp<ViewStyle>;
 }) {

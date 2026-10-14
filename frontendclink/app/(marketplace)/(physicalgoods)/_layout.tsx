@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Navigation for physical goods listings, product details and transactions. */
+/** Navegación de publicaciones de bienes físicos, detalles y transacciones. */
 export default function PhysicalGoodsLayout() {
   return (
     <Stack

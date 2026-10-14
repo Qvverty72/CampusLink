@@ -15,7 +15,7 @@ export interface ActivityNotificationEvent {
 }
 
 export function publicationNotifications(activity: ActivityDocument, now: Date): ActivityNotificationEvent[] {
-  // Series are announced by the worker when each occurrence starts, including the first.
+  // El worker anuncia las series cuando inicia cada ocurrencia, incluida la primera.
   if (activity.seriesId) return [];
   return activity.type === 'OFFICIAL_EVENT' ? [{ key: `activity:${activity._id.toHexString()}:published`,
     type: 'OFFICIAL_EVENT_PUBLISHED', title: activity.title, reasons: [], occurredAt: now, status: 'PENDING' }] : [];

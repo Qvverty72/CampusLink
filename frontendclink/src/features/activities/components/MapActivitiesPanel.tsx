@@ -10,7 +10,7 @@ import { useMapStore } from '@/three/store/mapStore';
 import { activityLocations } from '@/three/api/activityLocations';
 import { ACTIVITY_TYPES, ActivityTypeCounter } from './ActivityTypeCounter';
 
-/** Native browser bridges domain locations to map selection; it never guesses a GLB node. */
+/** El navegador nativo enlaza ubicaciones de dominio con selección del mapa, sin inferir nodos GLB. */
 export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
   const map = useMapDataStore(value => value.data);
   const buildingKey = useMapStore(value => value.selectedBuilding);

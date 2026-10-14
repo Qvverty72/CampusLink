@@ -12,7 +12,7 @@ import { spatialBuildings } from './activities.location.js';
 import type { ActivityChangeDocument } from './activities.edit.types.js';
 import type { ActivityDocument, ActivityParticipationDocument, ActivityParticipantsQuery, ActivityParticipantsRecords, ActivityDeletionResult } from './activities.types.js';
 
-/** A snapshot keeps the total, legacy creator and page consistent during joins/withdrawals. */
+/** Una instantánea mantiene total, creador legado y página coherentes durante altas y bajas. */
 export async function findActivityParticipants(document: ActivityDocument, query: ActivityParticipantsQuery,
   currentUserId: string): Promise<ActivityParticipantsRecords> {
   const db = getMongoDb();
@@ -26,12 +26,12 @@ export async function findActivityParticipants(document: ActivityDocument, query
     }
     const filter = { campusId: document.campusId, activityId: document._id, status: 'JOINED' as const };
     const creator = await rows.findOne({ campusId: document.campusId, activityId: document._id, userId: document.createdByUserId }, { session });
-    // A legacy creator with an explicit LEFT row must never be added back.
+    // No volver a incluir al creador antiguo si existe una fila explícita con estado LEFT.
     const implicitCreator = !creator;
     const own = currentUserId === document.createdByUserId ? creator
       : await rows.findOne({ ...filter, userId: currentUserId }, { session });
     const ownJoined = own?.status === 'JOINED';
-    // Build the ordering before slicing, so the viewer occupies just one slot on page one.
+    // Ordena antes de paginar para que el usuario actual ocupe un solo lugar en la primera página.
     const prefix = ownJoined ? [{ key: own._id!.toHexString(), userId: currentUserId }] : [];
     if (implicitCreator) {
       const implicit = { key: 'creator', userId: document.createdByUserId };

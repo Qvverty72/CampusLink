@@ -4,8 +4,9 @@
  */
 
 /**
- * Identificadores lógicos actuales de edificios. Hoy son una unión local cerrada;
- * al consumir la API deberán corresponder a los `building.id` del mapa ACTIVE.
+ * Identificadores conocidos por el modelo. La API se adapta mediante un cast y no
+ * valida en runtime que `building.id` pertenezca a esta unión; el mapa publicado
+ * debe usar IDs compatibles con el cliente y con los nodos del GLB.
  */
 export type BuildingId =
   | 'dbuilding'
@@ -37,17 +38,17 @@ export interface PointOfInterestDefinition {
 
 /** Metadata descriptiva de un piso; no contiene geometría de Three.js. */
 export interface FloorDefinition {
-  /** Unique identifier, e.g. 'ebuilding-floor-1' */
+  /** Identificador único, por ejemplo `ebuilding-floor-1`. */
   id: string;
-  /** Parent building */
+  /** Edificio al que pertenece. */
   buildingId: BuildingId;
-  /** Floor level number (1-indexed) */
+  /** Nivel del piso, comenzando en 1. */
   level: number;
-  /** Floor group name in the GLB model, e.g. 'ebuilding_floor1' */
+  /** Nombre del grupo del piso en el modelo GLB, por ejemplo `ebuilding_floor1`. */
   meshName: string;
-  /** Human-readable display name */
+  /** Nombre legible que se muestra en pantalla. */
   name: string;
-  /** Description shown in the modal */
+  /** Descripción mostrada en el modal. */
   description: string;
   /** El mapa de API siempre las incluye; opcional para la configuración mock histórica. */
   pois?: PointOfInterestDefinition[];
@@ -56,13 +57,13 @@ export interface FloorDefinition {
 /** Configuración lógica de un edificio y de la vista de cámara que lo encuadra. */
 export interface BuildingConfig {
   id: BuildingId;
-  /** Human-readable building name */
+  /** Nombre legible del edificio. */
   name: string;
-  /** List of floor group names for each floor */
+  /** Nombres de los grupos de piso del edificio. */
   floors: string[];
-  /** Camera target position [x, y, z] when building is selected */
+  /** Posición objetivo de cámara [x, y, z] al seleccionar el edificio. */
   focusTarget: [number, number, number];
-  /** Camera position [x, y, z] when zoomed into building */
+  /** Posición de cámara [x, y, z] al acercarse al edificio. */
   focusPosition: [number, number, number];
 }
 
@@ -73,9 +74,9 @@ export interface BuildingConfig {
  * reconstruye esa unidad mediante `subMeshes` y aplica un único transform al group.
  */
 export interface FloorMeshConfig {
-  /** Floor identifier, e.g. 'ebuilding_floor1' */
+  /** Identificador del piso, por ejemplo `ebuilding_floor1`. */
   meshName: string;
-  /** Parent building */
+  /** Edificio al que pertenece. */
   buildingId: BuildingId;
   /** Posición original XYZ respecto de la raíz del modelo. Y representa altura. */
   position: [number, number, number];

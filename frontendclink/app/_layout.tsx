@@ -4,10 +4,12 @@ import { StatusBar } from 'react-native';
 import { AuthProvider } from '@/features/auth/components/AuthProvider';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 
+/** Instala el proveedor de autenticación antes de montar las rutas de Expo Router. */
 export default function RootLayout() {
   return <AuthProvider><AppNavigation /></AuthProvider>;
 }
 
+/** Restringe pantallas según el estado de sesión y las capacidades actuales. */
 function AppNavigation() {
   const auth = useAuth();
   const ready = auth.status === 'ready';

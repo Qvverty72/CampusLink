@@ -20,13 +20,17 @@ export interface ApiRouterOptions {
   diagnosticsEnabled?: boolean;
 }
 
+/**
+ * Registra los módulos bajo `/api/v1` y permite inyectar consultas para pruebas.
+ * Los diagnósticos detallados solo se habilitan en desarrollo, aun con una opción explícita.
+ */
 export function createApiRouter(options: ApiRouterOptions = {}): Router {
   const apiRouter = Router();
   const diagnosticsEnabled = options.diagnosticsEnabled ?? env.healthDiagnosticsEnabled;
-  // Even an explicit override cannot enable detailed diagnostics outside development.
+  // Una opción explícita tampoco habilita diagnósticos detallados fuera de desarrollo.
   const diagnostics = env.nodeEnv === 'development' && diagnosticsEnabled;
 
-  // Keep the existing health contract stable while other routes use envelopes.
+  // Conserva el contrato histórico de salud; las demás rutas usan sobres de respuesta.
   apiRouter.get('/health', (_request, response) => {
     response.json({ status: 'ok' });
   });

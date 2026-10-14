@@ -4,6 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 
+/**
+ * Ejecuta migraciones y políticas sobre PGlite con tablas extraídas del esquema real.
+ * Los escenarios vuelven a aplicar la migración y comprueban que no borre filas previas.
+ */
 const db = new PGlite();
 const duoc = randomUUID();
 const otherInstitution = randomUUID();
@@ -64,7 +68,7 @@ test('reapplying migration preserves profiles, the domain table and existing ins
   const repeated = new PGlite();
   try {
     await prepare(repeated);
-    // Simulate the empty table created by the earlier F2.3-02 migration.
+    // Simula la tabla vacía que habría creado una ejecución anterior de F2.3-02.
     await repeated.exec('create table public.registro_institucional_pendiente(id integer primary key)');
     await migrate(repeated);
     assert.equal((await repeated.query("select to_regclass('public.registro_institucional_pendiente') as table_name")).rows[0]?.table_name, null);

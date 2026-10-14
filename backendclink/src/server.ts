@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-// Dynamic bootstrap makes configuration/driver failures pass through the safe logger too.
+// La carga dinámica permite que los fallos de configuración y drivers usen el registro seguro.
 async function main(): Promise<void> {
   const { startApi, stopApi } = await import('./bootstrap.js');
   const { env } = await import('./config/env.js');

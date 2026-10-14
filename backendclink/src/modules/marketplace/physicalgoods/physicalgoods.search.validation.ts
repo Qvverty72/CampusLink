@@ -6,6 +6,7 @@ import { physicalgoodsId } from './physicalgoods.validation.js';
 const invalid = (field: string, message: string): never => {
   throw new ApiError(400, 'VALIDATION_ERROR', message, { details: [{ field, message }] });
 };
+/** Valida filtros y paginación de búsqueda; limita precio a ventas y normaliza el texto. */
 export function parsePhysicalgoodsSearch(query: unknown) {
   const pagination = parsePaginationQuery(query);
   if (!pagination.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa la paginación.', { details: pagination.issues });

@@ -14,6 +14,7 @@ const defaults: NotificationDeliveryDependencies = { pending: findPendingActivit
   enqueuePublished: enqueuePublishedOfficialOccurrences,
   participants: findNotificationParticipants, deliver: deliverActivityNotification, acknowledge: markNotificationDelivered };
 
+/** Procesa una tanda de eventos; confirma solo los avisos entregados y conserva los fallidos para reintento. */
 export async function dispatchActivityNotifications(dependencies = defaults, stopped = () => false): Promise<{ delivered: number; failed: number }> {
   if (stopped()) return { delivered: 0, failed: 0 };
   await dependencies.enqueuePublished?.();
@@ -38,7 +39,7 @@ export interface ActivityMaintenanceDependencies {
 const maintenanceDefaults: ActivityMaintenanceDependencies = { finishEnded: finishEndedActivities,
   notifications: stopped => dispatchActivityNotifications(defaults, stopped) };
 
-/** Completion must continue when delivery is unavailable, and delivery must continue when completion fails. */
+/** La conciliación de vencimientos y la entrega continúan aunque la otra operación falle. */
 export async function maintainActivities(dependencies = maintenanceDefaults, stopped = () => false) {
   let finished = 0;
   if (stopped()) return { finished, delivered: 0, failed: 0 };
@@ -48,7 +49,7 @@ export async function maintainActivities(dependencies = maintenanceDefaults, sto
   return { finished, ...await dependencies.notifications(stopped) };
 }
 
-/** Durable events survive process restarts; SQL failures never invalidate a published activity. */
+/** Los eventos persistidos sobreviven reinicios; fallos SQL no invalidan una actividad ya publicada. */
 export function startActivityNotificationWorker(): () => Promise<void> {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;

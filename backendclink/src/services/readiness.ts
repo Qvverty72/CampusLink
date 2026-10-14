@@ -7,6 +7,7 @@ import { getReportsHealth } from '../modules/reports/reports.service.js';
 import { getUsersHealth } from '../modules/users/users.service.js';
 import type { ApiReadiness } from '../types/api.types.js';
 
+/** Agrega la salud de cada módulo; la API está lista solo cuando todos responden correctamente. */
 export async function getReadiness(): Promise<ApiReadiness> {
   const modules = await Promise.all([
     getUsersHealth(), getAuthHealth(), getMapHealth(), getPhysicalgoodsHealth(),

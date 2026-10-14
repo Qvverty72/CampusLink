@@ -2,7 +2,7 @@ import { APP_COLORS } from '@/types/colors';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ActivityDetail } from '../types/activity';
 
-/** Server-confirmed actions in the full sheet, including historical own participation. */
+/** Acciones confirmadas por servidor en la ficha completa, incluida participación histórica propia. */
 export function ActivityParticipationControls({ status, canJoin, pending, error, onJoin, activityTitle, disabled = false }: {
   status: ActivityDetail['participation']['status']; canJoin: boolean; pending: 'JOINED' | 'LEFT' | null;
   error: string | null; onJoin: () => Promise<void>; activityTitle?: string;

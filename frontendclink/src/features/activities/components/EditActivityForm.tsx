@@ -9,6 +9,7 @@ import { isActivityDescriptionAllowed, type ActivityDraft, type ActivityLocation
 import { activityEditDraft, validateActivityEditDraft } from '../types/editing';
 import { ActivityFields } from './ActivityFields';
 
+/** Edita una sola ocurrencia mediante previewHash y revisión para detectar escrituras concurrentes. */
 export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
   activity: ActivityDetail; locations: ActivityLocationOption[]; onCancel: () => void; onSaved: (count: number) => void;
 }) {
@@ -32,7 +33,7 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
     const abort = new AbortController(); request.current = abort; setBusy(true); setError(null);
     let saving = false;
     try {
-      // Obtain the server's concurrency token without a separate user action.
+      // Obtiene el token de concurrencia del servidor sin requerir otra acción del usuario.
       const preview = await previewActivityEdit(identity.campusId, activity.id, parsed.input, abort.signal);
       if (abort.signal.aborted) return;
       saving = true;

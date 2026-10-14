@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 
+/** Pantalla base de reportes; el flujo implementado de denuncias vive dentro de actividades. */
 export default function ReportsScreen() {
   return (
     <View style={styles.container}>

@@ -19,6 +19,7 @@ interface DetailState {
 
 const unavailableMessage = 'Esta actividad ya no está disponible en el mapa.';
 
+/** Carga ficha y participación propia; serializa mutaciones y conserva claves idempotentes al reintentar. */
 export function useActivityDetail(activityId: string) {
   const { identity, session, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;
@@ -71,6 +72,7 @@ export function useActivityDetail(activityId: string) {
     return () => clearTimeout(expiry);
   }, [detail, refresh]);
 
+  /** Evita mutaciones duplicadas y confirma en servidor la inscripción o el retiro. */
   const changeParticipation = async (target: 'JOINED' | 'LEFT') => {
     const abort = request.current;
     const status = detail?.participation.status ?? ownParticipation?.status;
@@ -95,7 +97,7 @@ export function useActivityDetail(activityId: string) {
           detail: current.detail ? { ...current.detail, participantCount: undefined,
             participation: { status: left.status, canJoin: left.status !== 'JOINED', canLeave: left.canLeave } } : null,
           pendingParticipation: detail ? 'LEFT' : null, participationError: null } : current);
-        // DELETE confirms own state, not the aggregate. Read the stored count again.
+        // DELETE confirma el estado propio, no el total; vuelve a leer el contador agregado.
         if (detail && !abort.signal.aborted) {
           try {
             const updated = await fetchActivityDetail(campusId, activityId, abort.signal);
@@ -122,6 +124,7 @@ export function useActivityDetail(activityId: string) {
     } finally { if (mutation.current === abort) mutation.current = null; }
   };
 
+  /** Retira la publicación con la revisión cargada e informa si el servidor confirmó la baja. */
   const remove = async (): Promise<boolean> => {
     const abort = request.current;
     if (!campusId || !token || !abort || abort.signal.aborted || mutation.current === abort

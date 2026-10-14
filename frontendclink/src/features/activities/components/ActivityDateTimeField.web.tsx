@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { browserDateSelection, browserDateValue, formatPickerValue, pickerDate, type ActivityDateTimeFieldProps } from '../types/dateTime';
 
-/** Browser-native selector inside a blocking modal, with changes staged until acceptance. */
+/** Selector nativo del navegador dentro de un modal; aplica cambios al aceptar. */
 export function ActivityDateTimeField({ label, mode, value, disabled, onChange, displayValue }: ActivityDateTimeFieldProps) {
   const [selection, setSelection] = useState<string | null>(null);
   useEffect(() => { if (disabled) setSelection(null); }, [disabled]);

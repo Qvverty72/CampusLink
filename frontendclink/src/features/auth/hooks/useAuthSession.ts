@@ -6,6 +6,7 @@ import { loadAuthIdentity } from '../api/authApi';
 import { getSupabaseClient } from '../api/supabaseClient';
 import type { AuthContextValue, AuthIdentity, AuthStatus } from '../types/auth';
 
+/** Sincroniza sesión del SDK con identidad y capacidades confirmadas por el backend. */
 export function useAuthSession(): AuthContextValue {
   const [session, setSession] = useState<Session | null>(null);
   const [identity, setIdentity] = useState<AuthIdentity | null>(null);
@@ -44,7 +45,7 @@ export function useAuthSession(): AuthContextValue {
     }
     if (!client) { setStatus('unconfigured'); return; }
     const auth = client.auth;
-    // Supabase emits INITIAL_SESSION after restoring persistence. Keep callbacks synchronous.
+    // Supabase emite INITIAL_SESSION al restaurar persistencia; el callback se mantiene síncrono.
     const { data: { subscription } } = auth.onAuthStateChange((_event, nextSession) => {
       pendingRequest.current?.abort();
       setIdentity(null);

@@ -14,12 +14,16 @@ import { changeNotification, participantsAtChange } from './activities.notificat
 export const findEditableActivity = (campusId: string, activityId: string) => getMongoDb().collection<ActivityDocument>('activities')
   .findOne({ campusId, _id: new ObjectId(activityId), status: { $in: ['ACTIVE', 'FINISHED'] }, visibility: 'PUBLIC', deletedAt: null });
 
+/**
+ * Recalcula y confirma el plan en una transacción MongoDB; guarda historial y avisos junto al cambio.
+ * Los filtros de revisión y propietario protegen contra ediciones concurrentes y cambios de dueño.
+ */
 export async function commitActivityEdit(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput, now: Date): Promise<ActivityEditResult> {
   requireIndividualEdit(input.scope);
   const db = getMongoDb();
   const operationId = new ObjectId();
   const result = await mongoClient.withSession(session => session.withTransaction(async () => {
-    // Keep CSOT in the session. Driver 7.6 bulk helpers otherwise re-pass inherited timeoutMS.
+    // Mantiene CSOT en la sesión; los helpers bulk del driver 7.6 podrían volver a pasar el timeout heredado.
     const transactionDb = mongoClient.db(db.databaseName, { ...db.options, timeoutMS: undefined });
     const transactionNow = new Date(Math.max(Date.now(), now.getTime()));
     const plan = await previewActivityEdit(auth, activityId, input, { now: () => transactionNow,
@@ -33,7 +37,7 @@ export async function commitActivityEdit(auth: VerifiedAuthConnection, activityI
       change.before.type === 'COMMUNITY_ACTIVITY' && (change.before.status === 'FINISHED' || change.before.endAt <= transactionNow)
       && change.after.status === 'ACTIVE');
     if (reactivatingCommunity) {
-      // Share the creation lock so an expired publication cannot be revived alongside a new one.
+      // Comparte el bloqueo de creación para no reactivar una publicación vencida junto a otra nueva.
       const map = await transactionDb.collection<CampusMapDocument>('campus_maps').findOneAndUpdate(
         { campusId: auth.campusId, status: 'ACTIVE' }, { $inc: { communityActivityCreationRevision: 1 } }, { session, returnDocument: 'after' });
       if (!map) throw new ApiError(404, 'NOT_FOUND', 'Active campus map not found.');

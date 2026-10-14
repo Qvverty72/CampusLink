@@ -5,6 +5,7 @@ import { addPhysicalgoodsPhoto, loadPublicationOptions, publishPhysicalgoods } f
 import { pickPublicationPhotos } from '../api/photoPicker';
 import type { PublicationCreated, PublicationInput, PublicationOptions, PublicationPhoto } from '../types/publication';
 
+/** Gestiona borrador, envío inicial y reintentos de subida de fotos secundarias. */
 export function usePublishPhysicalgoods(onPublished: () => void) {
   const auth = useAuth();
   const [options, setOptions] = useState<PublicationOptions | null>(null);
@@ -40,6 +41,7 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
     return () => abort.abort();
   }, [revision]);
 
+  /** Añade fotos locales al borrador sin permitir cambios durante el guardado. */
   async function choosePhoto() {
     if (saving.current) return;
     setError(null);
@@ -48,6 +50,7 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
       if (mounted.current && !saving.current) setPhotos(previous => [...previous, ...selected]);
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : 'No se pudo seleccionar la fotografía.'); }
   }
+  /** Publica la primera foto y luego sube las restantes; permite reanudar la cola. */
   async function publish() {
     if (saving.current || loading || !options || (created && !queued.current.length)) return;
     const numericPrice = Number(price.trim().replace(',', '.'));

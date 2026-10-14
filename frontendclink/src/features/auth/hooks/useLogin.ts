@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from './useAuth';
 import { loginAccount } from '../api/sessionApi';
 
+/** Mantiene el formulario de acceso, valida campos y descarta la contraseña tras enviar. */
 export function useLogin() {
   const auth = useAuth();
   const [email, setEmail] = useState('');

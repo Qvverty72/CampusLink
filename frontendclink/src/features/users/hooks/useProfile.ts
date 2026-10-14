@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 
+/** Deriva etiquetas visibles de perfil y protege el cierre de sesión contra dobles envíos. */
 export function useProfile() {
   const auth = useAuth();
   const [closing, setClosing] = useState(false);

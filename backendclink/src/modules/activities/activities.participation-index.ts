@@ -1,7 +1,7 @@
 import type { Db } from 'mongodb';
 import { ApiError } from '../../services/apiError.js';
 
-/** All activity writes depend on this full unique index, including organizer creation. */
+/** Todas las escrituras de actividad requieren este índice único completo, incluso la creación del organizador. */
 export async function requireParticipationIndex(db: Db): Promise<void> {
   const indexes = await db.collection('activity_participation').indexes();
   if (!indexes.some(index => index.unique && Object.keys(index.key).length === 2

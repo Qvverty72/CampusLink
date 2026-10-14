@@ -9,7 +9,7 @@ const DOTS_WIDTH = 16;
 const GAP = 8;
 const STRIP_PADDING = 4;
 
-/** Bounded range: keep the current page and endpoints without overflowing the modal. */
+/** Calcula una tira acotada que conserva extremos y página actual con puntos suspensivos. */
 export function getPaginationItems(page: number, totalPages: number, numberBudget: number): PageItem[] {
   if (totalPages <= numberBudget) return Array.from({ length: totalPages }, (_, index) => index + 1);
   if (numberBudget < 3) return [page];
@@ -38,6 +38,7 @@ export function getPaginationItems(page: number, totalPages: number, numberBudge
   return items;
 }
 
+/** Renderiza navegación accesible y limita la cantidad de botones al ancho disponible. */
 export function Pagination({ page, totalPages, onPageChange, label = 'Paginación', showSinglePage = false }: {
   page: number;
   totalPages: number;
@@ -48,7 +49,7 @@ export function Pagination({ page, totalPages, onPageChange, label = 'Paginació
   const [width, setWidth] = useState(280);
   if (totalPages <= 0 || (totalPages <= 1 && !showSinglePage)) return null;
   const current = Math.max(1, Math.min(page, totalPages));
-  // Reserve two arrows, two gaps, pill padding and up to two ellipses.
+  // Reserva espacio para flechas, separaciones, contenedor y hasta dos puntos suspensivos.
   const numberBudget = Math.max(1, Math.min(6,
     Math.floor((width - BUTTON_SIZE * 2 - GAP * 2 - STRIP_PADDING * 2 - DOTS_WIDTH * 2) / BUTTON_SIZE)));
   const items = getPaginationItems(current, totalPages, numberBudget);

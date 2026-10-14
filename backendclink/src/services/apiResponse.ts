@@ -13,7 +13,7 @@ export interface SuccessResponseOptions<Meta extends object> {
   meta?: Meta;
 }
 
-/** Sends the shared success envelope; HTTP 204 intentionally has no body. */
+/** Envía el sobre de éxito compartido; la respuesta HTTP 204 termina sin cuerpo. */
 export function sendSuccess<T, Meta extends object = Record<string, unknown>>(
   response: Response,
   data: T,
@@ -32,7 +32,7 @@ export function sendSuccess<T, Meta extends object = Record<string, unknown>>(
   return response.status(status).json(body);
 }
 
-/** Sends an API error envelope shared by application errors and diagnostics. */
+/** Envía el sobre de error usado tanto por la aplicación como por los diagnósticos. */
 export function sendApiError(
   response: Response,
   status: ApiErrorStatus,

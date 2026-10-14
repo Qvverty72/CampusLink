@@ -15,7 +15,7 @@ export interface PendingActivityNotification {
   createdAt: Date;
 }
 
-/** Each actual start announces its concrete occurrence, independently of the list representative. */
+/** Encola el aviso al inicio real de cada ocurrencia, sin depender de cuál representa a la serie en el listado. */
 export async function enqueuePublishedOfficialOccurrences(now = new Date()): Promise<void> {
   const db = getMongoDb();
   const activities = db.collection<ActivityDocument>('activities');
@@ -32,8 +32,8 @@ export async function enqueuePublishedOfficialOccurrences(now = new Date()): Pro
     if (!map || map.campusId !== document.campusId || map.status !== 'ACTIVE'
       || !toVisibleActivity(document, document.campusId, now, spatialBuildings(map))) continue;
     const event = occurrencePublicationNotification(document);
-    // Old premature DELIVERED publications do not replace the requested start notice.
-    // Old PENDING publications are deferred below and serve as this instance's start notice.
+    // Un aviso PUBLICADO antiguo entregado antes de tiempo no reemplaza el aviso de inicio requerido.
+    // Un aviso antiguo pendiente se difiere y se usa luego como el aviso de inicio de esta ocurrencia.
     const announced = { $or: [
       { key: event.key }, { type: 'OFFICIAL_EVENT_STARTED' },
       { type: 'OFFICIAL_EVENT_PUBLISHED', status: 'PENDING' },
@@ -43,7 +43,7 @@ export async function enqueuePublishedOfficialOccurrences(now = new Date()): Pro
     if (document.notificationEvents?.some(previous => previous.key === event.key || previous.type === 'OFFICIAL_EVENT_STARTED'
       || (previous.type === 'OFFICIAL_EVENT_PUBLISHED' && (previous.status === 'PENDING'
         || previous.occurredAt >= document.startAt || (previous.deliveredAt && previous.deliveredAt >= document.startAt))))) continue;
-    // Exact dates protect against a concurrent edit; a conditional push protects concurrent workers/restarts.
+    // Las fechas exactas protegen frente a ediciones concurrentes; el push condicional coordina workers y reinicios.
     await activities.updateOne({ _id: document._id, campusId: document.campusId, type: 'OFFICIAL_EVENT',
       status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null, seriesId: document.seriesId,
       startAt: document.startAt, endAt: document.endAt,

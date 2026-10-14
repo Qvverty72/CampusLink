@@ -256,7 +256,7 @@ test('large-body exception accepts a maximum-size photo and leaves other endpoin
   const bytes = Buffer.alloc(5 * 1024 * 1024); Buffer.from(png, 'base64').copy(bytes);
   const maximum = input({ photo: { name: 'large.png', mimeType: 'image/png', base64: bytes.toString('base64') } });
   assert.equal(parse(maximum).photo.bytes.length, 5 * 1024 * 1024);
-  // Stop at a field error after parsing so the Storage fixture remains a small real PNG.
+  // Detiene la prueba por error de campo después del parseo para conservar un PNG pequeño en Storage.
   assert.equal((await post({ ...maximum, title: '' })).status, 400); assert.equal(storageCalls.length, 0);
   assert.equal((await post({ value: 'a'.repeat(8 * 1024 * 1024) })).status, 413);
   const response = await originalFetch(base.replace('/marketplace/physicalgoods', '/users/me/profile'), {

@@ -6,6 +6,7 @@ import { parseActivityId, parseEmptyActivityInput } from '../activities/activiti
 import { parseActivityReport } from './reports.validation.js';
 import type { ReportsDependencies } from './reports.types.js';
 
+/** Registra la denuncia autenticada de actividades y el diagnóstico optativo del módulo. */
 export function createReportsRouter(diagnosticsEnabled: boolean, dependencies: ReportsDependencies = {}): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getReportsHealthController);

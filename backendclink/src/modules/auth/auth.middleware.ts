@@ -12,7 +12,7 @@ function readAccessToken(request: Request): string {
   return match[1];
 }
 
-// Registration completion needs verified identity before a profile exists.
+/** Verifica solo la identidad del Bearer; permite completar registros aún sin perfil. */
 export const requireVerifiedIdentity: RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, IdentityLocals> =
   async (request, response, next) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -25,7 +25,7 @@ export const requireVerifiedIdentity: RequestHandler<Record<string, string>, unk
     }
   };
 
-// Identity gate. Each business route must additionally define its authorization policy.
+/** Verifica identidad y contexto de cuenta; cada ruta de negocio debe aplicar su propia autorización. */
 export const requireAuthentication: RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> =
   async (request, response, next) => {
     response.setHeader('Cache-Control', 'no-store');

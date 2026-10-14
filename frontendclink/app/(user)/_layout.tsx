@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { canManageAccess } from '@/features/users/types/access';
 
-/** Navigation for welcome, authentication, account and profile screens. */
+/** Limita las rutas de cuenta y administración según sesión, capacidades y roles. */
 export default function UserLayout() {
   const auth = useAuth();
   return (

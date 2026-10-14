@@ -2,11 +2,13 @@ import { ApiError } from '../../services/apiError.js';
 import type { ActivityParticipationDocument, ActivityParticipationDto } from './activities.types.js';
 import type { ObjectId } from 'mongodb';
 
+/** Crea la primera fila del historial: el autor comienza inscrito en la actividad recién publicada. */
 export function initialActivityParticipation(activityId: ObjectId, campusId: string, userId: string, at: Date): ActivityParticipationDocument {
   return { activityId, campusId, userId, status: 'JOINED', joinedAt: at, updatedAt: at,
     firstJoinedAt: at, lastJoinedAt: at, lastLeftAt: null, joinCount: 1, leaveCount: 0, historyComplete: true };
 }
 
+/** Valida propiedad, referencias y fechas de la fila antes de exponer el estado de la persona autenticada. */
 export function participationDto(document: ActivityParticipationDocument, campusId: string,
   activityId: string, userId: string): ActivityParticipationDto {
   if (document.campusId !== campusId || document.userId !== userId

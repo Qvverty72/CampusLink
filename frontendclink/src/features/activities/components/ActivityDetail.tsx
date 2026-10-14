@@ -20,7 +20,7 @@ import { recordViewedActivity } from '../api/activitiesApi';
 import { activityOperationId } from '../types/interaction';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 
-/** Text names the action; the icon and its background are decorative. */
+/** El texto nombra la acción; el ícono y su fondo son decorativos. */
 function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = false }: {
   icon: LucideIcon; label: string; onPress: () => void; disabled: boolean; danger?: boolean;
 }) {
@@ -35,7 +35,7 @@ function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = fal
   </TouchableOpacity>;
 }
 
-/** The full sheet, edit and report stay inside the current native modal. */
+/** La ficha completa, edición y denuncia permanecen dentro del modal nativo actual. */
 export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurrence, locations, onEdited, onDeleted, onEditOpen }: {
   activityId: string; onBack: () => void; onExplore?: (activity: Activity) => void; onSelectOccurrence?: (activityId: string) => void;
   locations?: ActivityLocationOption[]; onEdited?: (count: number) => void; onDeleted?: () => void;

@@ -5,7 +5,7 @@ import { poiImages } from '../utils/pointOfInterest';
 
 const BANNER_HEIGHT = 140;
 
-/** First available POI photo as a stable, pressable preview in the floor modal. */
+/** Muestra la primera foto local disponible y conserva un estado alternativo si falla. */
 export function PointOfInterestBanner({ poi, onPress }: {
   poi: PointOfInterestDefinition; onPress: () => void;
 }) {
@@ -28,10 +28,10 @@ export function PointOfInterestBanner({ poi, onPress }: {
 }
 
 const styles = StyleSheet.create({
-  // Static style is required here: native CSS interop drops Pressable style callbacks.
+  // Se usa estilo estático porque la interoperabilidad CSS nativa descarta callbacks de estilo.
   banner: { width: '100%', height: BANNER_HEIGHT, flexGrow: 0, flexShrink: 0, overflow: 'hidden',
     borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#F1F5F9' },
-  // Explicit dimensions override the bundled image's intrinsic width/height on native.
+  // Las dimensiones explícitas sustituyen el tamaño intrínseco del recurso en nativo.
   image: { width: '100%', height: BANNER_HEIGHT },
   caption: { position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: 10, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.25)' },

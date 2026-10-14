@@ -2,7 +2,7 @@ import { BlurView } from 'expo-blur';
 import { StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 
-/** Material chosen for the navigation bar, shared by floating map controls. */
+/** Material de la barra de navegación compartido con controles flotantes del mapa. */
 export const GLASS_MATERIAL = {
   blurIntensity: 35,
   surfaceTint: 'rgba(255, 255, 255, 0.9)',
@@ -13,7 +13,7 @@ type GlassSurfaceProps = ViewProps & {
   contentStyle?: StyleProp<ViewStyle>;
 };
 
-/** Keeps the shadow outside the clipped, decorative blur background. */
+/** Mantiene la sombra fuera del fondo difuminado que recorta el contenido. */
 export function GlassSurface({ children, radius = 32, style, contentStyle, ...viewProps }: GlassSurfaceProps) {
   return <View {...viewProps} style={[styles.shadow, { borderRadius: radius }, style]}>
     <View style={[styles.surface, { borderRadius: radius }, contentStyle]}>

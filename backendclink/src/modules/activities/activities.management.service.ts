@@ -5,6 +5,7 @@ import { getAvailableActivity } from './activities.detail.service.js';
 import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityParticipantsQuery, ActivityParticipantsPage, ActivityDeletionResult } from './activities.types.js';
 
+/** Lista participantes de una actividad visible y agrega nombres sin exponer UUID internos. */
 export async function getActivityParticipants(auth: VerifiedAuthConnection, activityId: string,
   query: ActivityParticipantsQuery, dependencies: ActivityDependencies = {}): Promise<ActivityParticipantsPage> {
   if (!Number.isSafeInteger(query.page) || query.page < 1 || query.page > 100000
@@ -26,6 +27,7 @@ export async function getActivityParticipants(auth: VerifiedAuthConnection, acti
       isCurrentUser: row.userId === auth.userId })) };
 }
 
+/** Retira lógicamente una actividad propia solo si la revisión no cambió desde la lectura. */
 export async function deleteOwnActivity(auth: VerifiedAuthConnection, activityId: string, expectedRevision: number,
   dependencies: ActivityDependencies = {}): Promise<ActivityDeletionResult> {
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER) {

@@ -38,6 +38,7 @@ export function parsePhysicalgoods(body: unknown): { input: PhysicalgoodsInput; 
   const input: PhysicalgoodsInput = { ...content(values), categoryId, careerId: optionalId('careerId'), subjectId: optionalId('subjectId') };
   return { input, photo: parsePhysicalgoodsPhoto(values.photo) };
 }
+/** Acepta los campos mutables y la versión vigente; rechaza campos de identidad o estado. */
 export function parsePhysicalgoodsVersion(body: unknown, editing = false) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return invalid('body', 'Revisa los datos de la publicación.');
   const values = body as Record<string, unknown>;
@@ -70,6 +71,7 @@ export function parsePhysicalgoodsPhoto(raw: unknown): PrincipalPhoto {
   return { name, mimeType: photo.mimeType as PrincipalPhoto['mimeType'], bytes };
 }
 
+/** Valida el sobre de carga de imagen y delega la comprobación de tamaño y contenido. */
 export function parsePhysicalgoodsPhotoUpload(body: unknown): PrincipalPhoto {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'photo')) return invalid('body', 'Envía una fotografía válida.');
   return parsePhysicalgoodsPhoto((body as Record<string, unknown>).photo);

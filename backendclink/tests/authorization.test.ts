@@ -143,6 +143,6 @@ test('unimplemented business operations remain unavailable without inventing CRU
     assert.equal(response.status,404);assert.equal(mongoReads,0);
   }
   for(const path of ['/analytics','/reports','/marketplace/elibrary'])assert.equal((await originalFetch(base+path)).status,404);
-  // F2.4-02 now implements the physical list; it must gate anonymous access.
+  // F2.4-02 implementa la lista física; la ruta debe exigir autenticación.
   assert.equal((await originalFetch(base+'/marketplace/physicalgoods')).status,401);
 });

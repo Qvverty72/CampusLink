@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, type StyleProp, type ViewStyle } from 'react-native';
 
-/** Transition content inside a stable modal, without animating layout or delaying requests. */
+/** Transiciona el contenido dentro del modal estable sin animar el layout ni retrasar consultas. */
 export function ActivityContentTransition({ transitionKey, children, style }: {
   transitionKey: string; children: ReactNode; style?: StyleProp<ViewStyle>;
 }) {
   const [progress] = useState(() => new Animated.Value(1));
-  // Keep content visible until the device preference is known; initial opening uses Modal's fade.
+  // Mantiene el contenido visible hasta conocer la preferencia; la apertura inicial usa el fade del modal.
   const canAnimate = useRef(false);
   useEffect(() => {
     let active = true;

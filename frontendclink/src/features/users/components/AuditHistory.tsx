@@ -21,6 +21,7 @@ function Snapshot({ title, value }: { title: string; value: Record<string, unkno
   </View>;
 }
 
+/** Explora auditoría paginada y snapshots según campus y permisos del administrador. */
 export function AuditHistoryScreen() {
   const { campuses, campusId, page, setPage, entries, hasMore, selected, setSelected, loading,
     error, setReload, select, selectCampus } = useAuditHistory();

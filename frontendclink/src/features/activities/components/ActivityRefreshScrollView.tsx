@@ -11,7 +11,7 @@ const RefreshContext = createContext<{
 } | null>(null);
 const PULL_THRESHOLD = 64;
 
-/** Register one visible data view; unmounted views and forms never compete for refresh. */
+/** Registra la vista de datos visible; formularios desmontados no compiten por actualizar. */
 export function useActivityRefresh(onRefresh: () => void, refreshing: boolean, enabled: boolean, label = 'la ficha') {
   const register = useContext(RefreshContext)?.register;
   useLayoutEffect(() => {
@@ -20,13 +20,13 @@ export function useActivityRefresh(onRefresh: () => void, refreshing: boolean, e
   }, [register, onRefresh, refreshing, enabled, label]);
 }
 
-/** Reset the existing modal scroll only when its visible screen changes. */
+/** Restablece el scroll del modal cuando cambia la pantalla visible. */
 export function useActivityScrollReset(viewKey: string) {
   const resetScroll = useContext(RefreshContext)?.resetScroll;
   useLayoutEffect(() => { resetScroll?.(); }, [resetScroll, viewKey]);
 }
 
-/** A compact screen owns its close button; restore the outer header on departure. */
+/** Una pantalla compacta aporta su propio cierre y restaura el encabezado al salir. */
 export function useActivityCompactHeader() {
   const controls = useContext(RefreshContext);
   const setHeaderVisible = controls?.setHeaderVisible;
@@ -37,13 +37,13 @@ export function useActivityCompactHeader() {
   return controls?.closeModal;
 }
 
-/** Mount alongside a list or overview, including its loading and error states. */
+/** Se monta junto a la lista o resumen, incluidos sus estados de carga y error. */
 export function ActivityRefreshRegistration({ onRefresh, refreshing, enabled, label }: ViewRefresh) {
   useActivityRefresh(onRefresh, refreshing, enabled, label);
   return null;
 }
 
-/** Own the existing modal scroll, with native refresh and a touch equivalent for RN Web. */
+/** Controla el scroll del modal con refresco nativo y gesto táctil equivalente en RN Web. */
 type ActivityScrollProps = ScrollViewProps & {
   onClose?: () => void;
   onHeaderVisibilityChange?: (visible: boolean) => void;
@@ -99,7 +99,7 @@ export const ActivityRefreshScrollView = forwardRef<ScrollView, ActivityScrollPr
       const distance = touch.clientY - gesture.y;
       if (touch.identifier !== gesture.identifier || distance < 0 || Math.abs(touch.clientX - gesture.x) > Math.max(10, distance)) { cancel(); return; }
       if (distance > 0) {
-        // A non-passive listener prevents this gesture from refreshing the browser page.
+        // El listener no pasivo evita que el gesto también recargue la página del navegador.
         if (event.cancelable) event.preventDefault();
         gesture.distance = distance;
         setPullDistance(Math.min(distance, 160));
@@ -134,8 +134,8 @@ export const ActivityRefreshScrollView = forwardRef<ScrollView, ActivityScrollPr
         if (active && event.nativeEvent.actionName === 'activate') refresh();
         else props.onAccessibilityAction?.(event);
       }}
-      // Native ScrollView changes its host hierarchy when this control is added/removed.
-      // Keep it mounted so registering a sheet does not remount the activities browser.
+      // ScrollView nativo cambia su jerarquía host al agregar/quitar este control.
+      // Se mantiene montado para que registrar una hoja no reinicie el navegador de actividades.
       refreshControl={Platform.OS !== 'web' ? <RefreshControl
         enabled={active && !requested} refreshing={refreshing} onRefresh={refresh}
         colors={[APP_COLORS.PRIMARY]} tintColor={APP_COLORS.PRIMARY} /> : undefined}>

@@ -13,6 +13,7 @@ export interface ActivitiesState {
   refresh: () => void;
 }
 
+/** Carga actividades del campus, revalida al volver a primer plano y descarta resultados obsoletos. */
 export function useLocationActivities(query: ActivityLocationQuery = {}, enabled = true): ActivitiesState {
   const { identity, session, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;
@@ -33,7 +34,7 @@ export function useLocationActivities(query: ActivityLocationQuery = {}, enabled
       ? { ...previous, error: null } : { key, activities: [], isLoading: true, error: null });
     void fetchLocationActivities(campusId, { buildingKey, floorKey, poiKey }, abort.signal).then(activities => {
       if (abort.signal.aborted) return;
-      // Keep all authorized occurrences so the next card can appear even while revalidation is pending.
+      // Conserva todas las ocurrencias autorizadas para mostrar la siguiente mientras revalida.
       setState({ key, activities, isLoading: false, error: null });
       setClock(Date.now());
     }).catch(reason => {
@@ -54,7 +55,7 @@ export function useLocationActivities(query: ActivityLocationQuery = {}, enabled
     const expiry = setTimeout(() => {
       const now = Date.now();
       setClock(now);
-      // Long waits are capped by the JS timer limit; only refetch once an activity actually ends.
+      // Limita la espera al máximo del temporizador JS y vuelve a consultar al terminar una actividad.
       if (now >= end) setRevision(previous => ({ value: previous.value + 1, background: true }));
     }, Math.min(2_147_483_647, Math.max(1, end - Date.now())));
     return () => clearTimeout(expiry);
@@ -70,7 +71,7 @@ export function useLocationActivities(query: ActivityLocationQuery = {}, enabled
     return () => subscription.remove();
   }, [key, enabled, campusId, token]);
 
-  // A changed campus/session/location cannot display the previous request while the effect starts.
+  // Un cambio de campus, sesión o ubicación nunca muestra los datos de la consulta anterior.
   return state.key === key && enabled && campusId && token
     ? { activities: selectActivityOccurrences(state.activities), isLoading: state.isLoading, error: state.error, refresh }
     : { activities: [], isLoading: Boolean(enabled && campusId && token), error: null, refresh };

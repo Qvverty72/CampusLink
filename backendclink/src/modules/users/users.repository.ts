@@ -23,6 +23,7 @@ export async function findAcademicOptions(institutionId: string) {
 }
 
 export function withAcademicProfileTransaction<T>(operation: (repository: AcademicProfileTransaction) => Promise<T>): Promise<T> {
+  // Bloquea perfil, asignaciones y catálogos antes de validar y escribir para mantener una sola versión coherente.
   return withPostgresTransaction(async client => operation({
     lockProfile: async (userId, updatedAt) => {
       const result = await client.query<LockedAcademicProfile>(
@@ -55,7 +56,7 @@ export function withAcademicProfileTransaction<T>(operation: (repository: Academ
          RETURNING to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at`,
         [userId, input.fullName, input.campusId]);
       await client.query('DELETE FROM public.usuario_carrera WHERE perfil_usuario_id = $1 AND NOT (carrera_id = ANY($2::uuid[]))', [userId, input.careerIds]);
-      // Keep anio_ingreso on retained associations; only insert newly selected careers.
+      // Conserva `anio_ingreso` en asociaciones vigentes; inserta únicamente las carreras nuevas.
       await client.query('INSERT INTO public.usuario_carrera(perfil_usuario_id, carrera_id) SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING', [userId, input.careerIds]);
       if (!result.rows[0]) throw new Error('Profile write failed');
       return result.rows[0].updated_at;

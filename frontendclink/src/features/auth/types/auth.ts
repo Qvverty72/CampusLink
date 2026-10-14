@@ -1,8 +1,9 @@
 import type { Session } from '@supabase/supabase-js';
 
+/** Asignación de rol o permiso efectiva dentro de un campus. */
 export interface AuthAssignment { id: string; name: string; campusId: string }
 
-// GET /api/v1/auth/me: PostgreSQL data, never claims supplied in user_metadata.
+/** Respuesta de `/api/v1/auth/me`, obtenida del contexto actual de PostgreSQL. */
 export interface AuthIdentity {
   userId: string;
   campusId: string;
@@ -26,7 +27,9 @@ export interface AuthIdentity {
   };
 }
 
+/** Estados que determinan si hay sesión y si la identidad backend está lista. */
 export type AuthStatus = 'loading' | 'signedOut' | 'ready' | 'forbidden' | 'error' | 'unconfigured';
+/** Estado y acciones de autenticación compartidos por la aplicación. */
 export interface AuthContextValue {
   session: Session | null;
   identity: AuthIdentity | null;

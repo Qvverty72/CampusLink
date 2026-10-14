@@ -63,6 +63,7 @@ interface ApiErrorResponse {
   };
 }
 
+/** Error HTTP con el estado y código del contrato de errores de la API. */
 export class ApiClientError extends Error {
   constructor(
     readonly status: number,
@@ -75,6 +76,7 @@ export class ApiClientError extends Error {
   }
 }
 
+/** Vista cliente del mapa activo, enlazada con nodos locales del GLB. */
 export interface RuntimeMapData {
   campusId: string;
   version: number;
@@ -84,6 +86,7 @@ export interface RuntimeMapData {
   floorData: Record<string, FloorDefinition>;
 }
 
+/** Comprueba la forma mínima de error que el cliente sabe mostrar. */
 function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   if (typeof value !== 'object' || value === null || !('error' in value)) {
     return false;
@@ -100,6 +103,7 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   );
 }
 
+/** Convierte el sobre HTTP de error y conserva una alternativa para respuestas no JSON. */
 async function toApiClientError(response: Response): Promise<ApiClientError> {
   try {
     const payload: unknown = await response.json();
@@ -112,7 +116,7 @@ async function toApiClientError(response: Response): Promise<ApiClientError> {
       );
     }
   } catch {
-    // Preserve a stable fallback if a proxy or an older backend returns no JSON.
+    // Conserva un error estable si un proxy o una versión antigua no devuelve JSON.
   }
 
   return new ApiClientError(
@@ -122,8 +126,9 @@ async function toApiClientError(response: Response): Promise<ApiClientError> {
   );
 }
 
-// The active document currently serializes vectors as arrays, while older or
-// manually-authored maps may use the space-delimited representation.
+// El documento activo serializa vectores como arreglos; mapas antiguos o editados
+// manualmente también pueden representarlos como tres valores separados por espacios.
+/** Valida un vector recibido por API y normaliza ambas representaciones admitidas. */
 function parseVector3(value: ApiVector3, fieldName: string): Vector3 {
   const values = typeof value === 'string'
     ? value.trim().split(/\s+/).map(Number)
@@ -139,10 +144,16 @@ function parseVector3(value: ApiVector3, fieldName: string): Vector3 {
   return [values[0], values[1], values[2]];
 }
 
+/**
+ * Solicita el mapa ACTIVE del campus con el token de la sesión actual y adapta su
+ * contrato al índice de edificios, pisos y nodos que consume Three.js.
+ * Rechaza campus no UUID, respuestas de otro campus y vectores inválidos; admite
+ * cancelación por `signal` y no almacena el token ni el documento recibido.
+ */
 export async function fetchActiveCampusMap(campusId: string, accessToken: string, signal?: AbortSignal): Promise<RuntimeMapData> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campusId)) throw new Error('Invalid campus');
   if (!accessToken?.trim()) throw new ApiClientError(401, 'UNAUTHENTICATED', 'Inicia sesión para consultar el mapa.');
-  // Token comes from the current SDK session, never from persisted map data.
+  // El token proviene de la sesión actual del SDK, nunca de datos persistidos del mapa.
   const response = await fetch(
     `${API_BASE_URL}/api/v1/maps/${campusId}/active`, {
       signal, headers: { Authorization: 'Bearer ' + accessToken }, cache: 'no-store', redirect: 'error',

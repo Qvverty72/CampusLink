@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 
+/** Pantalla base de analítica; actualmente solo muestra el estado informativo del módulo. */
 export default function AnalyticsScreen() {
   return (
     <View style={styles.container}>

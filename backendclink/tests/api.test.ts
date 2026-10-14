@@ -15,6 +15,10 @@ import { sendSuccess } from '../src/services/apiResponse.js';
 import type { RequestParser } from '../src/types/api.js';
 import { ApiClientError, fetchActiveCampusMap } from '../../frontendclink/src/three/api/mapApi.js';
 
+/**
+ * Levanta Express en un puerto efímero y enruta fetch de Supabase a respuestas de prueba.
+ * El tráfico hacia el servidor de prueba sigue usando fetch real y el stub se restaura al terminar.
+ */
 const CAMPUS_ID = '22222222-2222-4222-8222-222222222222';
 const originalNetworkFetch = globalThis.fetch;
 const authHeaders = { headers: { Authorization: 'Bearer api.test.token' } };

@@ -7,6 +7,7 @@ import { listOwnNotifications, updateOwnNotification } from './notifications.rep
 
 export async function ownNotificationOperation(auth: VerifiedAuthConnection,
   input: { cursor?: string; id?: string; remove?: boolean }, transaction = withPostgresTransaction) {
+  // Revalida cuenta y campus dentro de la transacción para cubrir revocaciones posteriores al middleware.
   requireCampusCapability(auth, auth.campusId, 'general');
   return transaction(async (client: PoolClient) => {
     const profile = await client.query(`SELECT id FROM public.perfil_usuario WHERE id=$1 AND campus_id=$2

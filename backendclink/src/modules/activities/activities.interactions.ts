@@ -4,14 +4,16 @@ import { ApiError } from '../../services/apiError.js';
 import type { ActivityInteractionDocument, ActivityInteractionType } from './activities.types.js';
 
 export const ACTIVITY_INTERACTION_TYPES = ['VIEWED', 'JOINED', 'LEFT'] as const;
+/** Deriva un ObjectId estable de la clave; el índice único de `_id` hace idempotente cada evento. */
 export function activityInteractionId(eventKey: string): ObjectId {
-  // Stable event identity makes the built-in unique _id index an idempotency guard.
+  // La identidad estable del evento usa el índice único integrado como barrera de idempotencia.
   return new ObjectId(createHash('sha256').update(eventKey).digest('hex').slice(0, 24));
 }
 export function activityInteractionKey(activityId: ObjectId, campusId: string, userId: string,
   type: ActivityInteractionType, count: number, operationId?: string): string {
   return operationId ? `request:${campusId}:${userId}:${operationId}` : `transition:${activityId.toHexString()}:${userId}:${type}:${count}`;
 }
+/** Comprueba que una clave idempotente conserve actividad, campus, actor y tipo originales. */
 export async function hasActivityInteraction(db: Db, eventKey: string, activityId: ObjectId, campusId: string,
   userId: string, type: ActivityInteractionType, session?: ClientSession): Promise<boolean> {
   const event = await db.collection<ActivityInteractionDocument>('activity_interactions').findOne({ _id: activityInteractionId(eventKey) }, { session });
@@ -22,7 +24,7 @@ export async function hasActivityInteraction(db: Db, eventKey: string, activityI
   }
   return true;
 }
-/** Only append operations are exposed. Never update or delete event history. */
+/** Solo agrega eventos; el historial no se actualiza ni se elimina. */
 export async function appendActivityInteraction(db: Db, event: Omit<ActivityInteractionDocument, '_id'>,
   session?: ClientSession): Promise<void> {
   if (!ACTIVITY_INTERACTION_TYPES.includes(event.type) || !(event.occurredAt instanceof Date)

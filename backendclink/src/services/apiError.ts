@@ -19,7 +19,7 @@ type ApiErrorArguments = {
   ];
 }[ApiErrorStatus];
 
-/** An expected HTTP error that can safely be returned to the API client. */
+/** Error HTTP previsto que puede devolverse al cliente; los errores 429 requieren plazo de reintento. */
 export class ApiError extends Error {
   readonly status: ApiErrorStatus;
   readonly code: ApiErrorCode;

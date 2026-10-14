@@ -16,6 +16,7 @@ import { useMapStore } from '@/three/store/mapStore';
 import { ApiClientError } from '@/three/api/mapApi';
 import { useLocationActivities } from '@/features/activities/hooks/useLocationActivities';
 
+/** Carga el mapa del campus de la sesión y coordina escena, actividades y modal. */
 export default function MapScreen() {
   const auth = useAuth();
   const campusId = auth.identity?.campusId;
@@ -29,6 +30,7 @@ export default function MapScreen() {
   const error = useMapDataStore((state) => state.error);
   const loadMap = useMapDataStore((state) => state.loadMap);
   const clearMap = useMapDataStore((state) => state.clearMap);
+  // Si el backend rechaza la identidad, solicita refrescar sus capacidades actuales.
   const load = () => {
     if (campusId && accessToken) void loadMap(campusId, accessToken).catch(reason => {
       if (reason instanceof ApiClientError && [401, 403].includes(reason.status)) auth.refreshIdentity();

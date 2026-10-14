@@ -10,6 +10,7 @@ const calendarDate = (value: unknown): value is string => {
   try { return Temporal.PlainDate.from(value).toString() === value; } catch { return false; }
 };
 
+/** Valida la regla civil, fechas excluidas y zona horaria sin aceptar campos adicionales. */
 export function parseRecurrenceRule(value: unknown): ValidationResult<ActivityRecurrenceRule> {
   const issues: ApiErrorDetail[] = [];
   if (!record(value)) return { success: false, issues: [{ field: 'recurrence', message: 'Define la regla de repetición.' }] };
@@ -34,6 +35,7 @@ export function parseRecurrenceRule(value: unknown): ValidationResult<ActivityRe
     ...(weekdays !== undefined ? { weekdays: [...weekdays as number[]].sort((a, b) => a - b) } : {}) } };
 }
 
+/** Crea el validador de vista previa o publicación; publicar exige el hash generado en la vista previa. */
 export function activitySeriesParser(publish = false): RequestParser {
   return (input: unknown): ValidationResult<CreateActivitySeriesInput> => {
     if (!record(input)) return { success: false, issues: [{ field: 'body', message: 'Define la actividad recurrente.' }] };

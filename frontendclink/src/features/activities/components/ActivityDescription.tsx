@@ -2,7 +2,7 @@ import { APP_COLORS } from '@/types/colors';
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-/** Open details when supplied; otherwise keep expansion scoped through the caller's key. */
+/** Abre el detalle si se proporciona; de lo contrario, el caller limita la expansión por clave. */
 export function ActivityDescription({ description, previewLength = 240, previewLines = 4, onReadMore }: {
   description: string; previewLength?: number; previewLines?: number; onReadMore?: () => void;
 }) {

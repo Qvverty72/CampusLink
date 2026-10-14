@@ -4,7 +4,7 @@ import type { CreateActivityInput } from './creation';
 export interface ActivityRecurrenceRule {
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'; interval: number; until: string; timeZone: string; excludedDates: string[]; weekdays?: number[];
 }
-/** Form values remain local calendar dates until the existing API validator runs. */
+/** El formulario conserva fechas de calendario local hasta validar el contrato de API. */
 export interface ActivityRecurrenceDraft {
   enabled: boolean; frequency: ActivityRecurrenceRule['frequency']; interval: string; until: string; excludedDates: string; weekdays?: number[];
 }
@@ -13,18 +13,22 @@ export const RECURRENCE_WEEKDAYS = [
   { value: 3, short: 'Mié', name: 'miércoles' }, { value: 4, short: 'Jue', name: 'jueves' },
   { value: 5, short: 'Vie', name: 'viernes' }, { value: 6, short: 'Sáb', name: 'sábados' }, { value: 7, short: 'Dom', name: 'domingos' },
 ] as const;
+/** Devuelve los nombres locales de los días elegidos para mostrar un resumen. */
 const joinDays = (weekdays: number[]) => {
   const names = RECURRENCE_WEEKDAYS.filter(day => weekdays.includes(day.value)).map(day => day.name);
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} y ${names.at(-1)}` : names[0] ?? 'días por elegir';
 };
+/** Devuelve el día ISO de semana (lunes=1) de una fecha local validada. */
 export function recurrenceStartWeekday(startDate: string): number | null {
   const date = activityCalendarDate(startDate);
   return date ? new Date(`${date}T12:00:00Z`).getUTCDay() || 7 : null;
 }
+/** Formatea una fecha local para texto sin desplazarla por la zona del dispositivo. */
 export function recurrenceDateLabel(date: string): string {
   const iso = activityCalendarDate(date);
   return iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString('es-CL', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' }) : date;
 }
+/** Resume frecuencia, intervalo y días semanales seleccionados. */
 export function recurrenceSummary(value: ActivityRecurrenceDraft): string {
   if (!value.enabled) return 'Nunca';
   if (value.frequency === 'WEEKLY' && value.weekdays) {
@@ -33,6 +37,7 @@ export function recurrenceSummary(value: ActivityRecurrenceDraft): string {
   const units = { DAILY: ['día', 'días'], WEEKLY: ['semana', 'semanas'], MONTHLY: ['mes', 'meses'] }[value.frequency];
   return value.interval === '1' ? `Cada ${units[0]}` : `Cada ${value.interval || '…'} ${units[1]}`;
 }
+/** Explica el patrón y, si existe, el rango y el número de ocurrencias previstas. */
 export function recurrenceDescription(value: ActivityRecurrenceDraft, startDate: string, count?: number): string {
   if (!value.enabled) return 'Esta actividad se realizará una sola vez.';
   const pattern = value.frequency === 'DAILY' && value.interval === '1' ? 'todos los días'
@@ -55,7 +60,7 @@ export interface ActivitySeries {
 export interface CreatedActivitySeries { series: ActivitySeries; firstOccurrence: ActivityDetail }
 export const RECURRENCE_LABELS = { DAILY: 'Diaria', WEEKLY: 'Semanal', MONTHLY: 'Mensual' };
 
-/** A calendar date has no UTC offset. Validate independently of midnight DST transitions. */
+/** Valida una fecha civil sin zona horaria, independiente de cambios DST a medianoche. */
 export function activityCalendarDate(text: string): string | null {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text.trim());
   if (!match) return null;
@@ -64,6 +69,7 @@ export function activityCalendarDate(text: string): string | null {
     ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null;
 }
 
+/** Normaliza los campos del formulario y valida intervalo, zona, días y exclusiones. */
 export function recurrenceDraftRule(frequency: ActivityRecurrenceRule['frequency'], intervalText: string, untilText: string,
   exclusionsText: string, timeZone: string, weekdays?: number[]): { rule: ActivityRecurrenceRule; error?: never } | { error: string; rule?: never } {
   const until = activityCalendarDate(untilText); const interval = Number(intervalText);

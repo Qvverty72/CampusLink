@@ -7,6 +7,7 @@ import type { AuthProfile, RegistrationInput, RegistrationOption, VerifiedIdenti
 import type { User } from '@supabase/supabase-js';
 import { requireActiveAccount } from './auth.authorization.js';
 
+/** Valida el cuerpo estricto de inicio o recuperación, normaliza email y limita el código OTP. */
 function credentials(body: unknown, recovery = false) {
   const invalid = () => new ApiError(400, 'VALIDATION_ERROR', 'Revisa el correo, la contraseña y el código cuando corresponda.');
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid();
@@ -21,6 +22,7 @@ function credentials(body: unknown, recovery = false) {
   return { email, password, code };
 }
 
+/** Traduce errores del proveedor a estados públicos sin devolver mensajes internos. */
 function authFailure(error: { status?: number; code?: string }, recovery = false): ApiError {
   if (error.status === 429) return new ApiError(429, 'RATE_LIMITED', 'Espera antes de volver a intentarlo.', { retryAfterSeconds: 60 });
   if (!error.status || error.status >= 500) return new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'La autenticación no está disponible. Inténtalo nuevamente.');
@@ -29,6 +31,10 @@ function authFailure(error: { status?: number; code?: string }, recovery = false
     : new ApiError(401, 'UNAUTHENTICATED', 'No se pudo iniciar sesión. Revisa tus credenciales y la verificación del correo.');
 }
 
+/**
+ * Intercambia credenciales con Supabase Auth y devuelve solo los tokens de sesión.
+ * El perfil, estado de cuenta y permisos se consultan después mediante `/me`.
+ */
 export async function loginAccount(body: unknown) {
   const { email, password } = credentials(body);
   try {
@@ -37,7 +43,7 @@ export async function loginAccount(body: unknown) {
     if (!data.session || !data.user?.email_confirmed_at || data.user.email?.toLowerCase() !== email) {
       throw authFailure({ status: 401 });
     }
-    // Session transport only. /me checks the current profile and campus assignments.
+    // Solo transporta la sesión; `/me` verifica perfil y asignaciones vigentes por campus.
     return { session: { access_token: data.session.access_token, refresh_token: data.session.refresh_token } };
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -45,14 +51,16 @@ export async function loginAccount(body: unknown) {
   }
 }
 
+/** Solicita recuperación con respuesta uniforme para no revelar si una cuenta existe. */
 export async function recoverAccount(body: unknown) {
   const { email } = emailRequest(body);
-  // Keep every provider outcome identical, including account-specific delivery/rate errors.
-  // 202 acknowledges the request; it does not promise that an email was delivered.
-  try { await requestPasswordRecovery(email); } catch { /* No account enumeration. */ }
+  // Unifica incluso errores de entrega o límites asociados a una cuenta.
+  // El 202 confirma la recepción de la solicitud, no la entrega del correo.
+  try { await requestPasswordRecovery(email); } catch { /* No revela si existe una cuenta asociada al correo. */ }
   return { status: 'recovery_requested' as const };
 }
 
+/** Verifica un OTP de recuperación, cambia la contraseña con esa sesión y revoca su renovación. */
 export async function resetAccountPassword(body: unknown) {
   const { email, code, password } = credentials(body, true);
   let recoveryClient: Awaited<ReturnType<typeof verifyPasswordRecovery>>['client'] | undefined;
@@ -63,7 +71,7 @@ export async function resetAccountPassword(body: unknown) {
     if (!result.data.session || result.data.user?.email?.toLowerCase() !== email) {
       throw authFailure({ status: 400 }, true);
     }
-    // Only the session just established by Auth's recovery OTP may change this credential.
+    // Solo la sesión creada por el OTP de recuperación puede cambiar esta contraseña.
     const updated = await updateRecoveredPassword(recoveryClient, password);
     if (updated.error) throw authFailure(updated.error, true);
     if (updated.data.user?.id !== result.data.user.id) throw authFailure({ status: 503 }, true);
@@ -72,12 +80,12 @@ export async function resetAccountPassword(body: unknown) {
     if (error instanceof ApiError) throw error;
     throw authFailure({ status: 503 }, true);
   } finally {
-    // Recovery tokens are never returned or persisted. Revoke their renewal when possible.
+    // Los tokens de recuperación no se devuelven ni persisten; se revoca su renovación si es posible.
     if (recoveryClient) await closeRecoverySession(recoveryClient).catch(() => undefined);
   }
 }
 
-// Preserve the existing export and /me contract; services share the same matrix.
+// Conserva el contrato existente de `/me`; los servicios comparten la misma matriz de capacidades.
 export { accountCapabilities } from './auth.authorization.js';
 
 function providerIdentity(user: User | null): VerifiedIdentity {
@@ -87,6 +95,7 @@ function providerIdentity(user: User | null): VerifiedIdentity {
     registration: { fullName: user.user_metadata?.nombre_completo, campusId: user.user_metadata?.campus_id } };
 }
 
+/** Combina dominios activos con sus campus activos para poblar las opciones de registro. */
 export async function getRegistrationOptions(): Promise<RegistrationOption[]> {
   try {
     const domains = await findRegistrationDomains();
@@ -106,6 +115,7 @@ export async function getRegistrationOptions(): Promise<RegistrationOption[]> {
   }
 }
 
+/** Valida un cuerpo de registro cerrado y normaliza email, nombre y UUID del campus. */
 function registrationInput(body: unknown): RegistrationInput {
   const invalid = () => new ApiError(400, 'INVALID_REGISTRATION', 'Revisa el correo, nombre, contraseña y campus.');
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid();
@@ -122,6 +132,10 @@ function registrationInput(body: unknown): RegistrationInput {
   return { email, fullName, password: input.password, campusId: input.campusId.toLowerCase() };
 }
 
+/**
+ * Comprueba dominio institucional y campus antes de pedir a Auth que cree una cuenta pendiente.
+ * El flujo requiere confirmación de correo y no expone una sesión inmediata.
+ */
 export async function registerInstitutionalAccount(body: unknown) {
   const input = registrationInput(body);
   const options = await getRegistrationOptions();
@@ -132,7 +146,7 @@ export async function registerInstitutionalAccount(body: unknown) {
   try {
     const { data, error } = await signUpInstitutionalUser(input);
     if (error) {
-      // Supabase may obfuscate existing accounts; keep the same response for duplicates.
+      // Supabase puede ocultar cuentas existentes; conserva la misma respuesta para duplicados.
       if (['user_already_exists', 'email_exists'].includes(error.code ?? '')) return { status: 'verification_required' as const };
       if (error.status === 429) {
         throw new ApiError(429, 'RATE_LIMITED', 'Espera antes de volver a solicitar el registro.', {
@@ -144,9 +158,9 @@ export async function registerInstitutionalAccount(body: unknown) {
       }
       throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo iniciar el registro.');
     }
-    // Configuration drift (Confirm Email off) must never expose an immediate session.
+    // Una configuración con Confirm Email desactivado nunca debe exponer una sesión inmediata.
     if (!data.user || data.session) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'El registro requiere confirmación de correo.');
-    // Confirmed duplicate accounts may be represented by a fake user with no identities.
+    // Auth puede representar una cuenta duplicada confirmada con usuario ficticio sin identidades.
     if (!data.user.identities?.length || data.user.email_confirmed_at) return { status: 'verification_required' as const };
     return { status: 'verification_required' as const };
   } catch (error) {
@@ -155,6 +169,7 @@ export async function registerInstitutionalAccount(body: unknown) {
   }
 }
 
+/** Valida correo y, para confirmación, el formato del código enviado por Auth. */
 function emailRequest(body: unknown, withCode = false): { email: string; code?: string } {
   const invalid = () => new ApiError(400, 'INVALID_VERIFICATION', 'Revisa el correo y el código de verificación.');
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid();
@@ -167,6 +182,7 @@ function emailRequest(body: unknown, withCode = false): { email: string; code?: 
   return { email, code: typeof values.code === 'string' ? values.code.trim() : undefined };
 }
 
+/** Reenvía la confirmación para dominios admitidos y mantiene opaca la existencia de la cuenta. */
 export async function resendInstitutionalConfirmation(body: unknown) {
   const { email } = emailRequest(body);
   const options = await getRegistrationOptions();
@@ -190,6 +206,7 @@ export async function resendInstitutionalConfirmation(body: unknown) {
   }
 }
 
+/** Verifica el Bearer directamente con Supabase Auth y exige correo confirmado. */
 export async function verifyAuthIdentity(accessToken: string): Promise<VerifiedIdentity> {
   try {
     if (!accessToken.trim()) throw new ApiError(401, 'UNAUTHENTICATED', 'A valid access token is required');
@@ -219,6 +236,10 @@ function registrationDetails(identity: VerifiedIdentity) {
   return { fullName, campusId };
 }
 
+/**
+ * Provisiona el perfil institucional a partir de metadata verificada y catálogos vigentes.
+ * Si otra solicitud gana la inserción única, vuelve a leer el perfil sin sobrescribirlo.
+ */
 export async function completeInstitutionalRegistration(identity: VerifiedIdentity) {
   try {
     const existing = await findServerAuthProfile(identity.userId);
@@ -239,7 +260,7 @@ export async function completeInstitutionalRegistration(identity: VerifiedIdenti
       verificado_en: identity.emailConfirmedAt, estado_cuenta: 'ACTIVA' });
     let profile = inserted.data;
     if (inserted.error?.code === '23505') {
-      // Another retry may have completed concurrently. Never update the winning profile.
+      // Otro reintento pudo completar el alta a la vez; no modifica el perfil que ganó.
       const winner = await findServerAuthProfile(identity.userId);
       if (winner.error) throw new Error();
       profile = winner.data;
@@ -253,6 +274,7 @@ export async function completeInstitutionalRegistration(identity: VerifiedIdenti
   }
 }
 
+/** Consume el OTP de registro, comprueba su identidad y provisiona el perfil si puede. */
 export async function confirmInstitutionalRegistration(body: unknown) {
   const { email, code } = emailRequest(body, true);
   try {
@@ -268,14 +290,14 @@ export async function confirmInstitutionalRegistration(body: unknown) {
       }
       throw new ApiError(400, 'INVALID_VERIFICATION', 'No se pudo verificar. Revisa el código o solicita uno nuevo.');
     }
-    // verifyOtp validates the code with Auth. Avoid a second Auth call after consuming it.
+    // `verifyOtp` ya valida el código; evita otra llamada a Auth después de consumirlo.
     const identity = providerIdentity(data.user);
     if (identity.email !== email) throw new ApiError(403, 'FORBIDDEN', 'La verificación no corresponde a esta cuenta.');
     let status: 'complete' | 'profile_pending' = 'complete';
     try { await completeInstitutionalRegistration(identity); }
     catch (reason) {
       if (!(reason instanceof ApiError) || reason.status !== 503) throw reason;
-      status = 'profile_pending'; // Preserve the verified session so provisioning can be retried.
+      status = 'profile_pending'; // Conserva la sesión verificada para reintentar la provisión.
     }
     return { status, session: { access_token: data.session.access_token, refresh_token: data.session.refresh_token } };
   } catch (error) {
@@ -287,6 +309,7 @@ export async function confirmInstitutionalRegistration(body: unknown) {
 export const getAuthHealth: () => Promise<AuthHealth> =
   createModuleHealthCheck('auth', probeAuthDependencies);
 
+/** Convierte las relaciones RLS en asignaciones planas y rechaza filas incompletas. */
 function assignments(rows: AuthAssignmentRow[], kind: 'rol' | 'permiso'): AuthAssignment[] {
   return rows.map(row => {
     const value = row[kind];
@@ -297,7 +320,10 @@ function assignments(rows: AuthAssignmentRow[], kind: 'rol' | 'permiso'): AuthAs
   });
 }
 
-// Fresh identity and PostgreSQL context on every call. This does not grant operation permissions.
+/**
+ * Verifica identidad, perfil activo y asignaciones vigentes en cada solicitud.
+ * El resultado aporta contexto; cada operación debe comprobar aparte su autorización.
+ */
 export async function verifyAuthConnection(accessToken: string): Promise<VerifiedAuthConnection> {
   try {
     const identity = await verifyAuthIdentity(accessToken);

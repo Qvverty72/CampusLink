@@ -2,7 +2,7 @@ import { CalendarOff } from 'lucide-react-native';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 
-/** The caller supplies the server-confirmed withdrawal capability, never a name comparison. */
+/** El caller entrega la capacidad de retiro confirmada por el servidor, no inferida del nombre. */
 export function ActivityWithdrawalButton({ onLeave, disabled = false, pending = false }: {
   onLeave: () => Promise<void>; disabled?: boolean; pending?: boolean;
 }) {

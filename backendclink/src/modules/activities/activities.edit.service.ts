@@ -15,12 +15,15 @@ const valid = (document: ActivityDocument) => document._id?.toHexString?.() && d
   && Number.isFinite(document.startAt.getTime()) && Number.isFinite(document.endAt.getTime()) && document.endAt > document.startAt
   && Number.isSafeInteger(editRevision(document)) && editRevision(document) >= 0 && editRevision(document) < Number.MAX_SAFE_INTEGER;
 
-/** Runtime guard also protects direct service/repository calls from old clients. */
+/** Protege también llamadas directas de servicios y repositorios frente a clientes antiguos. */
 export function requireIndividualEdit(scope: unknown): void {
   if (scope !== 'ONE') throw new ApiError(400, 'VALIDATION_ERROR', 'Solo se permite editar una actividad u ocurrencia individual.');
 }
 
-/** Plan the selected activity only; other instances and the series definition remain untouched. */
+/**
+ * Construye una vista previa de una sola actividad u ocurrencia y su hash de contenido/revisión.
+ * Las demás ocurrencias y la definición de la serie quedan fuera del plan.
+ */
 export async function previewActivityEdit(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput,
   dependencies: ActivityEditDependencies = {}): Promise<ActivityEditPreview> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'ID de actividad válido requerido.');
@@ -58,13 +61,14 @@ export async function previewActivityEdit(auth: VerifiedAuthConnection, activity
     return { activityId: document._id.toHexString(), ...(document.occurrenceIndex ? { index: document.occurrenceIndex } : {}),
       revision: editRevision(document), before, after, changedFields };
   });
-  // Bind the selected revision and content, including no-op edits, for concurrency protection.
+  // Vincula revisión y contenido seleccionados, incluso en cambios vacíos, para detectar concurrencia.
   const previewHash = createHash('sha256').update(JSON.stringify({ campusId: auth.campusId, activityId: activityId.toLowerCase(),
     input, changes, previewHash: undefined }, (key, value) => key === 'previewHash' ? undefined : value)).digest('hex');
   return { campusId: auth.campusId, activityId: activityId.toLowerCase(), scope: input.scope, previewHash,
     changes };
 }
 
+/** Exige una vista previa coincidente antes de delegar la escritura transaccional. */
 export async function editActivity(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput,
   dependencies: ActivityEditDependencies = {}): Promise<ActivityEditResult> {
   const plan = await previewActivityEdit(auth, activityId, input, dependencies);

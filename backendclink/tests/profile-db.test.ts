@@ -6,6 +6,10 @@ import { PGlite } from '@electric-sql/pglite';
 import { Pool } from 'pg';
 import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 
+/**
+ * Ejecuta el servicio y SQL reales contra PGlite; se reemplaza solo el transporte de Pool.
+ * Los fixtures incluyen campus/carreras ajenos y una falla SQL para verificar atomicidad.
+ */
 const db = new PGlite();
 const institution = randomUUID(), foreignInstitution = randomUUID();
 const campus = randomUUID(), nextCampus = randomUUID(), foreignCampus = randomUUID();
@@ -18,7 +22,7 @@ before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://profile-db-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
     SUPABASE_DB_URL: 'postgresql://postgres:simulated@profile-db-test.invalid/postgres' });
-  // Exercise the real service/repository SQL against PGlite, replacing only transport.
+  // Ejecuta servicio/repositorio reales contra PGlite y reemplaza únicamente el transporte.
   mock.method(Pool.prototype, 'connect', async () => ({
     query: (sql: string, values: unknown[] = []) => db.query(sql, values),
     release: () => { releaseCount++; },
@@ -37,7 +41,7 @@ before(async () => {
   await db.query('insert into campus(id,institucion_id,nombre) values ($1,$2,$3),($4,$2,$5),($6,$7,$8)', [campus, institution, 'Old', nextCampus, 'New', foreignCampus, foreignInstitution, 'Foreign']);
   await db.query('insert into carrera(id,institucion_id,nombre) values ($1,$2,$3),($4,$2,$5),($6,$2,$7)', [career, institution, 'First', secondCareer, 'Second', wrongCareer, 'Unavailable here']);
   await db.query('insert into campus_carrera values ($1,$2),($3,$2),($3,$4),($1,$5)', [campus, career, nextCampus, secondCareer, wrongCareer]);
-  // Even if previous/default grants allowed public writes, the boundary must revoke them.
+  // Aunque grants anteriores hayan permitido escrituras públicas, la migración debe revocarlos.
   await db.exec('grant all on public.usuario_carrera to anon,authenticated');
   await db.exec(await migration());
 });
@@ -98,7 +102,7 @@ test('stale versions, foreign campus/institution, wrong offerings and duplicates
 
 test('failure after profile update rolls back all writes', async () => {
   const user = await fixture(), timestamp = await version(user);
-  // Simulate a storage failure during association insertion, after UPDATE/DELETE.
+  // Simula una falla al insertar asociaciones, después de los UPDATE/DELETE previos.
   await db.exec("create function public.fail_profile_test() returns trigger language plpgsql as $$begin raise exception 'storage failure'; end$$; create trigger fail_profile_test before insert on usuario_carrera for each row execute function fail_profile_test();");
   try {
     await assert.rejects(serverCall(user, timestamp, [secondCareer]), { status: 503 });

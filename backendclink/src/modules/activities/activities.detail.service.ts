@@ -20,6 +20,7 @@ function optionalBanner(value: unknown): string | undefined {
   } catch { return undefined; }
 }
 
+/** Lee una actividad vigente y visible, validando campus y ubicación contra el mapa activo. */
 export async function getAvailableActivity(auth: VerifiedAuthConnection, activityId: string,
   dependencies: ActivityDependencies = {}): Promise<{ document: ActivityDocument; activity: ActivityDto; now: Date }> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'A valid activity ID is required.');
@@ -32,6 +33,7 @@ export async function getAvailableActivity(auth: VerifiedAuthConnection, activit
   return { document, activity, now };
 }
 
+/** Combina el DTO público con el estado propio de participación y el nombre público del organizador. */
 export async function getActivityDetail(auth: VerifiedAuthConnection, activityId: string,
   dependencies: ActivityDependencies = {}): Promise<ActivityDetailDto> {
   const { document, activity } = await getAvailableActivity(auth, activityId, dependencies);
@@ -62,13 +64,14 @@ export async function getActivityDetail(auth: VerifiedAuthConnection, activityId
     ...(bannerUrl ? { bannerUrl } : {}), ...(category ? { category } : {}), ...(tags.length ? { tags } : {}) };
 }
 
+/** Inscribe al usuario si corresponde y vuelve a leer el detalle para devolver el estado confirmado. */
 export async function joinActivity(auth: VerifiedAuthConnection, activityId: string,
   dependencies: ActivityDependencies = {}, operationId?: string): Promise<ActivityDetailDto> {
   const detail = await getActivityDetail(auth, activityId, dependencies);
   if (!detail.participation.canJoin) return detail;
   const register = dependencies.registerParticipation ?? (await import('./activities.detail.repository.js')).registerActivityParticipation;
   await register(auth.campusId, detail.id, auth.userId, dependencies.now?.() ?? new Date(), operationId);
-  // Return server-owned participation, never an optimistic client-supplied state.
+  // Devuelve participación leída del servidor, nunca el estado optimista que enviaría un cliente.
   return getActivityDetail(auth, detail.id, dependencies);
 }
 
@@ -78,6 +81,7 @@ function authorizeParticipation(auth: VerifiedAuthConnection, activityId: string
   return activityId.toLowerCase();
 }
 
+/** Registra una vista idempotente con el UUID de apertura proporcionado por el cliente. */
 export async function recordViewedActivity(auth: VerifiedAuthConnection, activityId: string, operationId: string,
   dependencies: ActivityDependencies = {}) {
   const id = authorizeParticipation(auth, activityId);
@@ -86,6 +90,7 @@ export async function recordViewedActivity(auth: VerifiedAuthConnection, activit
   return { campusId: auth.campusId, activityId: id, type: 'VIEWED' as const, recorded: true };
 }
 
+/** Devuelve solo la participación propia, incluso si la actividad ya no aparece como contenido visible. */
 export async function getOwnActivityParticipation(auth: VerifiedAuthConnection, activityId: string,
   dependencies: ActivityDependencies = {}): Promise<ActivityParticipationDto> {
   const id = authorizeParticipation(auth, activityId);
@@ -93,7 +98,7 @@ export async function getOwnActivityParticipation(auth: VerifiedAuthConnection, 
   const current = await find(auth.campusId, id, auth.userId);
   const result = current && participationDto(current, auth.campusId, id, auth.userId);
   if (result && result.status !== 'JOINED') return result;
-  // Older activities count the creator even when they have no explicit participation row.
+  // En actividades antiguas se cuenta al creador aunque no haya una fila explícita de participación.
   const findCreated = dependencies.findCreatedActivity ?? (await import('./activities.detail.repository.js')).findCreatedActivity;
   const activity = await findCreated(auth.campusId, id, auth.userId);
   if (result) return { ...result, canLeave: !activity };
@@ -105,6 +110,7 @@ export async function getOwnActivityParticipation(auth: VerifiedAuthConnection, 
   return { campusId: auth.campusId, activityId: id, status: 'NOT_JOINED', canLeave: false };
 }
 
+/** Retira al usuario inscrito y prohíbe al creador retirarse de su propia actividad. */
 export async function leaveActivity(auth: VerifiedAuthConnection, activityId: string,
   dependencies: ActivityDependencies = {}, operationId?: string): Promise<ActivityParticipationDto> {
   const id = authorizeParticipation(auth, activityId);

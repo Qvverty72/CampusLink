@@ -8,10 +8,12 @@ import { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { PhysicalgoodsResources } from './PhysicalgoodsResources';
 import { PublicationImages } from './PublicationImages';
 
+/** Composición de búsqueda y publicación del módulo de bienes físicos. */
 export function PhysicalGoodsScreen() {
   const { identity, session } = useAuth();
   return <PhysicalgoodsContent key={`${identity?.userId}:${identity?.campusId}:${session?.access_token}`} />;
 }
+/** Mantiene en un flujo común el alta y la recuperación de su publicación. */
 function PhysicalgoodsContent() {
   const resources = usePhysicalgoodsResources();
   const [publishing, setPublishing] = useState(false);

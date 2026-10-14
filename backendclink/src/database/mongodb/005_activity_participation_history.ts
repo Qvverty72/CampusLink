@@ -7,6 +7,10 @@ const uuidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB]
 const uuid = new RegExp(uuidPattern);
 const validDate = (value: unknown): value is Date => value instanceof Date && Number.isFinite(value.getTime());
 
+/**
+ * Proyecta datos legados a contadores sin inventar eventos intermedios.
+ * `historyComplete` queda en false porque la fila solo conserva un estado resumido.
+ */
 export function legacyParticipationHistory(row: ActivityParticipationDocument, creatorAt?: Date) {
   if (!row.activityId?.toHexString?.() || !uuid.test(row.userId) || !uuid.test(row.campusId)
     || !['JOINED', 'LEFT'].includes(row.status) || !validDate(row.joinedAt) || !validDate(row.updatedAt)
@@ -18,7 +22,10 @@ export function legacyParticipationHistory(row: ActivityParticipationDocument, c
     joinCount: 1, leaveCount: row.status === 'LEFT' ? 1 : 0, historyComplete: false };
 }
 
-/** Run with the API stopped. Preserve existing IDs and append only retained historical facts. */
+/**
+ * Ejecuta con la API detenida. Valida todas las filas antes de mutar y conserva sus IDs.
+ * Agrega eventos LEGACY_STATE por hechos disponibles; cada fila se migra en su propia transacción.
+ */
 export async function migrateActivityParticipationHistory(db: Db, client: MongoClient) {
   for (const name of ['activities', 'activity_participation', 'activity_interactions']) {
     if (!(await db.listCollections({ name }, { nameOnly: true }).toArray()).length) throw new Error(`Approved collection ${name} is required.`);
@@ -26,7 +33,7 @@ export async function migrateActivityParticipationHistory(db: Db, client: MongoC
   const activities = await db.collection<ActivityDocument>('activities').find({}).toArray();
   const byId = new Map(activities.map(activity => [activity._id.toHexString(), activity]));
   const rows = await db.collection<ActivityParticipationDocument>('activity_participation').find({}).toArray();
-  // Validate the entire legacy input before any schema or data changes.
+  // Valida todos los datos legados antes de cambiar el esquema o los documentos.
   for (const row of rows) if (row.joinCount === undefined) {
     const activity = byId.get(row.activityId.toHexString());
     if (activity && activity.campusId !== row.campusId) throw new Error('Participation belongs to a different campus from its activity.');

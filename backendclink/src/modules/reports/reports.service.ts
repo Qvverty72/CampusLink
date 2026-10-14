@@ -12,6 +12,10 @@ import { parseActivityReport } from './reports.validation.js';
 export const getReportsHealth: () => Promise<ReportsHealth> =
   createModuleHealthCheck('reports', probeReportsDependencies);
 
+/**
+ * Registra una denuncia de actividad visible en el mapa actual del usuario.
+ * Guarda una instantánea pública para revisión posterior, sin datos de participación o eventos.
+ */
 export async function reportActivity(auth: VerifiedAuthConnection, activityId: string, input: ReportActivityInput,
   dependencies: ReportsDependencies = {}): Promise<ActivityReportReceipt> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'Identificador de actividad inválido.');
@@ -24,14 +28,14 @@ export async function reportActivity(auth: VerifiedAuthConnection, activityId: s
   const document = await find(auth.campusId, id, now);
   const visible = document && toVisibleActivity(document, auth.campusId, now, spatialBuildings(map));
   if (!visible || visible.id !== id) throw new ApiError(404, 'NOT_FOUND', 'Esta actividad ya no está disponible para denunciar.');
-  // Keep the content reviewed by the complainant, never participation, change logs or delivery events.
+  // Conserva el contenido que vio quien denuncia; excluye participación, historial de cambios y avisos.
   const snapshot: ActivityReportSnapshot = { ...visible, visibility: 'PUBLIC', revision: document.editRevision ?? 0 };
   if (typeof document.createdByUserId === 'string' && /^[0-9a-f-]{36}$/i.test(document.createdByUserId)) snapshot.createdByUserId = document.createdByUserId;
   if (typeof document.bannerUrl === 'string') {
     try {
       const url = new URL(document.bannerUrl);
       if (url.protocol === 'https:' && !url.username && !url.password) snapshot.bannerUrl = url.href;
-    } catch { /* Malformed optional metadata is not evidence to publish. */ }
+    } catch { /* Los metadatos opcionales malformados no se incluyen en la denuncia. */ }
   }
   if (typeof document.category === 'string' && document.category.trim()) snapshot.category = document.category.trim();
   if (Array.isArray(document.tags)) snapshot.tags = document.tags.filter(tag => typeof tag === 'string' && tag.trim()).map(tag => tag.trim());
