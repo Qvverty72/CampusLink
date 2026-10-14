@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
-import type { PhysicalgoodsRequestRow } from './physicalgoods.types.js';
+import type { PhysicalgoodsReceivedRow, PhysicalgoodsRequestRow } from './physicalgoods.types.js';
+import type { PaginationParams } from '../../../types/api.js';
 
 const projection = `id,publicacion_id,solicitante_id,codigo_mensaje,estado_solicitud,
   to_char(solicitada_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS solicitada_en`;
@@ -18,4 +19,28 @@ export async function findPhysicalgoodsRequestMessage(client: PoolClient, code: 
 export async function insertPhysicalgoodsRequest(client: PoolClient, publicationId: string, userId: string, code: string) {
   return (await client.query<PhysicalgoodsRequestRow>(`INSERT INTO public.solicitud_recurso(publicacion_id,solicitante_id,codigo_mensaje)
     VALUES($1,$2,$3) RETURNING ${projection}`, [publicationId,userId,code])).rows[0];
+}
+export async function findPhysicalgoodsRequest(client: PoolClient, publicationId: string, requestId: string) {
+  return (await client.query<PhysicalgoodsRequestRow>(`SELECT ${projection} FROM public.solicitud_recurso
+    WHERE publicacion_id=$1 AND id=$2 FOR UPDATE`,[publicationId,requestId])).rows[0] ?? null;
+}
+export async function updatePhysicalgoodsRequestStatus(client: PoolClient, requestId: string, status: PhysicalgoodsRequestRow['estado_solicitud']) {
+  await client.query(`UPDATE public.solicitud_recurso SET estado_solicitud=$2,updated_at=clock_timestamp() WHERE id=$1`,[requestId,status]);
+}
+export async function closePendingPhysicalgoodsRequests(client: PoolClient, publicationId: string) {
+  await client.query(`UPDATE public.solicitud_recurso SET estado_solicitud='CANCELADA',updated_at=clock_timestamp()
+    WHERE publicacion_id=$1 AND estado_solicitud='PENDIENTE'`,[publicationId]);
+}
+export async function listPhysicalgoodsRequests(client: PoolClient, campusId: string, userId: string, pagination: PaginationParams, received: boolean) {
+  return (await client.query<PhysicalgoodsReceivedRow>(`SELECT s.id,s.publicacion_id,s.solicitante_id,s.codigo_mensaje,s.estado_solicitud,
+    to_char(s.solicitada_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS solicitada_en,
+    p.titulo,p.estado_publicacion,p.modalidad,p.precio,u.nombre_completo AS solicitante_nombre,m.descripcion AS mensaje,
+    t.id AS transaccion_id,t.estado_transaccion
+    FROM public.solicitud_recurso s JOIN public.publicacion_recurso p ON p.id=s.publicacion_id
+    JOIN public.recurso_fisico r ON r.publicacion_id=p.id JOIN public.perfil_usuario u ON u.id=s.solicitante_id
+    JOIN public.mensaje_solicitud m ON m.codigo=s.codigo_mensaje LEFT JOIN public.transaccion_recurso t ON t.solicitud_id=s.id
+    WHERE p.campus_id=$1 AND ${received ? 'p.propietario_id' : 's.solicitante_id'}=$2 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL
+    AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO')
+    ORDER BY p.publicado_en DESC,p.id,s.solicitada_en,s.id LIMIT $3 OFFSET $4`,
+    [campusId,userId,pagination.limit+1,pagination.offset])).rows;
 }

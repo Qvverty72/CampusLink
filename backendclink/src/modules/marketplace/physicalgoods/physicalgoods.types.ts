@@ -81,6 +81,27 @@ export interface PhysicalgoodsRequestRow {
   publicacion_id: string;
   solicitante_id: string;
   codigo_mensaje: string;
-  estado_solicitud: 'PENDIENTE' | 'ACEPTADA';
+  estado_solicitud: 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA' | 'CANCELADA';
   solicitada_en: string;
+}
+export interface PhysicalgoodsTransactionRow {
+  id: string;
+  solicitud_id: string;
+  publicacion_id: string;
+  propietario_id: string;
+  receptor_id: string;
+  estado_transaccion: 'RESERVADA' | 'PENDIENTE_CONFIRMACION' | 'COMPLETADA' | 'CANCELADA';
+  modalidad_acordada: 'VENTA' | 'DONACION';
+  monto_acordado: string | null;
+  moneda: string;
+}
+export interface PhysicalgoodsReceivedRow extends PhysicalgoodsRequestRow {
+  titulo: string;
+  estado_publicacion: string;
+  modalidad: 'VENTA' | 'DONACION';
+  precio: string | null;
+  solicitante_nombre: string;
+  mensaje: string;
+  transaccion_id: string | null;
+  estado_transaccion: PhysicalgoodsTransactionRow['estado_transaccion'] | null;
 }

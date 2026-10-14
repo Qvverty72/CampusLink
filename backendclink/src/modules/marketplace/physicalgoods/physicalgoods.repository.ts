@@ -20,9 +20,10 @@ export async function retirePhysicalgoods(client: PoolClient, id: string) {
 }
 
 export async function lockPhysicalgoodsPublisher(client: PoolClient, userId: string) {
+  // Impide cambios de cuenta/campus sin bloquear las referencias FK de otros participantes al perfil.
   const profile = (await client.query<AuthProfile>(
     `SELECT id, campus_id, institucion_id, nombre_completo, foto_path, verificado_en, estado_cuenta, deleted_at
-     FROM public.perfil_usuario WHERE id=$1 FOR UPDATE`, [userId])).rows[0] ?? null;
+     FROM public.perfil_usuario WHERE id=$1 FOR NO KEY UPDATE`, [userId])).rows[0] ?? null;
   const roles = (await client.query<AuthAssignment>(
     `SELECT r.id, r.nombre AS name, ur.campus_id AS "campusId" FROM public.usuario_rol ur
      JOIN public.rol r ON r.id=ur.rol_id WHERE ur.perfil_usuario_id=$1 AND ur.revocado_en IS NULL

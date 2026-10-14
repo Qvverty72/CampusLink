@@ -4,12 +4,15 @@ import { requireAuthentication } from '../../auth/auth.middleware.js';
 import { addPhysicalgoodsImageController, changePhysicalgoodsCategoryController, changePhysicalgoodsPrincipalController, deletePhysicalgoodsImageController, getPhysicalgoodsGalleryController, getPhysicalgoodsResourcesController } from './physicalgoods.controller.js';
 import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from './physicalgoods.controller.js';
 import { createPhysicalgoodsRequestController, getPhysicalgoodsRequestOptionsController } from './physicalgoods.controller.js';
+import { getReceivedPhysicalgoodsRequestsController, getSentPhysicalgoodsRequestsController, resolvePhysicalgoodsRequestController, confirmPhysicalgoodsTransactionController, cancelPhysicalgoodsTransactionController } from './physicalgoods.controller.js';
 
 // Solo expone diagnósticos técnicos; las rutas de negocio requieren autenticación.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getPhysicalgoodsHealthController);
   router.get('/options', requireAuthentication, getPhysicalgoodsOptionsController);
+  router.get('/received-requests', requireAuthentication, getReceivedPhysicalgoodsRequestsController);
+  router.get('/sent-requests', requireAuthentication, getSentPhysicalgoodsRequestsController);
   router.get('/', requireAuthentication, getPhysicalgoodsResourcesController);
   // Base64 de una foto con tamaño limitado mantiene un mismo contrato JSON para web y nativo.
   router.post('/', requireAuthentication, json({ limit: '7mb' }), createPhysicalgoodsController);
@@ -17,6 +20,9 @@ export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   router.get('/:publicationId/images', requireAuthentication, getPhysicalgoodsGalleryController);
   router.get('/:publicationId/request-options', requireAuthentication, getPhysicalgoodsRequestOptionsController);
   router.post('/:publicationId/requests', requireAuthentication, createPhysicalgoodsRequestController);
+  router.patch('/:publicationId/requests/:requestId', requireAuthentication, resolvePhysicalgoodsRequestController);
+  router.post('/:publicationId/transactions/:transactionId/confirm', requireAuthentication, confirmPhysicalgoodsTransactionController);
+  router.post('/:publicationId/transactions/:transactionId/cancel', requireAuthentication, cancelPhysicalgoodsTransactionController);
   router.patch('/:publicationId', requireAuthentication, updatePhysicalgoodsController);
   router.delete('/:publicationId', requireAuthentication, withdrawPhysicalgoodsController);
   router.post('/:publicationId/images', requireAuthentication, json({ limit: '7mb' }), addPhysicalgoodsImageController);

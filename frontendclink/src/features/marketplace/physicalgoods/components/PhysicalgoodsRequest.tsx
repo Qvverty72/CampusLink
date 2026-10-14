@@ -11,6 +11,7 @@ export function PhysicalgoodsRequest({ resources:r }: { resources:ReturnType<typ
     {(request.loading||request.busy)&&<ActivityIndicator accessibilityLabel={request.busy?'Enviando solicitud':'Comprobando solicitud'} />}
     {request.error&&<Text accessibilityRole="alert" style={styles.error}>{request.error}</Text>}
     {request.options?.activeRequest&&<Text style={styles.label}>Solicitud registrada · Estado: {request.options.activeRequest.status.toLowerCase()}</Text>}
+    {request.options?.activeRequest?.status==='PENDIENTE'&&r.gallery?.status==='RESERVADO'&&<Text style={styles.text}>Tu solicitud sigue pendiente mientras se realiza otro intercambio. Este recurso está reservado para otra persona.</Text>}
     {request.options?.canRequest&&<>
       <Text style={styles.label}>Solicitar este recurso</Text>
       <Text style={styles.text}>Selecciona un mensaje para expresar tu interés.</Text>

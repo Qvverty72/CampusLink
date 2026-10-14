@@ -80,6 +80,15 @@ export function parsePhysicalgoodsCategory(body: unknown): string {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'categoryId')) return invalid('body', 'Selecciona una categoría válida.');
   return physicalgoodsId((body as Record<string, unknown>).categoryId, 'categoryId');
 }
+export function parsePhysicalgoodsDecision(body: unknown): 'ACEPTAR' | 'RECHAZAR' {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'decision')) return invalid('body', 'Elige aceptar o rechazar la solicitud.');
+  const value = (body as Record<string, unknown>).decision;
+  if (value !== 'ACEPTAR' && value !== 'RECHAZAR') return invalid('decision', 'Elige aceptar o rechazar la solicitud.');
+  return value;
+}
+export function parsePhysicalgoodsEmptyAction(body: unknown) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) return invalid('body', 'La acción no admite campos adicionales.');
+}
 /** Acepta exclusivamente un código de catálogo; el solicitante y el contexto los determina el servidor. */
 export function parsePhysicalgoodsRequest(body: unknown): string {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'messageCode')) return invalid('body','Selecciona un mensaje predefinido.');

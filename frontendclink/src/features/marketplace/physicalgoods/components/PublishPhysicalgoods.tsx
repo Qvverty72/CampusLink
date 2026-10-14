@@ -7,6 +7,7 @@ import { resourceConditions } from '../types/publication';
 import { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { PhysicalgoodsResources } from './PhysicalgoodsResources';
 import { PublicationImages } from './PublicationImages';
+import { PhysicalgoodsRequests } from './PhysicalgoodsRequests';
 
 /** Composición de búsqueda y publicación del módulo de bienes físicos. */
 export function PhysicalGoodsScreen() {
@@ -16,20 +17,27 @@ export function PhysicalGoodsScreen() {
 /** Mantiene en un flujo común el alta y la recuperación de su publicación. */
 function PhysicalgoodsContent() {
   const resources = usePhysicalgoodsResources();
-  const [publishing, setPublishing] = useState(false);
+  const [view,setView] = useState<'explore'|'publish'|'received'|'sent'>('explore');
+  const publishing=view==='publish',received=view==='received',sent=view==='sent';
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.eyebrow}>MARKETPLACE</Text>
       <Text style={styles.title}>Marketplace</Text>
       <Text style={styles.description}>Busca, vende o dona recursos físicos en tu campus.</Text>
       <View style={styles.choices}>
-        <Pressable accessibilityRole="button" accessibilityState={{ selected: !publishing }} style={!publishing ? styles.button : styles.secondaryButton} onPress={() => setPublishing(false)}><Text style={!publishing ? styles.buttonText : styles.action}>Explorar recursos</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityState={{ selected: publishing }} style={publishing ? styles.button : styles.secondaryButton} onPress={() => setPublishing(true)}><Text style={publishing ? styles.buttonText : styles.action}>Publicar un recurso</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: view==='explore' }} style={view==='explore' ? styles.button : styles.secondaryButton} onPress={() => setView('explore')}><Text style={view==='explore' ? styles.buttonText : styles.action}>Explorar recursos</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: publishing }} style={publishing ? styles.button : styles.secondaryButton} onPress={() => setView('publish')}><Text style={publishing ? styles.buttonText : styles.action}>Publicar un recurso</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: received }} style={received ? styles.button : styles.secondaryButton} onPress={() => setView('received')}><Text style={received ? styles.buttonText : styles.action}>Solicitudes recibidas</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: sent }} style={sent ? styles.button : styles.secondaryButton} onPress={() => setView('sent')}><Text style={sent ? styles.buttonText : styles.action}>Mis solicitudes</Text></Pressable>
       </View>
       <View style={publishing ? undefined : { display: 'none' }}>
-        <PublicationForm onPublished={resources.reload} onGallery={id => { setPublishing(false); resources.open(id); }} />
+        <PublicationForm onPublished={resources.reload} onGallery={id => { setView('explore'); resources.open(id); }} />
       </View>
-      <View style={publishing ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} /></View>
+      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests active={received} onResolved={()=>{resources.reload();resources.reloadGallery();}}
+        onOpen={id=>{setView('explore');resources.open(id);}} /></View>
+      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests active={sent} received={false} onResolved={resources.reload}
+        onOpen={id=>{setView('explore');resources.open(id);}} /></View>
+      <View style={publishing||received||sent ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} /></View>
     </ScrollView>
     <BottomNavigationBar activeItemId="physicalgoods" />
   </View>;

@@ -28,6 +28,8 @@ let failSign = false;
 let failAudit = false;
 let editService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
 let requestsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
+let transactionsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
+let failTransactionInsert=false;
 let failRequestInsert=false;
 let connectionLease=Promise.resolve();
 let failUpload = false, failInsert = false, failRemove = false, publicBucket = false, missingBucket = false, lostCommit = false;
@@ -43,6 +45,7 @@ before(async () => {
     connectionLease=new Promise<void>(resolve=>{releaseLease=resolve;});await previous;
     return {
     query: async (sql: string, values: unknown[] = []) => {
+      if (failTransactionInsert&&sql.startsWith('INSERT INTO public.transaccion_recurso')) throw new Error('private transaction SQL password');
       if (failRequestInsert&&sql.startsWith('INSERT INTO public.solicitud_recurso')) throw new Error('private request SQL failure password');
       if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL failure');
       if (failInsert && sql.startsWith('INSERT INTO public.archivo_publicacion')) throw new Error('private failed SQL password');
@@ -93,6 +96,7 @@ before(async () => {
   imagesService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.images.service.js');
   editService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
   requestsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
+  transactionsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
@@ -100,7 +104,7 @@ before(async () => {
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
-    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','reporte_contenido','auditoria']) {
+    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','reporte_contenido','auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -121,6 +125,7 @@ before(async () => {
 beforeEach(async () => {
   storageCalls = []; uploads = []; removals = []; signed = [];
   signedPaths = []; failSign = false; failAudit = false; failRequestInsert=false;
+  failTransactionInsert=false;
   failUpload = failInsert = failRemove = publicBucket = missingBucket = lostCommit = false; onUpload = null;
   const userId = randomUUID();
   await db.query('insert into auth.users values($1)', [userId]);
@@ -765,4 +770,173 @@ test('request message seed is repeatable, adds no attributes and preserves exist
     await isolated.exec("delete from mensaje_solicitud;insert into mensaje_solicitud values('CUSTOM','Approved existing message',false)");await isolated.exec(sql);
     assert.deepEqual((await isolated.query('select * from mensaje_solicitud')).rows,[{codigo:'CUSTOM',descripcion:'Approved existing message',activo:false}]);
   }finally{await isolated.close();}
+});
+
+async function requestedPair() {
+  const saved=await create(auth,input()),first=await otherActor(),second=await otherActor();
+  const a=await requestsService.createPhysicalgoodsRequest(first,saved.id,{messageCode:'ME_INTERESA'});
+  const b=await requestsService.createPhysicalgoodsRequest(second,saved.id,{messageCode:'PARA_MIS_ESTUDIOS'});
+  return {saved,first,second,a,b};
+}
+const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',actor=auth)=>requestsService.resolvePhysicalgoodsRequest(actor,publicationId,requestId,{decision});
+const transactionRows=(publicationId:string)=>db.query('select * from transaccion_recurso where publicacion_id=$1 order by iniciada_en,id',[publicationId]);
+
+test('acceptance snapshots agreed terms and reserves exactly one unit while other requests stay pending and visible',async()=>{
+  const {saved,first,second,a,b}=await requestedPair(),before=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  const result=await resolveRequest(saved.id,a.id);assert.equal(result.request.status,'ACEPTADA');assert.ok(result.transaction);
+  assert.deepEqual(result.transaction,{id:result.transaction.id,status:'RESERVADA',modality:'VENTA',amount:15000,currency:'CLP'});
+  const transaction=(await transactionRows(saved.id)).rows[0];assert.equal(transaction.solicitud_id,a.id);assert.equal(transaction.propietario_id,auth.userId);assert.equal(transaction.receptor_id,first.userId);
+  const after=await imagesService.getPhysicalgoodsGallery(auth,saved.id);assert.equal(after.status,'RESERVADO');assert.notEqual(after.updatedAt,before.updatedAt);
+  assert.equal((await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest?.id,b.id);
+  assert.equal((await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest?.status,'PENDIENTE');
+  assert.equal((await requestsService.getPhysicalgoodsRequestOptions(first,saved.id)).activeRequest?.status,'ACEPTADA');
+  assert.equal((await imagesService.getPhysicalgoodsResources(auth,{mine:'true'})).data.some(row=>row.id===saved.id),false);
+  const received=await requestsService.getReceivedPhysicalgoodsRequests(auth,{});assert.equal(received.data.length,2);assert.ok(received.data.every(row=>row.publication.status==='RESERVADO'));
+  assert.equal(received.data.find(row=>row.id===b.id)?.transaction,null);
+  const history=await audits(saved.id);assert.equal(history.length,2);assert.equal(history[1].datos_antes.estado_publicacion,'DISPONIBLE');assert.equal(history[1].datos_despues.estado_publicacion,'RESERVADO');
+});
+
+test('rejection only changes the selected pending request and preserves its message, date and history',async()=>{
+  const {saved,first,a,b}=await requestedPair(),before=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  const result=await resolveRequest(saved.id,a.id,'RECHAZAR');assert.equal(result.request.status,'RECHAZADA');assert.equal(result.transaction,null);
+  const selected=(await db.query('select * from solicitud_recurso where id=$1',[a.id])).rows[0];assert.equal(selected.codigo_mensaje,a.messageCode);assert.ok(selected.updated_at);assert.ok(selected.solicitada_en);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).updatedAt,before.updatedAt);assert.equal((await transactionRows(saved.id)).rows.length,0);
+  await assert.rejects(resolveRequest(saved.id,a.id),{status:409});
+  const another=await requestsService.createPhysicalgoodsRequest(first,saved.id,{messageCode:'ME_INTERESA'});assert.notEqual(another.id,a.id);
+  await resolveRequest(saved.id,b.id);await resolveRequest(saved.id,another.id,'RECHAZAR');
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'RESERVADO');assert.equal((await transactionRows(saved.id)).rows.length,1);
+});
+
+test('competing acceptances and double submission cannot create two active transactions',async()=>{
+  const {saved,a,b}=await requestedPair();
+  const results=await Promise.allSettled([resolveRequest(saved.id,a.id),resolveRequest(saved.id,b.id)]);
+  assert.equal(results.filter(row=>row.status==='fulfilled').length,1);
+  const failure=results.find(row=>row.status==='rejected') as PromiseRejectedResult;assert.equal(failure.reason.status,409);
+  assert.equal((await transactionRows(saved.id)).rows.length,1);
+  const states=(await db.query('select estado_solicitud from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.map(row=>row.estado_solicitud).sort();assert.deepEqual(states,['ACEPTADA','PENDIENTE']);
+  const winner=results[0].status==='fulfilled'?a:b;await assert.rejects(resolveRequest(saved.id,winner.id),{status:409});
+  // También rechaza disponibilidad inconsistente con un acuerdo activo previo.
+  await db.query("update publicacion_recurso set estado_publicacion='DISPONIBLE' where id=$1",[saved.id]);
+  await assert.rejects(resolveRequest(saved.id,winner.id===a.id?b.id:a.id),{status:409});
+});
+
+test('resolution checks owner, campus, current account, publication identity and exact action payload',async()=>{
+  const {saved,first,a}=await requestedPair(),admin=await otherActor('ADMINISTRADOR');
+  for(const actor of [first,admin])await assert.rejects(resolveRequest(saved.id,a.id,'ACEPTAR',actor),{status:403});
+  for(const body of [null,[],{}, {decision:'ACEPTADA'},{decision:['ACEPTAR']},{decision:'ACEPTAR',ownerId:auth.userId},{decision:'ACEPTAR',status:'RESERVADO'},{decision:'RECHAZAR',campusId:campus}]){
+    await assert.rejects(requestsService.resolvePhysicalgoodsRequest(auth,saved.id,a.id,body),{status:400});
+  }
+  await assert.rejects(resolveRequest(saved.id,randomUUID()),{status:404});
+  const other=await create(auth,input());await assert.rejects(resolveRequest(other.id,a.id),{status:404});
+  await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[auth.userId]);await assert.rejects(resolveRequest(saved.id,a.id),{status:403});
+  await db.query("update perfil_usuario set estado_cuenta='ACTIVA',campus_id=$2 where id=$1",[auth.userId,otherCampus]);await assert.rejects(resolveRequest(saved.id,a.id),{status:409});
+  await db.query('update perfil_usuario set campus_id=$2 where id=$1',[auth.userId,campus]);
+  await db.query('update publicacion_recurso set campus_id=$2 where id=$1',[saved.id,otherCampus]);await assert.rejects(resolveRequest(saved.id,a.id),{status:404});
+  await db.query("update publicacion_recurso set campus_id=$2,tipo_recurso='DIGITAL' where id=$1",[saved.id,campus]);await assert.rejects(resolveRequest(saved.id,a.id),{status:404});
+  await db.query("update publicacion_recurso set tipo_recurso='FISICO',deleted_at=now() where id=$1",[saved.id]);await assert.rejects(resolveRequest(saved.id,a.id),{status:404});
+});
+
+test('transaction or audit failure rolls acceptance back; an uncertain commit is discoverable without a second reservation',async()=>{
+  const {saved,a,b}=await requestedPair();
+  for(const failure of ['transaction','audit']){
+    failTransactionInsert=failure==='transaction';failAudit=failure==='audit';await assert.rejects(resolveRequest(saved.id,a.id),{status:503});failTransactionInsert=failAudit=false;
+    assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'DISPONIBLE');assert.equal((await transactionRows(saved.id)).rows.length,0);
+    assert.equal((await db.query('select estado_solicitud from solicitud_recurso where id=$1',[a.id])).rows[0].estado_solicitud,'PENDIENTE');
+  }
+  lostCommit=true;await assert.rejects(resolveRequest(saved.id,a.id),{status:503});
+  const received=await requestsService.getReceivedPhysicalgoodsRequests(auth,{});assert.equal(received.data.find(row=>row.id===a.id)?.status,'ACEPTADA');assert.ok(received.data.find(row=>row.id===a.id)?.transaction);
+  await assert.rejects(resolveRequest(saved.id,a.id),{status:409});await assert.rejects(resolveRequest(saved.id,b.id),{status:409});assert.equal((await transactionRows(saved.id)).rows.length,1);
+});
+
+test('cancelled agreement releases the resource, records actor/time, keeps others pending and permits selecting another',async()=>{
+  const {saved,first,second,a,b}=await requestedPair(),accepted=await resolveRequest(saved.id,a.id),id=accepted.transaction!.id;
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  const cancelled=(await transactionRows(saved.id)).rows[0];assert.equal(cancelled.estado_transaccion,'CANCELADA');assert.equal(cancelled.cancelada_por_id,first.userId);assert.ok(cancelled.cancelada_en);assert.equal(cancelled.completada_en,null);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'DISPONIBLE');assert.equal((await requestsService.getPhysicalgoodsRequestOptions(first,saved.id)).canRequest,true);
+  assert.equal((await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest?.status,'PENDIENTE');
+  await resolveRequest(saved.id,b.id);assert.equal((await transactionRows(saved.id)).rows.length,2);
+  // Repetir la cancelación de la transacción antigua no libera la nueva reserva.
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'RESERVADO');
+  await assert.rejects(transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR'),{status:409});
+});
+
+test('only two distinct participant confirmations finalize; remaining pending requests close without deleting or rejecting history',async()=>{
+  const {saved,first,second,a,b}=await requestedPair(),third=await otherActor(),rejected=await requestsService.createPhysicalgoodsRequest(third,saved.id,{messageCode:'ME_INTERESA'});
+  await resolveRequest(saved.id,rejected.id,'RECHAZAR');const accepted=await resolveRequest(saved.id,a.id),id=accepted.transaction!.id;
+  for(let i=0;i<2;i++)assert.equal((await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR')).status,'PENDIENTE_CONFIRMACION');
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'RESERVADO');assert.equal((await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest?.id,b.id);
+  assert.equal((await db.query('select id from confirmacion_transaccion where transaccion_id=$1',[id])).rows.length,1);
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'FINALIZADO');const transaction=(await transactionRows(saved.id)).rows[0];assert.equal(transaction.estado_transaccion,'COMPLETADA');assert.ok(transaction.completada_en);
+  const requests=(await db.query('select id,estado_solicitud,codigo_mensaje,solicitada_en from solicitud_recurso where publicacion_id=$1',[saved.id])).rows;
+  assert.equal(requests.length,3);assert.equal(requests.find(row=>row.id===a.id)?.estado_solicitud,'ACEPTADA');assert.equal(requests.find(row=>row.id===b.id)?.estado_solicitud,'CANCELADA');assert.equal(requests.find(row=>row.id===rejected.id)?.estado_solicitud,'RECHAZADA');
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');assert.equal((await db.query('select id from confirmacion_transaccion where transaccion_id=$1',[id])).rows.length,2);
+  await assert.rejects(transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CANCELAR'),{status:409});await assert.rejects(resolveRequest(saved.id,b.id),{status:409});
+});
+
+test('agreement terms survive later edits and donation acceptance stores no amount',async()=>{
+  const {saved,a}=await requestedPair(),accepted=await resolveRequest(saved.id,a.id),before=(await transactionRows(saved.id)).rows[0];
+  const detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);await editService.updatePhysicalgoods(auth,saved.id,updates(detail,{modality:'DONACION',price:null,title:'Otro nombre'}));
+  assert.deepEqual((await transactionRows(saved.id)).rows[0],before);assert.equal(accepted.transaction?.amount,15000);
+  const donation=await create(auth,input({modality:'DONACION',price:null})),requester=await otherActor(),request=await requestsService.createPhysicalgoodsRequest(requester,donation.id,{messageCode:'ME_INTERESA'});
+  assert.equal((await resolveRequest(donation.id,request.id)).transaction?.amount,null);
+});
+
+test('participant transitions are private, atomic on audit failure and do not reactivate withdrawn resources',async()=>{
+  const {saved,first,second,a,b}=await requestedPair(),accepted=await resolveRequest(saved.id,a.id),id=accepted.transaction!.id;
+  await assert.rejects(transactionsService.transitionPhysicalgoodsTransaction(second,saved.id,id,{},'CANCELAR'),{status:404});
+  await assert.rejects(transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{status:'COMPLETADA'},'CONFIRMAR'),{status:400});
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');failAudit=true;
+  await assert.rejects(transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR'),{status:503});failAudit=false;
+  assert.equal((await transactionRows(saved.id)).rows[0].estado_transaccion,'PENDIENTE_CONFIRMACION');assert.equal((await db.query('select id from confirmacion_transaccion where transaccion_id=$1',[id])).rows.length,1);
+  assert.equal((await db.query('select estado_solicitud from solicitud_recurso where id=$1',[b.id])).rows[0].estado_solicitud,'PENDIENTE');
+  const detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);await editService.withdrawPhysicalgoods(auth,saved.id,{updatedAt:detail.updatedAt});
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  assert.ok((await db.query('select deleted_at from publicacion_recurso where id=$1',[saved.id])).rows[0].deleted_at);
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(auth,saved.id),{status:404});assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{})).data.length,0);
+});
+
+test('received requests are own current-campus paginated projections even with inactive catalogue messages',async()=>{
+  const {saved,first,a}=await requestedPair();await db.query("update mensaje_solicitud set activo=false where codigo='ME_INTERESA'");
+  try{
+    const page=await requestsService.getReceivedPhysicalgoodsRequests(auth,{limit:'1'});assert.equal(page.data.length,1);assert.equal(page.meta.hasMore,true);assert.equal(page.data[0].id,a.id);
+    assert.equal(page.data[0].requester.id,first.userId);assert.ok(page.data[0].message);assert.doesNotMatch(JSON.stringify(page),/email|institucion_id|foto_path|storage_path|estado_cuenta/);
+    assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{page:'2',limit:'1'})).data.length,1);
+    assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(first,{})).data.length,0);
+    for(const query of [{campusId:campus},{ownerId:auth.userId},{limit:'0'},{page:['1']},{limit:'101'}])await assert.rejects(requestsService.getReceivedPhysicalgoodsRequests(auth,query),{status:400});
+    await db.query('update publicacion_recurso set campus_id=$2 where id=$1',[saved.id,otherCampus]);assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{})).data.length,0);
+  }finally{await db.query("update mensaje_solicitud set activo=true where codigo='ME_INTERESA'");}
+});
+
+test('authenticated HTTP received, resolve and transaction endpoints validate inputs and sanitize dependency errors',async()=>{
+  const {saved,first,a}=await requestedPair(),headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+  assert.equal((await originalFetch(base+'/received-requests')).status,401);
+  let response=await originalFetch(base+'/received-requests?limit=1',{headers});assert.equal(response.status,200);assert.equal((await response.json()).meta.hasMore,true);
+  failTransactionInsert=true;response=await originalFetch(base+'/'+saved.id+'/requests/'+a.id,{method:'PATCH',headers,body:JSON.stringify({decision:'ACEPTAR'})});assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/private transaction|password|SQL/);failTransactionInsert=false;
+  response=await originalFetch(base+'/'+saved.id+'/requests/'+a.id,{method:'PATCH',headers,body:JSON.stringify({decision:'ACEPTAR'})});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');const id=(await response.json()).data.transaction.id;
+  const confirm=()=>originalFetch(base+'/'+saved.id+'/transactions/'+id+'/confirm',{method:'POST',headers,body:'{}'});
+  assert.equal((await confirm()).status,200);current=structuredClone(first);response=await confirm();assert.equal(response.status,200);assert.equal((await response.json()).data.status,'COMPLETADA');
+});
+
+test('sent list exposes only the requester rows and lets a pending requester reopen a resource reserved for somebody else',async()=>{
+  const {saved,first,second,a,b}=await requestedPair();await resolveRequest(saved.id,a.id);
+  const own=await requestsService.getSentPhysicalgoodsRequests(second,{});assert.equal(own.data.length,1);assert.equal(own.data[0].id,b.id);assert.equal(own.data[0].status,'PENDIENTE');assert.equal(own.data[0].publication.status,'RESERVADO');assert.equal(own.data[0].transaction,null);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(second,own.data[0].publication.id)).status,'RESERVADO');
+  assert.equal((await requestsService.getSentPhysicalgoodsRequests(first,{})).data[0].status,'ACEPTADA');assert.equal((await requestsService.getSentPhysicalgoodsRequests(auth,{})).data.length,0);
+  current=structuredClone(second);const response=await originalFetch(base+'/sent-requests',{headers:{Authorization:'Bearer '+token}});assert.equal(response.status,200);const body=await response.json();assert.equal(body.data.length,1);assert.equal(body.data[0].id,b.id);assert.doesNotMatch(JSON.stringify(body),new RegExp(a.id));
+  for(const query of [{requesterId:first.userId},{campusId:campus},{page:'0'}])await assert.rejects(requestsService.getSentPhysicalgoodsRequests(second,query),{status:400});
+  await db.query('update publicacion_recurso set campus_id=$2 where id=$1',[saved.id,otherCampus]);assert.equal((await requestsService.getSentPhysicalgoodsRequests(second,{})).data.length,0);
+});
+
+test('competing completion and cancellation serialize and cannot leave a finalized publication with a live request',async()=>{
+  const {saved,first,second,a}=await requestedPair(),accepted=await resolveRequest(saved.id,a.id),id=accepted.transaction!.id;
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
+  const results=await Promise.allSettled([
+    transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR'),
+    transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CANCELAR')]);
+  assert.equal(results.filter(row=>row.status==='fulfilled').length,1);assert.equal((results.find(row=>row.status==='rejected') as PromiseRejectedResult).reason.status,409);
+  const status=(await transactionRows(saved.id)).rows[0].estado_transaccion;
+  const detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);assert.equal(detail.status,status==='COMPLETADA'?'FINALIZADO':'DISPONIBLE');
+  const pending=(await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest;assert.equal(pending?.status,status==='COMPLETADA'?undefined:'PENDIENTE');
 });

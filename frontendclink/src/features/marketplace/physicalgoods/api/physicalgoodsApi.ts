@@ -2,6 +2,7 @@ import { authenticatedEnvelopeRequest, authenticatedRequest, AuthApiError } from
 import type { PublicationCreated, PublicationInput, PublicationOptions } from '../types/publication';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, PhysicalgoodsSearchFilters, PublicationPhoto } from '../types/publication';
 import type { PhysicalgoodsRequest, PhysicalgoodsRequestOptions } from '../types/publication';
+import type { PhysicalgoodsReceivedPage, PhysicalgoodsReceivedRequest } from '../types/publication';
 
 const path = '/api/v1/marketplace/physicalgoods';
 /** Valida el UUID antes de incorporarlo a una ruta de publicación. */
@@ -25,6 +26,12 @@ export const loadPhysicalgoodsRequestOptions = (id: string, signal: AbortSignal)
 export const requestPhysicalgoods = (id: string, messageCode: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsRequest>(resourcePath(id) + '/requests',{
   method:'POST',signal,headers:{ 'Content-Type':'application/json' },body:JSON.stringify({ messageCode }),
 });
+export const loadPhysicalgoodsRequests = (page:number,received:boolean,signal:AbortSignal) => authenticatedEnvelopeRequest<PhysicalgoodsReceivedRequest[],PhysicalgoodsReceivedPage['meta']>(
+  path+(received?'/received-requests':'/sent-requests'),{signal},new URLSearchParams({page:String(page),limit:'10'}));
+export const resolvePhysicalgoodsRequest = (id:string,requestId:string,decision:'ACEPTAR'|'RECHAZAR',signal:AbortSignal) => {
+  resourcePath(requestId);
+  return authenticatedRequest(resourcePath(id)+'/requests/'+requestId,{method:'PATCH',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({decision})});
+};
 /** Edita campos de publicación con `updatedAt` para detectar escrituras concurrentes. */
 export const updatePhysicalgoods = (id: string, input: Pick<PublicationInput,'title'|'description'|'condition'|'modality'|'price'> & { updatedAt: string }, signal: AbortSignal) => authenticatedRequest(resourcePath(id), {
   method: 'PATCH', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),

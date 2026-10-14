@@ -81,11 +81,25 @@ export interface PhysicalgoodsRequest {
   ownerId: string;
   campusId: string;
   messageCode: string;
-  status: 'PENDIENTE' | 'ACEPTADA';
+  status: 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA' | 'CANCELADA';
   requestedAt: string;
 }
 export interface PhysicalgoodsRequestOptions {
   canRequest: boolean;
   activeRequest: PhysicalgoodsRequest | null;
   messages: { code:string; label:string }[];
+}
+export interface PhysicalgoodsReceivedRequest {
+  id: string;
+  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'>;
+  requester: { id:string; fullName:string };
+  message: string;
+  messageCode: string;
+  status: PhysicalgoodsRequest['status'];
+  requestedAt: string;
+  transaction: { id:string; status:'RESERVADA'|'PENDIENTE_CONFIRMACION'|'COMPLETADA'|'CANCELADA' } | null;
+}
+export interface PhysicalgoodsReceivedPage {
+  data: PhysicalgoodsReceivedRequest[];
+  meta: PhysicalgoodsPage['meta'];
 }
