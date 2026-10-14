@@ -91,7 +91,7 @@ export interface PhysicalgoodsRequestOptions {
 }
 export interface PhysicalgoodsReceivedRequest {
   id: string;
-  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'>;
+  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean };
   requester: { id:string; fullName:string };
   message: string;
   messageCode: string;
@@ -103,3 +103,26 @@ export interface PhysicalgoodsReceivedPage {
   data: PhysicalgoodsReceivedRequest[];
   meta: PhysicalgoodsPage['meta'];
 }
+export interface PhysicalgoodsTransactionTarget { publicationId:string; transactionId:string }
+export interface PhysicalgoodsTransaction {
+  id:string;
+  publication:{id:string;title:string;status:string;isWithdrawn:boolean};
+  campus:{id:string;name:string};
+  owner:{id:string;fullName:string};
+  receiver:{id:string;fullName:string};
+  role:'PROPIETARIO'|'RECEPTOR';
+  status:'RESERVADA'|'PENDIENTE_CONFIRMACION'|'COMPLETADA'|'CANCELADA';
+  modality:'VENTA'|'DONACION';
+  amount:number|null;
+  currency:string;
+  startedAt:string;
+  completedAt:string|null;
+  cancelledAt:string|null;
+  cancelledById:string|null;
+  confirmations:{userId:string;role:'PROPIETARIO'|'RECEPTOR';confirmedAt:string}[];
+  canConfirm:boolean;
+  canCancel:boolean;
+}
+export interface PhysicalgoodsCoordinationOptions { buildings:{id:string;name:string;floors:{id:string;name:string}[]}[] }
+export interface PhysicalgoodsCoordinationMessage { id:string;senderId:string;recipientId:string;text:string;createdAt:string }
+export interface PhysicalgoodsCoordinationPage {data:PhysicalgoodsCoordinationMessage[];meta:PhysicalgoodsPage['meta']}

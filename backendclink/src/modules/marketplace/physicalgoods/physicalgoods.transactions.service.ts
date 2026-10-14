@@ -1,19 +1,25 @@
+import type { PoolClient } from 'pg';
 import { ApiError } from '../../../services/api-response.js';
+import { createPaginatedResult,parsePaginationQuery } from '../../../services/pagination.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
-import { parsePhysicalgoodsEmptyAction, physicalgoodsId } from './physicalgoods.validation.js';
+import { parsePhysicalgoodsCoordination,parsePhysicalgoodsEmptyAction,physicalgoodsId } from './physicalgoods.validation.js';
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
 import { closePendingPhysicalgoodsRequests, updatePhysicalgoodsRequestStatus } from './physicalgoods.requests.repository.js';
 import { findPhysicalgoodsTransaction, insertPhysicalgoodsConfirmation, lockPhysicalgoodsTransactionResource,
-  physicalgoodsConfirmations, setPhysicalgoodsPublicationStatus, updatePhysicalgoodsTransactionStatus } from './physicalgoods.transactions.repository.js';
+  physicalgoodsConfirmations,setPhysicalgoodsPublicationStatus,updatePhysicalgoodsTransactionStatus,
+  physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from './physicalgoods.transactions.repository.js';
+import type { PhysicalgoodsCoordinationRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
+import { findActiveMapByCampusId } from '../../maps/map.repository.js';
+import { spatialBuildings } from '../../maps/map.location.js';
 
-/** Base del ciclo de F2.4-08: aplica aquí los efectos sobre la reserva y las solicitudes de F2.4-07. */
-export async function transitionPhysicalgoodsTransaction(auth: VerifiedAuthConnection, publicationId: unknown, transactionId: unknown, body: unknown, action: 'CONFIRMAR'|'CANCELAR') {
+/** Revalida identidad y pertenencia al acuerdo; lectura y escritura comparten el orden de locks. */
+async function transactionContext<T>(auth: VerifiedAuthConnection, publicationId: unknown, transactionId: unknown,
+  operation:(client:PoolClient,resource:{id:string;estado_publicacion:string},transaction:PhysicalgoodsTransactionRow,current:VerifiedAuthConnection)=>Promise<T>) {
   requireCampusCapability(auth,auth.campusId,'general');
   const id = physicalgoodsId(publicationId,'publicationId'), selected = physicalgoodsId(transactionId,'transactionId');
-  parsePhysicalgoodsEmptyAction(body);
   try {
     return await withPhysicalgoodsTransaction(async client => {
       const { profile,roles } = await lockPhysicalgoodsPublisher(client,auth.userId);
@@ -24,37 +30,104 @@ export async function transitionPhysicalgoodsTransaction(auth: VerifiedAuthConne
       if (!resource) throw new ApiError(404,'NOT_FOUND','No se encontró el acuerdo en tu campus.');
       const transaction = await findPhysicalgoodsTransaction(client,id,selected);
       if (!transaction || ![transaction.propietario_id,transaction.receptor_id].includes(current.userId)) throw new ApiError(404,'NOT_FOUND','No se encontró un acuerdo propio.');
-      const confirmations = await physicalgoodsConfirmations(client,selected);
-      if (action === 'CONFIRMAR' && transaction.estado_transaccion === 'COMPLETADA') return { id:selected,status:transaction.estado_transaccion };
-      if (action === 'CANCELAR' && transaction.estado_transaccion === 'CANCELADA') return { id:selected,status:transaction.estado_transaccion };
-      if (!['RESERVADA','PENDIENTE_CONFIRMACION'].includes(transaction.estado_transaccion)) throw new ApiError(409,'CONFLICT','El acuerdo ya fue cerrado.');
-      const before = await physicalgoodsSnapshot(client,id);
-      let status:'PENDIENTE_CONFIRMACION'|'COMPLETADA'|'CANCELADA';
-      if (action === 'CANCELAR') {
-        status='CANCELADA';
-        await updatePhysicalgoodsRequestStatus(client,transaction.solicitud_id,'CANCELADA');
-      } else {
-        const role = transaction.propietario_id===current.userId ? 'PROPIETARIO' : 'RECEPTOR';
-        if (!confirmations.some(row => row.usuario_id===current.userId && row.rol_confirmante===role)) {
-          await insertPhysicalgoodsConfirmation(client,selected,current.userId,role);
-          confirmations.push({ usuario_id:current.userId,rol_confirmante:role });
-        }
-        const both = confirmations.some(row => row.usuario_id===transaction.propietario_id && row.rol_confirmante==='PROPIETARIO')
-          && confirmations.some(row => row.usuario_id===transaction.receptor_id && row.rol_confirmante==='RECEPTOR');
-        status=both ? 'COMPLETADA' : 'PENDIENTE_CONFIRMACION';
-        if (both) await closePendingPhysicalgoodsRequests(client,id);
-      }
-      await updatePhysicalgoodsTransactionStatus(client,selected,status,current.userId);
-      // Preserva deleted_at y estados de moderación: cerrar un acuerdo no republica una retirada.
-      if (status !== 'PENDIENTE_CONFIRMACION' && resource.estado_publicacion==='RESERVADO') {
-        await setPhysicalgoodsPublicationStatus(client,id,status==='COMPLETADA'?'FINALIZADO':'DISPONIBLE');
-        await touchPhysicalgoods(client,id);
-        await auditPhysicalgoods(client,current,id,'EDITAR_PUBLICACION',before,await physicalgoodsSnapshot(client,id));
-      }
-      return { id:selected,status };
+      return operation(client,resource,transaction,current);
     });
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudo actualizar el acuerdo.');
   }
+}
+const inProgress = (row:PhysicalgoodsTransactionRow) => ['RESERVADA','PENDIENTE_CONFIRMACION'].includes(row.estado_transaccion);
+
+/** Conserva las transiciones atómicas implementadas en F2.4-07. */
+export async function transitionPhysicalgoodsTransaction(auth: VerifiedAuthConnection, publicationId: unknown, transactionId: unknown, body: unknown, action:'CONFIRMAR'|'CANCELAR') {
+  parsePhysicalgoodsEmptyAction(body);
+  return transactionContext(auth,publicationId,transactionId,async(client,resource,transaction,current)=>{
+    const id=resource.id,selected=transaction.id,confirmations=await physicalgoodsConfirmations(client,selected);
+    if (action==='CONFIRMAR'&&transaction.estado_transaccion==='COMPLETADA') return {id:selected,status:transaction.estado_transaccion};
+    if (action==='CANCELAR'&&transaction.estado_transaccion==='CANCELADA') return {id:selected,status:transaction.estado_transaccion};
+    if (!inProgress(transaction)) throw new ApiError(409,'CONFLICT','El acuerdo ya fue cerrado.');
+    const before=await physicalgoodsSnapshot(client,id);
+    let status:'PENDIENTE_CONFIRMACION'|'COMPLETADA'|'CANCELADA';
+    if (action==='CANCELAR') {
+      status='CANCELADA';await updatePhysicalgoodsRequestStatus(client,transaction.solicitud_id,'CANCELADA');
+    } else {
+      const role=transaction.propietario_id===current.userId?'PROPIETARIO':'RECEPTOR';
+      if (!confirmations.some(row=>row.usuario_id===current.userId&&row.rol_confirmante===role)) {
+        confirmations.push(await insertPhysicalgoodsConfirmation(client,selected,current.userId,role));
+      }
+      const both=confirmations.some(row=>row.usuario_id===transaction.propietario_id&&row.rol_confirmante==='PROPIETARIO')
+        &&confirmations.some(row=>row.usuario_id===transaction.receptor_id&&row.rol_confirmante==='RECEPTOR');
+      status=both?'COMPLETADA':'PENDIENTE_CONFIRMACION';
+      if(both)await closePendingPhysicalgoodsRequests(client,id);
+    }
+    await updatePhysicalgoodsTransactionStatus(client,selected,status,current.userId);
+    // Cerrar el acuerdo no reactiva publicaciones retiradas ni sobrescribe estados de moderación.
+    if(status!=='PENDIENTE_CONFIRMACION'&&resource.estado_publicacion==='RESERVADO') {
+      await setPhysicalgoodsPublicationStatus(client,id,status==='COMPLETADA'?'FINALIZADO':'DISPONIBLE');await touchPhysicalgoods(client,id);
+      await auditPhysicalgoods(client,current,id,'EDITAR_PUBLICACION',before,await physicalgoodsSnapshot(client,id));
+    }
+    return {id:selected,status};
+  });
+}
+export async function getPhysicalgoodsTransaction(auth:VerifiedAuthConnection,publicationId:unknown,transactionId:unknown) {
+  return transactionContext(auth,publicationId,transactionId,async(client,_resource,transaction,current)=>{
+    const row=await physicalgoodsTransactionDetail(client,transaction.id),confirmations=await physicalgoodsConfirmations(client,transaction.id);
+    return {id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at},
+      campus:{id:row.campus_id,name:row.campus_nombre},owner:{id:row.propietario_id,fullName:row.propietario_nombre},
+      receiver:{id:row.receptor_id,fullName:row.receptor_nombre},role:row.propietario_id===current.userId?'PROPIETARIO' as const:'RECEPTOR' as const,
+      status:row.estado_transaccion,modality:row.modalidad_acordada,amount:row.monto_acordado===null?null:Number(row.monto_acordado),currency:row.moneda,
+      startedAt:row.iniciada_en,completedAt:row.completada_en,cancelledAt:row.cancelada_en,cancelledById:row.cancelada_por_id,
+      confirmations:confirmations.map(value=>({userId:value.usuario_id,role:value.rol_confirmante,confirmedAt:value.confirmado_en})),
+      canConfirm:inProgress(row)&&!confirmations.some(value=>value.usuario_id===current.userId),canCancel:inProgress(row)};
+  });
+}
+async function coordinationBuildings(campusId:string) {
+  try {
+  const map=await findActiveMapByCampusId(campusId);
+  if(!map)return [];
+  if(map.campusId!==campusId||map.status!=='ACTIVE')throw new Error('Invalid active map context');
+  const buildings=spatialBuildings(map);
+  return buildings.filter(building=>building.name.trim()&&building.name.length<=200&&/^[a-zA-Z0-9_-]{1,120}$/.test(building.id)
+    &&buildings.filter(value=>value.id===building.id).length===1).map(building=>({id:building.id,name:building.name,
+      floors:building.floors.filter(floor=>floor.name.trim()&&floor.name.length<=200&&/^[a-zA-Z0-9_-]{1,120}$/.test(floor.id)
+        &&building.floors.filter(value=>value.id===floor.id).length===1).map(floor=>({id:floor.id,name:floor.name}))})).filter(building=>building.floors.length);
+  } catch {
+    throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudieron cargar las ubicaciones del campus.');
+  }
+}
+export async function getPhysicalgoodsCoordinationOptions(auth:VerifiedAuthConnection,publicationId:unknown,transactionId:unknown) {
+  const campusId=await transactionContext(auth,publicationId,transactionId,async(_client,_resource,transaction,current)=>inProgress(transaction)?current.campusId:null);
+  return {buildings:campusId?await coordinationBuildings(campusId):[]};
+}
+function coordinationDto(row:PhysicalgoodsCoordinationRow,transaction:PhysicalgoodsTransactionRow) {
+  return {id:row.id,senderId:row.destinatario_id===transaction.propietario_id?transaction.receptor_id:transaction.propietario_id,
+    recipientId:row.destinatario_id,text:row.mensaje,createdAt:row.created_at};
+}
+export async function getPhysicalgoodsCoordinationMessages(auth:VerifiedAuthConnection,publicationId:unknown,transactionId:unknown,query:unknown) {
+  const pagination=parsePaginationQuery(query);
+  if(!pagination.success||Object.keys(query as object).some(key=>!['page','limit'].includes(key)))throw new ApiError(400,'VALIDATION_ERROR','Revisa la paginación de mensajes.');
+  return transactionContext(auth,publicationId,transactionId,async(client,resource,transaction)=>{
+    const rows=await physicalgoodsCoordinationMessages(client,resource.id,transaction.id,[transaction.propietario_id,transaction.receptor_id],pagination.data);
+    const result=createPaginatedResult(rows,pagination.data);
+    return {...result,data:result.data.map(row=>coordinationDto(row,transaction))};
+  });
+}
+/** El cliente solo selecciona ubicaciones; destinatario, texto y fecha proceden del servidor. */
+export async function sendPhysicalgoodsCoordination(auth:VerifiedAuthConnection,publicationId:unknown,transactionId:unknown,body:unknown) {
+  const location=parsePhysicalgoodsCoordination(body);
+  // Mongo se consulta sin mantener locks SQL; antes de guardar se revalidan actor, campus y acuerdo.
+  const campusId=await transactionContext(auth,publicationId,transactionId,async(_client,_resource,transaction,current)=>{
+    if(!inProgress(transaction))throw new ApiError(409,'CONFLICT','El acuerdo ya fue cerrado.');
+    return current.campusId;
+  });
+  const buildings=await coordinationBuildings(campusId),building=buildings.find(value=>value.id===location.buildingId);
+  const floor=building?.floors.find(value=>value.id===location.floorId);
+  if(!building||!floor)throw new ApiError(400,'VALIDATION_ERROR','El edificio o piso ya no está disponible. Actualiza las ubicaciones.');
+  return transactionContext(auth,publicationId,transactionId,async(client,resource,transaction,current)=>{
+    if(!inProgress(transaction))throw new ApiError(409,'CONFLICT','El acuerdo ya fue cerrado.');
+    const recipient=current.userId===transaction.propietario_id?transaction.receptor_id:transaction.propietario_id;
+    const message=await insertPhysicalgoodsCoordination(client,resource.id,transaction.id,recipient,`Estoy en ${building.name}, en ${floor.name}.`);
+    return coordinationDto(message,transaction);
+  });
 }

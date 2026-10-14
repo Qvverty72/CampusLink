@@ -3,6 +3,7 @@ import type { PublicationCreated, PublicationInput, PublicationOptions } from '.
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, PhysicalgoodsSearchFilters, PublicationPhoto } from '../types/publication';
 import type { PhysicalgoodsRequest, PhysicalgoodsRequestOptions } from '../types/publication';
 import type { PhysicalgoodsReceivedPage, PhysicalgoodsReceivedRequest } from '../types/publication';
+import type { PhysicalgoodsCoordinationMessage,PhysicalgoodsCoordinationOptions,PhysicalgoodsCoordinationPage,PhysicalgoodsTransaction,PhysicalgoodsTransactionTarget } from '../types/publication';
 
 const path = '/api/v1/marketplace/physicalgoods';
 /** Valida el UUID antes de incorporarlo a una ruta de publicación. */
@@ -10,6 +11,18 @@ const resourcePath = (id: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Publicación inválida.');
   return path + '/' + id;
 };
+const transactionPath = (target:PhysicalgoodsTransactionTarget) => {
+  resourcePath(target.transactionId);
+  return resourcePath(target.publicationId)+'/transactions/'+target.transactionId;
+};
+export const loadPhysicalgoodsTransaction = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsTransaction>(transactionPath(target),{signal});
+export const loadPhysicalgoodsCoordinationOptions = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsCoordinationOptions>(transactionPath(target)+'/coordination-options',{signal});
+export const loadPhysicalgoodsCoordinationMessages = (target:PhysicalgoodsTransactionTarget,page:number,signal:AbortSignal) => authenticatedEnvelopeRequest<PhysicalgoodsCoordinationMessage[],PhysicalgoodsCoordinationPage['meta']>(
+  transactionPath(target)+'/messages',{signal},new URLSearchParams({page:String(page),limit:'10'}));
+export const changePhysicalgoodsTransaction = (target:PhysicalgoodsTransactionTarget,action:'confirm'|'cancel',signal:AbortSignal) => authenticatedRequest<{id:string;status:PhysicalgoodsTransaction['status']}>(
+  transactionPath(target)+'/'+action,{method:'POST',signal,headers:{'Content-Type':'application/json'},body:'{}'});
+export const sendPhysicalgoodsCoordination = (target:PhysicalgoodsTransactionTarget,buildingId:string,floorId:string,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsCoordinationMessage>(
+  transactionPath(target)+'/messages',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({buildingId,floorId})});
 /** Construye filtros de búsqueda y consulta una página del campus autorizado. */
 export function loadPhysicalgoodsResources(filters: PhysicalgoodsSearchFilters, page: number, signal: AbortSignal): Promise<PhysicalgoodsPage> {
   const query = new URLSearchParams({ page: String(page), limit: '10' });

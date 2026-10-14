@@ -8,9 +8,22 @@ import { addPhysicalgoodsImage, changePhysicalgoodsCategory, changePhysicalgoods
 import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 import { updatePhysicalgoods, withdrawPhysicalgoods } from './physicalgoods.edit.service.js';
 import { createPhysicalgoodsRequest, getPhysicalgoodsRequestOptions, getReceivedPhysicalgoodsRequests, getSentPhysicalgoodsRequests, resolvePhysicalgoodsRequest } from './physicalgoods.requests.service.js';
-import { transitionPhysicalgoodsTransaction } from './physicalgoods.transactions.service.js';
+import { getPhysicalgoodsTransaction,getPhysicalgoodsCoordinationOptions,getPhysicalgoodsCoordinationMessages,sendPhysicalgoodsCoordination,transitionPhysicalgoodsTransaction } from './physicalgoods.transactions.service.js';
 
 type PhysicalgoodsHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const getPhysicalgoodsTransactionController:PhysicalgoodsHandler=async(request,response)=>{
+  sendSuccess(response,await getPhysicalgoodsTransaction(response.locals.auth,request.params.publicationId,request.params.transactionId));
+};
+export const getPhysicalgoodsCoordinationOptionsController:PhysicalgoodsHandler=async(request,response)=>{
+  sendSuccess(response,await getPhysicalgoodsCoordinationOptions(response.locals.auth,request.params.publicationId,request.params.transactionId));
+};
+export const getPhysicalgoodsCoordinationMessagesController:PhysicalgoodsHandler=async(request,response)=>{
+  const result=await getPhysicalgoodsCoordinationMessages(response.locals.auth,request.params.publicationId,request.params.transactionId,request.query);
+  sendEnvelope(response,result.data,{meta:result.meta});
+};
+export const sendPhysicalgoodsCoordinationController:PhysicalgoodsHandler=async(request,response)=>{
+  sendSuccess(response,await sendPhysicalgoodsCoordination(response.locals.auth,request.params.publicationId,request.params.transactionId,request.body),201);
+};
 export const getReceivedPhysicalgoodsRequestsController: PhysicalgoodsHandler = async (request,response) => {
   const result = await getReceivedPhysicalgoodsRequests(response.locals.auth,request.query);
   sendEnvelope(response,result.data,{ meta:result.meta });

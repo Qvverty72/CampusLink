@@ -5,7 +5,7 @@ import { loadPhysicalgoodsRequests,resolvePhysicalgoodsRequest } from '../api/ph
 import type { PhysicalgoodsReceivedPage,PhysicalgoodsReceivedRequest } from '../types/publication';
 
 /** Mantiene página y confirmación; después de cualquier envío vuelve a consultar el estado real. */
-export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,received=true) {
+export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,received=true,refreshVersion=0) {
   const auth=useAuth();
   const [page,setPage]=useState<PhysicalgoodsReceivedPage|null>(null),[number,setNumber]=useState(1),[revision,setRevision]=useState(0);
   const [loading,setLoading]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
@@ -27,7 +27,7 @@ export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,rece
     }})
       .catch(reason=>{if(!abort.signal.aborted)report(reason);}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
-  },[active,number,revision,busy,received]);
+  },[active,number,revision,busy,received,refreshVersion]);
   async function resolve() {
     if(!selection||running.current||!received) return;
     const {request,decision}=selection,abort=new AbortController();mutation.current=abort;running.current=true;setBusy(true);setError(null);setSelection(null);

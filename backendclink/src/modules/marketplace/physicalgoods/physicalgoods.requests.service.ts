@@ -66,6 +66,7 @@ async function getPhysicalgoodsRequests(auth: VerifiedAuthConnection, query: unk
     const rows = await withPhysicalgoodsTransaction(client => listPhysicalgoodsRequests(client,auth.campusId,auth.userId,pagination.data,received));
     const result = createPaginatedResult(rows,pagination.data);
     return { ...result,data:result.data.map(row => ({ id:row.id,publication:{ id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,
+      canView:!row.deleted_at&&['DISPONIBLE','RESERVADO','FINALIZADO'].includes(row.estado_publicacion),
       modality:row.modalidad,price:row.modalidad==='VENTA'?Number(row.precio):null },requester:{ id:row.solicitante_id,fullName:row.solicitante_nombre },
       message:row.mensaje,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,
       transaction:row.transaccion_id ? { id:row.transaccion_id,status:row.estado_transaccion } : null })) };

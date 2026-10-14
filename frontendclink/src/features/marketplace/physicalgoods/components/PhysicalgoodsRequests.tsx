@@ -2,8 +2,9 @@ import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { usePhysicalgoodsRequests } from '../hooks/usePhysicalgoodsRequests';
 
 /** Lista propia por publicación: una reserva conserva las demás solicitudes pendientes. */
-export function PhysicalgoodsRequests({active,onOpen,onResolved,received=true}:{active:boolean;onOpen:(id:string)=>void;onResolved:()=>void;received?:boolean}) {
-  const r=usePhysicalgoodsRequests(active,onResolved,received);
+export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,received=true,refreshVersion=0}:{active:boolean;onOpen:(id:string)=>void;onResolved:()=>void;
+  onAgreement:(publicationId:string,transactionId:string)=>void;received?:boolean;refreshVersion?:number}) {
+  const r=usePhysicalgoodsRequests(active,onResolved,received,refreshVersion);
   const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled}
     onPress={action} style={[styles.button,disabled&&styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
   return <View style={styles.section}>
@@ -27,12 +28,14 @@ export function PhysicalgoodsRequests({active,onOpen,onResolved,received=true}:{
       <Text style={styles.text}>{request.message}</Text>
       <Text style={styles.text}>Solicitud: {request.status.toLowerCase()} · {new Date(request.requestedAt).toLocaleDateString('es-CL')}</Text>
       {request.transaction&&<Text style={styles.text}>Acuerdo: {request.transaction.status.toLowerCase().replace('_',' ')}</Text>}
+      {request.transaction&&button('Ver acuerdo: '+request.publication.title,()=>onAgreement(request.publication.id,request.transaction!.id),r.busy)}
+      {request.publication.canView===false&&<Text style={styles.text}>La publicación ya no está visible en el marketplace. Se conserva el acuerdo.</Text>}
       {request.status==='PENDIENTE'&&request.publication.status==='RESERVADO'&&<Text style={styles.text}>{received?'Pendiente mientras se realiza otro intercambio. Podrás aceptarla si ese acuerdo se cancela.':'Tu solicitud sigue pendiente mientras se realiza otro intercambio. Este recurso está reservado para otra persona.'}</Text>}
       {received&&request.status==='PENDIENTE'&&<View style={styles.choices}>
         {button(`Aceptar solicitud de ${request.requester.fullName}`,()=>r.select(request,'ACEPTAR'),r.busy||r.loading||request.publication.status!=='DISPONIBLE')}
         {button(`Rechazar solicitud de ${request.requester.fullName}`,()=>r.select(request,'RECHAZAR'),r.busy||r.loading)}
       </View>}
-      {button('Ver recurso: '+request.publication.title,()=>onOpen(request.publication.id),r.busy)}
+      {request.publication.canView!==false&&button('Ver recurso: '+request.publication.title,()=>onOpen(request.publication.id),r.busy)}
     </View>)}
     <View style={styles.choices}>
       {button('Solicitudes anteriores',()=>r.setNumber(r.number-1),r.busy||r.loading||r.number===1)}

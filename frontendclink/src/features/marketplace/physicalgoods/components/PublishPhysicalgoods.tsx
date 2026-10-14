@@ -8,6 +8,8 @@ import { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { PhysicalgoodsResources } from './PhysicalgoodsResources';
 import { PublicationImages } from './PublicationImages';
 import { PhysicalgoodsRequests } from './PhysicalgoodsRequests';
+import { PhysicalgoodsTransaction } from './PhysicalgoodsTransaction';
+import type { PhysicalgoodsTransactionTarget } from '../types/publication';
 
 /** Composición de búsqueda y publicación del módulo de bienes físicos. */
 export function PhysicalGoodsScreen() {
@@ -19,6 +21,9 @@ function PhysicalgoodsContent() {
   const resources = usePhysicalgoodsResources();
   const [view,setView] = useState<'explore'|'publish'|'received'|'sent'>('explore');
   const publishing=view==='publish',received=view==='received',sent=view==='sent';
+  const [agreement,setAgreement]=useState<PhysicalgoodsTransactionTarget|null>(null),[requestsVersion,setRequestsVersion]=useState(0);
+  const refresh=()=>{resources.reload();resources.reloadGallery();setRequestsVersion(value=>value+1);};
+  const openAgreement=(publicationId:string,transactionId:string)=>setAgreement({publicationId,transactionId});
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.eyebrow}>MARKETPLACE</Text>
@@ -33,12 +38,14 @@ function PhysicalgoodsContent() {
       <View style={publishing ? undefined : { display: 'none' }}>
         <PublicationForm onPublished={resources.reload} onGallery={id => { setView('explore'); resources.open(id); }} />
       </View>
-      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests active={received} onResolved={()=>{resources.reload();resources.reloadGallery();}}
+      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests active={received} onResolved={refresh} onAgreement={openAgreement} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
-      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests active={sent} received={false} onResolved={resources.reload}
+      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
       <View style={publishing||received||sent ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} /></View>
     </ScrollView>
+    {agreement&&<PhysicalgoodsTransaction key={`${agreement.publicationId}:${agreement.transactionId}`} target={agreement} onChanged={refresh}
+      onClose={()=>{setAgreement(null);setRequestsVersion(value=>value+1);}} />}
     <BottomNavigationBar activeItemId="physicalgoods" />
   </View>;
 }

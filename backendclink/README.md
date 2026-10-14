@@ -381,6 +381,24 @@ El lock de perfil es FOR NO KEY UPDATE: protege cuenta/campus pero permite refer
 
 Validación local:335/335 pruebas backend (67 físicas), TypeScript/build, exports web/Android/iOS y QA Edge390×844/1280×900 con API simulada: resolución/reintento/doble clic/resultado incierto/conflictos/paginación/acceso a reservado/consulta de otros pendientes y regresión de fotos/contenido/retirada. Interfaz de confirmar/cancelar y coordinación por edificios/pisos pertenece a F2.4-08; historial completo de retiradas/campus anteriores a F2.4-09. QA real de aplicación al cierre de fase según acuerdo del usuario.
 
+## Confirmar o cancelar una transacción física (F2.4-08)
+
+Desde Solicitudes recibidas o Mis solicitudes, «Ver acuerdo» abre términos originales, participantes, estado, fechas y confirmaciones. Cada participante confirma o cancela con una decisión explícita; una confirmación mantiene reserva, ambas completan/finalizan y cierran pendientes restantes. Cancelar registra actor/fecha y libera la reserva, preservando retirada/moderación. Reutiliza las transiciones atómicas de F2.4-07. Acuerdos propios de publicaciones retiradas u ocultas siguen accesibles desde las listas del campus actual; `publication.canView` impide abrir su detalle público excluido. La historia completa/campus anteriores corresponde a F2.4-09.
+
+Bajo `/api/v1/marketplace/physicalgoods/:publicationId/transactions/:transactionId`:
+
+- `GET /`: detalle propio con publicación/campus/participantes, rol, términos acordados, fechas, confirmaciones y `canConfirm`/`canCancel`. No contactos privados/Storage ni transacciones ajenas, incluso para administradores no participantes.
+- `POST /confirm` y `/cancel`: mantienen cuerpo exacto `{}` y reglas de F2.4-07. Actor/cuenta/campus se revalidan bajo locks; acciones terminales opuestas409 y reintento equivalente idempotente.
+- `GET /coordination-options`: `{data:{buildings:[{id,name,floors:[{id,name}]}]}}` del mapa ACTIVE de Mongo del campus vigente. Sin mapa devuelve lista vacía, fallos503 independientes del cierre SQL. Identificadores/nombres visibles y no ambiguos; conserva nombres de pisos negativos/Planta Baja.
+- `GET /messages?page=1&limit=10`: envelope paginado `{data:[{id,senderId,recipientId,text,createdAt}],meta}` de coordinación propia, también tras cierre. Fechas UTC con seis decimales.
+- `POST /messages`: cuerpo exacto `{buildingId,floorId}`,201 recibo del mensaje. Backend valida pertenencia al mapa/edificio/piso y construye «Estoy en {edificio}, en {piso}.». Destinatario es el otro participante y fecha procede del servidor; no texto libre, identidad/fecha inyectada ni envío nuevo tras cierre.
+
+Coordinación reutiliza exclusivamente columnas originales de `notificacion`, tipo `COORDINACION_RECURSO`; no agrega remitente: se deriva del participante opuesto al destinatario en el acuerdo inmutable de dos personas. No usa campos/eventos de actividades ni mezcla sus avisos. Texto guardado conserva nombres históricos. Mongo se consulta sin locks SQL; antes del INSERT se revalidan actor/campus/acuerdo. Confirm/cancel/detalle/mensajes guardados funcionan aunque Mongo falle. UI bloquea doble clic, conserva selecciones, descarta lecturas al cerrar y recarga después de mutar. Antes de enviar lee la primera página reciente para distinguir nuevos mensajes de registros antiguos ante respuesta perdida; nunca reenvía automáticamente.
+
+**Sin SQL nuevo:** consulta remota de solo lectura confirmó RLS y SELECT/INSERT servidor de notificacion, acceso directo anon/authenticated bloqueado y mapa activo con edificios/pisos. Sin nuevas tablas, columnas, colecciones, índices, dependencias ni escrituras remotas del agente.
+
+Validación local:345/345 pruebas backend (77 físicas), TypeScript/build, export web/Android/iOS y QA Edge390×844/1280×900 como propietario/receptor. Cubre términos originales, doble confirmación/cancelación, acceso tras retiro, ubicación/privacidad, Mongo ausente/fallido, cierre/suspensión durante lookup, rollback/COMMIT incierto, reintento desde página antigua y regresión de solicitudes/fotos/contenido/retirada/resolución. QA real de aplicación permanece para cierre de fase según acuerdo usuario.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

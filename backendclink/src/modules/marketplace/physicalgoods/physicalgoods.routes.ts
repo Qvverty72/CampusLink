@@ -5,6 +5,7 @@ import { addPhysicalgoodsImageController, changePhysicalgoodsCategoryController,
 import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from './physicalgoods.controller.js';
 import { createPhysicalgoodsRequestController, getPhysicalgoodsRequestOptionsController } from './physicalgoods.controller.js';
 import { getReceivedPhysicalgoodsRequestsController, getSentPhysicalgoodsRequestsController, resolvePhysicalgoodsRequestController, confirmPhysicalgoodsTransactionController, cancelPhysicalgoodsTransactionController } from './physicalgoods.controller.js';
+import { getPhysicalgoodsTransactionController,getPhysicalgoodsCoordinationOptionsController,getPhysicalgoodsCoordinationMessagesController,sendPhysicalgoodsCoordinationController } from './physicalgoods.controller.js';
 
 // Solo expone diagnósticos técnicos; las rutas de negocio requieren autenticación.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
@@ -23,6 +24,10 @@ export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   router.patch('/:publicationId/requests/:requestId', requireAuthentication, resolvePhysicalgoodsRequestController);
   router.post('/:publicationId/transactions/:transactionId/confirm', requireAuthentication, confirmPhysicalgoodsTransactionController);
   router.post('/:publicationId/transactions/:transactionId/cancel', requireAuthentication, cancelPhysicalgoodsTransactionController);
+  router.get('/:publicationId/transactions/:transactionId',requireAuthentication,getPhysicalgoodsTransactionController);
+  router.get('/:publicationId/transactions/:transactionId/coordination-options',requireAuthentication,getPhysicalgoodsCoordinationOptionsController);
+  router.get('/:publicationId/transactions/:transactionId/messages',requireAuthentication,getPhysicalgoodsCoordinationMessagesController);
+  router.post('/:publicationId/transactions/:transactionId/messages',requireAuthentication,sendPhysicalgoodsCoordinationController);
   router.patch('/:publicationId', requireAuthentication, updatePhysicalgoodsController);
   router.delete('/:publicationId', requireAuthentication, withdrawPhysicalgoodsController);
   router.post('/:publicationId/images', requireAuthentication, json({ limit: '7mb' }), addPhysicalgoodsImageController);

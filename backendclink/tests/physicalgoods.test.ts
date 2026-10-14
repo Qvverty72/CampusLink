@@ -6,6 +6,8 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { PGlite } from '@electric-sql/pglite';
 import { Pool } from 'pg';
+import {Db} from 'mongodb';
+import type {CampusMapDocument} from '../src/modules/maps/map.types.js';
 import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
@@ -30,6 +32,8 @@ let editService: typeof import('../src/modules/marketplace/physicalgoods/physica
 let requestsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
 let transactionsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
 let failTransactionInsert=false;
+let failCoordination=false,failMap=false,lostCoordinationCommit=false,mapReads=0;
+let activeMap:CampusMapDocument|null,onMapRead:(()=>Promise<void>)|null=null;
 let failRequestInsert=false;
 let connectionLease=Promise.resolve();
 let failUpload = false, failInsert = false, failRemove = false, publicBucket = false, missingBucket = false, lostCommit = false;
@@ -45,15 +49,25 @@ before(async () => {
     connectionLease=new Promise<void>(resolve=>{releaseLease=resolve;});await previous;
     return {
     query: async (sql: string, values: unknown[] = []) => {
+      if(failCoordination&&sql.startsWith('INSERT INTO public.notificacion'))throw new Error('private notification SQL password');
       if (failTransactionInsert&&sql.startsWith('INSERT INTO public.transaccion_recurso')) throw new Error('private transaction SQL password');
       if (failRequestInsert&&sql.startsWith('INSERT INTO public.solicitud_recurso')) throw new Error('private request SQL failure password');
       if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL failure');
       if (failInsert && sql.startsWith('INSERT INTO public.archivo_publicacion')) throw new Error('private failed SQL password');
       const result = await db.query(sql, values);
+      if(lostCoordinationCommit&&sql.startsWith('INSERT INTO public.notificacion')){lostCoordinationCommit=false;lostCommit=true;}
       if (lostCommit && sql === 'COMMIT') { lostCommit = false; throw new Error('lost commit acknowledgement'); }
       return result;
     }, release: () => releaseLease(),
   }; });
+  mock.method(Db.prototype,'collection',function(name:string){
+    assert.equal(name,'campus_maps');return {findOne:async(filter:unknown)=>{
+      mapReads++;assert.deepEqual(filter,{campusId:campus,status:'ACTIVE'});
+      if(failMap)throw new Error('private Mongo URI password');
+      if(onMapRead){const operation=onMapRead;onMapRead=null;await operation();}
+      return activeMap;
+    }};
+  });
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     assert.equal(url.origin, 'https://physicalgoods-test.invalid');
@@ -104,7 +118,7 @@ before(async () => {
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
-    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','reporte_contenido','auditoria']) {
+    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','notificacion','reporte_contenido','auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -126,6 +140,11 @@ beforeEach(async () => {
   storageCalls = []; uploads = []; removals = []; signed = [];
   signedPaths = []; failSign = false; failAudit = false; failRequestInsert=false;
   failTransactionInsert=false;
+  failCoordination=failMap=lostCoordinationCommit=false;mapReads=0;onMapRead=null;
+  activeMap={campusId:campus,version:1,status:'ACTIVE',createdAt:new Date(),updatedAt:new Date(),buildings:[
+    {id:'ebuilding',name:'Edificio E',floors:[{id:'ebuilding_floor1',name:'Planta Baja'},{id:'ebuilding_floor2',name:'Piso 2'}]},
+    {id:'cabin01',name:'Cabaña C',floors:[{id:'cabin01_floor1',name:'Piso -3'}]},
+  ]};
   failUpload = failInsert = failRemove = publicBucket = missingBucket = lostCommit = false; onUpload = null;
   const userId = randomUUID();
   await db.query('insert into auth.users values($1)', [userId]);
@@ -894,7 +913,8 @@ test('participant transitions are private, atomic on audit failure and do not re
   const detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);await editService.withdrawPhysicalgoods(auth,saved.id,{updatedAt:detail.updatedAt});
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
   assert.ok((await db.query('select deleted_at from publicacion_recurso where id=$1',[saved.id])).rows[0].deleted_at);
-  await assert.rejects(imagesService.getPhysicalgoodsGallery(auth,saved.id),{status:404});assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{})).data.length,0);
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(auth,saved.id),{status:404});
+  const own=await requestsService.getReceivedPhysicalgoodsRequests(auth,{});assert.equal(own.data.length,1);assert.equal(own.data[0].publication.canView,false);assert.equal(own.data[0].transaction?.id,id);
 });
 
 test('received requests are own current-campus paginated projections even with inactive catalogue messages',async()=>{
@@ -939,4 +959,128 @@ test('competing completion and cancellation serialize and cannot leave a finaliz
   const status=(await transactionRows(saved.id)).rows[0].estado_transaccion;
   const detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);assert.equal(detail.status,status==='COMPLETADA'?'FINALIZADO':'DISPONIBLE');
   const pending=(await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest;assert.equal(pending?.status,status==='COMPLETADA'?undefined:'PENDIENTE');
+});
+
+async function acceptedAgreement() {
+  const pair=await requestedPair(),accepted=await resolveRequest(pair.saved.id,pair.a.id);
+  return {...pair,id:accepted.transaction!.id};
+}
+const location={buildingId:'ebuilding',floorId:'ebuilding_floor2'};
+
+test('agreement detail exposes agreed terms, participants and precise confirmation dates independently of current publication edits',async()=>{
+  const {saved,first,id}=await acceptedAgreement();
+  let detail=await transactionsService.getPhysicalgoodsTransaction(auth,saved.id,id);
+  assert.equal(detail.role,'PROPIETARIO');assert.equal(detail.owner.id,auth.userId);assert.equal(detail.receiver.id,first.userId);assert.equal(detail.campus.id,campus);
+  assert.equal(detail.status,'RESERVADA');assert.equal(detail.modality,'VENTA');assert.equal(detail.amount,15000);assert.equal(detail.currency,'CLP');assert.equal(detail.confirmations.length,0);assert.equal(detail.canConfirm,true);assert.equal(detail.canCancel,true);assert.match(detail.startedAt,/\.\d{6}Z$/);
+  const gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{modality:'DONACION',price:null}));
+  detail=await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id);assert.equal(detail.role,'RECEPTOR');assert.equal(detail.modality,'VENTA');assert.equal(detail.amount,15000);
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');
+  detail=await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id);assert.equal(detail.status,'PENDIENTE_CONFIRMACION');assert.equal(detail.canConfirm,false);assert.equal(detail.canCancel,true);assert.equal(detail.confirmations[0].userId,first.userId);assert.equal(detail.confirmations[0].role,'RECEPTOR');assert.match(detail.confirmations[0].confirmedAt,/\.\d{6}Z$/);
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');detail=await transactionsService.getPhysicalgoodsTransaction(auth,saved.id,id);
+  assert.equal(detail.status,'COMPLETADA');assert.equal(detail.canConfirm,false);assert.equal(detail.canCancel,false);assert.ok(detail.completedAt);assert.equal(detail.cancelledAt,null);
+  assert.doesNotMatch(JSON.stringify(detail),/email|foto_path|estado_cuenta|detalle_cancelacion|storage_path|password/);
+});
+
+test('agreement consultation excludes outsiders and admins, wrong resource IDs, changed context and inactive accounts',async()=>{
+  const {saved,first,second,id}=await acceptedAgreement(),admin=await otherActor('ADMINISTRADOR');
+  for(const actor of [second,admin]){
+    await assert.rejects(transactionsService.getPhysicalgoodsTransaction(actor,saved.id,id),{status:404});
+    await assert.rejects(transactionsService.getPhysicalgoodsCoordinationOptions(actor,saved.id,id),{status:404});
+    await assert.rejects(transactionsService.getPhysicalgoodsCoordinationMessages(actor,saved.id,id,{}),{status:404});
+    await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(actor,saved.id,id,location),{status:404});
+  }
+  assert.equal(mapReads,0);await assert.rejects(transactionsService.getPhysicalgoodsTransaction(auth,saved.id,randomUUID()),{status:404});
+  const unrelated=await create(auth,input());await assert.rejects(transactionsService.getPhysicalgoodsTransaction(auth,unrelated.id,id),{status:404});
+  await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[first.userId]);await assert.rejects(transactionsService.getPhysicalgoodsTransaction(first,saved.id,id),{status:403});
+  await db.query("update perfil_usuario set estado_cuenta='ACTIVA',campus_id=$2 where id=$1",[first.userId,otherCampus]);await assert.rejects(transactionsService.getPhysicalgoodsTransaction(first,saved.id,id),{status:409});
+  const foreign={...first,campusId:otherCampus,profile:{...first.profile,campus_id:otherCampus}};await assert.rejects(transactionsService.getPhysicalgoodsTransaction(foreign,saved.id,id),{status:404});
+});
+
+test('participants can still reach and close the agreement from own lists after publication withdrawal',async()=>{
+  const {saved,first,second,id}=await acceptedAgreement();
+  const gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);await editService.withdrawPhysicalgoods(auth,saved.id,{updatedAt:gallery.updatedAt});
+  for(const participant of [auth,first]){
+    const detail=await transactionsService.getPhysicalgoodsTransaction(participant,saved.id,id);assert.equal(detail.publication.isWithdrawn,true);assert.equal(detail.canCancel,true);
+  }
+  const received=await requestsService.getReceivedPhysicalgoodsRequests(auth,{}),sent=await requestsService.getSentPhysicalgoodsRequests(first,{});
+  assert.equal(received.data.length,1);assert.equal(sent.data.length,1);assert.equal(sent.data[0].transaction?.id,id);assert.equal(sent.data[0].publication.canView,false);
+  assert.equal((await requestsService.getSentPhysicalgoodsRequests(second,{})).data.length,0);
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');const cancelled=await transactionsService.getPhysicalgoodsTransaction(auth,saved.id,id);
+  assert.equal(cancelled.status,'CANCELADA');assert.equal(cancelled.cancelledById,first.userId);assert.match(cancelled.cancelledAt!,/\.\d{6}Z$/);assert.equal(cancelled.publication.isWithdrawn,true);
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(first,saved.id),{status:404});
+});
+
+test('coordination loads visible active-campus building and floor names and never mesh identifiers or foreign maps',async()=>{
+  const {saved,id}=await acceptedAgreement();
+  const options=await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id);assert.equal(options.buildings.length,2);assert.deepEqual(options.buildings[1],{id:'cabin01',name:'Cabaña C',floors:[{id:'cabin01_floor1',name:'Piso -3'}]});
+  assert.doesNotMatch(JSON.stringify(options),/pois|meshName|transform|campusId/);
+  activeMap!.buildings.push({id:'hidden',name:'Hidden',isVisible:false,floors:[{id:'hidden_floor',name:'Hidden'}]},{id:'retired',name:'Retired',deletedAt:new Date(),floors:[]});
+  (activeMap!.buildings[0] as any).floors.push({id:'hidden_floor',name:'Hidden',isVisible:false},{id:'retired_floor',name:'Retired',deletedAt:new Date()});
+  assert.equal((await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id)).buildings.length,2);
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,{buildingId:'ebuilding',floorId:'hidden_floor'}),{status:400});
+  activeMap={...activeMap!,campusId:otherCampus};await assert.rejects(transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id),{status:503});
+});
+
+test('predefined coordination persists in existing notifications with server recipient, sender, text and timestamp; both participants read it',async()=>{
+  const {saved,first,second,id}=await acceptedAgreement();
+  const columns=()=>db.query("select column_name from information_schema.columns where table_name='notificacion' order by ordinal_position");const before=await columns();
+  const message=await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location);
+  assert.equal(message.senderId,auth.userId);assert.equal(message.recipientId,first.userId);assert.equal(message.text,'Estoy en Edificio E, en Piso 2.');assert.match(message.createdAt,/\.\d{6}Z$/);
+  const stored=(await db.query('select * from notificacion where id=$1',[message.id])).rows[0];assert.equal(stored.transaccion_id,id);assert.equal(stored.publicacion_id,saved.id);assert.equal(stored.destinatario_id,first.userId);assert.equal(stored.tipo_notificacion,'COORDINACION_RECURSO');assert.equal(stored.actividad_id,null);assert.equal(stored.deleted_at,null);
+  const response=await transactionsService.sendPhysicalgoodsCoordination(first,saved.id,id,{buildingId:'cabin01',floorId:'cabin01_floor1'});assert.equal(response.recipientId,auth.userId);assert.equal(response.senderId,first.userId);
+  const page=await transactionsService.getPhysicalgoodsCoordinationMessages(first,saved.id,id,{limit:'1'});assert.equal(page.data[0].id,response.id);assert.equal(page.meta.hasMore,true);
+  const older=await transactionsService.getPhysicalgoodsCoordinationMessages(auth,saved.id,id,{page:'2',limit:'1'});assert.deepEqual(older.data,[message]);assert.equal(older.meta.hasMore,false);
+  assert.doesNotMatch(JSON.stringify(page),/tipo_notificacion|actividad_id|campus_id|leida_en|email/);
+  await assert.rejects(transactionsService.getPhysicalgoodsCoordinationMessages(second,saved.id,id,{}),{status:404});
+  (activeMap!.buildings[0] as any).name='Edificio renombrado';(activeMap!.buildings[0] as any).floors[1].name='Piso renombrado';
+  assert.equal((await transactionsService.getPhysicalgoodsCoordinationMessages(first,saved.id,id,{})).data.find(row=>row.id===message.id)?.text,message.text);assert.deepEqual((await columns()).rows,before.rows);
+});
+
+test('coordination rejects free text, identity overrides, malformed fields and floors that do not belong to the selected building',async()=>{
+  const {saved,id}=await acceptedAgreement();
+  for(const body of [null,[],{}, {buildingId:['ebuilding'],floorId:'ebuilding_floor2'}, {buildingId:'../foreign',floorId:'x'},
+    {buildingId:'ebuilding',floorId:'cabin01_floor1'}, {buildingId:'missing',floorId:'missing'},
+    ...['text','message','senderId','recipientId','transactionId','campusId','createdAt','messageCode'].map(key=>({...location,[key]:'override'}))]){
+    await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,body),{status:400});
+  }
+  for(const query of [{senderId:auth.userId},{limit:'0'},{page:['1']},{limit:'101'}])await assert.rejects(transactionsService.getPhysicalgoodsCoordinationMessages(auth,saved.id,id,query),{status:400});
+  assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+});
+
+test('Mongo absence or outage affects only coordination and never prevents participant confirmation/cancellation',async()=>{
+  const {saved,first,id}=await acceptedAgreement();activeMap=null;
+  assert.deepEqual(await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id),{buildings:[]});
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:400});
+  failMap=true;await assert.rejects(transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id),{status:503});await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:503});
+  assert.equal((await transactionsService.getPhysicalgoodsTransaction(auth,saved.id,id)).canConfirm,true);
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  assert.equal((await transactionsService.getPhysicalgoodsTransaction(auth,saved.id,id)).status,'CANCELADA');assert.deepEqual(await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id),{buildings:[]});
+});
+
+test('closing the agreement or changing the actor while Mongo is read prevents a late coordination write',async()=>{
+  const {saved,first,id}=await acceptedAgreement();
+  onMapRead=()=>transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR').then(()=>{});
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:409});assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+  const next=await acceptedAgreement();onMapRead=()=>db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[auth.userId]).then(()=>{});
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,next.saved.id,next.id,location),{status:403});assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[next.id])).rows.length,0);
+});
+
+test('coordination insertion failure is atomic and a lost insertion acknowledgement is recovered from the message history',async()=>{
+  const {saved,first,id}=await acceptedAgreement(),before=await transactionRows(saved.id);failCoordination=true;
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:503});failCoordination=false;
+  assert.deepEqual((await transactionRows(saved.id)).rows,before.rows);assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+  lostCoordinationCommit=true;await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:503});
+  const history=await transactionsService.getPhysicalgoodsCoordinationMessages(first,saved.id,id,{});assert.equal(history.data.length,1);assert.equal(history.data[0].text,'Estoy en Edificio E, en Piso 2.');
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:409});assert.equal((await transactionsService.getPhysicalgoodsCoordinationMessages(auth,saved.id,id,{})).data.length,1);
+});
+
+test('HTTP agreement and coordination routes keep authenticated private envelopes and safe dependency failures',async()=>{
+  const {saved,first,id}=await acceptedAgreement(),url=base+'/'+saved.id+'/transactions/'+id,headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+  assert.equal((await originalFetch(url)).status,401);let response=await originalFetch(url,{headers});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.equal((await response.json()).data.amount,15000);
+  response=await originalFetch(url+'/coordination-options',{headers});assert.equal(response.status,200);assert.equal((await response.json()).data.buildings.length,2);
+  failMap=true;response=await originalFetch(url+'/coordination-options',{headers});assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/Mongo URI|password/);failMap=false;
+  response=await originalFetch(url+'/messages',{method:'POST',headers,body:JSON.stringify(location)});assert.equal(response.status,201);const receipt=(await response.json()).data;assert.equal(receipt.recipientId,first.userId);
+  current=structuredClone(first);response=await originalFetch(url+'/messages?limit=1',{headers});assert.equal(response.status,200);assert.equal((await response.json()).data[0].id,receipt.id);
+  response=await originalFetch(url+'/cancel',{method:'POST',headers,body:'{}'});assert.equal(response.status,200);response=await originalFetch(url,{headers});assert.equal((await response.json()).data.status,'CANCELADA');
 });
