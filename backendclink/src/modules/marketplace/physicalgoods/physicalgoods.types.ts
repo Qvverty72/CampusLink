@@ -76,3 +76,11 @@ export interface PhysicalgoodsImageRow {
   tamano_bytes: string;
   orden: number;
 }
+export interface PhysicalgoodsRequestRow {
+  id: string;
+  publicacion_id: string;
+  solicitante_id: string;
+  codigo_mensaje: string;
+  estado_solicitud: 'PENDIENTE' | 'ACEPTADA';
+  solicitada_en: string;
+}

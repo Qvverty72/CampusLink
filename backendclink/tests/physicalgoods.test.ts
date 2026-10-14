@@ -27,6 +27,9 @@ let signedPaths: string[];
 let failSign = false;
 let failAudit = false;
 let editService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
+let requestsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
+let failRequestInsert=false;
+let connectionLease=Promise.resolve();
 let failUpload = false, failInsert = false, failRemove = false, publicBucket = false, missingBucket = false, lostCommit = false;
 let onUpload: (() => Promise<void>) | null = null;
 
@@ -34,15 +37,20 @@ before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://physicalgoods-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
     SUPABASE_SECRET_KEY: 'sb_secret_test', SUPABASE_DB_URL: 'postgresql://postgres:simulated@physicalgoods-test.invalid/postgres' });
-  mock.method(Pool.prototype, 'connect', async () => ({
+  // PGlite ofrece una sola conexión: se conceden leases completos, como un pool de tamaño1.
+  mock.method(Pool.prototype, 'connect', async () => {
+    const previous=connectionLease;let releaseLease!:()=>void;
+    connectionLease=new Promise<void>(resolve=>{releaseLease=resolve;});await previous;
+    return {
     query: async (sql: string, values: unknown[] = []) => {
+      if (failRequestInsert&&sql.startsWith('INSERT INTO public.solicitud_recurso')) throw new Error('private request SQL failure password');
       if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL failure');
       if (failInsert && sql.startsWith('INSERT INTO public.archivo_publicacion')) throw new Error('private failed SQL password');
       const result = await db.query(sql, values);
       if (lostCommit && sql === 'COMMIT') { lostCommit = false; throw new Error('lost commit acknowledgement'); }
       return result;
-    }, release: () => {},
-  }));
+    }, release: () => releaseLease(),
+  }; });
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     assert.equal(url.origin, 'https://physicalgoods-test.invalid');
@@ -84,6 +92,7 @@ before(async () => {
   const services = await import('../src/modules/marketplace/physicalgoods/physicalgoods.service.js');
   imagesService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.images.service.js');
   editService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
+  requestsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
@@ -96,6 +105,7 @@ before(async () => {
     assert.ok(sql, name); await db.exec(sql);
   }
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8'));
+  await db.exec(await readFile('src/database/supabase/migrations/f2_4_06_mensajes_solicitud.sql','utf8'));
   await db.query("insert into institucion(id,nombre) values($1,'Institution')", [institution]);
   await db.query("insert into campus(id,institucion_id,nombre) values($1,$2,'Home'),($3,$2,'Foreign')", [campus, institution, otherCampus]);
   await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'Material académico')", [category]);
@@ -110,7 +120,7 @@ before(async () => {
 });
 beforeEach(async () => {
   storageCalls = []; uploads = []; removals = []; signed = [];
-  signedPaths = []; failSign = false; failAudit = false;
+  signedPaths = []; failSign = false; failAudit = false; failRequestInsert=false;
   failUpload = failInsert = failRemove = publicBucket = missingBucket = lostCommit = false; onUpload = null;
   const userId = randomUUID();
   await db.query('insert into auth.users values($1)', [userId]);
@@ -642,4 +652,117 @@ test('physical edit migration is repeatable, changes no table/column/data and re
   const sql=await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8');await db.exec(sql);await db.exec(sql);assert.deepEqual((await inventory()).rows,before.rows);assert.equal((await audits(saved.id)).length,1);
   await db.query("insert into auditoria(actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion) values($1,$2,$3,'publicacion_recurso',$4,'OCULTAR_PUBLICACION')",[auth.userId,institution,campus,saved.id]);
   await assert.rejects(db.query("insert into auditoria(institucion_id,entidad_tipo,entidad_id,accion) values($1,'x','x','UNKNOWN')",[institution]));
+});
+
+test('request uses server identity and publication origin, creates pending receipt and never reserves or changes the resource',async()=>{
+  const saved=await create(auth,input()),requester=await otherActor(), before=await imagesService.getPhysicalgoodsGallery(auth,saved.id),calls=storageCalls.length;
+  const options=await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id);
+  assert.equal(options.canRequest,true);assert.equal(options.activeRequest,null);assert.ok(['ME_INTERESA','PARA_MIS_ESTUDIOS','QUISIERA_SOLICITARLO'].every(code=>options.messages.some(row=>row.code===code)));
+  const receipt=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'});
+  assert.equal(receipt.publicationId,saved.id);assert.equal(receipt.requesterId,requester.userId);assert.equal(receipt.ownerId,auth.userId);assert.equal(receipt.campusId,campus);assert.equal(receipt.messageCode,'ME_INTERESA');assert.equal(receipt.status,'PENDIENTE');assert.match(receipt.requestedAt,/Z$/);
+  const row=(await db.query('select * from solicitud_recurso where id=$1',[receipt.id])).rows[0];assert.equal(row.solicitante_id,requester.userId);assert.equal(row.publicacion_id,saved.id);
+  assert.equal(storageCalls.length,calls);const after=await imagesService.getPhysicalgoodsGallery(auth,saved.id);assert.equal(after.status,'DISPONIBLE');assert.equal(after.updatedAt,before.updatedAt);assert.equal((await audits(saved.id)).length,1);
+  assert.deepEqual((await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id)).activeRequest,receipt);
+  const another=await otherActor();assert.equal((await requestsService.getPhysicalgoodsRequestOptions(another,saved.id)).activeRequest,null);
+  await requestsService.createPhysicalgoodsRequest(another,saved.id,{messageCode:'PARA_MIS_ESTUDIOS'});
+  assert.equal((await db.query('select id from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.length,2);
+});
+
+test('active pending/accepted requests block duplicates, closed rows remain historical and permit a new request',async()=>{
+  const saved=await create(auth,input()),requester=await otherActor();
+  const first=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'});
+  for(const status of ['PENDIENTE','ACEPTADA']){
+    await db.query('update solicitud_recurso set estado_solicitud=$2 where id=$1',[first.id,status]);
+    await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'QUISIERA_SOLICITARLO'}),{status:409});
+    const options=await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id);assert.equal(options.canRequest,false);assert.equal(options.activeRequest?.id,first.id);assert.equal(options.messages.length,0);
+  }
+  await db.query("update solicitud_recurso set estado_solicitud='RECHAZADA' where id=$1",[first.id]);
+  const second=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'QUISIERA_SOLICITARLO'});assert.notEqual(second.id,first.id);
+  await db.query("update solicitud_recurso set estado_solicitud='CANCELADA' where id=$1",[second.id]);
+  const third=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'});assert.notEqual(third.id,second.id);
+  const historical=(await db.query('select * from solicitud_recurso where id=$1',[first.id])).rows[0];assert.equal(historical.estado_solicitud,'RECHAZADA');assert.equal(historical.codigo_mensaje,'ME_INTERESA');
+  assert.equal((await db.query('select id from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.length,3);
+});
+
+test('own resources, foreign campus, digital/withdrawn resources and changed states cannot receive requests',async()=>{
+  const saved=await create(auth,input()),requester=await otherActor();
+  assert.equal((await requestsService.getPhysicalgoodsRequestOptions(auth,saved.id)).canRequest,false);
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(auth,saved.id,{messageCode:'ME_INTERESA'}),{status:403});
+  for(const state of ['RESERVADO','FINALIZADO']){
+    await db.query('update publicacion_recurso set estado_publicacion=$2 where id=$1',[saved.id,state]);
+    assert.equal((await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id)).canRequest,false);
+    await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:409});
+  }
+  for(const update of ["estado_publicacion='OCULTO'","estado_publicacion='CANCELADO'","tipo_recurso='DIGITAL'",'deleted_at=now()']){
+    await db.query("update publicacion_recurso set estado_publicacion='DISPONIBLE',tipo_recurso='FISICO',deleted_at=null where id=$1",[saved.id]);await db.query('update publicacion_recurso set '+update+' where id=$1',[saved.id]);
+    await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:404});
+  }
+  await db.query("update publicacion_recurso set estado_publicacion='DISPONIBLE',tipo_recurso='FISICO',deleted_at=null,campus_id=$2 where id=$1",[saved.id,otherCampus]);
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:404});
+  assert.equal((await db.query('select id from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.length,0);
+});
+
+test('request rejects free text and privileged fields and validates the chosen active catalogue message at submission time',async()=>{
+  const saved=await create(auth,input()),requester=await otherActor(),code=randomUUID();
+  await db.query("insert into mensaje_solicitud(codigo,descripcion) values($1,'Temporary option')",[code]);
+  assert.ok((await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id)).messages.some(row=>row.code===code));await db.query('update mensaje_solicitud set activo=false where codigo=$1',[code]);
+  for(const body of [null,[],{messageCode:['ME_INTERESA']},{messageCode:''},{messageCode:'x\n'},{messageCode:'UNKNOWN'},{messageCode:code},{messageCode:"' OR 1=1 --"},
+    ...['requesterId','ownerId','campusId','status','requestedAt','description','message','publicationId'].map(key=>({messageCode:'ME_INTERESA',[key]:'spoofed'}))]){
+    await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,body),{status:400});
+  }
+  assert.equal((await db.query('select id from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.length,0);
+});
+
+test('request rechecks persisted suspension, current campus and revoked authorized grants after middleware',async()=>{
+  const saved=await create(auth,input()),requester=await otherActor();
+  await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[requester.userId]);
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:403});
+  await db.query("update perfil_usuario set estado_cuenta='ACTIVA',campus_id=$2 where id=$1",[requester.userId,otherCampus]);
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:409});
+  await db.query('update perfil_usuario set campus_id=$2,verificado_en=null where id=$1',[requester.userId,campus]);
+  requester.roles=[{id:randomUUID(),name:'USUARIO_AUTORIZADO',campusId:campus}];requester.profile.verificado_en=null;
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:403});
+});
+
+test('HTTP request options and submission require identity, preserve no-store and serialize double submissions',async()=>{
+  const saved=await create(auth,input()),requester=await otherActor();current=structuredClone(requester);
+  const endpoint=base+'/'+saved.id;
+  assert.equal((await originalFetch(endpoint+'/request-options')).status,401);
+  const options=await originalFetch(endpoint+'/request-options',{headers:{Authorization:'Bearer '+token}});assert.equal(options.status,200);assert.equal(options.headers.get('cache-control'),'no-store');
+  const submit=()=>originalFetch(endpoint+'/requests',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({messageCode:'ME_INTERESA'})});
+  const responses=await Promise.all([submit(),submit()]);assert.deepEqual(responses.map(row=>row.status).sort(),[201,409]);
+  const success=responses.find(row=>row.status===201)!;assert.equal(success.headers.get('cache-control'),'no-store');assert.equal((await success.json()).data.requesterId,requester.userId);
+  assert.equal((await db.query('select id from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.length,1);
+  current.profile.campus_id=otherCampus;current.campusId=otherCampus;assert.equal((await submit()).status,409);
+});
+
+test('request persistence failure rolls back and an uncertain successful commit is discovered without duplicating the request',async()=>{
+  const saved=await create(auth,input()),requester=await otherActor();failRequestInsert=true;
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:503});failRequestInsert=false;
+  assert.equal((await db.query('select id from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.length,0);
+  lostCommit=true;await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:503});
+  const found=await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id);assert.ok(found.activeRequest);assert.equal(found.canRequest,false);
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),{status:409});
+  assert.equal((await db.query('select id from solicitud_recurso where publicacion_id=$1',[saved.id])).rows.length,1);
+});
+
+test('HTTP request errors sanitize dependencies and account changes while prior requests remain intact after withdrawal',async()=>{
+  const owner=structuredClone(auth),saved=await create(owner,input()),requester=await otherActor();current=structuredClone(requester);failRequestInsert=true;
+  const response=await originalFetch(base+'/'+saved.id+'/requests',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({messageCode:'ME_INTERESA'})});
+  assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/private request|password|SQL/);failRequestInsert=false;
+  const receipt=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'}),detail=await imagesService.getPhysicalgoodsGallery(owner,saved.id);
+  await editService.withdrawPhysicalgoods(owner,saved.id,{updatedAt:detail.updatedAt});assert.equal((await db.query('select id from solicitud_recurso where id=$1',[receipt.id])).rows.length,1);
+  await assert.rejects(requestsService.getPhysicalgoodsRequestOptions(requester,saved.id),{status:404});
+  current.profile.estado_cuenta='SUSPENDIDA';assert.equal((await originalFetch(base+'/'+saved.id+'/request-options',{headers:{Authorization:'Bearer '+token}})).status,403);
+});
+
+test('request message seed is repeatable, adds no attributes and preserves existing/inactive catalogues',async()=>{
+  const isolated=new PGlite();try{
+    await isolated.exec("create table mensaje_solicitud(codigo text primary key,descripcion text not null,activo boolean not null default true)");
+    const inventory=()=>isolated.query("select column_name from information_schema.columns where table_name='mensaje_solicitud' order by ordinal_position");const before=await inventory();
+    const sql=await readFile('src/database/supabase/migrations/f2_4_06_mensajes_solicitud.sql','utf8');await isolated.exec(sql);await isolated.exec(sql);
+    assert.equal((await isolated.query('select * from mensaje_solicitud')).rows.length,3);assert.deepEqual((await inventory()).rows,before.rows);
+    await isolated.exec("delete from mensaje_solicitud;insert into mensaje_solicitud values('CUSTOM','Approved existing message',false)");await isolated.exec(sql);
+    assert.deepEqual((await isolated.query('select * from mensaje_solicitud')).rows,[{codigo:'CUSTOM',descripcion:'Approved existing message',activo:false}]);
+  }finally{await isolated.close();}
 });

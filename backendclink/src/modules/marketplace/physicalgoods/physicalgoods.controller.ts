@@ -7,8 +7,15 @@ import type { AuthLocals } from '../../auth/auth.types.js';
 import { addPhysicalgoodsImage, changePhysicalgoodsCategory, changePhysicalgoodsPrincipal, deletePhysicalgoodsImage, getPhysicalgoodsGallery, getPhysicalgoodsResources } from './physicalgoods.images.service.js';
 import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 import { updatePhysicalgoods, withdrawPhysicalgoods } from './physicalgoods.edit.service.js';
+import { createPhysicalgoodsRequest, getPhysicalgoodsRequestOptions } from './physicalgoods.requests.service.js';
 
 type PhysicalgoodsHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const getPhysicalgoodsRequestOptionsController: PhysicalgoodsHandler = async (request,response) => {
+  sendSuccess(response,await getPhysicalgoodsRequestOptions(response.locals.auth,request.params.publicationId));
+};
+export const createPhysicalgoodsRequestController: PhysicalgoodsHandler = async (request,response) => {
+  sendSuccess(response,await createPhysicalgoodsRequest(response.locals.auth,request.params.publicationId,request.body),201);
+};
 export const updatePhysicalgoodsController: PhysicalgoodsHandler = async (request, response) => {
   sendSuccess(response, await updatePhysicalgoods(response.locals.auth, request.params.publicationId, request.body));
 };

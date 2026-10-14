@@ -4,6 +4,7 @@ import { PublicationImages } from './PublicationImages';
 import { PhysicalgoodsSearchFilters } from './PhysicalgoodsSearchFilters';
 import { resourceConditions } from '../types/publication';
 import { PhysicalgoodsEditor } from './PhysicalgoodsEditor';
+import { PhysicalgoodsRequest } from './PhysicalgoodsRequest';
 
 /** Muestra el listado paginado y la galería del recurso seleccionado. */
 export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
@@ -39,6 +40,9 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
           <Text style={styles.text}>Campus para el intercambio: {r.gallery.campus.name}</Text>
           <Text style={styles.text}>Estado: {r.gallery.status.toLowerCase()}</Text>
           <Text style={styles.label}>{r.gallery.acceptsRequests ? 'Disponible para recibir solicitudes.' : 'Este recurso no está disponible para recibir solicitudes.'}</Text>
+        </>}
+        <PhysicalgoodsRequest resources={r} />
+        {r.gallery&&<>
           {!r.gallery.images.length && <Text style={styles.text}>No hay fotografías disponibles para este recurso.</Text>}
           {r.gallery.images.map((image, index) => <View key={image.id} style={styles.resource}>
             <Image source={{ uri: image.url }} style={styles.image} accessibilityLabel={`Imagen ${index + 1} de ${r.gallery!.title}`} />

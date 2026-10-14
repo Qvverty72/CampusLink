@@ -80,3 +80,10 @@ export function parsePhysicalgoodsCategory(body: unknown): string {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'categoryId')) return invalid('body', 'Selecciona una categoría válida.');
   return physicalgoodsId((body as Record<string, unknown>).categoryId, 'categoryId');
 }
+/** Acepta exclusivamente un código de catálogo; el solicitante y el contexto los determina el servidor. */
+export function parsePhysicalgoodsRequest(body: unknown): string {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'messageCode')) return invalid('body','Selecciona un mensaje predefinido.');
+  const code = (body as Record<string,unknown>).messageCode;
+  if (typeof code !== 'string' || !code.trim() || /[\u0000-\u001f\u007f]/.test(code)) return invalid('messageCode','Selecciona un mensaje predefinido.');
+  return code.trim();
+}

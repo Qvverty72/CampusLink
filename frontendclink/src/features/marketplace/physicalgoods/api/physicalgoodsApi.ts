@@ -1,6 +1,7 @@
 import { authenticatedEnvelopeRequest, authenticatedRequest, AuthApiError } from '@/lib/api/authenticated-request';
 import type { PublicationCreated, PublicationInput, PublicationOptions } from '../types/publication';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, PhysicalgoodsSearchFilters, PublicationPhoto } from '../types/publication';
+import type { PhysicalgoodsRequest, PhysicalgoodsRequestOptions } from '../types/publication';
 
 const path = '/api/v1/marketplace/physicalgoods';
 /** Valida el UUID antes de incorporarlo a una ruta de publicación. */
@@ -20,6 +21,10 @@ export function loadPhysicalgoodsResources(filters: PhysicalgoodsSearchFilters, 
 }
 /** Carga la galería y los permisos de edición calculados por el backend. */
 export const loadPhysicalgoodsGallery = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsGallery>(resourcePath(id) + '/images', { signal });
+export const loadPhysicalgoodsRequestOptions = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsRequestOptions>(resourcePath(id) + '/request-options',{ signal });
+export const requestPhysicalgoods = (id: string, messageCode: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsRequest>(resourcePath(id) + '/requests',{
+  method:'POST',signal,headers:{ 'Content-Type':'application/json' },body:JSON.stringify({ messageCode }),
+});
 /** Edita campos de publicación con `updatedAt` para detectar escrituras concurrentes. */
 export const updatePhysicalgoods = (id: string, input: Pick<PublicationInput,'title'|'description'|'condition'|'modality'|'price'> & { updatedAt: string }, signal: AbortSignal) => authenticatedRequest(resourcePath(id), {
   method: 'PATCH', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),

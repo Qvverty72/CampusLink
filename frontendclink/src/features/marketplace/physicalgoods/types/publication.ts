@@ -74,3 +74,18 @@ export interface PhysicalgoodsPage {
   data: PhysicalgoodsResource[];
   meta: { page: number; limit: number; hasMore: boolean };
 }
+export interface PhysicalgoodsRequest {
+  id: string;
+  publicationId: string;
+  requesterId: string;
+  ownerId: string;
+  campusId: string;
+  messageCode: string;
+  status: 'PENDIENTE' | 'ACEPTADA';
+  requestedAt: string;
+}
+export interface PhysicalgoodsRequestOptions {
+  canRequest: boolean;
+  activeRequest: PhysicalgoodsRequest | null;
+  messages: { code:string; label:string }[];
+}
