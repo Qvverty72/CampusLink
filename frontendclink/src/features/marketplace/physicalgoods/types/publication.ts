@@ -32,3 +32,21 @@ export interface PublicationCreated extends Omit<PublicationInput, 'photo'> {
   status: 'DISPONIBLE';
   currency: 'CLP';
 }
+
+export interface PhysicalgoodsResource {
+  id: string;
+  title: string;
+  category: { id: string; name: string };
+  modality: 'VENTA' | 'DONACION';
+  price: number | null;
+  status: string;
+}
+export interface PhysicalgoodsGallery extends PhysicalgoodsResource {
+  canEdit: boolean;
+  images: { id: string; name: string; principal: boolean; url: string }[];
+  expiresIn: number;
+}
+export interface PhysicalgoodsPage {
+  data: PhysicalgoodsResource[];
+  meta: { page: number; limit: number; hasMore: boolean };
+}

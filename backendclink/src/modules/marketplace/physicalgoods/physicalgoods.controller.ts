@@ -4,8 +4,29 @@ import { getPhysicalgoodsHealth } from './physicalgoods.service.js';
 import { createPhysicalgoods, getPhysicalgoodsOptions, getPhysicalgoodsPhoto } from './physicalgoods.service.js';
 import { sendSuccess } from '../../../services/api-response.js';
 import type { AuthLocals } from '../../auth/auth.types.js';
+import { addPhysicalgoodsImage, changePhysicalgoodsCategory, changePhysicalgoodsPrincipal, deletePhysicalgoodsImage, getPhysicalgoodsGallery, getPhysicalgoodsResources } from './physicalgoods.images.service.js';
+import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 
 type PhysicalgoodsHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const getPhysicalgoodsResourcesController: PhysicalgoodsHandler = async (request, response) => {
+  const result = await getPhysicalgoodsResources(response.locals.auth, request.query);
+  sendEnvelope(response, result.data, { meta: result.meta });
+};
+export const getPhysicalgoodsGalleryController: PhysicalgoodsHandler = async (request, response) => {
+  sendSuccess(response, await getPhysicalgoodsGallery(response.locals.auth, request.params.publicationId));
+};
+export const addPhysicalgoodsImageController: PhysicalgoodsHandler = async (request, response) => {
+  sendSuccess(response, await addPhysicalgoodsImage(response.locals.auth, request.params.publicationId, request.body), 201);
+};
+export const changePhysicalgoodsPrincipalController: PhysicalgoodsHandler = async (request, response) => {
+  sendSuccess(response, await changePhysicalgoodsPrincipal(response.locals.auth, request.params.publicationId, request.params.imageId));
+};
+export const deletePhysicalgoodsImageController: PhysicalgoodsHandler = async (request, response) => {
+  sendSuccess(response, await deletePhysicalgoodsImage(response.locals.auth, request.params.publicationId, request.params.imageId));
+};
+export const changePhysicalgoodsCategoryController: PhysicalgoodsHandler = async (request, response) => {
+  sendSuccess(response, await changePhysicalgoodsCategory(response.locals.auth, request.params.publicationId, request.body));
+};
 export const getPhysicalgoodsOptionsController: PhysicalgoodsHandler = async (_request, response) => {
   sendSuccess(response, await getPhysicalgoodsOptions(response.locals.auth));
 };

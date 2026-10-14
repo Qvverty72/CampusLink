@@ -34,7 +34,10 @@ export function parsePhysicalgoods(body: unknown): { input: PhysicalgoodsInput; 
   const optionalId = (field: string) => values[field] == null ? null : physicalgoodsId(values[field], field);
   const input: PhysicalgoodsInput = { title, description, condition: values.condition as PhysicalgoodsCondition,
     categoryId, modality: values.modality, price, careerId: optionalId('careerId'), subjectId: optionalId('subjectId') };
-  const raw = values.photo;
+  return { input, photo: parsePhysicalgoodsPhoto(values.photo) };
+}
+
+export function parsePhysicalgoodsPhoto(raw: unknown): PrincipalPhoto {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return invalid('photo', 'Selecciona la fotografía principal.');
   const photo = raw as Record<string, unknown>;
   if (Object.keys(photo).some(key => !['name', 'mimeType', 'base64'].includes(key))) return invalid('photo', 'La fotografía contiene campos no admitidos.');
@@ -50,5 +53,14 @@ export function parsePhysicalgoods(body: unknown): { input: PhysicalgoodsInput; 
     : photo.mimeType === 'image/png' ? bytes.length > 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
       : bytes.length > 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
   if (!matches) return invalid('photo', 'El contenido de la fotografía no coincide con su tipo.');
-  return { input, photo: { name, mimeType: photo.mimeType as PrincipalPhoto['mimeType'], bytes } };
+  return { name, mimeType: photo.mimeType as PrincipalPhoto['mimeType'], bytes };
+}
+
+export function parsePhysicalgoodsPhotoUpload(body: unknown): PrincipalPhoto {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'photo')) return invalid('body', 'Envía una fotografía válida.');
+  return parsePhysicalgoodsPhoto((body as Record<string, unknown>).photo);
+}
+export function parsePhysicalgoodsCategory(body: unknown): string {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'categoryId')) return invalid('body', 'Selecciona una categoría válida.');
+  return physicalgoodsId((body as Record<string, unknown>).categoryId, 'categoryId');
 }

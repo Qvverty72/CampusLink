@@ -23,8 +23,8 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   app.use(cors());
   const jsonParser = express.json();
   app.use((request, response, next) => {
-    // This single upload route parses its larger body after authentication.
-    if (request.method === 'POST' && /^\/api\/v1\/marketplace\/physicalgoods\/?$/i.test(request.path)) next();
+    // Photo upload routes parse their bounded larger bodies after authentication.
+    if (request.method === 'POST' && /^\/api\/v1\/marketplace\/physicalgoods(?:\/[^/]+\/images)?\/?$/i.test(request.path)) next();
     else jsonParser(request, response, next);
   });
   app.use('/api/v1', createApiRouter(dependencies));

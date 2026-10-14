@@ -297,6 +297,21 @@ La categoría identifica el tipo de objeto físico, independientemente de condic
 
 Expo organiza el formulario en `features/marketplace/physicalgoods/{api,components,hooks,types}`. `expo-image-picker` compatible con SDK 57 permite seleccionar una foto en web/Android/iOS; el plugin configura permiso de fotos y deshabilita permisos de cámara/micrófono. La política de foto fue aprobada por el usuario para GH-38; la entrada F2.2-05 debe sincronizar esa decisión. Búsqueda, detalle completo, edición, múltiples fotos y transacciones pertenecen a sus tickets posteriores.
 
+## Imágenes y categoría de recursos físicos (F2.4-02)
+
+El mismo módulo permite una galería con varias fotos y una principal, y modificar la categoría existente. Reutiliza `archivo_publicacion.orden` (principal=0), `deleted_at`, `recurso_fisico.categoria_id`, `publicacion_recurso.updated_at` y el bucket privado `publication-images`; no requiere nuevas tablas, columnas, dependencias ni SQL. Las siete categorías ya cargadas en F2.4-01 permanecen en su tabla normalizada (decisión FIS-04 resuelta por el usuario).
+
+- `GET /api/v1/marketplace/physicalgoods?categoryId=<uuid>&mine=true&page=1&limit=20`: listado mínimo paginado del campus vigente con categoría. `categoryId` y `mine` son opcionales; `mine=true` filtra propietario actual. Por defecto solo DISPONIBLE; publicaciones propias también pueden estar RESERVADO/FINALIZADO. No incluye digitales, otras sedes ni retiradas/ocultas. Devuelve `data: []` y `meta: {page,limit,hasMore}`. Búsqueda completa corresponde a F2.4-03.
+- `GET /api/v1/marketplace/physicalgoods/:publicationId/images`: galería con título, categoría, modalidad/precio, estado, `canEdit` y `images: [{id,name,principal,url}]`; URLs de 60 segundos. La ficha completa corresponde a F2.4-04.
+- `POST /api/v1/marketplace/physicalgoods/:publicationId/images`: JSON `{photo:{name,mimeType,base64}}`, una imagen por solicitud, 201 `{data:{id}}`. Reutiliza JPEG/PNG/WebP, 5 MB, firma y codificación validadas; cuerpo máximo 7 MB parseado después de autenticar.
+- `PATCH /api/v1/marketplace/physicalgoods/:publicationId/images/:imageId/principal`: cambia principal mediante intercambio de órdenes en una transacción. La ruta `/photo` existente sigue entregando la principal vigente.
+- `DELETE /api/v1/marketplace/physicalgoods/:publicationId/images/:imageId`: retiro lógico. La última fotografía no se puede retirar; retirar la principal elige la siguiente en orden. Conserva referencia y bytes publicados, excluyéndolos de galería y nuevas firmas.
+- `PATCH /api/v1/marketplace/physicalgoods/:publicationId/category`: JSON `{categoryId}`, valida categoría activa y guarda en el esquema existente.
+
+Las lecturas requieren cuenta habilitada y capacidad general del campus vigente. Para modificar se exige propietario o ADMINISTRADOR vigente del mismo campus; el backend vuelve a leer cuenta/roles y bloquea la publicación para serializar cambios. UUID de una imagen debe pertenecer a esa publicación, estar activo y ser IMAGEN. Propiedad se verifica antes de cargar Storage y nuevamente antes de persistir; fallos de carga/registro compensan solo el archivo nuevo, preservando la publicación y evitando eliminar archivos referenciados tras COMMIT incierto.
+
+Expo permite elegir varias imágenes y principal antes de crear. La publicación conserva el POST de F2.4-01 para la principal y carga adicionales una por una. Si falla una adicional, informa que el recurso ya está publicado y ofrece reintentar las pendientes sin repetir su creación. Después, Recursos del campus permite filtrar categoría/ver publicaciones propias y abrir galería con edición autorizada, agregado de fotos y retiro lógico. URLs visibles se refrescan a los 50 s; el frontend deriva el permiso de edición del servidor y se desmonta al cambiar sesión/campus. QA real dentro de aplicación está diferido al cierre de fase por acuerdo del usuario.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

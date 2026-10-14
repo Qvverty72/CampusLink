@@ -3,22 +3,30 @@ import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { usePublishPhysicalgoods } from '../hooks/usePublishPhysicalgoods';
 import { resourceConditions } from '../types/publication';
+import { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
+import { PhysicalgoodsResources } from './PhysicalgoodsResources';
+import { PublicationImages } from './PublicationImages';
 
 export function PhysicalGoodsScreen() {
   const { identity, session } = useAuth();
+  return <PhysicalgoodsContent key={`${identity?.userId}:${identity?.campusId}:${session?.access_token}`} />;
+}
+function PhysicalgoodsContent() {
+  const resources = usePhysicalgoodsResources();
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.eyebrow}>MARKETPLACE</Text>
       <Text style={styles.title}>Publicar un recurso</Text>
       <Text style={styles.description}>Vende o dona un recurso físico a tu comunidad.</Text>
-      <PublicationForm key={`${identity?.userId}:${identity?.campusId}:${session?.access_token}`} />
+      <PublicationForm onPublished={resources.reload} onGallery={resources.open} />
+      <PhysicalgoodsResources resources={resources} />
     </ScrollView>
     <BottomNavigationBar activeItemId="physicalgoods" />
   </View>;
 }
 
-function PublicationForm() {
-  const form = usePublishPhysicalgoods();
+function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; onGallery: (id: string) => void }) {
+  const form = usePublishPhysicalgoods(onPublished);
   const { options, loading, busy, created } = form;
   const choice = (label: string, selected: boolean, onPress: () => void) => <Pressable key={label} accessibilityRole="radio"
     accessibilityLabel={label} accessibilityState={{ checked: selected, disabled: busy }} disabled={busy} onPress={onPress}
@@ -34,19 +42,23 @@ function PublicationForm() {
     <Text style={styles.label}>{created.title}</Text>
     <Text style={styles.description}>Disponible en {options.campus.name}</Text>
     <Text style={styles.description}>{created.modality === 'DONACION' ? 'Donación' : `Venta · ${created.price?.toLocaleString('es-CL')} CLP`}</Text>
-    <Pressable accessibilityRole="button" style={styles.button} onPress={form.reset}><Text style={styles.buttonText}>Publicar otro recurso</Text></Pressable>
+    {busy && <Text style={styles.description}>Cargando imágenes… Quedan {form.remaining}.</Text>}
+    {form.error && <Text accessibilityRole="alert" style={styles.error}>{form.error}</Text>}
+    {form.remaining > 0 && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void form.publish()} style={styles.secondaryButton}><Text style={styles.action}>Reintentar imágenes pendientes</Text></Pressable>}
+    <Pressable accessibilityRole="button" disabled={busy} style={styles.secondaryButton} onPress={() => onGallery(created.id)}><Text style={styles.action}>Ver imágenes publicadas</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy} style={styles.button} onPress={form.reset}><Text style={styles.buttonText}>Publicar otro recurso</Text></Pressable>
   </View>;
   return <View style={styles.card}>
     <Text style={styles.campus}>Campus: {options.campus.name}</Text>
     <Pressable accessibilityRole="button" disabled={busy} onPress={form.reload}><Text style={styles.action}>Actualizar opciones</Text></Pressable>
     <Text style={styles.label}>Nombre del recurso</Text>
     <TextInput accessibilityLabel="Nombre del recurso" placeholder="Ej. Calculadora científica" value={form.title} onChangeText={form.setTitle} maxLength={200} editable={!busy} style={styles.input} />
-    <Text style={styles.label}>Fotografía principal</Text>
-    {form.photo && <Image source={{ uri: form.photo.uri }} style={styles.photo} accessibilityLabel="Vista previa de la fotografía principal" />}
+    <Text style={styles.label}>Imágenes del recurso</Text>
+    <PublicationImages photos={form.photos} disabled={busy} onRemove={form.removePhoto} onPrincipal={form.makePrincipal} />
     <Pressable accessibilityRole="button" disabled={busy} onPress={() => void form.choosePhoto()} style={styles.secondaryButton}>
-      <Text style={styles.action}>{form.photo ? 'Cambiar fotografía' : 'Seleccionar fotografía'}</Text>
+      <Text style={styles.action}>Agregar imágenes</Text>
     </Pressable>
-    <Text style={styles.hint}>JPEG, PNG o WebP · Máximo 5 MB</Text>
+    <Text style={styles.hint}>JPEG, PNG o WebP · Máximo 5 MB por imagen · Elige una principal</Text>
     <Text style={styles.label}>Descripción</Text>
     <TextInput accessibilityLabel="Descripción del recurso" placeholder="Describe el recurso y lo que incluye" value={form.description} onChangeText={form.setDescription} maxLength={4000} multiline editable={!busy} style={[styles.input, styles.textarea]} />
     <Text style={styles.label}>Condición</Text>

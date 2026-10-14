@@ -31,3 +31,24 @@ export interface PhysicalgoodsCreated extends PhysicalgoodsInput {
   status: 'DISPONIBLE';
   currency: 'CLP';
 }
+
+export interface PhysicalgoodsMediaRow {
+  id: string;
+  campus_id: string;
+  propietario_id: string;
+  titulo: string;
+  categoria_id: string;
+  categoria_nombre: string;
+  modalidad: 'VENTA' | 'DONACION';
+  precio: string | null;
+  estado_publicacion: string;
+}
+export interface PhysicalgoodsImageRow {
+  id: string;
+  bucket_id: string;
+  storage_path: string;
+  nombre_original: string;
+  mime_type: string;
+  tamano_bytes: string;
+  orden: number;
+}
