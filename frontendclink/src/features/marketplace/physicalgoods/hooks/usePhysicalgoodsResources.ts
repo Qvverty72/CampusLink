@@ -83,7 +83,7 @@ export function usePhysicalgoodsResources() {
     setFilters(previous => ({ ...previous, [key]: value, ...(key === 'modality' && value === 'DONACION' ? { minPrice: '', maxPrice: '' } : {}) }));
   }
   function clearFilters() { setFilters({ ...emptyPhysicalgoodsFilters }); setApplied({ ...emptyPhysicalgoodsFilters }); setNumber(1); }
-  return { options, page, filters, setFilter, search, clearFilters, number, loading, error, selectedId, gallery, galleryLoading, galleryError, editCategory, setEditCategory, busy, draftImages,
+  return { options, page, filters, setFilter, search, clearFilters, number, loading, error, selectedId, gallery, galleryLoading, galleryError, editCategory, setEditCategory, busy, draftImages, change,
     open: (id: string) => { if (running.current) return; savedCategory.current = ''; setGallery(null); setDraftImages([]); setGalleryError(null); setSelectedId(id); }, close,
     setNumber,
     reload: () => setRevision(value => value + 1), reloadGallery: () => { setGalleryError(null); setGalleryRevision(value => value + 1); }, selectPhotos, upload,

@@ -2,6 +2,7 @@ import { json, Router } from 'express';
 import { createPhysicalgoodsController, getPhysicalgoodsHealthController, getPhysicalgoodsOptionsController, getPhysicalgoodsPhotoController } from './physicalgoods.controller.js';
 import { requireAuthentication } from '../../auth/auth.middleware.js';
 import { addPhysicalgoodsImageController, changePhysicalgoodsCategoryController, changePhysicalgoodsPrincipalController, deletePhysicalgoodsImageController, getPhysicalgoodsGalleryController, getPhysicalgoodsResourcesController } from './physicalgoods.controller.js';
+import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from './physicalgoods.controller.js';
 
 // Technical diagnostics only; business routes must declare authentication/authorization.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
@@ -13,6 +14,8 @@ export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   router.post('/', requireAuthentication, json({ limit: '7mb' }), createPhysicalgoodsController);
   router.get('/:publicationId/photo', requireAuthentication, getPhysicalgoodsPhotoController);
   router.get('/:publicationId/images', requireAuthentication, getPhysicalgoodsGalleryController);
+  router.patch('/:publicationId', requireAuthentication, updatePhysicalgoodsController);
+  router.delete('/:publicationId', requireAuthentication, withdrawPhysicalgoodsController);
   router.post('/:publicationId/images', requireAuthentication, json({ limit: '7mb' }), addPhysicalgoodsImageController);
   router.patch('/:publicationId/images/:imageId/principal', requireAuthentication, changePhysicalgoodsPrincipalController);
   router.delete('/:publicationId/images/:imageId', requireAuthentication, deletePhysicalgoodsImageController);

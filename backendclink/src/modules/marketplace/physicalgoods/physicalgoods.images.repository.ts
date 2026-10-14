@@ -3,7 +3,8 @@ import type { PaginationParams } from '../../../types/api.js';
 import type { PhysicalgoodsDetailRow, PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
 import { PHYSICALGOODS_BUCKET } from './physicalgoods.repository.js';
 
-const mediaProjection = `p.id,p.campus_id,p.propietario_id,p.titulo,p.modalidad,p.precio,p.estado_publicacion,
+const mediaProjection = `p.id,p.campus_id,p.propietario_id,p.titulo,p.descripcion,p.modalidad,p.precio,p.estado_publicacion,
+  to_char(p.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
   r.categoria_id,r.estado_uso,c.nombre AS categoria_nombre`;
 const mediaJoins = `FROM public.publicacion_recurso p JOIN public.recurso_fisico r ON r.publicacion_id=p.id
   JOIN public.categoria_recurso_fisico c ON c.id=r.categoria_id`;
@@ -14,7 +15,7 @@ export async function findPhysicalgoodsMedia(client: PoolClient, publicationId: 
     AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO') ${lock ? 'FOR UPDATE OF p,r' : ''}`, [publicationId, campusId])).rows[0] ?? null;
 }
 export async function findPhysicalgoodsDetail(client: PoolClient, publicationId: string, campusId: string) {
-  return (await client.query<PhysicalgoodsDetailRow>(`SELECT ${mediaProjection},p.descripcion,
+  return (await client.query<PhysicalgoodsDetailRow>(`SELECT ${mediaProjection},
     campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
     JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
     WHERE p.id=$1 AND p.campus_id=$2 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL

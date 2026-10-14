@@ -7,6 +7,7 @@ import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import type { PhysicalgoodsCatalog, PhysicalgoodsCreated } from './physicalgoods.types.js';
 import { parsePhysicalgoods, physicalgoodsId } from './physicalgoods.validation.js';
+import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
 import { findPhysicalgoodsCatalog, findPrincipalPhoto, insertPhysicalgoods, lockPhysicalgoodsPublisher,
   PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 
@@ -56,6 +57,7 @@ export async function createPhysicalgoods(auth: VerifiedAuthConnection, body: un
       if (input.subjectId && !catalog.subjects.some(row => row.id === input.subjectId)) invalid('subjectId', 'Selecciona una asignatura ofrecida en tu campus.');
       const publication: PhysicalgoodsCreated = { ...input, id, campusId: current.campusId, ownerId: current.userId, status: 'DISPONIBLE', currency: 'CLP' };
       await insertPhysicalgoods(client, publication, photo, path);
+      await auditPhysicalgoods(client, current, id, 'PUBLICAR_PUBLICACION', null, await physicalgoodsSnapshot(client, id));
       return publication;
     });
   } catch (error) {

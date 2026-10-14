@@ -3,6 +3,7 @@ import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResourc
 import { PublicationImages } from './PublicationImages';
 import { PhysicalgoodsSearchFilters } from './PhysicalgoodsSearchFilters';
 import { resourceConditions } from '../types/publication';
+import { PhysicalgoodsEditor } from './PhysicalgoodsEditor';
 
 export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled} onPress={action} style={[styles.button, disabled && styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
@@ -56,6 +57,7 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
             {button('Guardar categoría', () => void r.saveCategory(), r.busy || r.editCategory === r.gallery.category.id)}
           </>}
         </>}
+        <PhysicalgoodsEditor resources={r} />
       </ScrollView>
     </Modal>
   </View>;

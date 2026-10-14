@@ -16,11 +16,7 @@ function text(value: unknown, field: string, max: number): string {
   }
   return value.trim();
 }
-export function parsePhysicalgoods(body: unknown): { input: PhysicalgoodsInput; photo: PrincipalPhoto } {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return invalid('body', 'Revisa los datos de la publicación.');
-  const values = body as Record<string, unknown>;
-  const keys = ['title', 'description', 'condition', 'categoryId', 'modality', 'price', 'careerId', 'subjectId', 'photo'];
-  if (Object.keys(values).some(key => !keys.includes(key))) return invalid('body', 'La publicación contiene campos no admitidos.');
+function content(values: Record<string, unknown>): Pick<PhysicalgoodsInput,'title'|'description'|'condition'|'modality'|'price'> {
   const title = text(values.title, 'title', 200);
   const description = text(values.description, 'description', 4000);
   if (typeof values.condition !== 'string' || !['NUEVO', 'BUEN_ESTADO', 'USADO', 'DETERIORADO'].includes(values.condition)) return invalid('condition', 'Selecciona la condición del recurso.');
@@ -30,11 +26,29 @@ export function parsePhysicalgoods(body: unknown): { input: PhysicalgoodsInput; 
     if (typeof values.price !== 'number' || !Number.isFinite(values.price) || values.price <= 0 || values.price > Number.MAX_SAFE_INTEGER) return invalid('price', 'Ingresa un precio de venta mayor que cero.');
     price = values.price;
   } else if (values.price !== undefined && values.price !== null) return invalid('price', 'Una donación no tiene precio de venta.');
+  return { title, description, condition: values.condition as PhysicalgoodsCondition, modality: values.modality, price };
+}
+export function parsePhysicalgoods(body: unknown): { input: PhysicalgoodsInput; photo: PrincipalPhoto } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return invalid('body', 'Revisa los datos de la publicación.');
+  const values = body as Record<string, unknown>;
+  const keys = ['title', 'description', 'condition', 'categoryId', 'modality', 'price', 'careerId', 'subjectId', 'photo'];
+  if (Object.keys(values).some(key => !keys.includes(key))) return invalid('body', 'La publicación contiene campos no admitidos.');
   const categoryId = physicalgoodsId(values.categoryId, 'categoryId');
   const optionalId = (field: string) => values[field] == null ? null : physicalgoodsId(values[field], field);
-  const input: PhysicalgoodsInput = { title, description, condition: values.condition as PhysicalgoodsCondition,
-    categoryId, modality: values.modality, price, careerId: optionalId('careerId'), subjectId: optionalId('subjectId') };
+  const input: PhysicalgoodsInput = { ...content(values), categoryId, careerId: optionalId('careerId'), subjectId: optionalId('subjectId') };
   return { input, photo: parsePhysicalgoodsPhoto(values.photo) };
+}
+export function parsePhysicalgoodsVersion(body: unknown, editing = false) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return invalid('body', 'Revisa los datos de la publicación.');
+  const values = body as Record<string, unknown>;
+  const keys = editing ? ['title','description','condition','modality','price','updatedAt'] : ['updatedAt'];
+  if (Object.keys(values).some(key => !keys.includes(key)) || typeof values.updatedAt !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(values.updatedAt)) return invalid('updatedAt', 'Recarga el detalle de la publicación.');
+  return { values, updatedAt: values.updatedAt };
+}
+export function parsePhysicalgoodsUpdate(body: unknown) {
+  const { values, updatedAt } = parsePhysicalgoodsVersion(body, true);
+  return { ...content(values), updatedAt };
 }
 
 export function parsePhysicalgoodsPhoto(raw: unknown): PrincipalPhoto {

@@ -25,6 +25,8 @@ let storageCalls: { method: string; path: string; body?: unknown }[];
 let uploads: string[], removals: string[], signed: string[];
 let signedPaths: string[];
 let failSign = false;
+let failAudit = false;
+let editService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
 let failUpload = false, failInsert = false, failRemove = false, publicBucket = false, missingBucket = false, lostCommit = false;
 let onUpload: (() => Promise<void>) | null = null;
 
@@ -34,6 +36,7 @@ before(async () => {
     SUPABASE_SECRET_KEY: 'sb_secret_test', SUPABASE_DB_URL: 'postgresql://postgres:simulated@physicalgoods-test.invalid/postgres' });
   mock.method(Pool.prototype, 'connect', async () => ({
     query: async (sql: string, values: unknown[] = []) => {
+      if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL failure');
       if (failInsert && sql.startsWith('INSERT INTO public.archivo_publicacion')) throw new Error('private failed SQL password');
       const result = await db.query(sql, values);
       if (lostCommit && sql === 'COMMIT') { lostCommit = false; throw new Error('lost commit acknowledgement'); }
@@ -80,16 +83,19 @@ before(async () => {
   };
   const services = await import('../src/modules/marketplace/physicalgoods/physicalgoods.service.js');
   imagesService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.images.service.js');
+  editService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
-    'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura']) {
+    'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
+    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','reporte_contenido','auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
+  await db.exec(await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8'));
   await db.query("insert into institucion(id,nombre) values($1,'Institution')", [institution]);
   await db.query("insert into campus(id,institucion_id,nombre) values($1,$2,'Home'),($3,$2,'Foreign')", [campus, institution, otherCampus]);
   await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'Material académico')", [category]);
@@ -104,7 +110,7 @@ before(async () => {
 });
 beforeEach(async () => {
   storageCalls = []; uploads = []; removals = []; signed = [];
-  signedPaths = []; failSign = false;
+  signedPaths = []; failSign = false; failAudit = false;
   failUpload = failInsert = failRemove = publicBucket = missingBucket = lostCommit = false; onUpload = null;
   const userId = randomUUID();
   await db.query('insert into auth.users values($1)', [userId]);
@@ -476,7 +482,7 @@ test('physical detail exposes current description, condition, sale price, campus
   assert.deepEqual(detail.campus, { id: campus, name: 'Home' });
   assert.equal(detail.status, 'DISPONIBLE'); assert.equal(detail.acceptsRequests, true); assert.equal(detail.canEdit, false);
   assert.equal(detail.images.length, 2); assert.equal(detail.images[0].principal, true); assert.equal(detail.expiresIn, 60);
-  assert.deepEqual(Object.keys(detail).sort(), ['acceptsRequests','campus','canEdit','category','condition','description','expiresIn','id','images','modality','owner','price','status','title'].sort());
+  assert.deepEqual(Object.keys(detail).sort(), ['acceptsRequests','campus','canEdit','category','condition','description','expiresIn','id','images','modality','owner','price','status','title','updatedAt'].sort());
   assert.doesNotMatch(JSON.stringify(detail), /private-avatar|Private region|Private district|fecha_nacimiento|foto_path|email|storage_path|bucket_id|genero|verificado_en/);
 });
 
@@ -532,4 +538,108 @@ test('detail safely reports private image failures and validates persisted campu
   failSign = false; const calls = signed.length;
   await db.query('update archivo_publicacion set storage_path=$2 where publicacion_id=$1', [saved.id, otherCampus + '/foreign-private.png']);
   await assert.rejects(imagesService.getPhysicalgoodsGallery(auth, saved.id), { status: 503 }); assert.equal(signed.length, calls);
+});
+
+const updates = (detail: Awaited<ReturnType<typeof imagesService.getPhysicalgoodsGallery>>, overrides: Record<string,unknown> = {}) => ({
+  title: detail.title, description: detail.description,condition: detail.condition,modality: detail.modality,price: detail.price,updatedAt: detail.updatedAt,...overrides,
+});
+const audits = async (id: string) => (await db.query<{ accion:string; datos_antes:Record<string,unknown>|null; datos_despues:Record<string,unknown> }>('select accion,datos_antes,datos_despues from auditoria where entidad_id=$1 order by created_at,id',[id])).rows;
+
+test('owner updates physical content and converts sale to donation atomically without moving campus or academic associations', async () => {
+  const saved = await create(auth,input()), original = await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(original,{title:' Nuevo nombre ',description:'Nueva descripción',condition:'USADO',modality:'DONACION',price:null}));
+  const changed = await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  assert.equal(changed.title,'Nuevo nombre');assert.equal(changed.description,'Nueva descripción');assert.equal(changed.condition,'USADO');assert.equal(changed.price,null);assert.equal(changed.modality,'DONACION');assert.notEqual(changed.updatedAt,original.updatedAt);
+  assert.equal(changed.campus.id,campus);assert.equal(changed.owner.id,auth.userId);assert.equal(changed.category.id,category);assert.equal(changed.images[0].id,original.images[0].id);
+  assert.equal((await db.query('select carrera_id from publicacion_carrera where publicacion_id=$1',[saved.id])).rows[0].carrera_id,career);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(changed,{modality:'VENTA',price:2500}));
+  const sale = await imagesService.getPhysicalgoodsGallery(auth,saved.id);assert.equal(sale.price,2500);
+  const count = (await audits(saved.id)).length;await editService.updatePhysicalgoods(auth,saved.id,updates(sale));assert.equal((await audits(saved.id)).length,count);
+});
+
+test('update and withdrawal reject stale versions and spoofed/invalid data without changes or history', async () => {
+  const saved = await create(auth,input()), detail = await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  for (const changes of [{ownerId:auth.userId},{campusId:otherCampus},{status:'RESERVADO'},{categoryId:category},{title:''},{condition:'INVALID'},{price:0},{modality:'DONACION',price:15000},{photo:input().photo},{updatedAt:'bad'}]) await assert.rejects(editService.updatePhysicalgoods(auth,saved.id,updates(detail,changes)),{status:400});
+  await imagesService.addPhysicalgoodsImage(auth,saved.id,{photo:input().photo});const count = (await audits(saved.id)).length;
+  await assert.rejects(editService.updatePhysicalgoods(auth,saved.id,updates(detail,{title:'Lost update'})),{status:409});
+  await assert.rejects(editService.withdrawPhysicalgoods(auth,saved.id,{updatedAt:detail.updatedAt}),{status:409});
+  assert.equal((await audits(saved.id)).length,count);assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).title,detail.title);
+});
+
+test('basic edit/withdrawal is owner-only even for admins and rechecks current account and campus under SQL lock', async () => {
+  const saved = await create(auth,input()), detail = await imagesService.getPhysicalgoodsGallery(auth,saved.id), stranger = await otherActor();
+  stranger.roles=[{id:randomUUID(),name:'ADMINISTRADOR',campusId:campus}];
+  await db.query("insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) select $1,id,$2 from rol where nombre='ADMINISTRADOR'",[stranger.userId,campus]);
+  await assert.rejects(editService.updatePhysicalgoods(stranger,saved.id,updates(detail)),{status:403});
+  await assert.rejects(editService.withdrawPhysicalgoods(stranger,saved.id,{updatedAt:detail.updatedAt}),{status:403});
+  await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[auth.userId]);
+  await assert.rejects(editService.updatePhysicalgoods(auth,saved.id,updates(detail)),{status:403});
+  await db.query("update perfil_usuario set estado_cuenta='ACTIVA',campus_id=$2 where id=$1",[auth.userId,otherCampus]);
+  await assert.rejects(editService.withdrawPhysicalgoods(auth,saved.id,{updatedAt:detail.updatedAt}),{status:409});
+});
+
+test('editing and logical withdrawal after reservation preserve agreed transaction terms, requests, files and complete history', async () => {
+  const saved=await create(auth,input()), receiver=await otherActor(), requestId=randomUUID(),transactionId=randomUUID();
+  await db.query("insert into mensaje_solicitud(codigo,descripcion) values($1,'Interested')",[requestId]);
+  await db.query("insert into solicitud_recurso(id,publicacion_id,solicitante_id,estado_solicitud,codigo_mensaje) values($1,$2,$3,'ACEPTADA',$4)",[requestId,saved.id,receiver.userId,requestId]);
+  await db.query("insert into transaccion_recurso(id,solicitud_id,publicacion_id,propietario_id,receptor_id,modalidad_acordada,monto_acordado) values($1,$2,$3,$4,$5,'VENTA',15000)",[transactionId,requestId,saved.id,auth.userId,receiver.userId]);
+  await db.query("update publicacion_recurso set estado_publicacion='RESERVADO' where id=$1",[saved.id]);
+  const detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(detail,{description:'Cambio posterior',modality:'DONACION',price:null}));
+  const changed=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.withdrawPhysicalgoods(auth,saved.id,{updatedAt:changed.updatedAt});
+  const transaction=(await db.query('select * from transaccion_recurso where id=$1',[transactionId])).rows[0];
+  assert.equal(transaction.modalidad_acordada,'VENTA');assert.equal(Number(transaction.monto_acordado),15000);assert.equal(transaction.estado_transaccion,'RESERVADA');
+  assert.equal((await db.query('select estado_solicitud from solicitud_recurso where id=$1',[requestId])).rows[0].estado_solicitud,'ACEPTADA');
+  const stored=(await rows('publicacion_recurso')).rows[0];assert.ok(stored.deleted_at);assert.equal(stored.estado_publicacion,'RESERVADO');assert.equal(stored.descripcion,'Cambio posterior');
+  assert.equal((await db.query('select id from archivo_publicacion where publicacion_id=$1',[saved.id])).rows.length,1);assert.equal(removals.length,0);
+  assert.equal((await imagesService.getPhysicalgoodsResources(auth,{mine:'true'})).data.length,0);await assert.rejects(photo(auth,saved.id),{status:404});await assert.rejects(imagesService.getPhysicalgoodsGallery(auth,saved.id),{status:404});
+  const history=await audits(saved.id);assert.deepEqual(history.map(row=>row.accion),['PUBLICAR_PUBLICACION','EDITAR_PUBLICACION','RETIRAR_PUBLICACION']);
+  assert.equal(history[1].datos_antes?.modalidad,'VENTA');assert.equal(history[1].datos_despues.modalidad,'DONACION');assert.equal(history[2].datos_antes?.deleted_at,null);assert.ok(history[2].datos_despues.deleted_at);
+});
+
+test('publication, image and category histories preserve prior snapshots and expose only authorized public audit fields', async () => {
+  const saved=await create(auth,input()), second=await imagesService.addPhysicalgoodsImage(auth,saved.id,{photo:input().photo});
+  await imagesService.changePhysicalgoodsPrincipal(auth,saved.id,second.id);
+  const first=(await imagesService.getPhysicalgoodsGallery(auth,saved.id)).images[1].id;
+  await imagesService.deletePhysicalgoodsImage(auth,saved.id,first);
+  const newCategory=randomUUID();await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'New category')",[newCategory]);await imagesService.changePhysicalgoodsCategory(auth,saved.id,{categoryId:newCategory});
+  const history=await audits(saved.id);assert.equal(history.length,5);assert.equal(history[0].datos_despues.categoria_id,category);assert.equal(history[4].datos_despues.categoria_id,newCategory);
+  assert.equal((history[0].datos_despues.images as unknown[]).length,1);assert.equal((history[1].datos_despues.images as unknown[]).length,2);
+  const {auditSnapshot}=await import('../src/modules/users/audit.snapshot.js');
+  const projected=auditSnapshot({...history[4].datos_despues,password:'secret',images:[{id:second.id,orden:0,storage_path:'private',url:'secret'}]});
+  assert.equal(projected?.categoria_id,newCategory);assert.equal(projected?.descripcion,'Funciona correctamente');assert.doesNotMatch(JSON.stringify(projected),/password|storage_path|secret/);
+  const admin=await otherActor();await db.query("insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) select $1,id,$2 from rol where nombre='ADMINISTRADOR'",[admin.userId,campus]);
+  const entry=(await db.query('select id from auditoria where entidad_id=$1 order by created_at desc,id desc limit 1',[saved.id])).rows[0];
+  await db.query("update publicacion_recurso set descripcion='Live data changed',deleted_at=now() where id=$1",[saved.id]);
+  const {getAuditEntry}=await import('../src/modules/users/access.service.js');
+  const historical=await getAuditEntry(admin,campus,entry.id);assert.equal((historical.datos_despues as Record<string,unknown>).descripcion,'Funciona correctamente');
+  await assert.rejects(getAuditEntry(auth,campus,entry.id),{status:403});await assert.rejects(getAuditEntry(admin,otherCampus,entry.id),{status:403});
+});
+
+test('audit failures roll back content and file changes and compensate new uploads including publication creation', async () => {
+  const saved=await create(auth,input()),detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);failAudit=true;
+  await assert.rejects(editService.updatePhysicalgoods(auth,saved.id,updates(detail,{title:'Rollback'})),{status:503});
+  await assert.rejects(editService.withdrawPhysicalgoods(auth,saved.id,{updatedAt:detail.updatedAt}),{status:503});
+  await assert.rejects(imagesService.addPhysicalgoodsImage(auth,saved.id,{photo:input().photo}),{status:503});
+  await assert.rejects(create(auth,input()),{status:503});failAudit=false;
+  const currentDetail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);assert.equal(currentDetail.title,detail.title);assert.equal(currentDetail.updatedAt,detail.updatedAt);assert.equal(currentDetail.images.length,1);
+  assert.equal((await rows('publicacion_recurso')).rows.length,1);assert.equal((await audits(saved.id)).length,1);assert.equal(removals.length,2);
+});
+
+test('HTTP owner edits and withdraws with no-store, validation/authentication/conflicts and excluded resource protection', async () => {
+  const saved=await create(auth,input()),detail=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  const send=(method:string,body:unknown,authorization='Bearer '+token)=>originalFetch(base+'/'+saved.id,{method,headers:{Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  assert.equal((await send('PATCH',updates(detail),'')).status,401);assert.equal((await send('DELETE',{updatedAt:'invalid'})).status,400);
+  const updated=await send('PATCH',updates(detail,{price:2000}));assert.equal(updated.status,200);assert.equal(updated.headers.get('cache-control'),'no-store');
+  assert.equal((await send('DELETE',{updatedAt:detail.updatedAt})).status,409);
+  const fresh=await imagesService.getPhysicalgoodsGallery(auth,saved.id);assert.equal((await send('DELETE',{updatedAt:fresh.updatedAt})).status,200);
+  assert.equal((await send('PATCH',updates(fresh))).status,404);
+});
+
+test('physical edit migration is repeatable, changes no table/column/data and retains original audit actions', async () => {
+  const saved=await create(auth,input());const inventory=()=>db.query("select table_name,column_name from information_schema.columns where table_schema='public' order by table_name,ordinal_position");const before=await inventory();
+  const sql=await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8');await db.exec(sql);await db.exec(sql);assert.deepEqual((await inventory()).rows,before.rows);assert.equal((await audits(saved.id)).length,1);
+  await db.query("insert into auditoria(actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion) values($1,$2,$3,'publicacion_recurso',$4,'OCULTAR_PUBLICACION')",[auth.userId,institution,campus,saved.id]);
+  await assert.rejects(db.query("insert into auditoria(institucion_id,entidad_tipo,entidad_id,accion) values($1,'x','x','UNKNOWN')",[institution]));
 });

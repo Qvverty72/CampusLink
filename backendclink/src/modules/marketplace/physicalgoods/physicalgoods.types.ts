@@ -33,6 +33,8 @@ export interface PhysicalgoodsCreated extends PhysicalgoodsInput {
 }
 
 export interface PhysicalgoodsMediaRow {
+  descripcion: string;
+  updated_at: string;
   id: string;
   campus_id: string;
   propietario_id: string;

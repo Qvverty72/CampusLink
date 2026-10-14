@@ -59,6 +59,7 @@ export const emptyPhysicalgoodsFilters: PhysicalgoodsSearchFilters = {
   q: '', categoryId: '', modality: '', condition: '', careerId: '', subjectId: '', minPrice: '', maxPrice: '', mine: false,
 };
 export interface PhysicalgoodsGallery extends PhysicalgoodsResource {
+  updatedAt: string;
   description: string;
   campus: { id: string; name: string };
   owner: { id: string; fullName: string };

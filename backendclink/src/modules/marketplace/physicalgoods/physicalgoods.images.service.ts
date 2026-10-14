@@ -9,6 +9,7 @@ import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgood
 import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto,
   signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { parsePhysicalgoodsSearch } from './physicalgoods.search.validation.js';
+import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
 import { findPhysicalgoodsCategory, findPhysicalgoodsDetail, findPhysicalgoodsImages, findPhysicalgoodsMedia, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
   retirePhysicalgoodsImage, setPhysicalgoodsPrincipal, touchPhysicalgoods, updatePhysicalgoodsCategory } from './physicalgoods.images.repository.js';
 
@@ -25,7 +26,7 @@ function mediaDto(row: PhysicalgoodsMediaRow) {
   return { id: row.id, title: row.titulo, category: { id: row.categoria_id, name: row.categoria_nombre },
     modality: row.modalidad, price: row.modalidad === 'VENTA' ? Number(row.precio) : null, status: row.estado_publicacion, condition: row.estado_uso };
 }
-async function editPhysicalgoods<T>(auth: VerifiedAuthConnection, id: string, operation: (client: PoolClient, row: PhysicalgoodsMediaRow) => Promise<T>) {
+export async function editPhysicalgoods<T>(auth: VerifiedAuthConnection, id: string, operation: (client: PoolClient, row: PhysicalgoodsMediaRow) => Promise<T>, ownerOnly = false) {
   requireCampusCapability(auth, auth.campusId, 'general');
   return withPhysicalgoodsTransaction(async client => {
     const { profile, roles } = await lockPhysicalgoodsPublisher(client, auth.userId);
@@ -34,8 +35,16 @@ async function editPhysicalgoods<T>(auth: VerifiedAuthConnection, id: string, op
     requireCampusCapability(current, current.campusId, 'general');
     const row = await findPhysicalgoodsMedia(client, id, current.campusId, true);
     if (!row) throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible en tu campus.');
-    if (row.propietario_id !== current.userId) requireCampusCapability(current, row.campus_id, 'administration');
-    return operation(client, row);
+    if (row.propietario_id !== current.userId) {
+      if (ownerOnly) throw new ApiError(403, 'FORBIDDEN', 'Solo el propietario puede editar o retirar esta publicación.');
+      requireCampusCapability(current, row.campus_id, 'administration');
+    }
+    const before = await physicalgoodsSnapshot(client, id);
+    const result = await operation(client, row);
+    const after = await physicalgoodsSnapshot(client, id);
+    if (JSON.stringify(before) !== JSON.stringify(after)) await auditPhysicalgoods(client, current, id,
+      after.deleted_at ? 'RETIRAR_PUBLICACION' : 'EDITAR_PUBLICACION', before, after);
+    return result;
   });
 }
 export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publicationId: unknown) {
@@ -55,7 +64,8 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
     return { ...mediaDto(result.row), description: result.row.descripcion,
       campus: { id: result.row.campus_id, name: result.row.campus_nombre },
       owner: { id: result.row.propietario_id, fullName: result.row.propietario_nombre },
-      acceptsRequests: result.row.estado_publicacion === 'DISPONIBLE', canEdit: canEdit(auth, result.row), images, expiresIn: 60 };
+      acceptsRequests: result.row.estado_publicacion === 'DISPONIBLE', updatedAt: result.row.updated_at,
+      canEdit: canEdit(auth, result.row), images, expiresIn: 60 };
   });
 }
 export async function getPhysicalgoodsResources(auth: VerifiedAuthConnection, query: unknown) {

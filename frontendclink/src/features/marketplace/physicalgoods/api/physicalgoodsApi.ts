@@ -17,6 +17,12 @@ export function loadPhysicalgoodsResources(filters: PhysicalgoodsSearchFilters, 
   return authenticatedEnvelopeRequest<PhysicalgoodsResource[], PhysicalgoodsPage['meta']>(path, { signal }, query);
 }
 export const loadPhysicalgoodsGallery = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsGallery>(resourcePath(id) + '/images', { signal });
+export const updatePhysicalgoods = (id: string, input: Pick<PublicationInput,'title'|'description'|'condition'|'modality'|'price'> & { updatedAt: string }, signal: AbortSignal) => authenticatedRequest(resourcePath(id), {
+  method: 'PATCH', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+});
+export const withdrawPhysicalgoods = (id: string, updatedAt: string, signal: AbortSignal) => authenticatedRequest(resourcePath(id), {
+  method: 'DELETE', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updatedAt }),
+});
 export const addPhysicalgoodsPhoto = (id: string, photo: PublicationPhoto, signal: AbortSignal) => authenticatedRequest<{ id: string }>(resourcePath(id) + '/images', {
   method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ photo: { name: photo.name, mimeType: photo.mimeType, base64: photo.base64 } }),
 });
