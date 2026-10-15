@@ -2,14 +2,15 @@ import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { usePhysicalgoodsRequests } from '../hooks/usePhysicalgoodsRequests';
 
 /** Lista propia por publicación: una reserva conserva las demás solicitudes pendientes. */
-export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,received=true,refreshVersion=0}:{active:boolean;onOpen:(id:string)=>void;onResolved:()=>void;
+export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,onDetail,received=true,refreshVersion=0}:{active:boolean;onOpen:(id:string)=>void;onResolved:()=>void;
+  onDetail:(publicationId:string,requestId:string)=>void;
   onAgreement:(publicationId:string,transactionId:string)=>void;received?:boolean;refreshVersion?:number}) {
   const r=usePhysicalgoodsRequests(active,onResolved,received,refreshVersion);
   const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled}
     onPress={action} style={[styles.button,disabled&&styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
   return <View style={styles.section}>
     <Text accessibilityRole="header" style={styles.title}>{received?'Solicitudes recibidas':'Mis solicitudes'}</Text>
-    <Text style={styles.text}>{received?'Aceptar reserva una unidad. Las demás solicitudes permanecen pendientes mientras se realiza el intercambio.':'Consulta el estado de tus solicitudes, incluso mientras el recurso está reservado.'}</Text>
+    <Text style={styles.text}>{received?'Consulta todas tus solicitudes recibidas. En tu campus actual puedes resolver las pendientes.':'Consulta todas tus solicitudes, incluidas rechazadas y cerradas, también de campus anteriores.'}</Text>
     {button(received?'Actualizar solicitudes recibidas':'Actualizar mis solicitudes',r.reload,r.busy||r.loading)}
     {(r.loading||r.busy)&&<ActivityIndicator accessibilityLabel={r.busy?'Resolviendo solicitud':'Cargando solicitudes recibidas'} />}
     {r.error&&<Text accessibilityRole="alert" style={styles.error}>{r.error}</Text>}
@@ -23,18 +24,21 @@ export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,rece
     {r.page&&!r.page.data.length&&<Text style={styles.text}>No hay solicitudes en esta página.</Text>}
     {r.page?.data.map(request=><View key={request.id} style={styles.card}>
       <Text accessibilityRole="header" style={styles.label}>{request.publication.title}</Text>
+      <Text style={styles.text}>Campus: {request.campus.name}</Text>
       <Text style={styles.text}>Recurso: {request.publication.status.toLowerCase()} · {request.publication.modality==='DONACION'?'Donación':`Venta · ${request.publication.price?.toLocaleString('es-CL')} CLP`}</Text>
       {received&&<Text style={styles.label}>{request.requester.fullName}</Text>}
       <Text style={styles.text}>{request.message}</Text>
       <Text style={styles.text}>Solicitud: {request.status.toLowerCase()} · {new Date(request.requestedAt).toLocaleDateString('es-CL')}</Text>
       {request.transaction&&<Text style={styles.text}>Acuerdo: {request.transaction.status.toLowerCase().replace('_',' ')}</Text>}
       {request.transaction&&button('Ver acuerdo: '+request.publication.title,()=>onAgreement(request.publication.id,request.transaction!.id),r.busy)}
-      {request.publication.canView===false&&<Text style={styles.text}>La publicación ya no está visible en el marketplace. Se conserva el acuerdo.</Text>}
-      {request.status==='PENDIENTE'&&request.publication.status==='RESERVADO'&&<Text style={styles.text}>{received?'Pendiente mientras se realiza otro intercambio. Podrás aceptarla si ese acuerdo se cancela.':'Tu solicitud sigue pendiente mientras se realiza otro intercambio. Este recurso está reservado para otra persona.'}</Text>}
-      {received&&request.status==='PENDIENTE'&&<View style={styles.choices}>
+      {request.publication.isWithdrawn&&<Text style={styles.text}>Publicación retirada. Se conserva la solicitud.</Text>}
+      {!request.publication.canView&&<Text style={styles.text}>Consulta histórica; sin interacción pública en tu campus actual.</Text>}
+      {request.publication.canView&&request.status==='PENDIENTE'&&request.publication.status==='RESERVADO'&&<Text style={styles.text}>{received?'Pendiente mientras se realiza otro intercambio. Podrás aceptarla si ese acuerdo se cancela.':'Tu solicitud sigue pendiente mientras se realiza otro intercambio. Este recurso está reservado para otra persona.'}</Text>}
+      {received&&request.canResolve&&<View style={styles.choices}>
         {button(`Aceptar solicitud de ${request.requester.fullName}`,()=>r.select(request,'ACEPTAR'),r.busy||r.loading||request.publication.status!=='DISPONIBLE')}
         {button(`Rechazar solicitud de ${request.requester.fullName}`,()=>r.select(request,'RECHAZAR'),r.busy||r.loading)}
       </View>}
+      {button('Ver solicitud: '+request.publication.title,()=>onDetail(request.publication.id,request.id),r.busy)}
       {request.publication.canView!==false&&button('Ver recurso: '+request.publication.title,()=>onOpen(request.publication.id),r.busy)}
     </View>)}
     <View style={styles.choices}>

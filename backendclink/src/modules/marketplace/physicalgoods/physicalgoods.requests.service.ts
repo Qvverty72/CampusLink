@@ -5,13 +5,14 @@ import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { findPhysicalgoodsMedia } from './physicalgoods.images.repository.js';
 import { physicalgoodsId, parsePhysicalgoodsRequest, parsePhysicalgoodsDecision } from './physicalgoods.validation.js';
-import type { PhysicalgoodsMediaRow, PhysicalgoodsRequestRow } from './physicalgoods.types.js';
+import type { PhysicalgoodsMediaRow, PhysicalgoodsReceivedRow, PhysicalgoodsRequestRow } from './physicalgoods.types.js';
 import { findActivePhysicalgoodsRequest, findPhysicalgoodsRequestMessage, insertPhysicalgoodsRequest, physicalgoodsRequestMessages,
-  findPhysicalgoodsRequest, updatePhysicalgoodsRequestStatus, listPhysicalgoodsRequests } from './physicalgoods.requests.repository.js';
+  findOwnPhysicalgoodsRequest, findPhysicalgoodsRequest, updatePhysicalgoodsRequestStatus, listPhysicalgoodsRequests } from './physicalgoods.requests.repository.js';
 import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setPhysicalgoodsPublicationStatus } from './physicalgoods.transactions.repository.js';
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../../services/pagination.js';
+import { createPaginatedResult } from '../../../services/pagination.js';
+import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
 
 /** Reutiliza el orden de bloqueos de edición: perfil primero, publicación después. */
 async function requestContext<T>(auth: VerifiedAuthConnection, id: string,
@@ -57,23 +58,30 @@ export async function createPhysicalgoodsRequest(auth: VerifiedAuthConnection, p
     return receipt(await insertPhysicalgoodsRequest(client,id,current.userId,code),resource);
   });
 }
-/** Vista operacional propia, independiente de la búsqueda estrictamente disponible. */
+function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnection) {
+  const canView=row.campus_id===current.campusId&&!row.deleted_at&&['DISPONIBLE','RESERVADO','FINALIZADO'].includes(row.estado_publicacion);
+  return {id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at,
+    canView,modality:row.modalidad,price:row.modalidad==='VENTA'?Number(row.precio):null},campus:{id:row.campus_id,name:row.campus_nombre},
+    owner:{id:row.propietario_id,fullName:row.propietario_nombre},requester:{id:row.solicitante_id,fullName:row.solicitante_nombre},
+    message:row.mensaje,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,
+    canResolve:canView&&row.propietario_id===current.userId&&row.estado_solicitud==='PENDIENTE',
+    transaction:row.transaccion_id?{id:row.transaccion_id,status:row.estado_transaccion}:null};
+}
+/** Historia propia completa; la disponibilidad solo determina acciones operacionales. */
 async function getPhysicalgoodsRequests(auth: VerifiedAuthConnection, query: unknown, received: boolean) {
-  requireCampusCapability(auth,auth.campusId,'general');
-  const pagination = parsePaginationQuery(query);
-  if (!pagination.success || Object.keys(query as object).some(key => !['page','limit'].includes(key))) throw new ApiError(400,'VALIDATION_ERROR','Revisa la paginación de solicitudes.');
-  try {
-    const rows = await withPhysicalgoodsTransaction(client => listPhysicalgoodsRequests(client,auth.campusId,auth.userId,pagination.data,received));
-    const result = createPaginatedResult(rows,pagination.data);
-    return { ...result,data:result.data.map(row => ({ id:row.id,publication:{ id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,
-      canView:!row.deleted_at&&['DISPONIBLE','RESERVADO','FINALIZADO'].includes(row.estado_publicacion),
-      modality:row.modalidad,price:row.modalidad==='VENTA'?Number(row.precio):null },requester:{ id:row.solicitante_id,fullName:row.solicitante_nombre },
-      message:row.mensaje,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,
-      transaction:row.transaccion_id ? { id:row.transaccion_id,status:row.estado_transaccion } : null })) };
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudieron consultar las solicitudes.');
-  }
+  const pagination=physicalgoodsHistoryPagination(query);
+  return withPhysicalgoodsHistory(auth,async(client,current)=>{
+    const result=createPaginatedResult(await listPhysicalgoodsRequests(client,current.userId,pagination,received),pagination);
+    return {...result,data:result.data.map(row=>ownRequestDto(row,current))};
+  });
+}
+export async function getOwnPhysicalgoodsRequest(auth:VerifiedAuthConnection,publicationId:unknown,requestId:unknown) {
+  const id=physicalgoodsId(publicationId,'publicationId'),selected=physicalgoodsId(requestId,'requestId');
+  return withPhysicalgoodsHistory(auth,async(client,current)=>{
+    const row=await findOwnPhysicalgoodsRequest(client,current.userId,id,selected);
+    if(!row)throw new ApiError(404,'NOT_FOUND','No se encontró una solicitud propia.');
+    return ownRequestDto(row,current);
+  });
 }
 export const getReceivedPhysicalgoodsRequests = (auth: VerifiedAuthConnection, query: unknown) => getPhysicalgoodsRequests(auth,query,true);
 export const getSentPhysicalgoodsRequests = (auth: VerifiedAuthConnection, query: unknown) => getPhysicalgoodsRequests(auth,query,false);

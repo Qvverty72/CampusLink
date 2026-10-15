@@ -68,7 +68,7 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
     }catch(reason){if(!abort.signal.aborted){report(reason,kind==='message'?setMessageError:setError);}}
     finally{if(!abort.signal.aborted){running.current=false;setBusy(false);setPage(1);setRevision(value=>value+1);if(kind!=='message')onChanged();}}
   }
-  return {detail,messages,options,buildingId,floorId,building,preview,loading,messagesLoading,optionsLoading,busy,error,messageError,optionsError,page,action,
+  return {detail,historical:!!detail&&detail.campus.id!==auth.identity?.campusId,messages,options,buildingId,floorId,building,preview,loading,messagesLoading,optionsLoading,busy,error,messageError,optionsError,page,action,
     selectAction:(value:'confirm'|'cancel')=>{if(!running.current)setAction(value);},cancelAction:()=>{if(!running.current)setAction(null);},
     confirm:()=>perform('confirm'),cancel:()=>perform('cancel'),send:()=>perform('message'),
     setBuilding:(value:string)=>{if(!running.current){setBuildingId(value);setFloorId('');}},setFloor:(value:string)=>{if(!running.current)setFloorId(value);},

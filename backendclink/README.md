@@ -369,7 +369,7 @@ Validación local:322/322 tests backend (54 físicos), TypeScript/build, exports
 
 ## Resolver solicitudes recibidas (F2.4-07)
 
-Marketplace incorpora Solicitudes recibidas y Mis solicitudes. Ambas son vistas operacionales propias, paginadas y del campus vigente; permiten abrir un recurso RESERVADO sin ampliar la búsqueda pública, que sigue exigiendo DISPONIBLE. La gestión pertenece exclusivamente al propietario, con confirmación previa; los demás solicitantes pueden seguir consultando su estado pendiente.
+Marketplace incorpora Solicitudes recibidas y Mis solicitudes. Ambas son vistas propias y paginadas; F2.4-09 amplía su lectura al historial completo y a campus anteriores. Las acciones operacionales siguen sujetas al campus vigente. Permiten abrir un recurso RESERVADO del campus actual sin ampliar la búsqueda pública, que sigue exigiendo DISPONIBLE. La gestión pertenece exclusivamente al propietario, con confirmación previa; los demás solicitantes pueden seguir consultando su estado pendiente.
 
 - `GET /api/v1/marketplace/physicalgoods/received-requests` y `/sent-requests`: admiten únicamente `page`/`limit`, envelope `{data:[{id,publication:{id,title,status,modality,price},requester:{id,fullName},message,messageCode,status,requestedAt,transaction:{id,status}|null}],meta}`. Relaciones/actor/campus se determinan en servidor. No correos, perfiles privados ni solicitudes ajenas; el solicitante pendiente no recibe el acuerdo elegido de otra persona.
 - `PATCH /api/v1/marketplace/physicalgoods/:publicationId/requests/:requestId`: cuerpo exacto `{decision:'ACEPTAR'|'RECHAZAR'}`. Solo PENDIENTE y propietario habilitado; solicitud ajena al recurso404, resolución repetida/conflicto409. Rechazar conserva el registro y no cambia la publicación. Aceptar requiere DISPONIBLE y ausencia de acuerdo activo, inserta `transaccion_recurso` con términos vigentes copiados del servidor, marca ACEPTADA y RESERVADO, avanza versión y audita todo atómicamente. Las demás solicitudes permanecen PENDIENTE.
@@ -383,7 +383,7 @@ Validación local:335/335 pruebas backend (67 físicas), TypeScript/build, expor
 
 ## Confirmar o cancelar una transacción física (F2.4-08)
 
-Desde Solicitudes recibidas o Mis solicitudes, «Ver acuerdo» abre términos originales, participantes, estado, fechas y confirmaciones. Cada participante confirma o cancela con una decisión explícita; una confirmación mantiene reserva, ambas completan/finalizan y cierran pendientes restantes. Cancelar registra actor/fecha y libera la reserva, preservando retirada/moderación. Reutiliza las transiciones atómicas de F2.4-07. Acuerdos propios de publicaciones retiradas u ocultas siguen accesibles desde las listas del campus actual; `publication.canView` impide abrir su detalle público excluido. La historia completa/campus anteriores corresponde a F2.4-09.
+Desde Solicitudes recibidas o Mis solicitudes, «Ver acuerdo» abre términos originales, participantes, estado, fechas y confirmaciones. Cada participante confirma o cancela con una decisión explícita; una confirmación mantiene reserva, ambas completan/finalizan y cierran pendientes restantes. Cancelar registra actor/fecha y libera la reserva, preservando retirada/moderación. Reutiliza las transiciones atómicas de F2.4-07. Acuerdos propios de publicaciones retiradas u ocultas siguen accesibles desde las listas; `publication.canView` impide abrir su detalle público excluido. F2.4-09 incorpora historia completa y consulta de campus anteriores.
 
 Bajo `/api/v1/marketplace/physicalgoods/:publicationId/transactions/:transactionId`:
 
@@ -398,6 +398,25 @@ Coordinación reutiliza exclusivamente columnas originales de `notificacion`, ti
 **Sin SQL nuevo:** consulta remota de solo lectura confirmó RLS y SELECT/INSERT servidor de notificacion, acceso directo anon/authenticated bloqueado y mapa activo con edificios/pisos. Sin nuevas tablas, columnas, colecciones, índices, dependencias ni escrituras remotas del agente.
 
 Validación local:345/345 pruebas backend (77 físicas), TypeScript/build, export web/Android/iOS y QA Edge390×844/1280×900 como propietario/receptor. Cubre términos originales, doble confirmación/cancelación, acceso tras retiro, ubicación/privacidad, Mongo ausente/fallido, cierre/suspensión durante lookup, rollback/COMMIT incierto, reintento desde página antigua y regresión de solicitudes/fotos/contenido/retirada/resolución. QA real de aplicación permanece para cierre de fase según acuerdo usuario.
+
+## Historial propio de recursos físicos (F2.4-09)
+
+Marketplace ofrece Mis publicaciones, Solicitudes recibidas, Mis solicitudes y Mis transacciones. Conserva publicaciones de cualquier estado, incluidas retiradas, solicitudes rechazadas/canceladas y acuerdos completados/cancelados. Cada registro permite consultar su detalle y campus original, incluso después de cambiar el campus del perfil.
+
+Rutas autenticadas bajo `/api/v1/marketplace/physicalgoods`:
+
+- `GET /my-publications?page=1&limit=10`: publicaciones cuyo propietario es el usuario vigente. Incluye estado, `isWithdrawn`, campus/categoría/condición/modalidad/precio, `publishedAt` y `canView` (acceso al recurso operacional).
+- `GET /:publicationId/history`: detalle exclusivo del propietario con descripción e imágenes firmadas durante60 segundos. Valida rutas Storage contra el campus original. Solo retorna imágenes actualmente conservadas; no reconstruye versiones de auditoría.
+- `GET /received-requests` y `/sent-requests`: listas existentes ampliadas al historial completo propio; agregan campus, propietario, `publication.isWithdrawn` y `canResolve`. Conservan orden/paginación y contratos previos. La solicitud pendiente de otra persona nunca recibe el acuerdo elegido.
+- `GET /:publicationId/requests/:requestId`: detalle propio para propietario o solicitante, con mensaje, estado/fecha, publicación/campus y su acuerdo si existe. Comprueba simultáneamente publicación, solicitud e identidad.
+- `GET /transactions?page=1&limit=10`: acuerdos del usuario como propietario/receptor, con estado, campus, publicación, rol, términos originales y fecha de inicio. Sin filtros de disponibilidad ni campus vigente.
+- El detalle de acuerdo y `GET /:publicationId/transactions/:transactionId/messages` existentes permiten leer historia propia de otros campus. `canConfirm`/`canCancel` son falsos fuera del campus actual; confirmar/cancelar/enviar mensajes y los endpoints públicos conservan sus validaciones operacionales.
+
+Listas aceptan únicamente `page`/`limit` y mantienen `{data,meta}`. Los detalles usan `{data}`. Todas las lecturas comprueban cuenta/capacidad y contexto persistidos en servidor; los repositorios filtran propiedad/participación. No hay excepción de lectura para administradores ajenos. No se aceptan IDs de usuario/campus como alcance del cliente. 400 entrada;401 sesión;403 cuenta/capacidad;404 ajeno;409 contexto cambiado;503 dependencia sanitizada; no-store.
+
+Frontend mantiene API→hooks→componentes, aborta lecturas al cerrar/cambiar de vista y ofrece actualizar/reintentar. Los detalles históricos son de consulta; cuando `canView` lo permite enlazan al recurso actual para sus acciones existentes. La búsqueda pública conserva DISPONIBLE/campus vigente. No se trasladan publicaciones ni se escriben registros por consultar historia.
+
+Sin SQL que ejecutar, tablas/columnas/índices/dependencias/env nuevos. Validación:352/352 pruebas backend con Node22.23.3 (84 físicas,7 nuevas), TypeScript/build, exportaciones web/Android/iOS --no-bytecode y QA Edge390×844/1280×900 con API simulada. Incluye privacidad, campus anterior, todos los estados, esquema intacto, paginación, detalle/error/reintento/cierre tardío y regresiones de publicación/fotos/solicitudes/resolución/acuerdos. QA con datos reales y dispositivos permanece para el cierre de fase.
 
 ## Trabajo posterior
 

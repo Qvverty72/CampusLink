@@ -6,12 +6,15 @@ import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from '
 import { createPhysicalgoodsRequestController, getPhysicalgoodsRequestOptionsController } from './physicalgoods.controller.js';
 import { getReceivedPhysicalgoodsRequestsController, getSentPhysicalgoodsRequestsController, resolvePhysicalgoodsRequestController, confirmPhysicalgoodsTransactionController, cancelPhysicalgoodsTransactionController } from './physicalgoods.controller.js';
 import { getPhysicalgoodsTransactionController,getPhysicalgoodsCoordinationOptionsController,getPhysicalgoodsCoordinationMessagesController,sendPhysicalgoodsCoordinationController } from './physicalgoods.controller.js';
+import { getOwnPhysicalgoodsController,getOwnPhysicalgoodsDetailController,getOwnPhysicalgoodsRequestController,getOwnPhysicalgoodsTransactionsController } from './physicalgoods.controller.js';
 
 // Solo expone diagnósticos técnicos; las rutas de negocio requieren autenticación.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getPhysicalgoodsHealthController);
   router.get('/options', requireAuthentication, getPhysicalgoodsOptionsController);
+  router.get('/my-publications',requireAuthentication,getOwnPhysicalgoodsController);
+  router.get('/transactions',requireAuthentication,getOwnPhysicalgoodsTransactionsController);
   router.get('/received-requests', requireAuthentication, getReceivedPhysicalgoodsRequestsController);
   router.get('/sent-requests', requireAuthentication, getSentPhysicalgoodsRequestsController);
   router.get('/', requireAuthentication, getPhysicalgoodsResourcesController);
@@ -19,6 +22,8 @@ export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   router.post('/', requireAuthentication, json({ limit: '7mb' }), createPhysicalgoodsController);
   router.get('/:publicationId/photo', requireAuthentication, getPhysicalgoodsPhotoController);
   router.get('/:publicationId/images', requireAuthentication, getPhysicalgoodsGalleryController);
+  router.get('/:publicationId/history',requireAuthentication,getOwnPhysicalgoodsDetailController);
+  router.get('/:publicationId/requests/:requestId',requireAuthentication,getOwnPhysicalgoodsRequestController);
   router.get('/:publicationId/request-options', requireAuthentication, getPhysicalgoodsRequestOptionsController);
   router.post('/:publicationId/requests', requireAuthentication, createPhysicalgoodsRequestController);
   router.patch('/:publicationId/requests/:requestId', requireAuthentication, resolvePhysicalgoodsRequestController);

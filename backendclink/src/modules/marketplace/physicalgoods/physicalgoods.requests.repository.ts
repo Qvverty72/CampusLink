@@ -31,17 +31,24 @@ export async function closePendingPhysicalgoodsRequests(client: PoolClient, publ
   await client.query(`UPDATE public.solicitud_recurso SET estado_solicitud='CANCELADA',updated_at=clock_timestamp()
     WHERE publicacion_id=$1 AND estado_solicitud='PENDIENTE'`,[publicationId]);
 }
-export async function listPhysicalgoodsRequests(client: PoolClient, campusId: string, userId: string, pagination: PaginationParams, received: boolean) {
-  return (await client.query<PhysicalgoodsReceivedRow>(`SELECT s.id,s.publicacion_id,s.solicitante_id,s.codigo_mensaje,s.estado_solicitud,
+const ownRequestProjection = `SELECT s.id,s.publicacion_id,s.solicitante_id,s.codigo_mensaje,s.estado_solicitud,
     to_char(s.solicitada_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS solicitada_en,
-    p.titulo,p.estado_publicacion,p.deleted_at,p.modalidad,p.precio,u.nombre_completo AS solicitante_nombre,m.descripcion AS mensaje,
+    p.titulo,p.estado_publicacion,p.deleted_at,p.modalidad,p.precio,p.campus_id,c.nombre AS campus_nombre,
+    p.propietario_id,o.nombre_completo AS propietario_nombre,u.nombre_completo AS solicitante_nombre,m.descripcion AS mensaje,
     t.id AS transaccion_id,t.estado_transaccion
     FROM public.solicitud_recurso s JOIN public.publicacion_recurso p ON p.id=s.publicacion_id
     JOIN public.recurso_fisico r ON r.publicacion_id=p.id JOIN public.perfil_usuario u ON u.id=s.solicitante_id
+    JOIN public.campus c ON c.id=p.campus_id JOIN public.perfil_usuario o ON o.id=p.propietario_id
     JOIN public.mensaje_solicitud m ON m.codigo=s.codigo_mensaje LEFT JOIN public.transaccion_recurso t ON t.solicitud_id=s.id
-      AND t.publicacion_id=p.id AND (t.propietario_id=$2 OR t.receptor_id=$2)
-    WHERE p.campus_id=$1 AND ${received ? 'p.propietario_id' : 's.solicitante_id'}=$2 AND p.tipo_recurso='FISICO'
-    AND (t.id IS NOT NULL OR (p.deleted_at IS NULL AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO')))
-    ORDER BY p.publicado_en DESC,p.id,s.solicitada_en,s.id LIMIT $3 OFFSET $4`,
-    [campusId,userId,pagination.limit+1,pagination.offset])).rows;
+      AND t.publicacion_id=p.id AND (t.propietario_id=$1 OR t.receptor_id=$1)`;
+export async function listPhysicalgoodsRequests(client: PoolClient, userId: string, pagination: PaginationParams, received: boolean) {
+  return (await client.query<PhysicalgoodsReceivedRow>(`${ownRequestProjection}
+    WHERE ${received ? 'p.propietario_id' : 's.solicitante_id'}=$1 AND p.tipo_recurso='FISICO'
+    ORDER BY p.publicado_en DESC,p.id,s.solicitada_en,s.id LIMIT $2 OFFSET $3`,
+    [userId,pagination.limit+1,pagination.offset])).rows;
+}
+export async function findOwnPhysicalgoodsRequest(client:PoolClient,userId:string,publicationId:string,requestId:string) {
+  return (await client.query<PhysicalgoodsReceivedRow>(`${ownRequestProjection}
+    WHERE (p.propietario_id=$1 OR s.solicitante_id=$1) AND p.tipo_recurso='FISICO' AND p.id=$2 AND s.id=$3`,
+    [userId,publicationId,requestId])).rows[0]??null;
 }

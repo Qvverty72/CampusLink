@@ -26,6 +26,7 @@ export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:Phys
         <Text style={styles.text}>Estado del recurso: {detail.publication.status.toLowerCase()}</Text>
         {detail.publication.isWithdrawn&&<Text style={styles.text}>La publicación fue retirada. Se conserva este acuerdo.</Text>}
         <Text style={styles.text}>Campus: {detail.campus.name}</Text>
+        {t.historical&&<Text style={styles.text}>Consulta histórica de otro campus. Puedes revisar el acuerdo y sus mensajes.</Text>}
         <Text style={styles.text}>Propietario: {detail.owner.fullName}</Text><Text style={styles.text}>Receptor: {detail.receiver.fullName}</Text>
         <Text style={styles.label}>{detail.modality==='DONACION'?'Acuerdo de donación':`Precio acordado: ${detail.amount?.toLocaleString('es-CL')} ${detail.currency}`}</Text>
         <Text style={styles.text}>Iniciado: {date(detail.startedAt)}</Text>

@@ -21,10 +21,19 @@ export async function setPhysicalgoodsPublicationStatus(client: PoolClient, publ
   await client.query('UPDATE public.publicacion_recurso SET estado_publicacion=$2 WHERE id=$1',[publicationId,status]);
 }
 /** Los participantes pueden cerrar el acuerdo aunque el propietario haya retirado la publicación. */
-export async function lockPhysicalgoodsTransactionResource(client: PoolClient, publicationId: string, campusId: string) {
+export async function lockPhysicalgoodsTransactionResource(client: PoolClient, publicationId: string, campusId: string|null) {
   return (await client.query<{ id:string; estado_publicacion:string }>(`SELECT p.id,p.estado_publicacion
     FROM public.publicacion_recurso p JOIN public.recurso_fisico r ON r.publicacion_id=p.id
-    WHERE p.id=$1 AND p.campus_id=$2 AND p.tipo_recurso='FISICO' FOR UPDATE OF p,r`,[publicationId,campusId])).rows[0] ?? null;
+    WHERE p.id=$1 AND ($2::uuid IS NULL OR p.campus_id=$2) AND p.tipo_recurso='FISICO' FOR UPDATE OF p,r`,[publicationId,campusId])).rows[0] ?? null;
+}
+export async function listOwnPhysicalgoodsTransactions(client:PoolClient,userId:string,pagination:PaginationParams) {
+  return (await client.query<PhysicalgoodsTransactionDetailRow>(`SELECT t.id,t.publicacion_id,t.propietario_id,t.receptor_id,
+    t.estado_transaccion,t.modalidad_acordada,t.monto_acordado,t.moneda,p.titulo,p.estado_publicacion,p.deleted_at,p.campus_id,c.nombre AS campus_nombre,
+    to_char(t.iniciada_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS iniciada_en
+    FROM public.transaccion_recurso t JOIN public.publicacion_recurso p ON p.id=t.publicacion_id
+    JOIN public.recurso_fisico r ON r.publicacion_id=p.id JOIN public.campus c ON c.id=p.campus_id
+    WHERE (t.propietario_id=$1 OR t.receptor_id=$1) AND p.tipo_recurso='FISICO'
+    ORDER BY t.iniciada_en DESC,t.id DESC LIMIT $2 OFFSET $3`,[userId,pagination.limit+1,pagination.offset])).rows;
 }
 export async function findPhysicalgoodsTransaction(client: PoolClient, publicationId: string, transactionId: string) {
   return (await client.query<PhysicalgoodsTransactionRow>('SELECT * FROM public.transaccion_recurso WHERE publicacion_id=$1 AND id=$2 FOR UPDATE',

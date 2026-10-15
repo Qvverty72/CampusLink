@@ -67,6 +67,10 @@ export interface PhysicalgoodsDetailRow extends PhysicalgoodsMediaRow {
   campus_nombre: string;
   propietario_nombre: string;
 }
+export interface PhysicalgoodsOwnRow extends PhysicalgoodsDetailRow {
+  deleted_at: Date | null;
+  publicado_en: string;
+}
 export interface PhysicalgoodsImageRow {
   id: string;
   bucket_id: string;
@@ -96,6 +100,10 @@ export interface PhysicalgoodsTransactionRow {
   moneda: string;
 }
 export interface PhysicalgoodsReceivedRow extends PhysicalgoodsRequestRow {
+  campus_id: string;
+  campus_nombre: string;
+  propietario_id: string;
+  propietario_nombre: string;
   deleted_at: Date | null;
   titulo: string;
   estado_publicacion: string;

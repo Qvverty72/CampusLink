@@ -9,8 +9,25 @@ import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 import { updatePhysicalgoods, withdrawPhysicalgoods } from './physicalgoods.edit.service.js';
 import { createPhysicalgoodsRequest, getPhysicalgoodsRequestOptions, getReceivedPhysicalgoodsRequests, getSentPhysicalgoodsRequests, resolvePhysicalgoodsRequest } from './physicalgoods.requests.service.js';
 import { getPhysicalgoodsTransaction,getPhysicalgoodsCoordinationOptions,getPhysicalgoodsCoordinationMessages,sendPhysicalgoodsCoordination,transitionPhysicalgoodsTransaction } from './physicalgoods.transactions.service.js';
+import { getOwnPhysicalgoods, getOwnPhysicalgoodsDetail } from './physicalgoods.history.service.js';
+import { getOwnPhysicalgoodsRequest } from './physicalgoods.requests.service.js';
+import { getOwnPhysicalgoodsTransactions } from './physicalgoods.transactions.service.js';
 
 type PhysicalgoodsHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const getOwnPhysicalgoodsController:PhysicalgoodsHandler=async(request,response)=>{
+  const result=await getOwnPhysicalgoods(response.locals.auth,request.query);
+  sendEnvelope(response,result.data,{meta:result.meta});
+};
+export const getOwnPhysicalgoodsDetailController:PhysicalgoodsHandler=async(request,response)=>{
+  sendSuccess(response,await getOwnPhysicalgoodsDetail(response.locals.auth,request.params.publicationId));
+};
+export const getOwnPhysicalgoodsRequestController:PhysicalgoodsHandler=async(request,response)=>{
+  sendSuccess(response,await getOwnPhysicalgoodsRequest(response.locals.auth,request.params.publicationId,request.params.requestId));
+};
+export const getOwnPhysicalgoodsTransactionsController:PhysicalgoodsHandler=async(request,response)=>{
+  const result=await getOwnPhysicalgoodsTransactions(response.locals.auth,request.query);
+  sendEnvelope(response,result.data,{meta:result.meta});
+};
 export const getPhysicalgoodsTransactionController:PhysicalgoodsHandler=async(request,response)=>{
   sendSuccess(response,await getPhysicalgoodsTransaction(response.locals.auth,request.params.publicationId,request.params.transactionId));
 };

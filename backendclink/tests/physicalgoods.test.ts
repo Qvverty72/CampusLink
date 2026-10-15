@@ -31,6 +31,7 @@ let failAudit = false;
 let editService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
 let requestsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
 let transactionsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
+let historyService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
 let failTransactionInsert=false;
 let failCoordination=false,failMap=false,lostCoordinationCommit=false,mapReads=0;
 let activeMap:CampusMapDocument|null,onMapRead:(()=>Promise<void>)|null=null;
@@ -111,6 +112,7 @@ before(async () => {
   editService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
   requestsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
   transactionsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
+  historyService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
@@ -914,10 +916,10 @@ test('participant transitions are private, atomic on audit failure and do not re
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
   assert.ok((await db.query('select deleted_at from publicacion_recurso where id=$1',[saved.id])).rows[0].deleted_at);
   await assert.rejects(imagesService.getPhysicalgoodsGallery(auth,saved.id),{status:404});
-  const own=await requestsService.getReceivedPhysicalgoodsRequests(auth,{});assert.equal(own.data.length,1);assert.equal(own.data[0].publication.canView,false);assert.equal(own.data[0].transaction?.id,id);
+  const own=await requestsService.getReceivedPhysicalgoodsRequests(auth,{});assert.equal(own.data.length,2);assert.equal(own.data[0].publication.canView,false);assert.equal(own.data[0].transaction?.id,id);
 });
 
-test('received requests are own current-campus paginated projections even with inactive catalogue messages',async()=>{
+test('received requests are own historical paginated projections even with inactive catalogue messages',async()=>{
   const {saved,first,a}=await requestedPair();await db.query("update mensaje_solicitud set activo=false where codigo='ME_INTERESA'");
   try{
     const page=await requestsService.getReceivedPhysicalgoodsRequests(auth,{limit:'1'});assert.equal(page.data.length,1);assert.equal(page.meta.hasMore,true);assert.equal(page.data[0].id,a.id);
@@ -925,7 +927,8 @@ test('received requests are own current-campus paginated projections even with i
     assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{page:'2',limit:'1'})).data.length,1);
     assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(first,{})).data.length,0);
     for(const query of [{campusId:campus},{ownerId:auth.userId},{limit:'0'},{page:['1']},{limit:'101'}])await assert.rejects(requestsService.getReceivedPhysicalgoodsRequests(auth,query),{status:400});
-    await db.query('update publicacion_recurso set campus_id=$2 where id=$1',[saved.id,otherCampus]);assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{})).data.length,0);
+    await db.query('update publicacion_recurso set campus_id=$2 where id=$1',[saved.id,otherCampus]);
+    const history=await requestsService.getReceivedPhysicalgoodsRequests(auth,{});assert.equal(history.data.length,2);assert.equal(history.data[0].canResolve,false);assert.equal(history.data[0].campus.id,otherCampus);
   }finally{await db.query("update mensaje_solicitud set activo=true where codigo='ME_INTERESA'");}
 });
 
@@ -946,7 +949,8 @@ test('sent list exposes only the requester rows and lets a pending requester reo
   assert.equal((await requestsService.getSentPhysicalgoodsRequests(first,{})).data[0].status,'ACEPTADA');assert.equal((await requestsService.getSentPhysicalgoodsRequests(auth,{})).data.length,0);
   current=structuredClone(second);const response=await originalFetch(base+'/sent-requests',{headers:{Authorization:'Bearer '+token}});assert.equal(response.status,200);const body=await response.json();assert.equal(body.data.length,1);assert.equal(body.data[0].id,b.id);assert.doesNotMatch(JSON.stringify(body),new RegExp(a.id));
   for(const query of [{requesterId:first.userId},{campusId:campus},{page:'0'}])await assert.rejects(requestsService.getSentPhysicalgoodsRequests(second,query),{status:400});
-  await db.query('update publicacion_recurso set campus_id=$2 where id=$1',[saved.id,otherCampus]);assert.equal((await requestsService.getSentPhysicalgoodsRequests(second,{})).data.length,0);
+  await db.query('update publicacion_recurso set campus_id=$2 where id=$1',[saved.id,otherCampus]);
+  const history=await requestsService.getSentPhysicalgoodsRequests(second,{});assert.equal(history.data.length,1);assert.equal(history.data[0].publication.canView,false);
 });
 
 test('competing completion and cancellation serialize and cannot leave a finalized publication with a live request',async()=>{
@@ -993,7 +997,9 @@ test('agreement consultation excludes outsiders and admins, wrong resource IDs, 
   const unrelated=await create(auth,input());await assert.rejects(transactionsService.getPhysicalgoodsTransaction(auth,unrelated.id,id),{status:404});
   await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[first.userId]);await assert.rejects(transactionsService.getPhysicalgoodsTransaction(first,saved.id,id),{status:403});
   await db.query("update perfil_usuario set estado_cuenta='ACTIVA',campus_id=$2 where id=$1",[first.userId,otherCampus]);await assert.rejects(transactionsService.getPhysicalgoodsTransaction(first,saved.id,id),{status:409});
-  const foreign={...first,campusId:otherCampus,profile:{...first.profile,campus_id:otherCampus}};await assert.rejects(transactionsService.getPhysicalgoodsTransaction(foreign,saved.id,id),{status:404});
+  const foreign={...first,campusId:otherCampus,profile:{...first.profile,campus_id:otherCampus}};
+  const historical=await transactionsService.getPhysicalgoodsTransaction(foreign,saved.id,id);assert.equal(historical.canConfirm,false);assert.equal(historical.canCancel,false);
+  await assert.rejects(transactionsService.transitionPhysicalgoodsTransaction(foreign,saved.id,id,{},'CONFIRMAR'),{status:404});
 });
 
 test('participants can still reach and close the agreement from own lists after publication withdrawal',async()=>{
@@ -1003,8 +1009,8 @@ test('participants can still reach and close the agreement from own lists after 
     const detail=await transactionsService.getPhysicalgoodsTransaction(participant,saved.id,id);assert.equal(detail.publication.isWithdrawn,true);assert.equal(detail.canCancel,true);
   }
   const received=await requestsService.getReceivedPhysicalgoodsRequests(auth,{}),sent=await requestsService.getSentPhysicalgoodsRequests(first,{});
-  assert.equal(received.data.length,1);assert.equal(sent.data.length,1);assert.equal(sent.data[0].transaction?.id,id);assert.equal(sent.data[0].publication.canView,false);
-  assert.equal((await requestsService.getSentPhysicalgoodsRequests(second,{})).data.length,0);
+  assert.equal(received.data.length,2);assert.equal(sent.data.length,1);assert.equal(sent.data[0].transaction?.id,id);assert.equal(sent.data[0].publication.canView,false);
+  const pendingHistory=await requestsService.getSentPhysicalgoodsRequests(second,{});assert.equal(pendingHistory.data.length,1);assert.equal(pendingHistory.data[0].transaction,null);
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');const cancelled=await transactionsService.getPhysicalgoodsTransaction(auth,saved.id,id);
   assert.equal(cancelled.status,'CANCELADA');assert.equal(cancelled.cancelledById,first.userId);assert.match(cancelled.cancelledAt!,/\.\d{6}Z$/);assert.equal(cancelled.publication.isWithdrawn,true);
   await assert.rejects(imagesService.getPhysicalgoodsGallery(first,saved.id),{status:404});
@@ -1083,4 +1089,115 @@ test('HTTP agreement and coordination routes keep authenticated private envelope
   response=await originalFetch(url+'/messages',{method:'POST',headers,body:JSON.stringify(location)});assert.equal(response.status,201);const receipt=(await response.json()).data;assert.equal(receipt.recipientId,first.userId);
   current=structuredClone(first);response=await originalFetch(url+'/messages?limit=1',{headers});assert.equal(response.status,200);assert.equal((await response.json()).data[0].id,receipt.id);
   response=await originalFetch(url+'/cancel',{method:'POST',headers,body:'{}'});assert.equal(response.status,200);response=await originalFetch(url,{headers});assert.equal((await response.json()).data.status,'CANCELADA');
+});
+
+test('own publication history preserves every state and origin after profile campus change without exposing other owners',async()=>{
+  const saved=await create(auth,input()),other=await otherActor();await create(other,input());
+  const columnInventory=()=>db.query("select table_name,column_name,data_type from information_schema.columns where table_schema='public' order by table_name,ordinal_position");
+  const before=await columnInventory();
+  for(const status of ['DISPONIBLE','RESERVADO','FINALIZADO','OCULTO','CANCELADO']){
+    await db.query('update publicacion_recurso set estado_publicacion=$2 where id=$1',[saved.id,status]);
+    const history=await historyService.getOwnPhysicalgoods(auth,{});assert.equal(history.data.length,1);assert.equal(history.data[0].status,status);
+  }
+  await db.query('update publicacion_recurso set deleted_at=now() where id=$1',[saved.id]);
+  await db.query('update perfil_usuario set campus_id=$2 where id=$1',[auth.userId,otherCampus]);
+  const moved={...auth,campusId:otherCampus,profile:{...auth.profile,campus_id:otherCampus}};
+  const history=await historyService.getOwnPhysicalgoods(moved,{}),detail=await historyService.getOwnPhysicalgoodsDetail(moved,saved.id);
+  assert.equal(history.data[0].campus.id,campus);assert.equal(history.data[0].isWithdrawn,true);assert.equal(history.data[0].canView,false);
+  assert.equal(detail.description,'Funciona correctamente');assert.equal(detail.images.length,1);assert.equal(detail.campus.id,campus);
+  assert.doesNotMatch(JSON.stringify(detail),/storage_path|bucket_id|email|foto_path|institucion_id/);
+  assert.deepEqual((await columnInventory()).rows,before.rows);
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(moved,saved.id),{status:404});
+  for(const actor of [other,await otherActor('ADMINISTRADOR')])await assert.rejects(historyService.getOwnPhysicalgoodsDetail(actor,saved.id),{status:404});
+});
+
+test('own publication history paginates before media signing and rejects arbitrary scope or invalid IDs',async()=>{
+  const first=await create(auth,input()),second=await create(auth,input({title:'Segundo recurso'}));
+  signed=[];signedPaths=[];failSign=true;
+  const page=await historyService.getOwnPhysicalgoods(auth,{limit:'1'}),next=await historyService.getOwnPhysicalgoods(auth,{page:'2',limit:'1'});
+  assert.equal(page.data[0].id,second.id);assert.equal(page.meta.hasMore,true);assert.equal(next.data[0].id,first.id);assert.equal(next.meta.hasMore,false);
+  assert.equal(signed.length,0);assert.equal(signedPaths.length,0);
+  for(const query of [{campusId:campus},{ownerId:auth.userId},{page:'0'},{limit:'101'}])await assert.rejects(historyService.getOwnPhysicalgoods(auth,query),{status:400});
+  await assert.rejects(historyService.getOwnPhysicalgoodsDetail(auth,'bad'),{status:400});
+  await assert.rejects(historyService.getOwnPhysicalgoodsDetail(auth,first.id),{status:503});failSign=false;
+  await db.query("update archivo_publicacion set storage_path=$2 where publicacion_id=$1",[first.id,otherCampus+'/foreign.png']);
+  await assert.rejects(historyService.getOwnPhysicalgoodsDetail(auth,first.id),{status:503});assert.equal(signed.length,1);
+});
+
+test('rejected and closed requests remain visible and have private details after withdrawal and campus movement',async()=>{
+  const {saved,first,second,a,b}=await requestedPair();await resolveRequest(saved.id,a.id,'RECHAZAR');await resolveRequest(saved.id,b.id);
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,(await transactionRows(saved.id)).rows[0].id as string,{},'CANCELAR');
+  await db.query('update publicacion_recurso set deleted_at=now() where id=$1',[saved.id]);
+  for(const actor of [auth,first,second]){
+    await db.query('update perfil_usuario set campus_id=$2 where id=$1',[actor.userId,otherCampus]);
+    const moved={...actor,campusId:otherCampus,profile:{...actor.profile,campus_id:otherCampus}};
+    const list=actor.userId===auth.userId?await requestsService.getReceivedPhysicalgoodsRequests(moved,{}):await requestsService.getSentPhysicalgoodsRequests(moved,{});
+    assert.equal(list.data.length,actor.userId===auth.userId?2:1);assert.ok(list.data.every(row=>!row.canResolve&&!row.publication.canView&&row.publication.isWithdrawn&&row.campus.id===campus));
+    const ownId=actor.userId===second.userId?b.id:a.id,detail=await requestsService.getOwnPhysicalgoodsRequest(moved,saved.id,ownId);
+    assert.equal(detail.status,actor.userId===second.userId?'CANCELADA':'RECHAZADA');assert.ok(detail.message);assert.match(detail.requestedAt,/\.\d{6}Z$/);
+  }
+  const outsider=await otherActor('ADMINISTRADOR');
+  await assert.rejects(requestsService.getOwnPhysicalgoodsRequest(outsider,saved.id,a.id),{status:404});
+  const movedFirst={...first,campusId:otherCampus,profile:{...first.profile,campus_id:otherCampus}};
+  await assert.rejects(requestsService.getOwnPhysicalgoodsRequest(movedFirst,saved.id,b.id),{status:404});
+  await assert.rejects(requestsService.getOwnPhysicalgoodsRequest(movedFirst,randomUUID(),a.id),{status:404});
+  await assert.rejects(requestsService.resolvePhysicalgoodsRequest({...auth,campusId:otherCampus,profile:{...auth.profile,campus_id:otherCampus}},saved.id,a.id,{decision:'RECHAZAR'}),{status:404});
+});
+
+test('transaction history retains cancelled and completed agreements with original terms and excludes other participants',async()=>{
+  const {saved,first,second,a,b}=await requestedPair(),cancelled=(await resolveRequest(saved.id,a.id)).transaction!.id;
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,cancelled,{},'CANCELAR');
+  const completed=(await resolveRequest(saved.id,b.id)).transaction!.id;
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,completed,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(second,saved.id,completed,{},'CONFIRMAR');
+  await db.query("update publicacion_recurso set modalidad='DONACION',precio=null,deleted_at=now() where id=$1",[saved.id]);
+  const page=await transactionsService.getOwnPhysicalgoodsTransactions(auth,{limit:'1'}),next=await transactionsService.getOwnPhysicalgoodsTransactions(auth,{page:'2',limit:'1'});
+  assert.equal(page.data[0].id,completed);assert.equal(page.data[0].status,'COMPLETADA');assert.equal(page.data[0].amount,15000);assert.equal(page.meta.hasMore,true);
+  assert.equal(next.data[0].id,cancelled);assert.equal(next.data[0].status,'CANCELADA');assert.equal(next.meta.hasMore,false);
+  assert.deepEqual((await transactionsService.getOwnPhysicalgoodsTransactions(first,{})).data.map(row=>row.id),[cancelled]);
+  assert.deepEqual((await transactionsService.getOwnPhysicalgoodsTransactions(second,{})).data.map(row=>row.id),[completed]);
+  assert.equal((await transactionsService.getOwnPhysicalgoodsTransactions(await otherActor('ADMINISTRADOR'),{})).data.length,0);
+  assert.doesNotMatch(JSON.stringify(page),/solicitud_id|email|storage_path|institucion_id/);
+  for(const query of [{participantId:auth.userId},{campusId:campus},{limit:'0'}])await assert.rejects(transactionsService.getOwnPhysicalgoodsTransactions(auth,query),{status:400});
+});
+
+test('former-campus participants can read their agreement and coordination history but cannot interact with that campus',async()=>{
+  const {saved,first,id}=await acceptedAgreement();await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location);
+  for(const actor of [auth,first]){
+    await db.query('update perfil_usuario set campus_id=$2 where id=$1',[actor.userId,otherCampus]);
+    const moved={...actor,campusId:otherCampus,profile:{...actor.profile,campus_id:otherCampus}};
+    const history=await transactionsService.getOwnPhysicalgoodsTransactions(moved,{}),detail=await transactionsService.getPhysicalgoodsTransaction(moved,saved.id,id);
+    assert.equal(history.data.length,1);assert.equal(detail.campus.id,campus);assert.equal(detail.canConfirm,false);assert.equal(detail.canCancel,false);
+    assert.equal((await transactionsService.getPhysicalgoodsCoordinationMessages(moved,saved.id,id,{})).data.length,1);
+    for(const action of ['CONFIRMAR','CANCELAR'] as const)await assert.rejects(transactionsService.transitionPhysicalgoodsTransaction(moved,saved.id,id,{},action),{status:404});
+    await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(moved,saved.id,id,location),{status:404});
+    await assert.rejects(imagesService.getPhysicalgoodsGallery(moved,saved.id),{status:404});
+    await assert.rejects(requestsService.createPhysicalgoodsRequest(moved,saved.id,{messageCode:'ME_INTERESA'}),{status:404});
+  }
+  assert.equal((await db.query('select campus_id from publicacion_recurso where id=$1',[saved.id])).rows[0].campus_id,campus);
+});
+
+test('history revalidates persisted suspension, changed context and revoked general access before reads',async()=>{
+  const saved=await create(auth,input());
+  await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[auth.userId]);
+  for(const read of [()=>historyService.getOwnPhysicalgoods(auth,{}),()=>historyService.getOwnPhysicalgoodsDetail(auth,saved.id),
+    ()=>requestsService.getReceivedPhysicalgoodsRequests(auth,{}),()=>requestsService.getSentPhysicalgoodsRequests(auth,{}),()=>transactionsService.getOwnPhysicalgoodsTransactions(auth,{})])await assert.rejects(read(),{status:403});
+  await db.query("update perfil_usuario set estado_cuenta='ACTIVA',campus_id=$2 where id=$1",[auth.userId,otherCampus]);
+  await assert.rejects(historyService.getOwnPhysicalgoods(auth,{}),{status:409});
+  await db.query("update perfil_usuario set campus_id=$2,verificado_en=null where id=$1",[auth.userId,campus]);
+  await assert.rejects(historyService.getOwnPhysicalgoods({...auth,roles:[{id:randomUUID(),name:'USUARIO_AUTORIZADO',campusId:campus}]},{}),{status:403});
+});
+
+test('history HTTP routes require authentication, preserve no-store and hide unrelated UUIDs and private dependency errors',async()=>{
+  const {saved,first,a,id}=await acceptedAgreement(),headers={Authorization:'Bearer '+token};
+  for(const suffix of ['/my-publications','/transactions','/'+saved.id+'/history','/'+saved.id+'/requests/'+a.id])assert.equal((await originalFetch(base+suffix)).status,401);
+  for(const suffix of ['/my-publications','/transactions','/'+saved.id+'/history','/'+saved.id+'/requests/'+a.id]){
+    const response=await originalFetch(base+suffix,{headers});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.ok((await response.json()).data);
+  }
+  for(const suffix of ['/my-publications?campusId='+otherCampus,'/transactions?ownerId='+auth.userId,'/bad/history','/'+saved.id+'/requests/bad'])assert.equal((await originalFetch(base+suffix,{headers})).status,400);
+  current=structuredClone(first);assert.equal((await originalFetch(base+'/'+saved.id+'/history',{headers})).status,404);
+  current=structuredClone(await otherActor('ADMINISTRADOR'));
+  for(const suffix of ['/'+saved.id+'/requests/'+a.id,'/'+saved.id+'/transactions/'+id])assert.equal((await originalFetch(base+suffix,{headers})).status,404);
+  current=structuredClone(auth);failSign=true;
+  const response=await originalFetch(base+'/'+saved.id+'/history',{headers});assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/private|password|storage_path/);
 });

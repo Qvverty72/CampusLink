@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { PaginationParams } from '../../../types/api.js';
-import type { PhysicalgoodsDetailRow, PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
+import type { PhysicalgoodsDetailRow, PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsOwnRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
 import { PHYSICALGOODS_BUCKET } from './physicalgoods.repository.js';
 
 const mediaProjection = `p.id,p.campus_id,p.propietario_id,p.titulo,p.descripcion,p.modalidad,p.precio,p.estado_publicacion,
@@ -20,6 +20,22 @@ export async function findPhysicalgoodsDetail(client: PoolClient, publicationId:
     JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
     WHERE p.id=$1 AND p.campus_id=$2 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL
     AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO')`, [publicationId, campusId])).rows[0] ?? null;
+}
+/** Historial del propietario: no filtra disponibilidad ni traslada el campus de origen. */
+export async function listOwnPhysicalgoods(client: PoolClient, userId: string, pagination: PaginationParams) {
+  return (await client.query<PhysicalgoodsOwnRow>(`SELECT ${mediaProjection},p.deleted_at,
+    to_char(p.publicado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS publicado_en,
+    campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
+    JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
+    WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO'
+    ORDER BY p.publicado_en DESC,p.id DESC LIMIT $2 OFFSET $3`,[userId,pagination.limit+1,pagination.offset])).rows;
+}
+export async function findOwnPhysicalgoods(client: PoolClient, publicationId: string, userId: string) {
+  return (await client.query<PhysicalgoodsOwnRow>(`SELECT ${mediaProjection},p.deleted_at,
+    to_char(p.publicado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS publicado_en,
+    campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
+    JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
+    WHERE p.id=$1 AND p.propietario_id=$2 AND p.tipo_recurso='FISICO'`,[publicationId,userId])).rows[0]??null;
 }
 export async function listPhysicalgoodsMedia(client: PoolClient, campusId: string, filters: PhysicalgoodsSearchFilters, ownerId: string | null, pagination: PaginationParams) {
   // Trata %, _ y barras invertidas del usuario como texto literal, no como comodines SQL.

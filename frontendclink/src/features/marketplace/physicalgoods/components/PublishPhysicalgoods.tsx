@@ -10,6 +10,8 @@ import { PublicationImages } from './PublicationImages';
 import { PhysicalgoodsRequests } from './PhysicalgoodsRequests';
 import { PhysicalgoodsTransaction } from './PhysicalgoodsTransaction';
 import type { PhysicalgoodsTransactionTarget } from '../types/publication';
+import {PhysicalgoodsHistory,PhysicalgoodsHistoryDetail} from './PhysicalgoodsHistory';
+import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory';
 
 /** Composición de búsqueda y publicación del módulo de bienes físicos. */
 export function PhysicalGoodsScreen() {
@@ -19,11 +21,13 @@ export function PhysicalGoodsScreen() {
 /** Mantiene en un flujo común el alta y la recuperación de su publicación. */
 function PhysicalgoodsContent() {
   const resources = usePhysicalgoodsResources();
-  const [view,setView] = useState<'explore'|'publish'|'received'|'sent'>('explore');
+  const [view,setView] = useState<'explore'|'publish'|'received'|'sent'|'mine'|'transactions'>('explore');
   const publishing=view==='publish',received=view==='received',sent=view==='sent';
   const [agreement,setAgreement]=useState<PhysicalgoodsTransactionTarget|null>(null),[requestsVersion,setRequestsVersion]=useState(0);
+  const [historyDetail,setHistoryDetail]=useState<PhysicalgoodsHistoryTarget|null>(null);
   const refresh=()=>{resources.reload();resources.reloadGallery();setRequestsVersion(value=>value+1);};
-  const openAgreement=(publicationId:string,transactionId:string)=>setAgreement({publicationId,transactionId});
+  const openAgreement=(publicationId:string,transactionId:string)=>{setHistoryDetail(null);setAgreement({publicationId,transactionId});};
+  const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.eyebrow}>MARKETPLACE</Text>
@@ -34,16 +38,23 @@ function PhysicalgoodsContent() {
         <Pressable accessibilityRole="button" accessibilityState={{ selected: publishing }} style={publishing ? styles.button : styles.secondaryButton} onPress={() => setView('publish')}><Text style={publishing ? styles.buttonText : styles.action}>Publicar un recurso</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityState={{ selected: received }} style={received ? styles.button : styles.secondaryButton} onPress={() => setView('received')}><Text style={received ? styles.buttonText : styles.action}>Solicitudes recibidas</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityState={{ selected: sent }} style={sent ? styles.button : styles.secondaryButton} onPress={() => setView('sent')}><Text style={sent ? styles.buttonText : styles.action}>Mis solicitudes</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{selected:view==='mine'}} style={view==='mine'?styles.button:styles.secondaryButton} onPress={()=>setView('mine')}><Text style={view==='mine'?styles.buttonText:styles.action}>Mis publicaciones</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{selected:view==='transactions'}} style={view==='transactions'?styles.button:styles.secondaryButton} onPress={()=>setView('transactions')}><Text style={view==='transactions'?styles.buttonText:styles.action}>Mis transacciones</Text></Pressable>
       </View>
       <View style={publishing ? undefined : { display: 'none' }}>
-        <PublicationForm onPublished={resources.reload} onGallery={id => { setView('explore'); resources.open(id); }} />
+        <PublicationForm onPublished={refresh} onGallery={id => { setView('explore'); resources.open(id); }} />
       </View>
-      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests active={received} onResolved={refresh} onAgreement={openAgreement} refreshVersion={requestsVersion}
+      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests active={received} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
-      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} refreshVersion={requestsVersion}
+      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
-      <View style={publishing||received||sent ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} /></View>
+      <View style={view==='mine'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='mine'} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} /></View>
+      <View style={view==='transactions'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='transactions'} transactions refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} /></View>
+      <View style={view!=='explore' ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} /></View>
     </ScrollView>
+    {historyDetail&&<PhysicalgoodsHistoryDetail key={`${historyDetail.publicationId}:${historyDetail.requestId??''}`} target={historyDetail}
+      onClose={()=>{setHistoryDetail(null);setRequestsVersion(value=>value+1);}} onAgreement={openAgreement}
+      onOpen={id=>{setHistoryDetail(null);setView('explore');resources.open(id);}} />}
     {agreement&&<PhysicalgoodsTransaction key={`${agreement.publicationId}:${agreement.transactionId}`} target={agreement} onChanged={refresh}
       onClose={()=>{setAgreement(null);setRequestsVersion(value=>value+1);}} />}
     <BottomNavigationBar activeItemId="physicalgoods" />

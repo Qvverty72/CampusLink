@@ -4,6 +4,7 @@ import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, Ph
 import type { PhysicalgoodsRequest, PhysicalgoodsRequestOptions } from '../types/publication';
 import type { PhysicalgoodsReceivedPage, PhysicalgoodsReceivedRequest } from '../types/publication';
 import type { PhysicalgoodsCoordinationMessage,PhysicalgoodsCoordinationOptions,PhysicalgoodsCoordinationPage,PhysicalgoodsTransaction,PhysicalgoodsTransactionTarget } from '../types/publication';
+import type { PhysicalgoodsOwnDetail,PhysicalgoodsOwnPublication,PhysicalgoodsOwnPage,PhysicalgoodsTransactionSummary,PhysicalgoodsTransactionsPage } from '../types/publication';
 
 const path = '/api/v1/marketplace/physicalgoods';
 /** Valida el UUID antes de incorporarlo a una ruta de publicación. */
@@ -14,6 +15,15 @@ const resourcePath = (id: string) => {
 const transactionPath = (target:PhysicalgoodsTransactionTarget) => {
   resourcePath(target.transactionId);
   return resourcePath(target.publicationId)+'/transactions/'+target.transactionId;
+};
+export const loadOwnPhysicalgoods=(page:number,signal:AbortSignal)=>authenticatedEnvelopeRequest<PhysicalgoodsOwnPublication[],PhysicalgoodsOwnPage['meta']>(
+  path+'/my-publications',{signal},new URLSearchParams({page:String(page),limit:'10'}));
+export const loadOwnPhysicalgoodsDetail=(id:string,signal:AbortSignal)=>authenticatedRequest<PhysicalgoodsOwnDetail>(resourcePath(id)+'/history',{signal});
+export const loadOwnPhysicalgoodsTransactions=(page:number,signal:AbortSignal)=>authenticatedEnvelopeRequest<PhysicalgoodsTransactionSummary[],PhysicalgoodsTransactionsPage['meta']>(
+  path+'/transactions',{signal},new URLSearchParams({page:String(page),limit:'10'}));
+export const loadOwnPhysicalgoodsRequest=(id:string,requestId:string,signal:AbortSignal)=>{
+  resourcePath(requestId);
+  return authenticatedRequest<PhysicalgoodsReceivedRequest>(resourcePath(id)+'/requests/'+requestId,{signal});
 };
 export const loadPhysicalgoodsTransaction = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsTransaction>(transactionPath(target),{signal});
 export const loadPhysicalgoodsCoordinationOptions = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsCoordinationOptions>(transactionPath(target)+'/coordination-options',{signal});

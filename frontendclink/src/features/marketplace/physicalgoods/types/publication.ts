@@ -91,7 +91,10 @@ export interface PhysicalgoodsRequestOptions {
 }
 export interface PhysicalgoodsReceivedRequest {
   id: string;
-  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean };
+  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean;isWithdrawn:boolean };
+  campus:{id:string;name:string};
+  owner:{id:string;fullName:string};
+  canResolve:boolean;
   requester: { id:string; fullName:string };
   message: string;
   messageCode: string;
@@ -126,3 +129,17 @@ export interface PhysicalgoodsTransaction {
 export interface PhysicalgoodsCoordinationOptions { buildings:{id:string;name:string;floors:{id:string;name:string}[]}[] }
 export interface PhysicalgoodsCoordinationMessage { id:string;senderId:string;recipientId:string;text:string;createdAt:string }
 export interface PhysicalgoodsCoordinationPage {data:PhysicalgoodsCoordinationMessage[];meta:PhysicalgoodsPage['meta']}
+export interface PhysicalgoodsOwnPublication extends PhysicalgoodsResource {
+  campus:{id:string;name:string};
+  isWithdrawn:boolean;
+  canView:boolean;
+  publishedAt:string;
+}
+export interface PhysicalgoodsOwnDetail extends PhysicalgoodsOwnPublication {
+  description:string;
+  images:PhysicalgoodsGallery['images'];
+  expiresIn:number;
+}
+export type PhysicalgoodsTransactionSummary=Pick<PhysicalgoodsTransaction,'id'|'publication'|'campus'|'role'|'status'|'modality'|'amount'|'currency'|'startedAt'>;
+export interface PhysicalgoodsOwnPage {data:PhysicalgoodsOwnPublication[];meta:PhysicalgoodsPage['meta']}
+export interface PhysicalgoodsTransactionsPage {data:PhysicalgoodsTransactionSummary[];meta:PhysicalgoodsPage['meta']}
