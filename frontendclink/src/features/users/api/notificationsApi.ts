@@ -10,9 +10,10 @@ export async function fetchNotifications(cursor?: string, signal?: AbortSignal):
   const response = await authenticatedEnvelopeRequest<NotificationPage>('/api/v1/users/me/notifications', { signal }, query);
   const value = response.data;
   if (!value || !Array.isArray(value.items) || (value.nextCursor !== null && !uuid.test(value.nextCursor))
-    || value.items.some(item => !uuid.test(item.id) || !/^[0-9a-f]{24}$/.test(item.activityId)
-      || (item.seriesId !== undefined && !/^[0-9a-f]{24}$/.test(item.seriesId))
-      || !['OFFICIAL_EVENT_PUBLISHED', 'ACTIVITY_CHANGED', 'OFFICIAL_EVENT_STARTED'].includes(item.type) || typeof item.title !== 'string'
+    || value.items.some(item => !uuid.test(item.id)
+      || (item.type==='PHYSICAL_PUBLICATION_CLOSE_REMINDER'?!uuid.test(item.publicationId):
+        (!/^[0-9a-f]{24}$/.test(item.activityId)||(item.seriesId!==undefined&&!/^[0-9a-f]{24}$/.test(item.seriesId))
+          ||!['OFFICIAL_EVENT_PUBLISHED','ACTIVITY_CHANGED','OFFICIAL_EVENT_STARTED'].includes(item.type))) || typeof item.title !== 'string'
       || typeof item.message !== 'string' || !Number.isFinite(Date.parse(item.createdAt)))) {
     throw new Error('No se pudieron cargar las notificaciones.');
   }

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect,useState } from 'react';
+import {useLocalSearchParams} from 'expo-router';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -16,15 +17,18 @@ import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory'
 /** Composición de búsqueda y publicación del módulo de bienes físicos. */
 export function PhysicalGoodsScreen() {
   const { identity, session } = useAuth();
-  return <PhysicalgoodsContent key={`${identity?.userId}:${identity?.campusId}:${session?.access_token}`} />;
+  const {publicationId}=useLocalSearchParams<{publicationId?:string}>();
+  const initialPublicationId=typeof publicationId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publicationId)?publicationId:undefined;
+  return <PhysicalgoodsContent key={`${identity?.userId}:${identity?.campusId}:${session?.access_token}`} initialPublicationId={initialPublicationId} />;
 }
 /** Mantiene en un flujo común el alta y la recuperación de su publicación. */
-function PhysicalgoodsContent() {
+function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:string}) {
   const resources = usePhysicalgoodsResources();
   const [view,setView] = useState<'explore'|'publish'|'received'|'sent'|'mine'|'transactions'>('explore');
   const publishing=view==='publish',received=view==='received',sent=view==='sent';
   const [agreement,setAgreement]=useState<PhysicalgoodsTransactionTarget|null>(null),[requestsVersion,setRequestsVersion]=useState(0);
   const [historyDetail,setHistoryDetail]=useState<PhysicalgoodsHistoryTarget|null>(null);
+  useEffect(()=>{if(initialPublicationId){setView('explore');resources.open(initialPublicationId);}},[initialPublicationId]);
   const refresh=()=>{resources.reload();resources.reloadGallery();setRequestsVersion(value=>value+1);};
   const openAgreement=(publicationId:string,transactionId:string)=>{setHistoryDetail(null);setAgreement({publicationId,transactionId});};
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});

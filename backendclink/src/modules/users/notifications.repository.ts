@@ -54,16 +54,29 @@ export async function deliverActivityNotification(task: PendingActivityNotificat
   });
 }
 
-type SqlNotification = { id: string; actividad_id: string; tipo_notificacion: ActivityNotificationDto['type'];
+type SqlNotification = { id: string; actividad_id: string; publicacion_id:string;
+  tipo_notificacion: ActivityNotificationDto['type']|'PHYSICAL_PUBLICATION_CLOSE_REMINDER';
   titulo: string; mensaje: string; created_at: Date; leida_en: Date | null; actividad_evento_clave: string };
 
+// Las actividades conservan campus vigente; un aviso físico solo pertenece al propietario de su publicación original.
+const ownNotificationScope=`n.destinatario_id=$1 AND (
+  (n.campus_id=$2 AND n.actividad_evento_clave IS NOT NULL
+    AND n.tipo_notificacion IN ('OFFICIAL_EVENT_PUBLISHED','ACTIVITY_CHANGED','OFFICIAL_EVENT_STARTED'))
+  OR (n.tipo_notificacion='PHYSICAL_PUBLICATION_CLOSE_REMINDER' AND EXISTS(SELECT 1 FROM public.publicacion_recurso p
+    WHERE p.id=n.publicacion_id AND p.tipo_recurso='FISICO' AND p.propietario_id=$1)))`;
+
 export async function listOwnNotifications(client: PoolClient, userId: string, campusId: string, cursor?: string): Promise<NotificationPage> {
-  const result = await client.query<SqlNotification>(`SELECT id,actividad_id,tipo_notificacion,titulo,mensaje,created_at,leida_en,actividad_evento_clave
-    FROM public.notificacion WHERE destinatario_id=$1 AND campus_id=$2 AND deleted_at IS NULL
-      AND actividad_evento_clave IS NOT NULL AND ($3::uuid IS NULL OR (created_at,id) <
-        (SELECT created_at,id FROM public.notificacion WHERE id=$3 AND destinatario_id=$1 AND campus_id=$2))
+  const result = await client.query<SqlNotification>(`WITH own AS (
+      SELECT n.* FROM public.notificacion n WHERE ${ownNotificationScope})
+    SELECT id,actividad_id,publicacion_id,tipo_notificacion,titulo,mensaje,created_at,leida_en,actividad_evento_clave
+    FROM own WHERE deleted_at IS NULL AND ($3::uuid IS NULL OR (created_at,id) <
+      (SELECT created_at,id FROM own WHERE id=$3))
     ORDER BY created_at DESC,id DESC LIMIT 31`, [userId, campusId, cursor ?? null]);
   const items = result.rows.slice(0, 30).map(row => {
+    if(row.tipo_notificacion==='PHYSICAL_PUBLICATION_CLOSE_REMINDER')return {
+      id:row.id,publicationId:row.publicacion_id,type:row.tipo_notificacion,title:row.titulo,message:row.mensaje,
+      createdAt:row.created_at.toISOString(),readAt:row.leida_en?.toISOString()??null,
+    };
     const content = publicNotificationContent(row.tipo_notificacion, row.titulo, row.mensaje, row.actividad_evento_clave);
     return { id: row.id, activityId: row.actividad_id, type: row.tipo_notificacion, ...content,
       createdAt: row.created_at.toISOString(), readAt: row.leida_en?.toISOString() ?? null };
@@ -72,8 +85,8 @@ export async function listOwnNotifications(client: PoolClient, userId: string, c
 }
 
 export async function updateOwnNotification(client: PoolClient, userId: string, campusId: string, id: string, remove: boolean): Promise<boolean> {
-  const result = await client.query(`UPDATE public.notificacion SET ${remove ? 'deleted_at=COALESCE(deleted_at,now())' : 'leida_en=COALESCE(leida_en,now())'}
-    WHERE id=$1 AND destinatario_id=$2 AND campus_id=$3 AND actividad_evento_clave IS NOT NULL
-      ${remove ? '' : 'AND deleted_at IS NULL'} RETURNING id`, [id, userId, campusId]);
+  const result = await client.query(`UPDATE public.notificacion n SET ${remove ? 'deleted_at=COALESCE(n.deleted_at,now())' : 'leida_en=COALESCE(n.leida_en,now())'}
+    WHERE n.id=$3 AND ${ownNotificationScope}
+      ${remove ? '' : 'AND n.deleted_at IS NULL'} RETURNING n.id`, [userId, campusId, id]);
   return result.rows.length === 1;
 }

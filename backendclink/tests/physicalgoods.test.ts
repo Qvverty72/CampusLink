@@ -32,6 +32,8 @@ let editService: typeof import('../src/modules/marketplace/physicalgoods/physica
 let requestsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
 let transactionsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
 let historyService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
+let remindersService:typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
+let notificationsService:typeof import('../src/modules/users/notifications.service.js');
 let failTransactionInsert=false;
 let failCoordination=false,failMap=false,lostCoordinationCommit=false,mapReads=0;
 let activeMap:CampusMapDocument|null,onMapRead:(()=>Promise<void>)|null=null;
@@ -39,6 +41,7 @@ let failRequestInsert=false;
 let connectionLease=Promise.resolve();
 let failUpload = false, failInsert = false, failRemove = false, publicBucket = false, missingBucket = false, lostCommit = false;
 let onUpload: (() => Promise<void>) | null = null;
+let onReminderCandidates:(()=>Promise<void>)|null=null;
 
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
@@ -56,6 +59,9 @@ before(async () => {
       if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL failure');
       if (failInsert && sql.startsWith('INSERT INTO public.archivo_publicacion')) throw new Error('private failed SQL password');
       const result = await db.query(sql, values);
+      if(onReminderCandidates&&sql.includes('ORDER BY p.publicado_en,p.id LIMIT 100')){
+        const operation=onReminderCandidates;onReminderCandidates=null;await operation();
+      }
       if(lostCoordinationCommit&&sql.startsWith('INSERT INTO public.notificacion')){lostCoordinationCommit=false;lostCommit=true;}
       if (lostCommit && sql === 'COMMIT') { lostCommit = false; throw new Error('lost commit acknowledgement'); }
       return result;
@@ -113,6 +119,8 @@ before(async () => {
   requestsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
   transactionsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
   historyService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
+  remindersService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
+  notificationsService=await import('../src/modules/users/notifications.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
@@ -126,6 +134,7 @@ before(async () => {
   }
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_06_mensajes_solicitud.sql','utf8'));
+  await db.exec(await readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql','utf8'));
   await db.query("insert into institucion(id,nombre) values($1,'Institution')", [institution]);
   await db.query("insert into campus(id,institucion_id,nombre) values($1,$2,'Home'),($3,$2,'Foreign')", [campus, institution, otherCampus]);
   await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'Material académico')", [category]);
@@ -148,6 +157,7 @@ beforeEach(async () => {
     {id:'cabin01',name:'Cabaña C',floors:[{id:'cabin01_floor1',name:'Piso -3'}]},
   ]};
   failUpload = failInsert = failRemove = publicBucket = missingBucket = lostCommit = false; onUpload = null;
+  onReminderCandidates=null;
   const userId = randomUUID();
   await db.query('insert into auth.users values($1)', [userId]);
   await db.query("insert into perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) values($1,$2,$3,'User',now())", [userId, institution, campus]);
@@ -407,10 +417,16 @@ test('HTTP image/gallery/category contracts require identity, scope references a
   assert.equal((await append({ value: 'a'.repeat(8 * 1024 * 1024) })).status, 413);
 });
 
-async function otherActor(): Promise<VerifiedAuthConnection> {
+async function otherActor(role?:'ADMINISTRADOR'|'USUARIO_AUTORIZADO'): Promise<VerifiedAuthConnection> {
   const userId = randomUUID(); await db.query('insert into auth.users values($1)', [userId]);
   await db.query("insert into perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) values($1,$2,$3,'Other',now())", [userId, institution, campus]);
-  return { ...auth, userId, roles: [], profile: { ...auth.profile, id: userId } };
+  const roles:VerifiedAuthConnection['roles']=[];
+  if(role){
+    const row=(await db.query<{id:string}>('SELECT id FROM rol WHERE nombre=$1',[role])).rows[0];
+    await db.query('INSERT INTO usuario_rol(perfil_usuario_id,rol_id,campus_id) VALUES($1,$2,$3)',[userId,row.id,campus]);
+    roles.push({id:row.id,name:role,campusId:campus});
+  }
+  return { ...auth, userId, roles, profile: { ...auth.profile, id: userId } };
 }
 
 test('search matches case-insensitive words across name/description and escapes wildcard characters as literal text', async () => {
@@ -1200,4 +1216,159 @@ test('history HTTP routes require authentication, preserve no-store and hide unr
   for(const suffix of ['/'+saved.id+'/requests/'+a.id,'/'+saved.id+'/transactions/'+id])assert.equal((await originalFetch(base+suffix,{headers})).status,404);
   current=structuredClone(auth);failSign=true;
   const response=await originalFetch(base+'/'+saved.id+'/history',{headers});assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/private|password|storage_path/);
+});
+
+const reminderRows=(publicationId:string)=>db.query<{id:string;destinatario_id:string;created_at:Date;deleted_at:Date|null;leida_en:Date|null;titulo:string;mensaje:string}>(
+  "SELECT * FROM notificacion WHERE publicacion_id=$1 AND tipo_notificacion='PHYSICAL_PUBLICATION_CLOSE_REMINDER'",[publicationId]);
+const agePublication=(id:string,days=8)=>db.query("UPDATE publicacion_recurso SET publicado_en=now()-($2::text||' days')::interval WHERE id=$1",[id,days]);
+
+test('close reminder becomes due at exactly seven days from publication, independently of later edits and reservation',async()=>{
+  const saved=await create(auth,input()),instant=Date.now(),boundary=instant-7*24*60*60*1000;
+  await db.query('UPDATE publicacion_recurso SET publicado_en=$2,updated_at=now() WHERE id=$1',[saved.id,new Date(boundary+1)]);
+  const clock=mock.method(Date,'now',()=>instant);
+  try{
+    await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,0);
+    await db.query("UPDATE publicacion_recurso SET publicado_en=$2,estado_publicacion='RESERVADO',updated_at=now() WHERE id=$1",[saved.id,new Date(boundary)]);
+    const before=(await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id])).rows;
+    await remindersService.dispatchPhysicalgoodsReminders();const rows=(await reminderRows(saved.id)).rows;
+    assert.equal(rows.length,1);assert.equal(rows[0].destinatario_id,auth.userId);assert.equal(rows[0].titulo,saved.title);assert.ok(rows[0].created_at instanceof Date);
+    assert.match(rows[0].mensaje,/siete días/);assert.deepEqual((await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id])).rows,before);
+  }finally{clock.mock.restore();}
+});
+
+test('reminder excludes finalized, hidden, cancelled, withdrawn and digital resources without changing schema or agreements',async()=>{
+  const inventory=()=>db.query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position");
+  const before=await inventory(),saved=[];
+  for(const state of ['DISPONIBLE','RESERVADO','FINALIZADO','OCULTO','CANCELADO','WITHDRAWN','DIGITAL']){
+    const item=await create(auth,input({title:state}));await agePublication(item.id);saved.push({...item,state});
+    if(state==='WITHDRAWN')await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[item.id]);
+    else if(state==='DIGITAL')await db.query("UPDATE publicacion_recurso SET tipo_recurso='DIGITAL' WHERE id=$1",[item.id]);
+    else await db.query('UPDATE publicacion_recurso SET estado_publicacion=$2 WHERE id=$1',[item.id,state]);
+  }
+  await remindersService.dispatchPhysicalgoodsReminders();
+  for(const item of saved)assert.equal((await reminderRows(item.id)).rows.length,['DISPONIBLE','RESERVADO'].includes(item.state)?1:0);
+  assert.deepEqual((await inventory()).rows,before.rows);
+  assert.equal((await db.query('SELECT id FROM transaccion_recurso WHERE propietario_id=$1',[auth.userId])).rows.length,0);
+});
+
+test('concurrent reminder checks, rereads, deletion and later weeks never recreate a delivered reminder',async()=>{
+  const saved=await create(auth,input());await agePublication(saved.id);
+  await Promise.all([remindersService.dispatchPhysicalgoodsReminders(),remindersService.dispatchPhysicalgoodsReminders()]);
+  const rows=(await reminderRows(saved.id)).rows;assert.equal(rows.length,1);
+  await notificationsService.ownNotificationOperation(auth,{id:rows[0].id});
+  await notificationsService.ownNotificationOperation(auth,{id:rows[0].id,remove:true});
+  await agePublication(saved.id,30);await remindersService.dispatchPhysicalgoodsReminders();
+  const history=(await reminderRows(saved.id)).rows;assert.equal(history.length,1);assert.equal(history[0].id,rows[0].id);assert.ok(history[0].deleted_at);assert.ok(history[0].leida_en);
+});
+
+test('reminder failures roll back and uncertain committed deliveries are not duplicated on retry',async()=>{
+  const saved=await create(auth,input());await agePublication(saved.id);failCoordination=true;
+  assert.ok((await remindersService.dispatchPhysicalgoodsReminders()).failed>0);assert.equal((await reminderRows(saved.id)).rows.length,0);
+  failCoordination=false;lostCoordinationCommit=true;
+  assert.ok((await remindersService.dispatchPhysicalgoodsReminders()).failed>0);assert.equal((await reminderRows(saved.id)).rows.length,1);
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,1);
+});
+
+test('reminder delivery checks active verified/current authorized owners and revalidates changes after candidate discovery',async()=>{
+  const saved=await create(auth,input()),owner=await otherActor('USUARIO_AUTORIZADO'),authorized=await create(owner,input());
+  await agePublication(saved.id);await agePublication(authorized.id);
+  await db.query('UPDATE perfil_usuario SET verificado_en=null WHERE id=$1',[owner.userId]);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1",[auth.userId]);
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,0);assert.equal((await reminderRows(authorized.id)).rows.length,1);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA' WHERE id=$1",[auth.userId]);
+  onReminderCandidates=async()=>{await db.query("UPDATE publicacion_recurso SET estado_publicacion='FINALIZADO' WHERE id=$1",[saved.id]);};
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,0);
+  await db.query("UPDATE publicacion_recurso SET estado_publicacion='DISPONIBLE' WHERE id=$1",[saved.id]);
+  onReminderCandidates=async()=>{await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1",[auth.userId]);};
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,0);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA',verificado_en=null WHERE id=$1",[auth.userId]);
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,0);
+});
+
+test('reminder inbox and acknowledgements are private while original-campus ownership survives a profile move',async()=>{
+  const saved=await create(auth,input());await agePublication(saved.id);await remindersService.dispatchPhysicalgoodsReminders();
+  const id=(await reminderRows(saved.id)).rows[0].id,other=await otherActor('ADMINISTRADOR');
+  for(const actor of [other]){
+    const page=await notificationsService.ownNotificationOperation(actor,{});assert.ok('items' in page);assert.equal(page.items.some(row=>row.id===id),false);
+    for(const remove of [false,true])await assert.rejects(notificationsService.ownNotificationOperation(actor,{id,remove}),{status:404});
+  }
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1',[auth.userId,otherCampus]);
+  const moved={...auth,campusId:otherCampus,profile:{...auth.profile,campus_id:otherCampus}};
+  const page=await notificationsService.ownNotificationOperation(moved,{});assert.ok('items' in page);const item=page.items.find(row=>row.id===id)!;
+  assert.equal(item.type,'PHYSICAL_PUBLICATION_CLOSE_REMINDER');assert.ok('publicationId' in item);assert.equal(item.publicationId,saved.id);
+  assert.doesNotMatch(JSON.stringify(item),/destinatario_id|actividad_id|storage_path|email|campus_id/);
+  await notificationsService.ownNotificationOperation(moved,{id});assert.ok((await reminderRows(saved.id)).rows[0].leida_en);
+  const detail=await historyService.getOwnPhysicalgoodsDetail(moved,saved.id);assert.equal(detail.campus.id,campus);assert.equal(detail.canView,false);
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(moved,saved.id),{status:404});
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[saved.id]);
+  const retained=await notificationsService.ownNotificationOperation(moved,{});assert.ok('items' in retained);assert.ok(retained.items.some(row=>row.id===id));
+});
+
+test('fresh own-publication detail points to the current pending agreement instead of an outdated reminder-time agreement',async()=>{
+  const {saved,first,a,b}=await requestedPair();await agePublication(saved.id);await remindersService.dispatchPhysicalgoodsReminders();
+  assert.equal((await historyService.getOwnPhysicalgoodsDetail(auth,saved.id)).activeTransaction,null);
+  const firstId=(await resolveRequest(saved.id,a.id)).transaction!.id;
+  assert.equal((await historyService.getOwnPhysicalgoodsDetail(auth,saved.id)).activeTransaction?.id,firstId);
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,firstId,{},'CANCELAR');
+  const secondId=(await resolveRequest(saved.id,b.id)).transaction!.id;
+  assert.equal((await historyService.getOwnPhysicalgoodsDetail(auth,saved.id)).activeTransaction?.id,secondId);
+  await assert.rejects(historyService.getOwnPhysicalgoodsDetail(first,saved.id),{status:404});
+});
+
+test('reminder HTTP inbox/read/delete retain no-store and never expose coordination or other owners notices',async()=>{
+  const {saved,id}=await acceptedAgreement();await agePublication(saved.id);await remindersService.dispatchPhysicalgoodsReminders();
+  await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location);
+  const notificationId=(await reminderRows(saved.id)).rows[0].id,headers={Authorization:'Bearer '+token},url=base.replace('/marketplace/physicalgoods','/users/me/notifications');
+  let response=await originalFetch(url,{headers});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+  const items=(await response.json()).data.items;assert.equal(items.length,1);assert.equal(items[0].publicationId,saved.id);assert.equal(items[0].type,'PHYSICAL_PUBLICATION_CLOSE_REMINDER');
+  assert.equal((await originalFetch(url+'/'+notificationId+'/read',{method:'PUT',headers})).status,200);
+  const owner=structuredClone(current);current=structuredClone(await otherActor('ADMINISTRADOR'));
+  assert.equal((await originalFetch(url+'/'+notificationId,{method:'DELETE',headers})).status,404);current=owner;
+  response=await originalFetch(url+'/'+notificationId,{method:'DELETE',headers});assert.equal(response.status,200);
+  assert.equal((await originalFetch(url,{headers}).then(row=>row.json())).data.items.length,0);
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,1);
+});
+
+test('reminder worker waits for in-flight work on shutdown and logs sanitized failures without affecting activity delivery',async()=>{
+  const {startPhysicalgoodsReminderWorker}=await import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.worker.js');
+  let release!:()=>void,signal=()=>false,calls=0;
+  const stop=startPhysicalgoodsReminderWorker(async stopped=>{calls++;signal=stopped!;await new Promise<void>(resolve=>{release=resolve;});return {delivered:0,failed:0};});
+  assert.equal(calls,1);assert.equal(signal(),false);const shutdown=stop();assert.equal(signal(),true);release();await shutdown;assert.equal(calls,1);
+  const logs:unknown[][]=[],logger=mock.method(console,'error',(...args:unknown[])=>{logs.push(args);});
+  try{
+    const stopFailure=startPhysicalgoodsReminderWorker(async()=>{throw new Error('private postgres password');});await stopFailure();
+    assert.equal(logs.length,1);assert.doesNotMatch(JSON.stringify(logs),/private|password|postgres/);
+  }finally{logger.mock.restore();}
+  assert.deepEqual(await remindersService.dispatchPhysicalgoodsReminders(()=>true),{delivered:0,failed:0});
+});
+
+async function seedReminderPublications(count:number) {
+  const items=(await db.query<{id:string}>(`INSERT INTO publicacion_recurso(campus_id,propietario_id,tipo_recurso,titulo,modalidad,publicado_en)
+    SELECT $1,$2,'FISICO','Material '||i,'DONACION',now()-interval '8 days' FROM generate_series(1,$3::integer) i RETURNING id`,[campus,auth.userId,count])).rows;
+  await db.query("INSERT INTO recurso_fisico(publicacion_id,categoria_id,estado_uso) SELECT unnest($1::uuid[]),$2,'BUEN_ESTADO'",[items.map(row=>row.id),category]);
+  return items;
+}
+
+test('mixed activity/reminder cursor pagination includes deleted cursors and keeps each campus and recipient scope',async()=>{
+  await seedReminderPublications(35);await remindersService.dispatchPhysicalgoodsReminders();
+  await db.query(`INSERT INTO notificacion(destinatario_id,actividad_id,tipo_notificacion,titulo,mensaje,campus_id,actividad_evento_clave)
+    VALUES($1,'507f1f77bcf86cd799439011','OFFICIAL_EVENT_PUBLISHED','Evento','Nuevo evento',$2,'activity:qa:published')`,[auth.userId,campus]);
+  const first=await notificationsService.ownNotificationOperation(auth,{});assert.ok('items' in first);assert.equal(first.items.length,30);assert.ok(first.nextCursor);
+  await notificationsService.ownNotificationOperation(auth,{id:first.nextCursor,remove:true});
+  const next=await notificationsService.ownNotificationOperation(auth,{cursor:first.nextCursor});assert.ok('items' in next);assert.equal(next.items.length,6);assert.equal(next.nextCursor,null);
+  assert.equal(next.items.some(row=>first.items.some(old=>old.id===row.id)),false);
+  const outsider=await otherActor(),foreignNotice=randomUUID();await db.query(`INSERT INTO notificacion(id,destinatario_id,actividad_id,tipo_notificacion,titulo,mensaje,campus_id,actividad_evento_clave)
+    VALUES($1,$2,'507f1f77bcf86cd799439011','ACTIVITY_CHANGED','Ajeno','Ajeno',$3,'activity:qa:foreign')`,[foreignNotice,outsider.userId,campus]);
+  const foreignCursor=await notificationsService.ownNotificationOperation(auth,{cursor:foreignNotice});assert.ok('items' in foreignCursor);assert.equal(foreignCursor.items.length,0);
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1',[auth.userId,otherCampus]);
+  const moved=await notificationsService.ownNotificationOperation({...auth,campusId:otherCampus,profile:{...auth.profile,campus_id:otherCampus}},{});
+  assert.ok('items' in moved);assert.ok(moved.items.every(row=>row.type==='PHYSICAL_PUBLICATION_CLOSE_REMINDER'));
+});
+
+test('bounded reminder batches make progress across checks without leaving older publications permanently ahead of the queue',async()=>{
+  const items=await seedReminderPublications(101);
+  const count=()=>db.query("SELECT id FROM notificacion WHERE destinatario_id=$1 AND tipo_notificacion='PHYSICAL_PUBLICATION_CLOSE_REMINDER'",[auth.userId]);
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await count()).rows.length,100);
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await count()).rows.length,items.length);
+  await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await count()).rows.length,items.length);
 });

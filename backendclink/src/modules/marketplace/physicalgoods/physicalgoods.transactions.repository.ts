@@ -11,6 +11,11 @@ export async function hasActivePhysicalgoodsTransaction(client: PoolClient, publ
   return (await client.query(`SELECT id FROM public.transaccion_recurso WHERE publicacion_id=$1
     AND estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION') LIMIT 1`,[publicationId])).rows.length > 0;
 }
+export async function findActivePhysicalgoodsTransaction(client:PoolClient,publicationId:string,ownerId:string) {
+  return (await client.query<{id:string;status:PhysicalgoodsTransactionRow['estado_transaccion']}>(`SELECT id,estado_transaccion AS status
+    FROM public.transaccion_recurso WHERE publicacion_id=$1 AND propietario_id=$2
+    AND estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION') ORDER BY iniciada_en DESC,id DESC LIMIT 1`,[publicationId,ownerId])).rows[0]??null;
+}
 export async function insertPhysicalgoodsTransaction(client: PoolClient, publicationId: string, requestId: string, requesterId: string) {
   return (await client.query<PhysicalgoodsTransactionRow>(`INSERT INTO public.transaccion_recurso
     (solicitud_id,publicacion_id,propietario_id,receptor_id,modalidad_acordada,monto_acordado,moneda)

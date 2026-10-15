@@ -8,4 +8,13 @@ export interface ActivityNotificationDto {
   createdAt: string;
   readAt: string | null;
 }
-export interface NotificationPage { items: ActivityNotificationDto[]; nextCursor: string | null }
+export interface PhysicalgoodsReminderDto {
+  id:string;
+  publicationId:string;
+  type:'PHYSICAL_PUBLICATION_CLOSE_REMINDER';
+  title:string;
+  message:string;
+  createdAt:string;
+  readAt:string|null;
+}
+export interface NotificationPage { items: (ActivityNotificationDto|PhysicalgoodsReminderDto)[]; nextCursor: string | null }

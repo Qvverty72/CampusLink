@@ -37,8 +37,9 @@ before(async () => {
   await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
     CREATE TABLE public.campus(id uuid PRIMARY KEY);
     CREATE TABLE public.perfil_usuario(id uuid PRIMARY KEY,campus_id uuid REFERENCES public.campus(id),estado_cuenta text,deleted_at timestamptz);
+    CREATE TABLE public.publicacion_recurso(id uuid PRIMARY KEY,propietario_id uuid,tipo_recurso text);
     CREATE TABLE public.notificacion(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),destinatario_id uuid REFERENCES public.perfil_usuario(id),
-      actividad_id text,tipo_notificacion text,titulo text,mensaje text NOT NULL,created_at timestamptz DEFAULT now(),leida_en timestamptz,deleted_at timestamptz);
+      actividad_id text,publicacion_id uuid,tipo_notificacion text,titulo text,mensaje text NOT NULL,created_at timestamptz DEFAULT now(),leida_en timestamptz,deleted_at timestamptz);
     ALTER TABLE public.notificacion ENABLE ROW LEVEL SECURITY;`);
   await db.exec(await migration());
   await db.query('INSERT INTO campus VALUES ($1),($2)', [campusId, otherCampus]);

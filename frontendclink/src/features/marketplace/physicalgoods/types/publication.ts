@@ -139,6 +139,7 @@ export interface PhysicalgoodsOwnDetail extends PhysicalgoodsOwnPublication {
   description:string;
   images:PhysicalgoodsGallery['images'];
   expiresIn:number;
+  activeTransaction:{id:string;status:PhysicalgoodsTransaction['status']}|null;
 }
 export type PhysicalgoodsTransactionSummary=Pick<PhysicalgoodsTransaction,'id'|'publication'|'campus'|'role'|'status'|'modality'|'amount'|'currency'|'startedAt'>;
 export interface PhysicalgoodsOwnPage {data:PhysicalgoodsOwnPublication[];meta:PhysicalgoodsPage['meta']}

@@ -63,6 +63,7 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement}:{
         {request.transaction&&button('Ver acuerdo: '+publication.title,()=>onAgreement(publication.id,request.transaction!.id))}
       </>}
       {'description' in detail&&<>
+        {detail.activeTransaction&&button('Ver acuerdo pendiente: '+publication.title,()=>onAgreement(publication.id,detail.activeTransaction!.id))}
         <Text style={styles.text}>{detail.description}</Text>
         <Text style={styles.text}>Categoría: {detail.category.name}</Text>
         <Text style={styles.text}>Condición: {resourceConditions.find(row=>row.value===detail.condition)?.label}</Text>

@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback,useRef,useState } from 'react';
+import {useFocusEffect} from 'expo-router';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchNotifications, updateNotification } from '../api/notificationsApi';
-import type { ActivityNotification } from '../types/notification';
+import type { UserNotification } from '../types/notification';
 
 /** Pagina notificaciones y refleja lecturas/eliminaciones solo tras el acuse del servidor. */
 export function useActivityNotifications() {
   const { refreshIdentity } = useAuth();
-  const [items, setItems] = useState<ActivityNotification[]>([]);
+  const [items, setItems] = useState<UserNotification[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activityId, setActivityId] = useState<string | null>(null);
+  const [publicationId,setPublicationId]=useState<string|null>(null);
   const pending = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const handleError = (reason: unknown) => {
@@ -30,11 +32,14 @@ export function useActivityNotifications() {
     } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
     finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
   }
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     mounted.current = true; void load();
-    return () => { mounted.current = false; pending.current?.abort(); pending.current = null; };
-  }, []);
-  async function update(item: ActivityNotification, remove: boolean) {
+    return () => {
+      mounted.current = false; pending.current?.abort(); pending.current = null;
+      setActivityId(null);setPublicationId(null);
+    };
+  }, []));
+  async function update(item: UserNotification, remove: boolean) {
     if (pending.current || !mounted.current) return;
     const abort = new AbortController(); pending.current = abort; setBusy(true); setError(null);
     try {
@@ -42,10 +47,13 @@ export function useActivityNotifications() {
       if (!abort.signal.aborted) {
         setItems(current => remove ? current.filter(row => row.id !== item.id)
           : current.map(row => row.id === item.id ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row));
-        if (!remove) setActivityId(item.activityId);
+        if (!remove) {
+          if(item.type==='PHYSICAL_PUBLICATION_CLOSE_REMINDER')setPublicationId(item.publicationId);
+          else setActivityId(item.activityId);
+        }
       }
     } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
     finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
   }
-  return { items, cursor, busy, error, activityId, setActivityId, load, update };
+  return { items, cursor, busy, error, activityId, setActivityId, publicationId,setPublicationId,load, update };
 }

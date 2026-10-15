@@ -418,6 +418,24 @@ Frontend mantiene API→hooks→componentes, aborta lecturas al cerrar/cambiar d
 
 Sin SQL que ejecutar, tablas/columnas/índices/dependencias/env nuevos. Validación:352/352 pruebas backend con Node22.23.3 (84 físicas,7 nuevas), TypeScript/build, exportaciones web/Android/iOS --no-bytecode y QA Edge390×844/1280×900 con API simulada. Incluye privacidad, campus anterior, todos los estados, esquema intacto, paginación, detalle/error/reintento/cierre tardío y regresiones de publicación/fotos/solicitudes/resolución/acuerdos. QA con datos reales y dispositivos permanece para el cierre de fase.
 
+## Recordar el cierre de una publicación física (F2.4-10)
+
+Decisión confirmada por el usuario el2026-10-15: **un único recordatorio al cumplir siete días desde `publicado_en`**. Reservar, aceptar solicitudes o actualizar contenido no reinicia el plazo. La propuesta temporal del backlog/Issue73 queda resuelta con esa aprobación, registrada en el contexto de GH-73.
+
+El servidor inicia un worker de publicaciones físicas después del arranque válido de la API. Comprueba hasta100 pendientes por tanda, al iniciar y cada60 segundos después de terminar la anterior; no se solapa consigo mismo y espera la ejecución en curso al cerrar. Si la API estuvo detenida, la siguiente comprobación recupera publicaciones vencidas sin crear avisos semanales acumulados. Fallos de esta tarea no detienen el worker de actividades.
+
+Solo son elegibles físicas `DISPONIBLE`/`RESERVADO`, no retiradas, con propietario activo y acceso general vigente. Excluye `FINALIZADO`, `OCULTO`, `CANCELADO`, digitales y eliminación lógica. La fecha límite y el texto se deciden en reminders.service; reminders.repository ejecuta SQL parametrizado. Por cada publicación se revalidan perfil/roles y publicación, con el orden de locks existente perfil→publicación/subtipo. Una sentencia posterior al lock vuelve a consultar la existencia del aviso antes de insertarlo, de modo que ejecuciones concurrentes no dupliquen una entrega ya confirmada.
+
+Reutiliza exclusivamente `notificacion.destinatario_id/publicacion_id/tipo_notificacion/titulo/mensaje/created_at` originales. Tipo `PHYSICAL_PUBLICATION_CLOSE_REMINDER`, título de la publicación y fecha de generación de PostgreSQL. La comprobación de duplicados considera también avisos leídos/eliminados: borrar la notificación no reinicia el recordatorio. No modifica publicación, `updated_at`, solicitudes, acuerdos ni auditoría. Una entrega fallida revierte y se reintenta; si el COMMIT ocurrió pero se perdió el acuse, la siguiente lectura detecta el aviso existente.
+
+La bandeja existente `/api/v1/users/me/notifications` conserva sus rutas, paginación cursorada, lectura, eliminación y no-store. Sus `items` admiten el DTO físico `{id,publicationId,type:'PHYSICAL_PUBLICATION_CLOSE_REMINDER',title,message,createdAt,readAt}` junto a los DTO de actividades existentes. Se verifica destinatario y propiedad física persistidos, sin excepción administrativa. Avisos propios de publicaciones de un campus anterior siguen consultables con su historial (F2.4-09); las actividades mantienen su campus vigente y los mensajes `COORDINACION_RECURSO` permanecen fuera de la bandeja.
+
+«Revisar publicación» marca lectura tras acuse y abre el detalle propio actual de F2.4-09. Este detalle añade `activeTransaction:{id,status}|null`, consultado en ese momento, para abrir el acuerdo pendiente de F2.4-08. El vínculo operacional existente permite editar/retirar con autorización habitual. `/physicalgoods?publicationId=<uuid>` abre el recurso específico; IDs inválidos no se incorporan al API. Otro campus/retirada conserva solo las acciones que el servidor autoriza. Abrir un aviso no confirma ni retira automáticamente. La bandeja cancela lecturas al perder foco para que una respuesta tardía no abra un modal en otra pantalla.
+
+**Sin SQL nuevo ni dependencias:** usa tablas, atributos, permisos y migraciones existentes, incluidas las columnas de actividades ya utilizadas por la bandeja. No se reutiliza `actividad_evento_clave` como clave física ni se agrega un atributo de último recordatorio. Requiere el backend en ejecución; entrega dentro de la aplicación mediante su bandeja existente.
+
+Validación local:363/363 pruebas backend con Node22.23.3 (95 físicas,11 nuevas), TypeScript/build backend y TypeScript frontend. Export web/Android/iOS --no-bytecode y QA Edge390×844/1280×900 con API ficticia: bandeja mixta/error/reintento/lectura/eliminación, confirmación explícita, retirada y reapertura del mismo recurso, campus anterior,404 limpio y respuesta tardía cancelada; regresiones de actividades/perfil, historial propio y publicación/fotos/edición/retirada aprobadas. SQL real con PGlite; QA real de datos/dispositivos y contención remota multiconexión permanece para el cierre de fase.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
