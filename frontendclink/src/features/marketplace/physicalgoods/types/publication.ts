@@ -107,6 +107,7 @@ export interface PhysicalgoodsReceivedPage {
   meta: PhysicalgoodsPage['meta'];
 }
 export interface PhysicalgoodsTransactionTarget { publicationId:string; transactionId:string }
+export interface PhysicalgoodsRating {id:string;score:number;createdAt:string}
 export interface PhysicalgoodsTransaction {
   id:string;
   publication:{id:string;title:string;status:string;isWithdrawn:boolean};
@@ -125,6 +126,8 @@ export interface PhysicalgoodsTransaction {
   confirmations:{userId:string;role:'PROPIETARIO'|'RECEPTOR';confirmedAt:string}[];
   canConfirm:boolean;
   canCancel:boolean;
+  rating:PhysicalgoodsRating|null;
+  canRate:boolean;
 }
 export interface PhysicalgoodsCoordinationOptions { buildings:{id:string;name:string;floors:{id:string;name:string}[]}[] }
 export interface PhysicalgoodsCoordinationMessage { id:string;senderId:string;recipientId:string;text:string;createdAt:string }

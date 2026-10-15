@@ -35,6 +35,7 @@ let historyService: typeof import('../src/modules/marketplace/physicalgoods/phys
 let remindersService:typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
 let notificationsService:typeof import('../src/modules/users/notifications.service.js');
 let failTransactionInsert=false;
+let failRatingInsert=false,lostRatingCommit=false;
 let failCoordination=false,failMap=false,lostCoordinationCommit=false,mapReads=0;
 let activeMap:CampusMapDocument|null,onMapRead:(()=>Promise<void>)|null=null;
 let failRequestInsert=false;
@@ -53,6 +54,7 @@ before(async () => {
     connectionLease=new Promise<void>(resolve=>{releaseLease=resolve;});await previous;
     return {
     query: async (sql: string, values: unknown[] = []) => {
+      if(failRatingInsert&&sql.startsWith('INSERT INTO public.valoracion'))throw new Error('private rating SQL password');
       if(failCoordination&&sql.startsWith('INSERT INTO public.notificacion'))throw new Error('private notification SQL password');
       if (failTransactionInsert&&sql.startsWith('INSERT INTO public.transaccion_recurso')) throw new Error('private transaction SQL password');
       if (failRequestInsert&&sql.startsWith('INSERT INTO public.solicitud_recurso')) throw new Error('private request SQL failure password');
@@ -63,6 +65,7 @@ before(async () => {
         const operation=onReminderCandidates;onReminderCandidates=null;await operation();
       }
       if(lostCoordinationCommit&&sql.startsWith('INSERT INTO public.notificacion')){lostCoordinationCommit=false;lostCommit=true;}
+      if(lostRatingCommit&&sql.startsWith('INSERT INTO public.valoracion')){lostRatingCommit=false;lostCommit=true;}
       if (lostCommit && sql === 'COMMIT') { lostCommit = false; throw new Error('lost commit acknowledgement'); }
       return result;
     }, release: () => releaseLease(),
@@ -128,13 +131,14 @@ before(async () => {
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
-    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','notificacion','reporte_contenido','auditoria']) {
+    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_06_mensajes_solicitud.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql','utf8'));
+  await db.exec('ALTER TABLE public.valoracion ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON public.valoracion TO service_role;');
   await db.query("insert into institucion(id,nombre) values($1,'Institution')", [institution]);
   await db.query("insert into campus(id,institucion_id,nombre) values($1,$2,'Home'),($3,$2,'Foreign')", [campus, institution, otherCampus]);
   await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'Material académico')", [category]);
@@ -151,6 +155,7 @@ beforeEach(async () => {
   storageCalls = []; uploads = []; removals = []; signed = [];
   signedPaths = []; failSign = false; failAudit = false; failRequestInsert=false;
   failTransactionInsert=false;
+  failRatingInsert=lostRatingCommit=false;
   failCoordination=failMap=lostCoordinationCommit=false;mapReads=0;onMapRead=null;
   activeMap={campusId:campus,version:1,status:'ACTIVE',createdAt:new Date(),updatedAt:new Date(),buildings:[
     {id:'ebuilding',name:'Edificio E',floors:[{id:'ebuilding_floor1',name:'Planta Baja'},{id:'ebuilding_floor2',name:'Piso 2'}]},
@@ -1371,4 +1376,121 @@ test('bounded reminder batches make progress across checks without leaving older
   await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await count()).rows.length,100);
   await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await count()).rows.length,items.length);
   await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await count()).rows.length,items.length);
+});
+
+async function completedAgreement() {
+  const pair=await acceptedAgreement();
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,pair.saved.id,pair.id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(pair.first,pair.saved.id,pair.id,{},'CONFIRMAR');
+  return pair;
+}
+const ratings=(id:string)=>db.query('SELECT * FROM public.valoracion WHERE transaccion_id=$1',[id]);
+
+test('completed physical receiver rates the persisted owner once and the agreement exposes the immutable receipt to its participants',async()=>{
+  const {saved,first,id}=await completedAgreement(),before=await transactionRows(saved.id),publication=await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id]),history=await audits(saved.id);
+  assert.equal((await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id)).canRate,true);
+  assert.equal((await transactionsService.getPhysicalgoodsTransaction(auth,saved.id,id)).canRate,false);
+  const rating=await transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:5}),stored=(await ratings(id)).rows;
+  assert.equal(rating.score,5);assert.match(rating.createdAt,/\.\d{6}Z$/);assert.equal(stored.length,1);
+  assert.equal(stored[0].evaluador_id,first.userId);assert.equal(stored[0].evaluado_id,auth.userId);assert.equal(stored[0].transaccion_id,id);assert.equal(stored[0].comentario,null);
+  for(const actor of [auth,first]){
+    const detail=await transactionsService.getPhysicalgoodsTransaction(actor,saved.id,id);assert.deepEqual(detail.rating,rating);assert.equal(detail.canRate,false);
+  }
+  assert.deepEqual((await transactionRows(saved.id)).rows,before.rows);assert.deepEqual((await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id])).rows,publication.rows);assert.deepEqual(await audits(saved.id),history);
+  assert.deepEqual(Object.keys(rating).sort(),['createdAt','id','score']);
+});
+
+test('rating is unavailable before double confirmation and after cancellation, and only the receiver can submit it',async()=>{
+  const {saved,first,second,id}=await acceptedAgreement(),body={score:3};
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,body),{status:409});
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
+  assert.equal((await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id)).canRate,false);
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,body),{status:409});
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,body),{status:409});assert.equal((await ratings(id)).rows.length,0);
+  const completed=await completedAgreement();
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(auth,completed.saved.id,completed.id,body),{status:403});
+  for(const outsider of [second,await otherActor('ADMINISTRADOR')])await assert.rejects(transactionsService.ratePhysicalgoodsOwner(outsider,completed.saved.id,completed.id,body),{status:404});
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(completed.first,saved.id,completed.id,body),{status:404});
+});
+
+test('rating accepts only an integer score from one through five and rejects client identity, comments and state overrides',async()=>{
+  const {saved,first,id}=await completedAgreement();
+  for(const score of [0,6,-1,1.5,'5',NaN,Infinity,null,true,undefined])await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score}),{status:400});
+  for(const body of [null,[],{},'5',...['ownerId','reviewerId','evaluatedId','transactionId','campusId','createdAt','comment','status'].map(key=>({score:4,[key]:'override'}))]){
+    await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,body),{status:400});
+  }
+  assert.equal((await ratings(id)).rows.length,0);
+  assert.equal((await transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:1})).score,1);
+});
+
+test('duplicate and competing rating submissions preserve the first score and schema without any edit or removal endpoint',async()=>{
+  const {saved,first,id}=await completedAgreement(),inventory=()=>db.query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position"),before=await inventory();
+  const outcomes=await Promise.allSettled([transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:2}),transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:5})]);
+  assert.equal(outcomes.filter(value=>value.status==='fulfilled').length,1);
+  assert.ok(outcomes.some(value=>value.status==='rejected'&&value.reason.status===409));
+  const original=(await ratings(id)).rows;
+  for(const score of [2,5])await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score}),{status:409});
+  assert.deepEqual((await ratings(id)).rows,original);assert.deepEqual((await inventory()).rows,before.rows);
+  current=structuredClone(first);const url=base+'/'+saved.id+'/transactions/'+id+'/rating',headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+  for(const method of ['PATCH','PUT','DELETE'])assert.equal((await originalFetch(url,{method,headers,body:JSON.stringify({score:4})})).status,404);
+  assert.deepEqual((await ratings(id)).rows,original);
+});
+
+test('rating rechecks persisted suspension, revoked access and changed campus and does not grant writes through historical access',async()=>{
+  const {saved,first,id}=await completedAgreement();
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1",[first.userId]);
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:4}),{status:403});
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA',verificado_en=null WHERE id=$1",[first.userId]);
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner({...first,roles:[{id:randomUUID(),name:'USUARIO_AUTORIZADO',campusId:campus}]},saved.id,id,{score:4}),{status:403});
+  await db.query('UPDATE perfil_usuario SET verificado_en=now(),campus_id=$2 WHERE id=$1',[first.userId,otherCampus]);
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:4}),{status:409});
+  const moved={...first,campusId:otherCampus,profile:{...first.profile,campus_id:otherCampus}};
+  const detail=await transactionsService.getPhysicalgoodsTransaction(moved,saved.id,id);assert.equal(detail.canRate,false);assert.equal(detail.rating,null);
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(moved,saved.id,id,{score:4}),{status:404});assert.equal((await ratings(id)).rows.length,0);
+});
+
+test('rating survives withdrawal, hidden publication and owner deactivation while its receiver and transaction remain the authority',async()=>{
+  const {saved,first,id}=await completedAgreement();
+  await db.query("UPDATE publicacion_recurso SET estado_publicacion='OCULTO',deleted_at=now() WHERE id=$1",[saved.id]);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='DESACTIVADA',deleted_at=now() WHERE id=$1",[auth.userId]);
+  assert.equal((await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id)).canRate,true);
+  const rating=await transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:4});
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(first,saved.id),{status:404});
+  const detail=await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id);assert.deepEqual(detail.rating,rating);assert.equal(detail.publication.isWithdrawn,true);assert.equal(detail.owner.id,auth.userId);
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1',[first.userId,otherCampus]);
+  const historical=await transactionsService.getPhysicalgoodsTransaction({...first,campusId:otherCampus,profile:{...first.profile,campus_id:otherCampus}},saved.id,id);
+  assert.deepEqual(historical.rating,rating);assert.equal(historical.canRate,false);assert.equal((await transactionRows(saved.id)).rows.length,1);
+});
+
+test('donation ratings use the same completed-receiver rule and do not introduce a purchase-only requirement',async()=>{
+  const saved=await create(auth,input({modality:'DONACION',price:null})),first=await otherActor(),request=await requestsService.createPhysicalgoodsRequest(first,saved.id,{messageCode:'ME_INTERESA'});
+  const id=(await resolveRequest(saved.id,request.id)).transaction!.id;
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');
+  const rating=await transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:1});assert.equal(rating.score,1);
+  const detail=await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id);assert.equal(detail.modality,'DONACION');assert.equal(detail.amount,null);assert.equal(detail.rating?.score,1);
+});
+
+test('rating insertion failure rolls back and an uncertain commit is recovered through the agreement without changing the score',async()=>{
+  const {saved,first,id}=await completedAgreement(),before=(await transactionRows(saved.id)).rows;failRatingInsert=true;
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:5}),{status:503});assert.equal((await ratings(id)).rows.length,0);failRatingInsert=false;
+  lostRatingCommit=true;await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:5}),{status:503});
+  const detail=await transactionsService.getPhysicalgoodsTransaction(first,saved.id,id);assert.equal(detail.rating?.score,5);assert.equal(detail.canRate,false);
+  await assert.rejects(transactionsService.ratePhysicalgoodsOwner(first,saved.id,id,{score:2}),{status:409});assert.equal((await ratings(id)).rows.length,1);assert.deepEqual((await transactionRows(saved.id)).rows,before);
+});
+
+test('rating HTTP requires identity and valid scope, returns no-store and sanitizes database failures without an editing bypass',async()=>{
+  const {saved,first,id}=await completedAgreement(),url=base+'/'+saved.id+'/transactions/'+id+'/rating',headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+  assert.equal((await originalFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"score":5}'})).status,401);
+  assert.equal((await originalFetch(url,{method:'POST',headers,body:'{"score":5}'})).status,403);current=structuredClone(first);
+  for(const body of [{score:'3'},{score:4.1},{score:3,ownerId:auth.userId}])assert.equal((await originalFetch(url,{method:'POST',headers,body:JSON.stringify(body)})).status,400);
+  assert.equal((await originalFetch(base+'/bad/transactions/'+id+'/rating',{method:'POST',headers,body:'{"score":3}'})).status,400);
+  assert.equal((await originalFetch(base+'/'+randomUUID()+'/transactions/'+id+'/rating',{method:'POST',headers,body:'{"score":3}'})).status,404);
+  failRatingInsert=true;let response=await originalFetch(url,{method:'POST',headers,body:'{"score":3}'});assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/private|SQL|password/);failRatingInsert=false;
+  response=await originalFetch(url,{method:'POST',headers,body:'{"score":3}'});assert.equal(response.status,201);assert.equal(response.headers.get('cache-control'),'no-store');const receipt=(await response.json()).data;assert.equal(receipt.score,3);
+  response=await originalFetch(url,{method:'POST',headers,body:'{"score":2}'});assert.equal(response.status,409);
+  response=await originalFetch(url.replace('/rating',''),{headers});assert.equal(response.status,200);assert.deepEqual((await response.json()).data.rating,receipt);
+  for(const role of ['anon','authenticated']){
+    await db.exec('SET ROLE '+role);try{await assert.rejects(db.query('SELECT * FROM valoracion'),/permission denied/);await assert.rejects(db.query('UPDATE valoracion SET puntuacion=1'),/permission denied/);}finally{await db.exec('RESET ROLE');}
+  }
 });

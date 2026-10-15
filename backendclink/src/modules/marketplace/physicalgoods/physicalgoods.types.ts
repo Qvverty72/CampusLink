@@ -138,3 +138,11 @@ export interface PhysicalgoodsCoordinationRow {
   mensaje: string;
   created_at: string;
 }
+export interface PhysicalgoodsRatingRow {
+  id:string;
+  transaccion_id:string;
+  evaluador_id:string;
+  evaluado_id:string;
+  puntuacion:number;
+  created_at:string;
+}

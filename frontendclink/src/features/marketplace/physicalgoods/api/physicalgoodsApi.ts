@@ -5,6 +5,7 @@ import type { PhysicalgoodsRequest, PhysicalgoodsRequestOptions } from '../types
 import type { PhysicalgoodsReceivedPage, PhysicalgoodsReceivedRequest } from '../types/publication';
 import type { PhysicalgoodsCoordinationMessage,PhysicalgoodsCoordinationOptions,PhysicalgoodsCoordinationPage,PhysicalgoodsTransaction,PhysicalgoodsTransactionTarget } from '../types/publication';
 import type { PhysicalgoodsOwnDetail,PhysicalgoodsOwnPublication,PhysicalgoodsOwnPage,PhysicalgoodsTransactionSummary,PhysicalgoodsTransactionsPage } from '../types/publication';
+import type {PhysicalgoodsRating} from '../types/publication';
 
 const path = '/api/v1/marketplace/physicalgoods';
 /** Valida el UUID antes de incorporarlo a una ruta de publicación. */
@@ -26,6 +27,8 @@ export const loadOwnPhysicalgoodsRequest=(id:string,requestId:string,signal:Abor
   return authenticatedRequest<PhysicalgoodsReceivedRequest>(resourcePath(id)+'/requests/'+requestId,{signal});
 };
 export const loadPhysicalgoodsTransaction = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsTransaction>(transactionPath(target),{signal});
+export const ratePhysicalgoodsOwner=(target:PhysicalgoodsTransactionTarget,score:number,signal:AbortSignal)=>authenticatedRequest<PhysicalgoodsRating>(
+  transactionPath(target)+'/rating',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({score})});
 export const loadPhysicalgoodsCoordinationOptions = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsCoordinationOptions>(transactionPath(target)+'/coordination-options',{signal});
 export const loadPhysicalgoodsCoordinationMessages = (target:PhysicalgoodsTransactionTarget,page:number,signal:AbortSignal) => authenticatedEnvelopeRequest<PhysicalgoodsCoordinationMessage[],PhysicalgoodsCoordinationPage['meta']>(
   transactionPath(target)+'/messages',{signal},new URLSearchParams({page:String(page),limit:'10'}));

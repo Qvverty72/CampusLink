@@ -8,7 +8,7 @@ import { addPhysicalgoodsImage, changePhysicalgoodsCategory, changePhysicalgoods
 import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 import { updatePhysicalgoods, withdrawPhysicalgoods } from './physicalgoods.edit.service.js';
 import { createPhysicalgoodsRequest, getPhysicalgoodsRequestOptions, getReceivedPhysicalgoodsRequests, getSentPhysicalgoodsRequests, resolvePhysicalgoodsRequest } from './physicalgoods.requests.service.js';
-import { getPhysicalgoodsTransaction,getPhysicalgoodsCoordinationOptions,getPhysicalgoodsCoordinationMessages,sendPhysicalgoodsCoordination,transitionPhysicalgoodsTransaction } from './physicalgoods.transactions.service.js';
+import { getPhysicalgoodsTransaction,getPhysicalgoodsCoordinationOptions,getPhysicalgoodsCoordinationMessages,sendPhysicalgoodsCoordination,transitionPhysicalgoodsTransaction,ratePhysicalgoodsOwner } from './physicalgoods.transactions.service.js';
 import { getOwnPhysicalgoods, getOwnPhysicalgoodsDetail } from './physicalgoods.history.service.js';
 import { getOwnPhysicalgoodsRequest } from './physicalgoods.requests.service.js';
 import { getOwnPhysicalgoodsTransactions } from './physicalgoods.transactions.service.js';
@@ -30,6 +30,9 @@ export const getOwnPhysicalgoodsTransactionsController:PhysicalgoodsHandler=asyn
 };
 export const getPhysicalgoodsTransactionController:PhysicalgoodsHandler=async(request,response)=>{
   sendSuccess(response,await getPhysicalgoodsTransaction(response.locals.auth,request.params.publicationId,request.params.transactionId));
+};
+export const ratePhysicalgoodsOwnerController:PhysicalgoodsHandler=async(request,response)=>{
+  sendSuccess(response,await ratePhysicalgoodsOwner(response.locals.auth,request.params.publicationId,request.params.transactionId,request.body),201);
 };
 export const getPhysicalgoodsCoordinationOptionsController:PhysicalgoodsHandler=async(request,response)=>{
   sendSuccess(response,await getPhysicalgoodsCoordinationOptions(response.locals.auth,request.params.publicationId,request.params.transactionId));

@@ -1,11 +1,21 @@
 import type { PoolClient } from 'pg';
-import type { PhysicalgoodsConfirmationRow,PhysicalgoodsCoordinationRow,PhysicalgoodsTransactionDetailRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
+import type { PhysicalgoodsConfirmationRow,PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionDetailRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
 import type { PaginationParams } from '../../../types/api.js';
 
 const confirmationProjection = `usuario_id,rol_confirmante,
   to_char(confirmado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS confirmado_en`;
 const messageProjection = `id,destinatario_id,mensaje,
   to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at`;
+const ratingProjection=`id,transaccion_id,evaluador_id,evaluado_id,puntuacion,
+  to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at`;
+
+export async function findPhysicalgoodsRating(client:PoolClient,transactionId:string) {
+  return (await client.query<PhysicalgoodsRatingRow>(`SELECT ${ratingProjection} FROM public.valoracion WHERE transaccion_id=$1`,[transactionId])).rows[0]??null;
+}
+export async function insertPhysicalgoodsRating(client:PoolClient,transactionId:string,reviewerId:string,ownerId:string,score:number) {
+  return (await client.query<PhysicalgoodsRatingRow>(`INSERT INTO public.valoracion(transaccion_id,evaluador_id,evaluado_id,puntuacion)
+    VALUES($1,$2,$3,$4) RETURNING ${ratingProjection}`,[transactionId,reviewerId,ownerId,score])).rows[0];
+}
 
 export async function hasActivePhysicalgoodsTransaction(client: PoolClient, publicationId: string) {
   return (await client.query(`SELECT id FROM public.transaccion_recurso WHERE publicacion_id=$1

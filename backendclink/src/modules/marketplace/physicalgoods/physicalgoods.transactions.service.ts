@@ -4,15 +4,15 @@ import { createPaginatedResult,parsePaginationQuery } from '../../../services/pa
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
-import { parsePhysicalgoodsCoordination,parsePhysicalgoodsEmptyAction,physicalgoodsId } from './physicalgoods.validation.js';
+import { parsePhysicalgoodsCoordination,parsePhysicalgoodsEmptyAction,parsePhysicalgoodsRating,physicalgoodsId } from './physicalgoods.validation.js';
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
 import { closePendingPhysicalgoodsRequests, updatePhysicalgoodsRequestStatus } from './physicalgoods.requests.repository.js';
 import { findPhysicalgoodsTransaction, insertPhysicalgoodsConfirmation, lockPhysicalgoodsTransactionResource,
   physicalgoodsConfirmations,setPhysicalgoodsPublicationStatus,updatePhysicalgoodsTransactionStatus,
-  listOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from './physicalgoods.transactions.repository.js';
+  findPhysicalgoodsRating,insertPhysicalgoodsRating,listOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from './physicalgoods.transactions.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
-import type { PhysicalgoodsCoordinationRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
+import type { PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
 import { findActiveMapByCampusId } from '../../maps/map.repository.js';
 import { spatialBuildings } from '../../maps/map.location.js';
 
@@ -39,6 +39,18 @@ async function transactionContext<T>(auth: VerifiedAuthConnection, publicationId
   }
 }
 const inProgress = (row:PhysicalgoodsTransactionRow) => ['RESERVADA','PENDIENTE_CONFIRMACION'].includes(row.estado_transaccion);
+const ratingDto=(row:PhysicalgoodsRatingRow)=>({id:row.id,score:row.puntuacion,createdAt:row.created_at});
+
+/** Solo el receptor del acuerdo completado valora al propietario, una vez y sin modificar el acuerdo. */
+export async function ratePhysicalgoodsOwner(auth:VerifiedAuthConnection,publicationId:unknown,transactionId:unknown,body:unknown) {
+  const score=parsePhysicalgoodsRating(body);
+  return transactionContext(auth,publicationId,transactionId,async(client,_resource,transaction,current)=>{
+    if(current.userId!==transaction.receptor_id||current.userId===transaction.propietario_id)throw new ApiError(403,'FORBIDDEN','Solo el comprador o receptor puede valorar al propietario.');
+    if(transaction.estado_transaccion!=='COMPLETADA')throw new ApiError(409,'CONFLICT','Completa el intercambio antes de valorar al propietario.');
+    if(await findPhysicalgoodsRating(client,transaction.id))throw new ApiError(409,'CONFLICT','Esta transacción ya tiene una valoración. No se puede editar.');
+    return ratingDto(await insertPhysicalgoodsRating(client,transaction.id,current.userId,transaction.propietario_id,score));
+  });
+}
 
 /** Conserva las transiciones atómicas implementadas en F2.4-07. */
 export async function transitionPhysicalgoodsTransaction(auth: VerifiedAuthConnection, publicationId: unknown, transactionId: unknown, body: unknown, action:'CONFIRMAR'|'CANCELAR') {
@@ -74,6 +86,7 @@ export async function transitionPhysicalgoodsTransaction(auth: VerifiedAuthConne
 export async function getPhysicalgoodsTransaction(auth:VerifiedAuthConnection,publicationId:unknown,transactionId:unknown) {
   return transactionContext(auth,publicationId,transactionId,async(client,_resource,transaction,current)=>{
     const row=await physicalgoodsTransactionDetail(client,transaction.id),confirmations=await physicalgoodsConfirmations(client,transaction.id);
+    const rating=await findPhysicalgoodsRating(client,transaction.id);
     return {id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at},
       campus:{id:row.campus_id,name:row.campus_nombre},owner:{id:row.propietario_id,fullName:row.propietario_nombre},
       receiver:{id:row.receptor_id,fullName:row.receptor_nombre},role:row.propietario_id===current.userId?'PROPIETARIO' as const:'RECEPTOR' as const,
@@ -81,7 +94,8 @@ export async function getPhysicalgoodsTransaction(auth:VerifiedAuthConnection,pu
       startedAt:row.iniciada_en,completedAt:row.completada_en,cancelledAt:row.cancelada_en,cancelledById:row.cancelada_por_id,
       confirmations:confirmations.map(value=>({userId:value.usuario_id,role:value.rol_confirmante,confirmedAt:value.confirmado_en})),
       canConfirm:row.campus_id===current.campusId&&inProgress(row)&&!confirmations.some(value=>value.usuario_id===current.userId),
-      canCancel:row.campus_id===current.campusId&&inProgress(row)};
+      canCancel:row.campus_id===current.campusId&&inProgress(row),rating:rating?ratingDto(rating):null,
+      canRate:row.campus_id===current.campusId&&row.estado_transaccion==='COMPLETADA'&&row.receptor_id===current.userId&&row.propietario_id!==current.userId&&!rating};
   },true);
 }
 export async function getOwnPhysicalgoodsTransactions(auth:VerifiedAuthConnection,query:unknown) {

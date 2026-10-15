@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {useAuth} from '@/features/auth/hooks/useAuth';
 import {AuthApiError} from '@/lib/api/authenticated-request';
-import {changePhysicalgoodsTransaction,loadPhysicalgoodsCoordinationMessages,loadPhysicalgoodsCoordinationOptions,loadPhysicalgoodsTransaction,sendPhysicalgoodsCoordination} from '../api/physicalgoodsApi';
+import {changePhysicalgoodsTransaction,loadPhysicalgoodsCoordinationMessages,loadPhysicalgoodsCoordinationOptions,loadPhysicalgoodsTransaction,ratePhysicalgoodsOwner,sendPhysicalgoodsCoordination} from '../api/physicalgoodsApi';
 import type {PhysicalgoodsCoordinationOptions,PhysicalgoodsCoordinationPage,PhysicalgoodsTransaction,PhysicalgoodsTransactionTarget} from '../types/publication';
 
 /** Separa acuerdo, mensajes y ubicaciones: un fallo de Mongo no bloquea confirmar o cancelar. */
@@ -12,6 +12,8 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
   const [loading,setLoading]=useState(false),[messagesLoading,setMessagesLoading]=useState(false),[optionsLoading,setOptionsLoading]=useState(false),[busy,setBusy]=useState(false);
   const [error,setError]=useState<string|null>(null),[messageError,setMessageError]=useState<string|null>(null),[optionsError,setOptionsError]=useState<string|null>(null);
   const [revision,setRevision]=useState(0),[page,setPage]=useState(1),[action,setAction]=useState<'confirm'|'cancel'|null>(null);
+  const [ratingScore,setRatingScore]=useState<number|null>(null),[ratingConfirmation,setRatingConfirmation]=useState(false);
+  const pendingRating=useRef<number|null>(null);
   const mutation=useRef<AbortController|null>(null),running=useRef(false),outcome=useRef<'confirm'|'cancel'|null>(null);
   const sent=useRef<{text:string;previousIds:string[]}|null>(null),selection=useRef({buildingId,floorId});selection.current={buildingId,floorId};
   useEffect(()=>()=>mutation.current?.abort(),[]);
@@ -24,6 +26,7 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
     setLoading(true);setDetail(null);
     void loadPhysicalgoodsTransaction(target,abort.signal).then(result=>{if(!abort.signal.aborted){
       setDetail(result);
+      if(result.rating&&pendingRating.current===result.rating.score){setError(null);pendingRating.current=null;setRatingScore(null);}
       if((outcome.current==='cancel'&&result.status==='CANCELADA')||(outcome.current==='confirm'&&result.confirmations.some(value=>value.userId===auth.identity?.userId&&value.role===result.role))){setError(null);outcome.current=null;}
     }}).catch(reason=>{if(!abort.signal.aborted)report(reason,setError);}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
@@ -51,10 +54,13 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
   },[detail,revision,busy,target.publicationId,target.transactionId]);
   const building=options?.buildings.find(value=>value.id===buildingId),floor=building?.floors.find(value=>value.id===floorId);
   const preview=building&&floor?`Estoy en ${building.name}, en ${floor.name}.`:null;
-  async function perform(kind:'confirm'|'cancel'|'message') {
-    if(running.current||!detail||(kind==='confirm'&&!detail.canConfirm)||(kind==='cancel'&&!detail.canCancel)||(kind==='message'&&(!detail.canCancel||!preview)))return;
+  async function perform(kind:'confirm'|'cancel'|'message'|'rating') {
+    if(running.current||!detail||(kind==='confirm'&&!detail.canConfirm)||(kind==='cancel'&&!detail.canCancel)||(kind==='message'&&(!detail.canCancel||!preview))
+      ||(kind==='rating'&&(!detail.canRate||!ratingConfirmation||ratingScore===null||!Number.isInteger(ratingScore)||ratingScore<1||ratingScore>5)))return;
     const abort=new AbortController();mutation.current=abort;running.current=true;setBusy(true);setAction(null);
+    setRatingConfirmation(false);
     if(kind==='message'){setMessageError(null);sent.current=null;}
+    else if(kind==='rating'){setError(null);pendingRating.current=ratingScore;}
     else{setError(null);outcome.current=kind;}
     try {
       if(kind==='message'){
@@ -64,14 +70,19 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
         sent.current={text:preview!,previousIds:before.data.map(value=>value.id)};
         await sendPhysicalgoodsCoordination(target,buildingId,floorId,abort.signal);
       }
+      else if(kind==='rating')await ratePhysicalgoodsOwner(target,ratingScore!,abort.signal);
       else await changePhysicalgoodsTransaction(target,kind,abort.signal);
     }catch(reason){if(!abort.signal.aborted){report(reason,kind==='message'?setMessageError:setError);}}
     finally{if(!abort.signal.aborted){running.current=false;setBusy(false);setPage(1);setRevision(value=>value+1);if(kind!=='message')onChanged();}}
   }
   return {detail,historical:!!detail&&detail.campus.id!==auth.identity?.campusId,messages,options,buildingId,floorId,building,preview,loading,messagesLoading,optionsLoading,busy,error,messageError,optionsError,page,action,
+    ratingScore,ratingConfirmation,rate:()=>perform('rating'),
+    selectRating:(value:number)=>{if(!running.current&&detail?.canRate&&Number.isInteger(value)&&value>=1&&value<=5){setRatingScore(value);setRatingConfirmation(false);}},
+    confirmRating:()=>{if(!running.current&&detail?.canRate&&ratingScore!==null)setRatingConfirmation(true);},
+    cancelRating:()=>{if(!running.current)setRatingConfirmation(false);},
     selectAction:(value:'confirm'|'cancel')=>{if(!running.current)setAction(value);},cancelAction:()=>{if(!running.current)setAction(null);},
     confirm:()=>perform('confirm'),cancel:()=>perform('cancel'),send:()=>perform('message'),
     setBuilding:(value:string)=>{if(!running.current){setBuildingId(value);setFloorId('');}},setFloor:(value:string)=>{if(!running.current)setFloorId(value);},
     setPage:(value:number)=>{if(!running.current){setMessageError(null);setPage(value);}},
-    reload:()=>{if(!running.current){setError(null);setMessageError(null);setAction(null);setRevision(value=>value+1);}}};
+    reload:()=>{if(!running.current){setError(null);setMessageError(null);setAction(null);setRatingConfirmation(false);setRevision(value=>value+1);}}};
 }

@@ -436,6 +436,20 @@ La bandeja existente `/api/v1/users/me/notifications` conserva sus rutas, pagina
 
 Validación local:363/363 pruebas backend con Node22.23.3 (95 físicas,11 nuevas), TypeScript/build backend y TypeScript frontend. Export web/Android/iOS --no-bytecode y QA Edge390×844/1280×900 con API ficticia: bandeja mixta/error/reintento/lectura/eliminación, confirmación explícita, retirada y reapertura del mismo recurso, campus anterior,404 limpio y respuesta tardía cancelada; regresiones de actividades/perfil, historial propio y publicación/fotos/edición/retirada aprobadas. SQL real con PGlite; QA real de datos/dispositivos y contención remota multiconexión permanece para el cierre de fase.
 
+## Valorar al propietario de una transacción física (F2.4-11)
+
+El comprador/receptor puede elegir una puntuación entera de1 a5 desde «Ver acuerdo» cuando ambas partes han completado el intercambio. La interfaz exige selección y confirmación explícita, muestra puntuación/fecha guardadas y no permite editar después. Venta y donación comparten el mismo flujo. El propietario puede consultar la valoración recibida, pero no valorar al receptor.
+
+- `POST /api/v1/marketplace/physicalgoods/:publicationId/transactions/:transactionId/rating`: cuerpo exacto `{score:number}`,201 `{data:{id,score,createdAt}}`. Solo receptor del acuerdo físico COMPLETADA, cuenta/capacidad vigentes y campus actual del recurso. Evaluador, evaluado, transacción y fecha se determinan en servidor. Rechaza comentario, identidades, fechas y campos adicionales.
+- El `GET` existente del acuerdo añade `rating:{id,score,createdAt}|null` y `canRate:boolean`. Solo los participantes pueden consultar el recibo; conserva la lectura histórica propia de F2.4-09, también de publicaciones retiradas/ocultas o campus anteriores. Fuera del campus vigente `canRate` es falso y no se habilitan escrituras históricas.
+- 400 entrada/puntuación;401 sesión;403 cuenta/capacidad/propietario;404 acuerdo ajeno, digital o fuera del campus operacional;409 estado, duplicado o contexto cambiado;503 dependencia sanitizada. No-store y ausencia de rutas PUT/PATCH/DELETE para valoraciones.
+
+Servicio reutiliza el contexto transaccional y orden de locks perfil→publicación/subtipo→transacción. Revalida participación, COMPLETADA y ausencia de valoración antes del INSERT parametrizado en `valoracion`; su UNIQUE original por transacción conserva la unicidad. No cambia publicación, términos, confirmaciones, solicitudes ni auditoría. Si se pierde el acuse de COMMIT, la consulta del acuerdo recupera el recibo sin reenviar automáticamente. Frontend conserva selección ante fallo, bloquea doble envío y aborta operaciones al desmontar.
+
+**Sin SQL pendiente ni cambios de esquema:** usa exclusivamente la tabla y columnas originales de `valoracion`, con `comentario` nulo y fecha/id por defecto. Consulta Supabase READ ONLY del2026-10-15 confirmó RLS activo, SELECT/INSERT servidor y ausencia de acceso directo de anon/authenticated. El rol servidor conserva sus permisos administrativos preexistentes; la inmutabilidad funcional se aplica en la API. Sin nuevas tablas, atributos, índices, dependencias ni variables de entorno; sin valoraciones ni escrituras remotas de prueba.
+
+Validación local:372/372 pruebas backend con Node22.23.3 (104 físicas,9 nuevas), TypeScript/build backend y TypeScript frontend. Export web/Android/iOS --no-bytecode y QA Edge390×844/1280×900 como receptor/propietario: estados y permisos, selección/confirmación, duplicados, venta/donación, respuesta perdida, conflicto entre sesiones, campus anterior, recibo inmutable y cierre tardío; regresiones de transacciones, historial y recordatorios aprobadas. PGlite ejecuta SQL con una conexión serializada; contención remota multiconexión y QA con datos/dispositivos reales quedan para el cierre de fase.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

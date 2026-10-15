@@ -49,6 +49,27 @@ export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:Phys
           {button('Volver al acuerdo',t.cancelAction,t.busy)}
         </View>}
       </View>
+      {detail.status==='COMPLETADA'&&<View style={styles.card}>
+        <Text style={styles.subtitle}>Valoración del propietario</Text>
+        {detail.rating?<>
+          <Text style={styles.label}>Puntuación: {detail.rating.score} de 5</Text>
+          <Text style={styles.text}>Registrada: {date(detail.rating.createdAt)}</Text>
+          <Text style={styles.text}>Esta valoración no se puede editar.</Text>
+        </>:detail.canRate?<>
+          <Text style={styles.text}>Valora tu intercambio con {detail.owner.fullName}.</Text>
+          {!t.ratingConfirmation?<>
+            <View style={styles.choices}>{[1,2,3,4,5].map(score=><Pressable key={score} accessibilityRole="radio" accessibilityLabel={`Puntuar con ${score} de 5`}
+              accessibilityState={{checked:t.ratingScore===score,disabled:t.busy||t.loading}} disabled={t.busy||t.loading} onPress={()=>t.selectRating(score)}
+              style={[styles.button,t.ratingScore===score&&styles.selected]}><Text style={styles.action}>{score}</Text></Pressable>)}</View>
+            {button('Valorar al propietario',t.confirmRating,t.busy||t.loading||t.ratingScore===null)}
+          </>:<>
+            <Text style={styles.label}>Enviar una valoración de {t.ratingScore} de 5</Text>
+            <Text style={styles.text}>La valoración quedará vinculada a este intercambio y no podrás editarla después.</Text>
+            {button('Confirmar valoración',()=>void t.rate(),t.busy||t.loading)}
+            {button('Cancelar valoración',t.cancelRating,t.busy)}
+          </>}
+        </>:<Text style={styles.text}>Aún no se ha registrado una valoración.</Text>}
+      </View>}
       {detail.canCancel&&<View style={styles.card}>
         <Text style={styles.subtitle}>Coordinar el intercambio</Text><Text style={styles.text}>Selecciona dónde estás para avisar a la otra persona.</Text>
         {t.optionsLoading&&<ActivityIndicator accessibilityLabel="Cargando ubicaciones" />}
