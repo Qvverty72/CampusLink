@@ -5,9 +5,13 @@ import { PhysicalgoodsSearchFilters } from './PhysicalgoodsSearchFilters';
 import { resourceConditions } from '../types/publication';
 import { PhysicalgoodsEditor } from './PhysicalgoodsEditor';
 import { PhysicalgoodsRequest } from './PhysicalgoodsRequest';
+import { useState } from 'react';
+import { ContentReportForm } from '@/features/reports/components/ContentReportForm';
 
 /** Muestra el listado paginado y la galería del recurso seleccionado. */
 export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
+  const [reporting,setReporting]=useState<{id:string;title:string}|null>(null),[reportBusy,setReportBusy]=useState(false);
+  const close=()=>{if(!r.busy&&!reportBusy){setReporting(null);r.close();}};
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled} onPress={action} style={[styles.button, disabled && styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
   return <View style={styles.card}>
     <Text style={styles.title}>Recursos del campus</Text>
@@ -25,9 +29,11 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
     </View>)}
     <View style={styles.choices}>{button('Página anterior', () => r.setNumber(r.number - 1), r.loading || r.number === 1)}{button('Página siguiente', () => r.setNumber(r.number + 1), r.loading || !r.page?.meta.hasMore)}</View>
     {r.page && <Text style={styles.text}>Página {r.page.meta.page}</Text>}
-    <Modal visible={Boolean(r.selectedId)} onRequestClose={r.close} animationType="slide">
+    <Modal visible={Boolean(r.selectedId)} onRequestClose={close} animationType="slide">
       <ScrollView contentContainerStyle={styles.modal} keyboardShouldPersistTaps="handled">
-        {button('Cerrar detalle', r.close, r.busy)}
+        {button('Cerrar detalle', close, r.busy||reportBusy)}
+        {reporting?.id===r.selectedId?<ContentReportForm target={{type:'PUBLICACION_FISICA',publicationId:reporting.id}} title={reporting.title}
+          onBusyChange={setReportBusy} onBack={()=>{setReporting(null);r.reloadGallery();}}/>:<>
         {r.galleryLoading && <ActivityIndicator accessibilityLabel="Cargando detalle del recurso" />}
         {r.galleryError && <Text accessibilityRole="alert" style={styles.error}>{r.galleryError}</Text>}
         {button('Actualizar detalle', r.reloadGallery, r.busy || r.galleryLoading)}
@@ -40,6 +46,7 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
           <Text style={styles.text}>Campus para el intercambio: {r.gallery.campus.name}</Text>
           <Text style={styles.text}>Estado: {r.gallery.status.toLowerCase()}</Text>
           <Text style={styles.label}>{r.gallery.acceptsRequests ? 'Disponible para recibir solicitudes.' : 'Este recurso no está disponible para recibir solicitudes.'}</Text>
+          {button('Denunciar publicación',()=>setReporting({id:r.gallery!.id,title:r.gallery!.title}),r.busy||r.galleryLoading)}
         </>}
         <PhysicalgoodsRequest resources={r} />
         {r.gallery&&<>
@@ -63,6 +70,7 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
           </>}
         </>}
         <PhysicalgoodsEditor resources={r} />
+        </>}
       </ScrollView>
     </Modal>
   </View>;

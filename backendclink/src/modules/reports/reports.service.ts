@@ -7,7 +7,7 @@ import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { spatialBuildings } from '../activities/activities.location.js';
 import { toVisibleActivity } from '../activities/activities.policy.js';
 import { ApiError } from '../../services/apiError.js';
-import { parseActivityReport } from './reports.validation.js';
+import { parseContentReport } from './reports.validation.js';
 
 export const getReportsHealth: () => Promise<ReportsHealth> =
   createModuleHealthCheck('reports', probeReportsDependencies);
@@ -19,7 +19,7 @@ export const getReportsHealth: () => Promise<ReportsHealth> =
 export async function reportActivity(auth: VerifiedAuthConnection, activityId: string, input: ReportActivityInput,
   dependencies: ReportsDependencies = {}): Promise<ActivityReportReceipt> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'Identificador de actividad inválido.');
-  const parsed = parseActivityReport(input);
+  const parsed = parseContentReport(input);
   if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los datos de la denuncia.', { details: parsed.issues });
   const id = activityId.toLowerCase();
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);

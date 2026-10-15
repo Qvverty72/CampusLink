@@ -7,7 +7,7 @@ import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity, type ActivityDetail as
 import { ActivitySeriesView } from './ActivitySeriesView';
 import type { ActivityLocationOption } from '../types/creation';
 import { EditActivityForm } from './EditActivityForm';
-import { ReportActivityForm } from '@/features/reports/components/ReportActivityForm';
+import { ContentReportForm } from '@/features/reports/components/ContentReportForm';
 import { ActivityParticipationControls } from './ActivityParticipationControls';
 import { ActivityParticipants } from './ActivityParticipants';
 import { ActivityDetailSkeleton } from './ActivityDetailSkeleton';
@@ -78,7 +78,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   useActivityRefresh(refreshSheet, isLoading,
     !busy && !isLoading && !editingOpen && !reporting && !showSeries);
   if (reporting?.id === activityId) return <ActivityContentTransition transitionKey="report">
-    <ReportActivityForm key={activityId} activityId={activityId}
+    <ContentReportForm key={activityId} target={{type:'ACTIVIDAD',activityId}}
       title={reporting.title} onBack={() => { setReporting(null); refresh(); }} />
   </ActivityContentTransition>;
   if (editing && locations) return <ActivityContentTransition transitionKey="edit">

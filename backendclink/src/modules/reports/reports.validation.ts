@@ -1,8 +1,8 @@
 import type { RequestParser, ApiErrorDetail, ValidationResult } from '../../types/api.js';
-import type { ReportActivityInput } from './reports.types.js';
+import type { ContentReportInput } from './reports.types.js';
 
 /** Acepta motivo y descripción; identidad, snapshot y estado se asignan exclusivamente en el servidor. */
-export const parseActivityReport: RequestParser = (input: unknown): ValidationResult<ReportActivityInput> => {
+export const parseContentReport: RequestParser = (input: unknown): ValidationResult<ContentReportInput> => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return { success: false, issues: [{ field: 'body', message: 'Se requiere un motivo para la denuncia.' }] };
   }

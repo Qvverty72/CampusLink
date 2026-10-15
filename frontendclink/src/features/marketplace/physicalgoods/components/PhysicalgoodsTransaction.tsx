@@ -1,10 +1,13 @@
 import {ActivityIndicator,Modal,Pressable,ScrollView,StyleSheet,Text,View} from 'react-native';
 import {usePhysicalgoodsTransaction} from '../hooks/usePhysicalgoodsTransaction';
 import type {PhysicalgoodsTransactionTarget} from '../types/publication';
+import {useState} from 'react';
+import {ContentReportForm} from '@/features/reports/components/ContentReportForm';
 
 /** Consulta del acuerdo, decisiones explícitas y mensajes de ubicación sin texto libre. */
 export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:PhysicalgoodsTransactionTarget;onClose:()=>void;onChanged:()=>void}) {
   const t=usePhysicalgoodsTransaction(target,onChanged),detail=t.detail;
+  const [reporting,setReporting]=useState(false),[reportBusy,setReportBusy]=useState(false);
   const button=(label:string,press:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} onPress={press}
     style={[styles.button,disabled&&styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
   const date=(value:string)=>new Date(value).toLocaleString('es-CL');
@@ -12,9 +15,11 @@ export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:Phys
   const cancellationMessage=detail?.publication.isWithdrawn?'Se cancelará el acuerdo y se conservará su historial. La publicación seguirá retirada.'
     :['OCULTO','CANCELADO'].includes(detail?.publication.status??'')?'Se cancelará el acuerdo y se conservará su historial. La publicación seguirá fuera del marketplace.'
       :'El recurso volverá a estar disponible. Las otras solicitudes pendientes podrán resolverse y se conservará este acuerdo cancelado.';
-  const close=()=>{if(!t.busy)onClose();};
+  const close=()=>{if(!t.busy&&!reportBusy)onClose();};
   return <Modal visible onRequestClose={close} animationType="slide"><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-    {button('Cerrar acuerdo',close,t.busy)}
+    {button('Cerrar acuerdo',close,t.busy||reportBusy)}
+    {reporting?<ContentReportForm target={{type:'TRANSACCION',...target}} title={detail?.publication.title??'Acuerdo del recurso'}
+      onBusyChange={setReportBusy} onBack={()=>{setReporting(false);t.reload();}}/>:<>
     <Text accessibilityRole="header" style={styles.title}>Acuerdo del recurso</Text>
     {button('Actualizar acuerdo',t.reload,t.busy||t.loading)}
     {(t.loading||t.busy)&&<ActivityIndicator accessibilityLabel={t.busy?'Guardando acuerdo':'Cargando acuerdo'} />}
@@ -27,6 +32,7 @@ export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:Phys
         {detail.publication.isWithdrawn&&<Text style={styles.text}>La publicación fue retirada. Se conserva este acuerdo.</Text>}
         <Text style={styles.text}>Campus: {detail.campus.name}</Text>
         {t.historical&&<Text style={styles.text}>Consulta histórica de otro campus. Puedes revisar el acuerdo y sus mensajes.</Text>}
+        {!t.historical&&button('Denunciar transacción',()=>setReporting(true),t.busy||t.loading)}
         <Text style={styles.text}>Propietario: {detail.owner.fullName}</Text><Text style={styles.text}>Receptor: {detail.receiver.fullName}</Text>
         <Text style={styles.label}>{detail.modality==='DONACION'?'Acuerdo de donación':`Precio acordado: ${detail.amount?.toLocaleString('es-CL')} ${detail.currency}`}</Text>
         <Text style={styles.text}>Iniciado: {date(detail.startedAt)}</Text>
@@ -98,6 +104,7 @@ export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:Phys
           {button('Mensajes siguientes',()=>t.setPage(t.page+1),t.busy||t.messagesLoading||!t.messages?.meta.hasMore)}
         </View>
       </View>
+    </>}
     </>}
   </ScrollView></Modal>;
 }

@@ -4,7 +4,15 @@ import type { ActivityDependencies } from '../activities/activities.service.js';
 
 export type ReportsHealth = ModuleHealth<'reports'>;
 
-export interface ReportActivityInput { reason: string; description?: string }
+export interface ContentReportInput { reason: string; description?: string }
+export type ReportActivityInput = ContentReportInput;
+export interface ContentReportReceipt { id:string;campusId:string;status:'PENDIENTE';reportedAt:string }
+export interface PhysicalgoodsReportReceipt extends ContentReportReceipt {
+  publicationId:string; transactionId:string|null;
+}
+export interface NewContentReport extends ContentReportInput {
+  userId:string;campusId:string;entityType:'ACTIVIDAD'|'PUBLICACION_FISICA'|'TRANSACCION';entityId:string;snapshot:unknown;
+}
 export interface ActivityReportReceipt {
   id: string; activityId: string; campusId: string; status: 'PENDIENTE'; reportedAt: string;
 }

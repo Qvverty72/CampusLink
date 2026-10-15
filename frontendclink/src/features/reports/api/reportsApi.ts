@@ -1,6 +1,7 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
 import type { ActivityReportInput, ActivityReportReceipt } from '../types/activityReport';
+import type { ContentReportInput, ContentReportTarget, PhysicalgoodsReportReceipt } from '../types/contentReport';
 
 /** Envía una denuncia y valida que el recibo corresponda al campus y actividad solicitados. */
 export async function submitActivityReport(campusId: string, activityId: string, input: ActivityReportInput,
@@ -13,5 +14,20 @@ export async function submitActivityReport(campusId: string, activityId: string,
   if (!receipt || !/^[0-9a-f-]{36}$/i.test(receipt.id) || receipt.campusId !== campusId
     || receipt.activityId !== activityId.toLowerCase() || receipt.status !== 'PENDIENTE'
     || !Number.isFinite(Date.parse(receipt.reportedAt))) throw new Error('No se pudo confirmar el envío de la denuncia.');
+  return receipt;
+}
+
+/** Denuncia física desde contenido accesible o un acuerdo propio; solo devuelve el acuse privado. */
+export async function submitPhysicalgoodsReport(campusId:string,target:Exclude<ContentReportTarget,{type:'ACTIVIDAD'}>,
+  input:ContentReportInput,signal?:AbortSignal):Promise<PhysicalgoodsReportReceipt> {
+  const validId=(id:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if(!validId(target.publicationId)||(target.type==='TRANSACCION'&&!validId(target.transactionId)))throw new Error('Identificador inválido para denunciar.');
+  const transactionId=target.type==='TRANSACCION'?target.transactionId.toLowerCase():null;
+  const path='/api/v1/reports/physicalgoods/'+target.publicationId+(transactionId?'/transactions/'+transactionId:'');
+  const {data:receipt}=await authenticatedEnvelopeRequest<PhysicalgoodsReportReceipt>(path,{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal,
+  });
+  if(!receipt||!validId(receipt.id)||receipt.campusId!==campusId||receipt.publicationId!==target.publicationId.toLowerCase()
+    ||receipt.transactionId!==transactionId||receipt.status!=='PENDIENTE'||!Number.isFinite(Date.parse(receipt.reportedAt)))throw new Error('No se pudo confirmar el envío de la denuncia.');
   return receipt;
 }

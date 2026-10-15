@@ -450,6 +450,25 @@ Servicio reutiliza el contexto transaccional y orden de locks perfil→publicaci
 
 Validación local:372/372 pruebas backend con Node22.23.3 (104 físicas,9 nuevas), TypeScript/build backend y TypeScript frontend. Export web/Android/iOS --no-bytecode y QA Edge390×844/1280×900 como receptor/propietario: estados y permisos, selección/confirmación, duplicados, venta/donación, respuesta perdida, conflicto entre sesiones, campus anterior, recibo inmutable y cierre tardío; regresiones de transacciones, historial y recordatorios aprobadas. PGlite ejecuta SQL con una conexión serializada; contención remota multiconexión y QA con datos/dispositivos reales quedan para el cierre de fase.
 
+## Denunciar mal uso del marketplace físico (F2.4-12)
+
+«Denunciar publicación» está disponible desde el detalle físico del campus actual; «Denunciar transacción» desde un acuerdo propio, en curso, completado o cancelado. Ambos participantes pueden denunciar el acuerdo aunque la publicación haya sido retirada u ocultada. Historial de otro campus conserva su lectura, sin habilitar esta nueva escritura. Usa el mismo formulario, validación y registro de `reports` que las actividades.
+
+- `POST /api/v1/reports/physicalgoods/:publicationId` registra `PUBLICACION_FISICA` con el UUID del contenido. Exige acceso al detalle vigente: FISICO, campus actual, sin retirada y estado DISPONIBLE/RESERVADO/FINALIZADO.
+- `POST /api/v1/reports/physicalgoods/:publicationId/transactions/:transactionId` registra `TRANSACCION` con el UUID del acuerdo. Exige publicación física del campus actual, relación exacta entre ambos IDs y participación como propietario o receptor; no excepción para administrador ajeno.
+- Ambos aceptan únicamente `{reason:string,description?:string}`: motivo libre obligatorio de1..200 caracteres y descripción opcional hasta2000, con espacios exteriores normalizados. Sin query parameters. Identidad, campus, tipo/ID, copia del contenido, estado y fecha se resuelven en servidor.
+- Devuelven201 `{data:{id,campusId,publicationId,transactionId:null|string,status:'PENDIENTE',reportedAt}}`, no-store. No devuelven motivo, denunciante ni contexto administrativo. 400 entrada;401 sesión;403 cuenta/capacidad;404 elemento inaccesible/ajeno;409 contexto cambiado;503 dependencia sanitizada.
+
+Servicio físico de reports revalida perfil/roles/campus y bloquea perfil→publicación/subtipo→transacción como las operaciones existentes. Conserva en `contenido_reportado_json` una instantánea de contenido/metadatos de imágenes sin bytes/rutas Storage; para acuerdos añade participantes, términos originales, estado, fechas y confirmaciones. La copia no cambia si el contenido se edita u oculta después. No consulta Mongo/Storage al enviar, ni modifica publicación, solicitudes, transacción, valoración o auditoría. Denuncias de actividades reutilizan el mismo INSERT sin cambiar su contrato ni autorización.
+
+Frontend mantiene reports/api→useContentReport→ContentReportForm dentro de los detalles existentes. La extracción sustituye el formulario/hook exclusivos de actividades, sin archivos puente, stores o pantallas nuevas. Conserva texto al fallar, bloquea doble envío/cierre durante envío y descarta respuestas al cambiar identidad/elemento o desmontar. Un acuse perdido no provoca reenvío automático; la UI informa que puede haberse guardado y que reenviar puede crear otra denuncia, como el flujo previo de actividades. No se introduce una regla de deduplicación no definida por el backlog.
+
+La denuncia queda para moderación F2.8-02/03; este ticket no añade lectura/listado/resolución pública de casos ni denuncias de valoraciones. Motivo/denunciante/contexto siguen privados al registro administrativo. El Issue75 conserva una referencia antigua a MOD-04; el backlog vigente F2.4-12/F2.8-01 define motivo/descripción/PENDIENTE y no incluye esa espera. La diferencia se documenta en GH-75 sin inventar catálogo o medidas administrativas.
+
+**Sin SQL pendiente ni cambios de esquema/dependencias:** reutiliza exclusivamente `reporte_contenido` y columnas originales, incluyendo su JSON/estados/defaults. Inspección Supabase READ ONLY del2026-10-15 confirmó RLS, SELECT/INSERT servidor y ausencia de acceso directo anon/authenticated. Sin tablas, atributos, índices, migraciones, env nuevos ni denuncias remotas de prueba.
+
+Validación local:381/381 tests backend con Node22.23.3 (113 físicos,9 nuevos), TypeScript/build backend, TypeScript frontend y export web/Android/iOS --no-bytecode. QA Edge390×844/1280×900 como propietario/receptor: publicación/acuerdos en todos sus estados, motivo/descripción, doble clic, error/reintento, recibo,404, respuesta incierta/recibo incorrecto, campus anterior, respuesta tardía descartada y regresión del envío de actividades desde notificaciones. Regresiones de fotografías/contenido/retirada, transacciones/coordinación, valoraciones, historial y recordatorios aprobadas. QA con datos/dispositivos reales y contención remota multiconexión quedan para cierre de fase.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

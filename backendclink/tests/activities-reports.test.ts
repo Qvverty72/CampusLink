@@ -11,7 +11,7 @@ import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
 import type { NewActivityReport, ReportsDependencies } from '../src/modules/reports/reports.types.js';
-import { parseActivityReport } from '../src/modules/reports/reports.validation.js';
+import { parseContentReport } from '../src/modules/reports/reports.validation.js';
 
 const db = new PGlite();
 const campusId = randomUUID(), otherCampus = randomUUID(), userId = randomUUID(), creatorId = randomUUID();
@@ -55,13 +55,13 @@ before(async () => {
 after(async () => { await db.close(); await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 
 test('report validation requires a bounded free-text reason, accepts optional description and rejects every identity/state/content override', () => {
-  assert.deepEqual(parseActivityReport({ reason: '  Uso indebido  ', description: '  ' }), { success: true, data: { reason: 'Uso indebido' } });
+  assert.deepEqual(parseContentReport({ reason: '  Uso indebido  ', description: '  ' }), { success: true, data: { reason: 'Uso indebido' } });
   for (const input of [undefined, null, [], 'texto', {}, { reason: ' ' }, { reason: 42 }, { reason: 'x'.repeat(201) },
     { reason: 'Motivo', description: null }, { reason: 'Motivo', description: 'x'.repeat(2001) },
     ...['campusId', 'userId', 'status', 'snapshot', 'activityId', 'reportedAt'].map(key => ({ reason: 'Motivo', [key]: 'override' }))]) {
-    assert.equal(parseActivityReport(input).success, false);
+    assert.equal(parseContentReport(input).success, false);
   }
-  assert.equal(parseActivityReport({ reason: 'x'.repeat(200), description: 'x'.repeat(2000) }).success, true);
+  assert.equal(parseContentReport({ reason: 'x'.repeat(200), description: 'x'.repeat(2000) }).success, true);
 });
 
 test('community and official reports use the common SQL table with server identities, database date and pending state', async () => {

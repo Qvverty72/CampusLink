@@ -34,8 +34,10 @@ let transactionsService: typeof import('../src/modules/marketplace/physicalgoods
 let historyService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
 let remindersService:typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
 let notificationsService:typeof import('../src/modules/users/notifications.service.js');
+let reportsService:typeof import('../src/modules/reports/reports.physicalgoods.service.js');
 let failTransactionInsert=false;
 let failRatingInsert=false,lostRatingCommit=false;
+let failReportInsert=false,lostReportCommit=false;
 let failCoordination=false,failMap=false,lostCoordinationCommit=false,mapReads=0;
 let activeMap:CampusMapDocument|null,onMapRead:(()=>Promise<void>)|null=null;
 let failRequestInsert=false;
@@ -54,6 +56,7 @@ before(async () => {
     connectionLease=new Promise<void>(resolve=>{releaseLease=resolve;});await previous;
     return {
     query: async (sql: string, values: unknown[] = []) => {
+      if(failReportInsert&&sql.startsWith('INSERT INTO public.reporte_contenido'))throw new Error('private report SQL password');
       if(failRatingInsert&&sql.startsWith('INSERT INTO public.valoracion'))throw new Error('private rating SQL password');
       if(failCoordination&&sql.startsWith('INSERT INTO public.notificacion'))throw new Error('private notification SQL password');
       if (failTransactionInsert&&sql.startsWith('INSERT INTO public.transaccion_recurso')) throw new Error('private transaction SQL password');
@@ -66,6 +69,7 @@ before(async () => {
       }
       if(lostCoordinationCommit&&sql.startsWith('INSERT INTO public.notificacion')){lostCoordinationCommit=false;lostCommit=true;}
       if(lostRatingCommit&&sql.startsWith('INSERT INTO public.valoracion')){lostRatingCommit=false;lostCommit=true;}
+      if(lostReportCommit&&sql.startsWith('INSERT INTO public.reporte_contenido')){lostReportCommit=false;lostCommit=true;}
       if (lostCommit && sql === 'COMMIT') { lostCommit = false; throw new Error('lost commit acknowledgement'); }
       return result;
     }, release: () => releaseLease(),
@@ -124,6 +128,7 @@ before(async () => {
   historyService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
   remindersService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
   notificationsService=await import('../src/modules/users/notifications.service.js');
+  reportsService=await import('../src/modules/reports/reports.physicalgoods.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
@@ -139,6 +144,7 @@ before(async () => {
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_06_mensajes_solicitud.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql','utf8'));
   await db.exec('ALTER TABLE public.valoracion ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON public.valoracion TO service_role;');
+  await db.exec('ALTER TABLE public.reporte_contenido ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON public.reporte_contenido TO service_role;');
   await db.query("insert into institucion(id,nombre) values($1,'Institution')", [institution]);
   await db.query("insert into campus(id,institucion_id,nombre) values($1,$2,'Home'),($3,$2,'Foreign')", [campus, institution, otherCampus]);
   await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'Material académico')", [category]);
@@ -156,6 +162,7 @@ beforeEach(async () => {
   signedPaths = []; failSign = false; failAudit = false; failRequestInsert=false;
   failTransactionInsert=false;
   failRatingInsert=lostRatingCommit=false;
+  failReportInsert=lostReportCommit=false;
   failCoordination=failMap=lostCoordinationCommit=false;mapReads=0;onMapRead=null;
   activeMap={campusId:campus,version:1,status:'ACTIVE',createdAt:new Date(),updatedAt:new Date(),buildings:[
     {id:'ebuilding',name:'Edificio E',floors:[{id:'ebuilding_floor1',name:'Planta Baja'},{id:'ebuilding_floor2',name:'Piso 2'}]},
@@ -1492,5 +1499,140 @@ test('rating HTTP requires identity and valid scope, returns no-store and saniti
   response=await originalFetch(url.replace('/rating',''),{headers});assert.equal(response.status,200);assert.deepEqual((await response.json()).data.rating,receipt);
   for(const role of ['anon','authenticated']){
     await db.exec('SET ROLE '+role);try{await assert.rejects(db.query('SELECT * FROM valoracion'),/permission denied/);await assert.rejects(db.query('UPDATE valoracion SET puntuacion=1'),/permission denied/);}finally{await db.exec('RESET ROLE');}
+  }
+});
+
+const reported=(id:string)=>db.query<Record<string,any>>('SELECT * FROM public.reporte_contenido WHERE id=$1',[id]);
+const reportCount=()=>db.query<{count:number}>('SELECT count(*)::int AS count FROM public.reporte_contenido');
+test('physical publication reports reuse the common table with server scope, trimmed reason, pending status and a private content snapshot',async()=>{
+  const saved=await create(auth,input()),reporter=await otherActor(),before=await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id]),history=await audits(saved.id);
+  const receipt=await reportsService.reportPhysicalgoods(reporter,saved.id.toUpperCase(),null,{reason:'  Información falsa  ',description:'  Descripción de lo ocurrido  '});
+  const row=(await reported(receipt.id)).rows[0];
+  assert.equal(row.reportante_id,reporter.userId);assert.equal(row.campus_id,campus);assert.equal(row.entidad_tipo,'PUBLICACION_FISICA');assert.equal(row.entidad_id,saved.id);
+  assert.equal(row.motivo,'Información falsa');assert.equal(row.descripcion,'Descripción de lo ocurrido');assert.equal(row.estado_reporte,'PENDIENTE');
+  for(const key of ['resuelto_por_id','fundamento_resolucion','medida_aplicada','resuelto_en'])assert.equal(row[key],null);
+  assert.equal(row.contenido_reportado_json.publication.titulo,'Calculadora');assert.equal(row.contenido_reportado_json.publication.propietario_id,auth.userId);
+  assert.equal(row.contenido_reportado_json.publication.images.length,1);assert.doesNotMatch(JSON.stringify(row.contenido_reportado_json),/storage_path|base64|token|reportante_id/);
+  assert.equal(receipt.publicationId,saved.id);assert.equal(receipt.transactionId,null);assert.equal(receipt.status,'PENDIENTE');assert.equal(receipt.reportedAt,new Date(row.reportado_en).toISOString());
+  assert.deepEqual(Object.keys(receipt).sort(),['campusId','id','publicationId','reportedAt','status','transactionId']);
+  assert.deepEqual((await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id])).rows,before.rows);assert.deepEqual(await audits(saved.id),history);
+  await db.query("UPDATE publicacion_recurso SET titulo='Editada',descripcion='Nueva',deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1",[saved.id]);
+  assert.deepEqual((await reported(receipt.id)).rows[0].contenido_reportado_json,row.contenido_reportado_json);
+});
+
+test('reportable publications follow existing detail visibility for sale and donation, including own content, without requiring admin or analytics permissions',async()=>{
+  for(const modality of ['VENTA','DONACION']){
+    const saved=await create(auth,input({modality,price:modality==='DONACION'?null:15000}));
+    for(const status of ['DISPONIBLE','RESERVADO','FINALIZADO']){
+      await db.query('UPDATE publicacion_recurso SET estado_publicacion=$2 WHERE id=$1',[saved.id,status]);
+      const receipt=await reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'Motivo',description:'  '});
+      const row=(await reported(receipt.id)).rows[0];assert.equal(row.descripcion,null);assert.equal(row.contenido_reportado_json.publication.estado_publicacion,status);
+      assert.equal(row.contenido_reportado_json.publication.modalidad,modality);
+    }
+  }
+});
+
+test('publication reporting cannot bypass campus, visibility, retirement or physical resource type using UUIDs',async()=>{
+  const saved=await create(auth,input()),reporter=await otherActor(),before=(await reportCount()).rows[0].count;
+  for(const status of ['OCULTO','CANCELADO']){
+    await db.query('UPDATE publicacion_recurso SET estado_publicacion=$2 WHERE id=$1',[saved.id,status]);
+    await assert.rejects(reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Motivo'}),{status:404});
+  }
+  await db.query("UPDATE publicacion_recurso SET estado_publicacion='DISPONIBLE',deleted_at=now() WHERE id=$1",[saved.id]);
+  await assert.rejects(reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Motivo'}),{status:404});
+  await db.query('UPDATE publicacion_recurso SET deleted_at=null,campus_id=$2 WHERE id=$1',[saved.id,otherCampus]);
+  await assert.rejects(reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Motivo'}),{status:404});
+  await db.query("UPDATE publicacion_recurso SET campus_id=$2,tipo_recurso='DIGITAL' WHERE id=$1",[saved.id,campus]);
+  await assert.rejects(reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Motivo'}),{status:404});
+  await assert.rejects(reportsService.reportPhysicalgoods(reporter,randomUUID(),null,{reason:'Motivo'}),{status:404});
+  assert.equal((await reportCount()).rows[0].count,before);
+});
+
+test('both physical transaction participants can report any agreement state while the exchange and its public visibility stay unchanged',async()=>{
+  const {saved,first,id}=await acceptedAgreement();
+  await db.query("UPDATE publicacion_recurso SET precio=45000,deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1",[saved.id]);
+  for(const expected of ['RESERVADA','PENDIENTE_CONFIRMACION','COMPLETADA']){
+    if(expected==='PENDIENTE_CONFIRMACION')await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
+    if(expected==='COMPLETADA')await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');
+    const before=await transactionRows(saved.id),history=await audits(saved.id),requests=await db.query('SELECT * FROM solicitud_recurso WHERE publicacion_id=$1',[saved.id]);
+    for(const actor of [auth,first]){
+      const receipt=await reportsService.reportPhysicalgoods(actor,saved.id,id,{reason:'Comportamiento durante el intercambio'}),row=(await reported(receipt.id)).rows[0];
+      assert.equal(row.entidad_tipo,'TRANSACCION');assert.equal(row.entidad_id,id);assert.equal(row.reportante_id,actor.userId);
+      const snapshot=row.contenido_reportado_json;
+      assert.equal(snapshot.publication.id,saved.id);assert.equal(snapshot.transaction.publicacion_id,saved.id);assert.equal(snapshot.transaction.id,id);
+      assert.equal(snapshot.transaction.propietario_id,auth.userId);assert.equal(snapshot.transaction.receptor_id,first.userId);assert.equal(snapshot.transaction.estado_transaccion,expected);
+      assert.equal(Number(snapshot.transaction.monto_acordado),15000);assert.equal(Number(snapshot.publication.precio),45000);
+      assert.equal(snapshot.confirmations.length,expected==='COMPLETADA'?2:expected==='RESERVADA'?0:1);
+    }
+    assert.deepEqual((await transactionRows(saved.id)).rows,before.rows);assert.deepEqual(await audits(saved.id),history);assert.deepEqual((await db.query('SELECT * FROM solicitud_recurso WHERE publicacion_id=$1',[saved.id])).rows,requests.rows);
+  }
+  const cancelled=await acceptedAgreement();await transactionsService.transitionPhysicalgoodsTransaction(auth,cancelled.saved.id,cancelled.id,{},'CANCELAR');
+  const receipt=await reportsService.reportPhysicalgoods(cancelled.first,cancelled.saved.id,cancelled.id,{reason:'Conducta inapropiada'});
+  assert.equal((await reported(receipt.id)).rows[0].contenido_reportado_json.transaction.estado_transaccion,'CANCELADA');
+});
+
+test('a transaction report requires the exact physical publication, participant and current campus, with no administrator bypass',async()=>{
+  const pair=await acceptedAgreement(),other=await create(auth,input()),before=(await reportCount()).rows[0].count;
+  for(const actor of [pair.second,await otherActor('ADMINISTRADOR')])await assert.rejects(reportsService.reportPhysicalgoods(actor,pair.saved.id,pair.id,{reason:'Motivo'}),{status:404});
+  await assert.rejects(reportsService.reportPhysicalgoods(pair.first,other.id,pair.id,{reason:'Motivo'}),{status:404});
+  await assert.rejects(reportsService.reportPhysicalgoods(pair.first,pair.saved.id,randomUUID(),{reason:'Motivo'}),{status:404});
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1',[pair.first.userId,otherCampus]);
+  await assert.rejects(reportsService.reportPhysicalgoods(pair.first,pair.saved.id,pair.id,{reason:'Motivo'}),{status:409});
+  const moved={...pair.first,campusId:otherCampus,profile:{...pair.first.profile,campus_id:otherCampus}};
+  await transactionsService.getPhysicalgoodsTransaction(moved,pair.saved.id,pair.id);
+  await assert.rejects(reportsService.reportPhysicalgoods(moved,pair.saved.id,pair.id,{reason:'Motivo'}),{status:404});
+  assert.equal((await reportCount()).rows[0].count,before);
+});
+
+test('physical reports revalidate persisted suspension, verification, role revocation and context before inserting',async()=>{
+  const saved=await create(auth,input()),reporter=await otherActor(),before=(await reportCount()).rows[0].count;
+  for(const change of ["estado_cuenta='SUSPENDIDA'","estado_cuenta='DESACTIVADA',deleted_at=now()","estado_cuenta='ACTIVA',deleted_at=null,verificado_en=null"]){
+    await db.query('UPDATE perfil_usuario SET '+change+' WHERE id=$1',[reporter.userId]);
+    await assert.rejects(reportsService.reportPhysicalgoods({...reporter,roles:[{id:randomUUID(),name:'USUARIO_AUTORIZADO',campusId:campus}]},saved.id,null,{reason:'Motivo'}),{status:403});
+  }
+  await db.query('UPDATE perfil_usuario SET verificado_en=now(),campus_id=$2 WHERE id=$1',[reporter.userId,otherCampus]);
+  await assert.rejects(reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Motivo'}),{status:409});
+  assert.equal((await reportCount()).rows[0].count,before);
+});
+
+test('report payload cannot supply identities, a rating target, state or snapshot; bounded reason and optional description reuse activity validation',async()=>{
+  const saved=await create(auth,input()),before=(await reportCount()).rows[0].count;
+  for(const body of [null,[],{},'text',{reason:3},{reason:' '},{reason:'x'.repeat(201)},{reason:'Motivo',description:null},{reason:'Motivo',description:'x'.repeat(2001)},
+    ...['campusId','userId','entityType','entityId','ratingId','transactionId','publicationId','snapshot','reportedAt','status','resolution'].map(key=>({reason:'Motivo',[key]:'override'}))]){
+    await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,null,body),{status:400});
+  }
+  await assert.rejects(reportsService.reportPhysicalgoods(auth,'invalid',null,{reason:'Motivo'}),{status:400});
+  await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,'invalid',{reason:'Motivo'}),{status:400});
+  assert.equal((await reportCount()).rows[0].count,before);
+  const receipt=await reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'x'.repeat(200),description:'x'.repeat(2000)});assert.equal((await reported(receipt.id)).rows[0].motivo.length,200);
+});
+
+test('report insertion failure rolls back and uncertain acknowledgement never changes the reported publication or schema',async()=>{
+  const saved=await create(auth,input()),before=await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id]),count=(await reportCount()).rows[0].count,
+    inventory=()=>db.query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position"),columns=await inventory();
+  failReportInsert=true;await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'Motivo'}),{status:503});failReportInsert=false;
+  assert.equal((await reportCount()).rows[0].count,count);
+  lostReportCommit=true;await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'Motivo'}),{status:503});
+  assert.equal((await reportCount()).rows[0].count,count+1);assert.deepEqual((await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id])).rows,before.rows);assert.deepEqual((await inventory()).rows,columns.rows);
+});
+
+test('report HTTP is authenticated, no-store, private and sanitized, with no client read, resolution or rating-report endpoints',async()=>{
+  const pair=await acceptedAgreement(),url=base.replace('/marketplace/physicalgoods','/reports/physicalgoods')+'/'+pair.saved.id,
+    headers={Authorization:'Bearer '+token,'Content-Type':'application/json'},body=JSON.stringify({reason:'Motivo',description:'Detalle'});
+  assert.equal((await originalFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body})).status,401);
+  for(const target of [url+'?campusId='+otherCampus,url.replace(pair.saved.id,'invalid')])assert.equal((await originalFetch(target,{method:'POST',headers,body})).status,400);
+  assert.equal((await originalFetch(url,{method:'POST',headers,body:JSON.stringify({reason:'Motivo',status:'RESUELTO'})})).status,400);
+  failReportInsert=true;let response=await originalFetch(url,{method:'POST',headers,body});assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/private|SQL|password/);failReportInsert=false;
+  response=await originalFetch(url,{method:'POST',headers,body});assert.equal(response.status,201);assert.equal(response.headers.get('cache-control'),'no-store');const receipt=(await response.json()).data;
+  assert.equal(receipt.status,'PENDIENTE');for(const field of ['snapshot','reason','description','userId','reportante_id'])assert.equal(field in receipt,false);
+  current=structuredClone(pair.first);response=await originalFetch(url+'/transactions/'+pair.id,{method:'POST',headers,body});assert.equal(response.status,201);
+  current=structuredClone(pair.second);assert.equal((await originalFetch(url+'/transactions/'+pair.id,{method:'POST',headers,body})).status,404);
+  for(const target of [url,url+'/'+receipt.id,base.replace('/marketplace/physicalgoods','/reports')+'/'+receipt.id]){
+    for(const method of ['GET','PATCH','DELETE'])assert.equal((await originalFetch(target,{method,headers,...(method==='GET'?{}:{body})})).status,404);
+  }
+  assert.equal((await originalFetch(url+'/ratings/'+randomUUID(),{method:'POST',headers,body})).status,404);
+  const gallery=await imagesService.getPhysicalgoodsGallery(pair.first,pair.saved.id);assert.equal('reports' in gallery,false);assert.equal('reporter' in gallery,false);
+  for(const role of ['anon','authenticated']){
+    await db.exec('SET ROLE '+role);try{await assert.rejects(db.query('SELECT * FROM reporte_contenido'),/permission denied/);await assert.rejects(db.query('UPDATE reporte_contenido SET estado_reporte=\'RESUELTO\''),/permission denied/);}finally{await db.exec('RESET ROLE');}
   }
 });
