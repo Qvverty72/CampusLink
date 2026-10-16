@@ -43,9 +43,7 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
           <Text style={styles.text}>Condición: {resourceConditions.find(condition => condition.value === r.gallery!.condition)?.label}</Text>
           <Text style={styles.text}>{r.gallery.modality === 'DONACION' ? 'Modalidad: Donación' : `Modalidad: Venta · ${r.gallery.price?.toLocaleString('es-CL')} CLP`}</Text>
           <Text style={styles.text}>Publicado por: {r.gallery.owner.fullName}</Text>
-          <Text style={styles.text}>Campus para el intercambio: {r.gallery.campus.name}</Text>
-          <Text style={styles.text}>Estado: {r.gallery.status.toLowerCase()}</Text>
-          <Text style={styles.label}>{r.gallery.acceptsRequests ? 'Disponible para recibir solicitudes.' : 'Este recurso no está disponible para recibir solicitudes.'}</Text>
+          <Text style={styles.label}>{r.gallery.acceptsRequests ? 'Disponible para solicitudes.' : `Estado: ${r.gallery.status.toLowerCase()} · No admite nuevas solicitudes.`}</Text>
           {button('Denunciar publicación',()=>setReporting({id:r.gallery!.id,title:r.gallery!.title}),r.busy||r.galleryLoading)}
         </>}
         <PhysicalgoodsRequest resources={r} />

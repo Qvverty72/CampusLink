@@ -22,7 +22,7 @@ export function PhysicalgoodsRequest({ resources:r }: { resources:ReturnType<typ
       {button('Enviar solicitud',()=>void request.send(),request.busy||!request.messageCode||r.busy)}
     </>}
     {request.options&&!request.options.canRequest&&!request.options.activeRequest&&<Text style={styles.text}>El recurso no admite nuevas solicitudes.</Text>}
-    {!request.busy&&button('Actualizar solicitud',request.reload,request.loading)}
+    {!request.busy&&button('Consultar estado',request.reload,request.loading)}
   </View>;
 }
 const styles=StyleSheet.create({
