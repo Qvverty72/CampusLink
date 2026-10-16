@@ -4,7 +4,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { usePublishPhysicalgoods } from '../hooks/usePublishPhysicalgoods';
-import { resourceConditions } from '../types/publication';
+import { PHYSICALGOODS_MAX_IMAGES, resourceConditions } from '../types/publication';
 import { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { PhysicalgoodsResources } from './PhysicalgoodsResources';
 import { PublicationImages } from './PublicationImages';
@@ -93,12 +93,13 @@ function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; 
     <Pressable accessibilityRole="button" disabled={busy} onPress={form.reload}><Text style={styles.action}>Actualizar opciones</Text></Pressable>
     <Text style={styles.label}>Nombre del recurso</Text>
     <TextInput accessibilityLabel="Nombre del recurso" placeholder="Ej. Calculadora científica" value={form.title} onChangeText={form.setTitle} maxLength={200} editable={!busy} style={styles.input} />
-    <Text style={styles.label}>Imágenes del recurso</Text>
+    <Text style={styles.label}>Imágenes del recurso ({form.photos.length}/{PHYSICALGOODS_MAX_IMAGES})</Text>
     <PublicationImages photos={form.photos} disabled={busy} onRemove={form.removePhoto} onPrincipal={form.makePrincipal} />
-    <Pressable accessibilityRole="button" disabled={busy} onPress={() => void form.choosePhoto()} style={styles.secondaryButton}>
+    <Pressable accessibilityRole="button" disabled={busy || form.photos.length >= PHYSICALGOODS_MAX_IMAGES} onPress={() => void form.choosePhoto()}
+      style={[styles.secondaryButton, (busy || form.photos.length >= PHYSICALGOODS_MAX_IMAGES) && styles.disabled]}>
       <Text style={styles.action}>Agregar imágenes</Text>
     </Pressable>
-    <Text style={styles.hint}>JPEG, PNG o WebP · Máximo 5 MB por imagen · Elige una principal</Text>
+    <Text style={styles.hint}>Máximo {PHYSICALGOODS_MAX_IMAGES} imágenes · JPEG, PNG o WebP · Máximo 5 MB por imagen · Elige una principal</Text>
     <Text style={styles.label}>Descripción</Text>
     <TextInput accessibilityLabel="Descripción del recurso" placeholder="Describe el recurso y lo que incluye" value={form.description} onChangeText={form.setDescription} maxLength={4000} multiline editable={!busy} style={[styles.input, styles.textarea]} />
     <Text style={styles.label}>Condición</Text>

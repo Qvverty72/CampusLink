@@ -4,7 +4,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { addPhysicalgoodsPhoto, choosePhysicalgoodsPrincipal, loadPhysicalgoodsGallery, loadPhysicalgoodsResources, loadPublicationOptions, retirePhysicalgoodsPhoto, savePhysicalgoodsCategory } from '../api/physicalgoodsApi';
 import { pickPublicationPhotos } from '../api/photoPicker';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PublicationOptions, PublicationPhoto } from '../types/publication';
-import { emptyPhysicalgoodsFilters, type PhysicalgoodsSearchFilters } from '../types/publication';
+import { emptyPhysicalgoodsFilters, PHYSICALGOODS_MAX_IMAGES, type PhysicalgoodsSearchFilters } from '../types/publication';
 
 /** Coordina filtros, paginación, galería, imágenes y mutaciones de publicaciones físicas. */
 export function usePhysicalgoodsResources() {
@@ -17,6 +17,8 @@ export function usePhysicalgoodsResources() {
   const [editCategory, setEditCategory] = useState(''), [busy, setBusy] = useState(false), [draftImages, setDraftImages] = useState<PublicationPhoto[]>([]);
   const mutation = useRef<AbortController | null>(null), running = useRef(false), mounted = useRef(true);
   const selectedRef = useRef(selectedId), savedCategory = useRef(''); selectedRef.current = selectedId;
+  const galleryRef = useRef(gallery), draftImagesRef = useRef(draftImages), picking = useRef(false);
+  galleryRef.current = gallery; draftImagesRef.current = draftImages;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; mutation.current?.abort(); }; }, []);
   function report(reason: unknown, setMessage: (message: string) => void) {
     if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) auth.refreshIdentity();
@@ -60,19 +62,33 @@ export function usePhysicalgoodsResources() {
   }
   /** Añade fotos seleccionadas solo si la publicación activa no cambió durante el picker. */
   async function selectPhotos() {
-    if (running.current) return;
+    const current = galleryRef.current;
+    if (running.current || picking.current || !current?.canEdit) return;
     const forPublication = selectedId;
-    try { const result = await pickPublicationPhotos(); if (mounted.current && selectedRef.current === forPublication && !running.current) setDraftImages(previous => [...previous, ...result]); }
-    catch (reason) { if (mounted.current) report(reason, setGalleryError); }
+    picking.current = true; setGalleryError(null);
+    try {
+      const result = await pickPublicationPhotos(PHYSICALGOODS_MAX_IMAGES - current.images.length - draftImagesRef.current.length);
+      const latest = galleryRef.current ?? current;
+      if (mounted.current && selectedRef.current === forPublication && latest.id === forPublication && !running.current) {
+        const next = [...draftImagesRef.current, ...result];
+        if (latest.images.length + next.length > PHYSICALGOODS_MAX_IMAGES) throw new Error(`Cada publicación admite un máximo de ${PHYSICALGOODS_MAX_IMAGES} imágenes. Revisa las imágenes publicadas y pendientes.`);
+        draftImagesRef.current = next; setDraftImages(next);
+      }
+    } catch (reason) { if (mounted.current && selectedRef.current === forPublication) report(reason, setGalleryError); }
+    finally { picking.current = false; }
   }
   /** Sube las fotos en orden y conserva el resto de la cola si una petición se interrumpe. */
   async function upload() {
+    if (picking.current || !gallery) return;
+    if (gallery.images.length + draftImages.length > PHYSICALGOODS_MAX_IMAGES) {
+      setGalleryError(`Cada publicación admite un máximo de ${PHYSICALGOODS_MAX_IMAGES} imágenes. Quita imágenes pendientes o publicadas antes de guardar.`); return;
+    }
     let left = draftImages;
     await change(async signal => {
       while (left.length) {
         await addPhysicalgoodsPhoto(selectedId!, left[0], signal);
         if (signal.aborted) return;
-        left = left.slice(1); setDraftImages(left);
+        left = left.slice(1); draftImagesRef.current = left; setDraftImages(left);
       }
     });
   }
@@ -89,6 +105,7 @@ export function usePhysicalgoodsResources() {
   }
   function clearFilters() { setFilters({ ...emptyPhysicalgoodsFilters }); setApplied({ ...emptyPhysicalgoodsFilters }); setNumber(1); }
   return { options, page, filters, setFilter, search, clearFilters, number, loading, error, selectedId, gallery, galleryLoading, galleryError, editCategory, setEditCategory, busy, draftImages, change,
+    remainingImageSlots: Math.max(0, PHYSICALGOODS_MAX_IMAGES - (gallery?.images.length ?? 0) - draftImages.length),
     open: (id: string) => { if (running.current) return; savedCategory.current = ''; setGallery(null); setDraftImages([]); setGalleryError(null); setSelectedId(id); }, close,
     setNumber,
     reload: () => setRevision(value => value + 1), reloadGallery: () => { setGalleryError(null); setGalleryRevision(value => value + 1); }, selectPhotos, upload,

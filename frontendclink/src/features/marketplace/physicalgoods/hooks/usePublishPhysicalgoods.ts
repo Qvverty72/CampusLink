@@ -4,6 +4,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { addPhysicalgoodsPhoto, loadPublicationOptions, publishPhysicalgoods } from '../api/physicalgoodsApi';
 import { pickPublicationPhotos } from '../api/photoPicker';
 import type { PublicationCreated, PublicationInput, PublicationOptions, PublicationPhoto } from '../types/publication';
+import { PHYSICALGOODS_MAX_IMAGES } from '../types/publication';
 
 /** Gestiona borrador, envío inicial y reintentos de subida de fotos secundarias. */
 export function usePublishPhysicalgoods(onPublished: () => void) {
@@ -16,6 +17,7 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
   const [price, setPrice] = useState('');
   const [careerId, setCareerId] = useState(''), [subjectId, setSubjectId] = useState('');
   const [photos, setPhotos] = useState<PublicationPhoto[]>([]);
+  const photosRef = useRef(photos), picking = useRef(false); photosRef.current = photos;
   const photo = photos[0];
   const queued = useRef<PublicationPhoto[]>([]), [remaining, setRemaining] = useState(0);
   const [created, setCreated] = useState<PublicationCreated | null>(null);
@@ -43,16 +45,22 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
 
   /** Añade fotos locales al borrador sin permitir cambios durante el guardado. */
   async function choosePhoto() {
-    if (saving.current) return;
+    if (saving.current || picking.current) return;
     setError(null);
+    picking.current = true;
     try {
-      const selected = await pickPublicationPhotos();
-      if (mounted.current && !saving.current) setPhotos(previous => [...previous, ...selected]);
+      const selected = await pickPublicationPhotos(PHYSICALGOODS_MAX_IMAGES - photosRef.current.length);
+      if (mounted.current && !saving.current) {
+        const next = [...photosRef.current, ...selected];
+        if (next.length > PHYSICALGOODS_MAX_IMAGES) throw new Error(`Cada publicación admite un máximo de ${PHYSICALGOODS_MAX_IMAGES} imágenes.`);
+        photosRef.current = next; setPhotos(next);
+      }
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : 'No se pudo seleccionar la fotografía.'); }
+    finally { picking.current = false; }
   }
   /** Publica la primera foto y luego sube las restantes; permite reanudar la cola. */
   async function publish() {
-    if (saving.current || loading || !options || (created && !queued.current.length)) return;
+    if (saving.current || picking.current || loading || !options || (created && !queued.current.length)) return;
     const numericPrice = Number(price.trim().replace(',', '.'));
     if (!title.trim() || !description.trim() || !categoryId || !photo) { setError('Completa el nombre, la descripción, la categoría y la fotografía principal.'); return; }
     if (modality === 'VENTA' && (!Number.isFinite(numericPrice) || numericPrice <= 0)) { setError('Ingresa un precio de venta mayor que cero.'); return; }

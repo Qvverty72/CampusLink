@@ -2,6 +2,7 @@ import { ApiError } from '../../../services/api-response.js';
 import type { PhysicalgoodsCondition, PhysicalgoodsInput, PrincipalPhoto } from './physicalgoods.types.js';
 
 export const PRINCIPAL_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+export const PHYSICALGOODS_MAX_IMAGES = 3;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const invalid = (field: string, message: string): never => {
   throw new ApiError(400, 'VALIDATION_ERROR', message, { details: [{ field, message }] });

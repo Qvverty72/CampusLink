@@ -335,6 +335,66 @@ test('gallery adds several referenced images, chooses one principal and legacy p
   await photo(auth, saved.id); assert.ok(signed.at(-1)?.includes(third.id));
   assert.equal((await db.query('select orden from archivo_publicacion where id=$1', [second.id])).rows[0].orden, 1);
 });
+test('image capacity includes the principal, rejects a fourth before Storage and releases a retired slot', async () => {
+  const saved = await create(auth, input());
+  await imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo });
+  const third = await imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo });
+  const before = await imagesService.getPhysicalgoodsGallery(auth, saved.id), calls = storageCalls.length;
+  const admin = await otherActor('ADMINISTRADOR');
+  for (const actor of [auth, admin]) {
+    await assert.rejects(imagesService.addPhysicalgoodsImage(actor, saved.id, { photo: input().photo }),
+      { status: 409, message: /máximo de 3 imágenes/ });
+  }
+  assert.equal(storageCalls.length, calls);
+  assert.deepEqual((await imagesService.getPhysicalgoodsGallery(auth, saved.id)).images.map(row => row.id), before.images.map(row => row.id));
+  await imagesService.deletePhysicalgoodsImage(auth, saved.id, third.id);
+  const replacement = await imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo });
+  const after = await imagesService.getPhysicalgoodsGallery(auth, saved.id);
+  assert.equal(after.images.length, 3); assert.ok(after.images.some(row => row.id === replacement.id));
+  assert.equal(after.images.filter(row => row.principal).length, 1); assert.equal(after.images[0].id, before.images[0].id);
+  const history = await db.query('SELECT id,deleted_at FROM archivo_publicacion WHERE publicacion_id=$1', [saved.id]);
+  assert.equal(history.rows.length, 4); assert.ok(history.rows.find(row => row.id === third.id)?.deleted_at);
+});
+test('competing uploads for the last image slot persist only one and compensate the unreferenced file', { timeout: 10000 }, async () => {
+  const saved = await create(auth, input());
+  await imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo });
+  const before = uploads.length;
+  let arrived = 0, release!: () => void;
+  const bothUploaded = new Promise<void>(resolve => { release = resolve; });
+  // Ambas cargas superan el precheck con dos fotos; compiten después por el mismo cupo bajo lock.
+  onUpload = async () => { if (++arrived === 2) release(); await bothUploaded; };
+  const results = await Promise.allSettled([
+    imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo }),
+    imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo }),
+  ]);
+  onUpload = null;
+  assert.equal(arrived, 2); assert.equal(results.filter(row => row.status === 'fulfilled').length, 1);
+  const failure = results.find(row => row.status === 'rejected');
+  assert.ok(failure?.status === 'rejected'); assert.equal(failure.reason.status, 409);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth, saved.id)).images.length, 3);
+  assert.equal(uploads.length, before + 2); assert.equal(removals.length, 1);
+  assert.equal((await db.query('SELECT id FROM archivo_publicacion WHERE storage_path=$1', [removals[0]])).rows.length, 0);
+});
+test('legacy publications above the image limit retain their gallery and allow additions only after freeing capacity', async () => {
+  const saved = await create(auth, input());
+  // Representa datos anteriores al nuevo límite sin usar la API que ahora lo impide.
+  for (let order = 1; order <= 3; order++) {
+    const id = randomUUID();
+    await db.query(`INSERT INTO archivo_publicacion(id,publicacion_id,bucket_id,storage_path,nombre_original,mime_type,tamano_bytes,tipo_archivo,orden)
+      VALUES($1,$2,'publication-images',$3,'legacy.png','image/png',$4,'IMAGEN',$5)`,
+    [id, saved.id, `${campus}/${auth.userId}/${saved.id}/${id}.png`, Buffer.from(png, 'base64').length, order]);
+  }
+  const legacy = await imagesService.getPhysicalgoodsGallery(auth, saved.id), calls = storageCalls.length;
+  assert.equal(legacy.images.length, 4);
+  await assert.rejects(imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo }), { status: 409 });
+  assert.equal(storageCalls.length, calls);
+  await imagesService.deletePhysicalgoodsImage(auth, saved.id, legacy.images[3].id);
+  await assert.rejects(imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo }), { status: 409 });
+  await imagesService.deletePhysicalgoodsImage(auth, saved.id, legacy.images[2].id);
+  await imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo });
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth, saved.id)).images.length, 3);
+  assert.equal((await db.query('SELECT id FROM archivo_publicacion WHERE publicacion_id=$1', [saved.id])).rows.length, 5);
+});
 test('published images retire logically, bytes/references survive and deleting the principal selects a remaining image', async () => {
   const saved = await create(auth, input()), second = await imagesService.addPhysicalgoodsImage(auth, saved.id, { photo: input().photo });
   const before = await imagesService.getPhysicalgoodsGallery(auth, saved.id), principal = before.images[0].id;
@@ -426,6 +486,11 @@ test('HTTP image/gallery/category contracts require identity, scope references a
   assert.equal(gallery.status, 200); assert.equal(gallery.headers.get('cache-control'), 'no-store'); assert.equal((await gallery.json()).data.images.length, 2);
   const list = await originalFetch(base + '?mine=true&categoryId=' + category + '&limit=1', { headers: { Authorization: 'Bearer ' + token } });
   assert.equal(list.status, 200); const page = await list.json(); assert.equal(page.data.length, 1); assert.equal(page.meta.limit, 1);
+  assert.equal((await append({ photo: input().photo })).status, 201);
+  const calls = storageCalls.length, full = await append({ photo: input().photo });
+  assert.equal(full.status, 409); assert.equal(full.headers.get('cache-control'), 'no-store');
+  const error = await full.json(); assert.equal(error.error.code, 'CONFLICT'); assert.match(error.error.message, /máximo de 3 imágenes/);
+  assert.equal(storageCalls.length, calls);
   assert.equal((await append({ value: 'a'.repeat(8 * 1024 * 1024) })).status, 413);
 });
 

@@ -5,7 +5,7 @@ import { createPaginatedResult } from '../../../services/pagination.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import type { PhysicalgoodsMediaRow } from './physicalgoods.types.js';
-import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgoodsId } from './physicalgoods.validation.js';
+import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgoodsId, PHYSICALGOODS_MAX_IMAGES } from './physicalgoods.validation.js';
 import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto,
   signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { parsePhysicalgoodsSearch } from './physicalgoods.search.validation.js';
@@ -88,20 +88,27 @@ export async function getPhysicalgoodsResources(auth: VerifiedAuthConnection, qu
     return { data: result.data.map(row => ({ ...mediaDto(row), imageUrl: row.photo_storage_path ? urls.get(row.photo_storage_path) ?? null : null })), meta: result.meta };
   });
 }
+/** Cuenta solo imágenes activas; debe ejecutarse con el lock de publicación de editPhysicalgoods. */
+async function requirePhysicalgoodsImageSlot(client: PoolClient, publicationId: string) {
+  const images = await findPhysicalgoodsImages(client, publicationId);
+  if (images.length >= PHYSICALGOODS_MAX_IMAGES) throw new ApiError(409, 'CONFLICT',
+    `Cada publicación admite un máximo de ${PHYSICALGOODS_MAX_IMAGES} imágenes. Quita una antes de agregar otra.`);
+  return images;
+}
 export async function addPhysicalgoodsImage(auth: VerifiedAuthConnection, publicationId: unknown, body: unknown) {
   requireCampusCapability(auth, auth.campusId, 'general');
   const id = physicalgoodsId(publicationId, 'publicationId'), photo = parsePhysicalgoodsPhotoUpload(body), imageId = randomUUID();
   const extension = photo.mimeType === 'image/jpeg' ? 'jpg' : photo.mimeType === 'image/png' ? 'png' : 'webp';
   const path = `${auth.campusId}/${auth.userId}/${id}/${imageId}.${extension}`;
-  // Comprueba acceso antes de Storage y vuelve a validar cuenta, permisos y publicación bajo bloqueo de escritura.
-  await dependency(() => editPhysicalgoods(auth, id, async () => {}));
+  // Comprueba acceso/cupo antes de Storage; la segunda comprobación cubre altas simultáneas durante la carga.
+  await dependency(() => editPhysicalgoods(auth, id, client => requirePhysicalgoodsImageSlot(client, id)));
   let attemptedPersistence = false;
   return dependency(async () => {
     try {
       await uploadPrincipalPhoto(path, photo);
       attemptedPersistence = true;
       await editPhysicalgoods(auth, id, async client => {
-        const images = await findPhysicalgoodsImages(client, id);
+        const images = await requirePhysicalgoodsImageSlot(client, id);
         const order = images.length ? Math.max(...images.map(image => image.orden)) + 1 : 0;
         if (order > 32767) throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'La publicación alcanzó el límite de imágenes del catálogo.');
         await insertPhysicalgoodsImage(client, id, imageId, path, photo, order);

@@ -2,7 +2,7 @@ import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Tex
 import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { PublicationImages } from './PublicationImages';
 import { PhysicalgoodsSearchFilters } from './PhysicalgoodsSearchFilters';
-import { resourceConditions } from '../types/publication';
+import { PHYSICALGOODS_MAX_IMAGES, resourceConditions } from '../types/publication';
 import { PhysicalgoodsEditor } from './PhysicalgoodsEditor';
 import { PhysicalgoodsRequest } from './PhysicalgoodsRequest';
 import { useState } from 'react';
@@ -58,10 +58,11 @@ export function PhysicalgoodsResources({ resources: r }: { resources: ReturnType
             </>}
           </View>)}
           {r.gallery.canEdit && <>
-            <Text style={styles.label}>Agregar imágenes</Text><Text style={styles.text}>JPEG, PNG o WebP · Hasta 5 MB por imagen</Text>
-            {button('Seleccionar imágenes adicionales', () => void r.selectPhotos(), r.busy)}
+            <Text style={styles.label}>Imágenes ({r.gallery.images.length + r.draftImages.length}/{PHYSICALGOODS_MAX_IMAGES})</Text>
+            <Text style={styles.text}>Máximo {PHYSICALGOODS_MAX_IMAGES} imágenes por publicación · JPEG, PNG o WebP · Hasta 5 MB por imagen</Text>
+            {button('Seleccionar imágenes adicionales', () => void r.selectPhotos(), r.busy || !r.remainingImageSlots)}
             <PublicationImages photos={r.draftImages} disabled={r.busy} onRemove={r.removeDraft} />
-            {button(r.busy ? 'Guardando…' : 'Guardar imágenes adicionales', () => void r.upload(), r.busy || !r.draftImages.length)}
+            {button(r.busy ? 'Guardando…' : 'Guardar imágenes adicionales', () => void r.upload(), r.busy || !r.draftImages.length || r.gallery.images.length + r.draftImages.length > PHYSICALGOODS_MAX_IMAGES)}
             <Text style={styles.label}>Modificar categoría</Text>
             <View style={styles.choices}>{r.options?.categories.map(category => <Pressable key={category.id} accessibilityRole="radio" accessibilityLabel={`Nueva categoría: ${category.name}`} accessibilityState={{ checked: r.editCategory === category.id, disabled: r.busy }} disabled={r.busy} onPress={() => r.setEditCategory(category.id)} style={[styles.choice, r.editCategory === category.id && styles.selected]}><Text style={styles.action}>{category.name}</Text></Pressable>)}</View>
             {button('Guardar categoría', () => void r.saveCategory(), r.busy || r.editCategory === r.gallery.category.id)}

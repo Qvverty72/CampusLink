@@ -1,3 +1,5 @@
+export const PHYSICALGOODS_MAX_IMAGES = 3;
+
 export const resourceConditions = [
   { value: 'NUEVO', label: 'Nuevo' }, { value: 'BUEN_ESTADO', label: 'Buen estado' },
   { value: 'USADO', label: 'Usado' }, { value: 'DETERIORADO', label: 'Deteriorado' },

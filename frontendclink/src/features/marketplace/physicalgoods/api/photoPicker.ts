@@ -1,11 +1,15 @@
 import { launchImageLibraryAsync } from 'expo-image-picker';
-import type { PublicationPhoto } from '../types/publication';
+import { PHYSICALGOODS_MAX_IMAGES, type PublicationPhoto } from '../types/publication';
 
-/** Abre el selector del dispositivo y valida tamaño y firma MIME de cada foto. */
-export async function pickPublicationPhotos(): Promise<PublicationPhoto[]> {
+/** Limita la selección a los cupos restantes y valida tamaño y firma MIME de cada foto. */
+export async function pickPublicationPhotos(availableSlots = PHYSICALGOODS_MAX_IMAGES): Promise<PublicationPhoto[]> {
+  if (availableSlots <= 0) throw new Error(`Cada publicación admite un máximo de ${PHYSICALGOODS_MAX_IMAGES} imágenes. Quita una antes de agregar otra.`);
+  const selectionLimit = Math.min(availableSlots, PHYSICALGOODS_MAX_IMAGES);
   // Se invoca directamente desde la acción del usuario para conservar la activación web.
-  const result = await launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, base64: true, quality: 1, exif: false });
+  const result = await launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit, base64: true, quality: 1, exif: false });
   if (result.canceled) return [];
+  // Web no aplica selectionLimit: rechaza el lote completo sin descartar selecciones anteriores.
+  if (result.assets.length > selectionLimit) throw new Error(`Puedes seleccionar hasta ${selectionLimit} ${selectionLimit === 1 ? 'imagen más' : 'imágenes más'} (máximo ${PHYSICALGOODS_MAX_IMAGES} por publicación).`);
   return result.assets.map(asset => {
     const base64 = asset.base64;
     if (!base64) throw new Error('No se pudo leer una fotografía. Selecciona otra.');
