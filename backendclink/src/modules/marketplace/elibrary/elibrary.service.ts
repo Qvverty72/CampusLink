@@ -17,7 +17,7 @@ const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pud
 export function authorizeDigitalAccess(auth: VerifiedAuthConnection) {
   requireCampusCapability(auth, auth.campusId, 'general');
 }
-async function currentDigitalContext(client: PoolClient, auth: VerifiedAuthConnection) {
+export async function currentDigitalContext(client: PoolClient, auth: VerifiedAuthConnection) {
   const { profile, roles } = await lockAccountContext(client, auth.userId);
   if (!profile || profile.campus_id !== auth.campusId || profile.institucion_id !== auth.profile.institucion_id) {
     throw new ApiError(409, 'CONFLICT', 'Tu contexto institucional cambió. Recarga la biblioteca.');
@@ -43,8 +43,8 @@ export async function createDigitalPublication(auth: VerifiedAuthConnection, raw
       const { current, campus } = await currentDigitalContext(client, auth);
       saved = { ...input, id, ownerId: current.userId, campusId: campus.id, campusName: campus.nombre,
         institutionId: campus.institucion_id, status: 'DISPONIBLE', currency: 'CLP',
-        files: [{ name: file.name, mimeType: file.mimeType, sizeBytes: file.bytes.length }] };
-      await insertDigitalPublication(client, saved, file, path);
+        files: [] };
+      saved.files = [await insertDigitalPublication(client, saved, file, path)];
       return saved;
     });
   } catch (error) {

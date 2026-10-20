@@ -28,7 +28,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   app.use((request, response, next) => {
     // Las publicaciones analizan sus cargas acotadas después de autenticar.
     if (request.method === 'POST' && (/^\/api\/v1\/marketplace\/physicalgoods(?:\/[^/]+\/images)?\/?$/i.test(request.path)
-      || /^\/api\/v1\/marketplace\/elibrary\/?$/i.test(request.path))) next();
+      || /^\/api\/v1\/marketplace\/elibrary(?:\/[^/]+\/files)?\/?$/i.test(request.path))) next();
     else jsonParser(request, response, next);
   });
   app.use('/api/v1', createApiRouter(dependencies));

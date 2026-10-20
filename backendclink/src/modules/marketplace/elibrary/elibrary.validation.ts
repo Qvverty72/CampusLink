@@ -6,9 +6,9 @@ export const DIGITAL_MAX_BYTES = 25 * 1024 * 1024;
 export function invalidDigital(field: string, message: string): never {
   throw new ApiError(400, 'VALIDATION_ERROR', message, { details: [{ field, message }] });
 }
-export function digitalId(value: unknown): string {
+export function digitalId(value: unknown, field = 'publicationId'): string {
   if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-    return invalidDigital('publicationId', 'Selecciona una publicación válida.');
+    return invalidDigital(field, field === 'fileId' ? 'Selecciona un archivo válido.' : 'Selecciona una publicación válida.');
   }
   return value.toLowerCase();
 }
@@ -36,7 +36,7 @@ export function parseDigitalInput(raw: unknown): DigitalInput {
   return { title, description, modality: body.modality, price };
 }
 
-/** Política inicial: PDF sin cifrado, acciones ni adjuntos. No define el catálogo final de F2.5-02. */
+/** Política PDF confirmada para F2.5-02: sin cifrado, acciones ni adjuntos embebidos. */
 export async function validateDigitalFile(file: DigitalUpload | undefined): Promise<DigitalUpload> {
   if (!file || !Buffer.isBuffer(file.bytes) || !file.bytes.length) return invalidDigital('file', 'Selecciona un archivo PDF.');
   if (file.bytes.length > DIGITAL_MAX_BYTES) throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'El archivo debe pesar como máximo 25 MB.');

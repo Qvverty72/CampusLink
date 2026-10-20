@@ -12,7 +12,8 @@
         "photosPermission": "Permite a CampusLink seleccionar la fotografía del recurso que quieres publicar.",
         "cameraPermission": false,
         "microphonePermission": false
-      }]
+      }],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

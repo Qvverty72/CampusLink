@@ -19,6 +19,12 @@ export async function authenticatedRequest<T>(path: string, init: RequestInit = 
  * ambiguos; la autorización real del token corresponde al backend.
  */
 export async function authenticatedEnvelopeRequest<T, Meta = never>(path: string, init: RequestInit = {}, query?: URLSearchParams): Promise<{ data: T; meta: Meta }> {
+  const response = await authenticatedResponseRequest(path, init, query);
+  return await response.json() as { data: T; meta: Meta };
+}
+
+/** Comparte sesión, frontera de URL y errores con respuestas binarias autenticadas. */
+export async function authenticatedResponseRequest(path: string, init: RequestInit = {}, query?: URLSearchParams): Promise<Response> {
   // Solo rutas relativas de la API pueden recibir el token bearer.
   if (!path.startsWith('/api/v1/') || /[\\?#]/.test(path) || path.includes('..')) {
     throw new Error('A relative versioned API path is required');
@@ -43,5 +49,5 @@ export async function authenticatedEnvelopeRequest<T, Meta = never>(path: string
     } catch { /* Si la respuesta no es JSON, se conserva de todos modos el estado HTTP. */ }
     throw new AuthApiError(response.status, message);
   }
-  return await response.json() as { data: T; meta: Meta };
+  return response;
 }

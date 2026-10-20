@@ -20,6 +20,8 @@ let validation: typeof import('../src/modules/marketplace/elibrary/elibrary.vali
 let failUpload: boolean, failInsert: boolean, failRemove: boolean, failReference: boolean, lostCommit: boolean, failCommit: boolean;
 let publicBucket: boolean, missingBucket: boolean, smallBucket: boolean;
 let onUpload: (() => Promise<void>) | null;
+let onDownload: (() => Promise<void>) | null, failDownload = false, corruptDownload = false;
+let filesService: typeof import('../src/modules/marketplace/elibrary/elibrary.files.service.js');
 let uploads: string[], removals: string[], storageCalls: string[], logs: unknown[][];
 let objects = new Map<string, Buffer>(), connectionLease = Promise.resolve();
 let barriers = 0;
@@ -64,6 +66,12 @@ before(async () => {
       if (failRemove) return Response.json({ error: 'private failure' }, { status: 500 });
       paths.forEach(path => objects.delete(path)); return Response.json([]);
     }
+    if ((init?.method ?? 'GET') === 'GET' && url.pathname.startsWith('/storage/v1/object/digital-resources/')) {
+      const path = decodeURIComponent(url.pathname.replace('/storage/v1/object/digital-resources/', ''));
+      await onDownload?.();
+      if (failDownload || !objects.has(path)) return Response.json({ error: 'private download failure' }, { status: 500 });
+      return new Response(new Uint8Array(corruptDownload ? Buffer.from('bad') : objects.get(path)!), { headers: { 'Content-Type': 'application/pdf' } });
+    }
     assert.equal(init?.method, 'POST'); assert.ok(!url.pathname.includes('/sign/'));
     assert.equal(headers.get('content-type'), 'application/pdf'); assert.equal(headers.get('x-upsert'), 'false');
     const path = url.pathname.replace('/storage/v1/object/digital-resources/', '');
@@ -72,11 +80,13 @@ before(async () => {
     return failUpload ? Response.json({ error: 'private failure' }, { status: 500 }) : Response.json({ Key: path, Id: randomUUID() });
   };
   service = await import('../src/modules/marketplace/elibrary/elibrary.service.js');
+  filesService = await import('../src/modules/marketplace/elibrary/elibrary.files.service.js');
   validation = await import('../src/modules/marketplace/elibrary/elibrary.validation.js');
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
-  for (const name of ['institucion', 'campus', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion']) {
+  for (const name of ['institucion', 'campus', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion',
+    'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -84,6 +94,9 @@ before(async () => {
   await db.exec(`ALTER TABLE campus ADD UNIQUE(id,institucion_id);
     ALTER TABLE perfil_usuario ADD FOREIGN KEY(campus_id,institucion_id) REFERENCES campus(id,institucion_id);
     ALTER TABLE archivo_publicacion ADD UNIQUE(bucket_id,storage_path);
+    ALTER TABLE acceso_recurso_digital ADD UNIQUE(publicacion_id,receptor_id);
+    ALTER TABLE confirmacion_transaccion ADD UNIQUE(transaccion_id,rol_confirmante);
+    ALTER TABLE confirmacion_transaccion ADD UNIQUE(transaccion_id,usuario_id);
     ALTER TABLE publicacion_recurso ADD CHECK ((modalidad='VENTA' AND precio>0 AND precio IS NOT NULL) OR (modalidad='DONACION' AND precio IS NULL));
     ALTER TABLE publicacion_recurso ENABLE ROW LEVEL SECURITY; ALTER TABLE archivo_publicacion ENABLE ROW LEVEL SECURITY;
     GRANT SELECT,INSERT ON publicacion_recurso,archivo_publicacion TO service_role;
@@ -101,6 +114,7 @@ before(async () => {
   base = 'http://127.0.0.1:' + (server.address() as AddressInfo).port + '/api/v1/marketplace/elibrary';
 });
 beforeEach(async () => {
+  onDownload = null; failDownload = corruptDownload = false;
   uploads = []; removals = []; storageCalls = []; logs = []; objects = new Map(); barriers = 0;
   failUpload = failInsert = failRemove = failReference = lostCommit = failCommit = publicBucket = missingBucket = smallBucket = false; onUpload = null;
   const userId = randomUUID();
@@ -131,7 +145,8 @@ test('multipart sale persists server identity, digital subtype and private file 
   const response = await post(); assert.equal(response.status, 201);
   const { data } = await response.json(); assert.equal(data.title, 'Apuntes'); assert.equal(data.status, 'DISPONIBLE');
   assert.equal(data.ownerId, auth.userId); assert.equal(data.campusId, campus); assert.equal(data.institutionId, institution);
-  assert.deepEqual(data.files, [{ name: 'apuntes.pdf', mimeType: 'application/pdf', sizeBytes: pdf.length }]);
+  assert.match(data.files[0].id, /^[0-9a-f-]{36}$/i);
+  assert.deepEqual(data.files, [{ id: data.files[0].id, name: 'apuntes.pdf', mimeType: 'application/pdf', sizeBytes: pdf.length }]);
   const rows = (await db.query(`select p.*,d.publicacion_id,a.bucket_id,a.storage_path,a.tipo_archivo,a.tamano_bytes
     from publicacion_recurso p join recurso_digital d on d.publicacion_id=p.id join archivo_publicacion a on a.publicacion_id=p.id where p.id=$1`, [data.id])).rows;
   assert.equal(rows.length, 1); assert.equal(rows[0].tipo_recurso, 'DIGITAL'); assert.equal(rows[0].bucket_id, 'digital-resources');
@@ -222,7 +237,7 @@ test('same institution other campus can list/read; foreign institution cannot an
   assert.ok(!(await (await get()).json()).data.some((item: { id: string }) => item.id === saved.id));
   assert.equal(storageCalls.filter(path => path.includes('/sign/')).length, 0);
 });
-test('metadata consultation grants no original-file endpoint or URL, including for owner', async () => {
+test('metadata consultation hides original URLs and unsupported original routes remain unavailable', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());
   for (const route of ['/download', '/files', '/file', '/photo', '/preview']) assert.equal((await get('/' + saved.id + route)).status, 404);
   const response = await get('/' + saved.id); assert.equal(response.headers.get('cache-control'), 'no-store');
@@ -338,4 +353,121 @@ test('malformed boundary/metadata and excessive raw chunked body reject safely w
     request.end(Buffer.alloc(validation.DIGITAL_MAX_BYTES + 64 * 1024));
   });
   assert.equal(status, 413); await noPublication(); assert.equal(uploads.length, 0);
+});
+
+async function peer(campusId = sibling, institutionId = institution): Promise<VerifiedAuthConnection> {
+  const id = randomUUID(); await db.query('insert into auth.users values($1)', [id]);
+  await db.query("insert into perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) values($1,$2,$3,'Receiver',now())", [id, institutionId, campusId]);
+  return { userId: id, campusId, roles: [], permissions: [], profile: { ...auth.profile, id, campus_id: campusId, institucion_id: institutionId } };
+}
+async function acquisition(publicationId: string, receiverId: string, confirmations = 2) {
+  const transactionId = randomUUID(), requestId = randomUUID(), code = randomUUID();
+  await db.query("insert into mensaje_solicitud(codigo,descripcion) values($1,'QA')", [code]);
+  await db.query("insert into solicitud_recurso(id,publicacion_id,solicitante_id,codigo_mensaje,estado_solicitud) values($1,$2,$3,$4,'ACEPTADA')", [requestId, publicationId, receiverId, code]);
+  await db.query(`insert into transaccion_recurso(id,solicitud_id,publicacion_id,propietario_id,receptor_id,estado_transaccion,modalidad_acordada,monto_acordado,completada_en)
+    values($1,$2,$3,$4,$5,'COMPLETADA','VENTA',2500,now())`, [transactionId, requestId, publicationId, auth.userId, receiverId]);
+  await db.query('insert into acceso_recurso_digital(transaccion_id,publicacion_id,receptor_id) values($1,$2,$3)', [transactionId, publicationId, receiverId]);
+  if (confirmations > 0) await db.query("insert into confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) values($1,$2,'PROPIETARIO')", [transactionId, auth.userId]);
+  if (confirmations > 1) await db.query("insert into confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) values($1,$2,'RECEPTOR')", [transactionId, receiverId]);
+  return transactionId;
+}
+async function attach(id: string, bytes: Buffer | null = pdf, extra = false) {
+  const body = new FormData(); if (bytes) body.append('file', new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), 'segundo.pdf');
+  if (extra) body.append('metadata', '{}');
+  return originalFetch(`${base}/${id}/files`, { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body });
+}
+const original = (publicationId: string, fileId: string) => get(`/${publicationId}/files/${fileId}/download`);
+
+test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  const results = await Promise.all(Array.from({ length: 8 }, (_, index) => filesService.addDigitalAttachment(auth, saved.id, { ...file(), name: `archivo${index}.pdf` })));
+  const publication = (await service.getDigitalPublications(auth, saved.id))[0]; assert.equal(publication.files.length, 9);
+  assert.equal(new Set(publication.files.map(row => row.id)).size, 9); assert.equal(objects.size, 9);
+  const rows = (await db.query('select orden,storage_path from archivo_publicacion where publicacion_id=$1 order by orden', [saved.id])).rows;
+  assert.deepEqual(rows.map(row => row.orden), Array.from({ length: 9 }, (_, index) => index));
+  assert.equal(results.length, 8); assert.equal(publication.status, 'DISPONIBLE'); assert.equal(removals.length, 0);
+});
+test('multipart append accepts file only; missing/invalid/oversized/privileged fields do not alter registered files', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  const response = await attach(saved.id); assert.equal(response.status, 201); assert.match((await response.json()).data.id, /^[0-9a-f-]{36}$/i);
+  for (const [bytes, extra] of [[null, false], [Buffer.from('fake'), false], [pdf, true]] as const) assert.equal((await attach(saved.id, bytes, extra)).status, 400);
+  assert.equal((await attach(saved.id, Buffer.alloc(validation.DIGITAL_MAX_BYTES + 1))).status, 413);
+  assert.equal((await service.getDigitalPublications(auth, saved.id))[0].files.length, 2); assert.equal(objects.size, 2);
+});
+test('only owner may append, institution remains authoritative and original campus stays in Storage paths', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file()), receiver = await peer();
+  await assert.rejects(filesService.addDigitalAttachment(receiver, saved.id, file()), { status: 403 });
+  const outsider = await peer(foreignCampus, foreignInstitution);
+  await assert.rejects(filesService.addDigitalAttachment(outsider, saved.id, file()), { status: 404 });
+  await switchCampus(sibling); assert.equal((await attach(saved.id)).status, 201); assert.ok(uploads[1].startsWith(`${campus}/${auth.userId}/${saved.id}/`));
+  await db.query("update publicacion_recurso set estado_publicacion='OCULTO' where id=$1", [saved.id]);
+  assert.equal((await attach(saved.id)).status, 409); assert.equal(objects.size, 2);
+});
+test('owner authorization and availability are rechecked after upload; rollback compensates only new file', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  onUpload = () => db.query("update publicacion_recurso set deleted_at=now() where id=$1", [saved.id]).then(() => {});
+  await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 409 });
+  assert.equal(objects.size, 1); assert.equal(removals.length, 1);
+  assert.equal((await db.query('select id from archivo_publicacion where publicacion_id=$1', [saved.id])).rows.length, 1);
+});
+test('append Storage/SQL failures and uncertain COMMIT preserve existing files and recover persisted receipt', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  failUpload = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 503 }); assert.equal(objects.size, 1);
+  failUpload = false; failInsert = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 503 }); assert.equal(objects.size, 1);
+  failInsert = false; onUpload = async () => { lostCommit = true; };
+  const result = await filesService.addDigitalAttachment(auth, saved.id, file()); assert.ok(result.id);
+  assert.equal(objects.size, 2); assert.equal((await service.getDigitalPublications(auth, saved.id))[0].files.length, 2);
+});
+test('owner download returns bytes only with attachment/no-store/nosniff headers; mismatched IDs and other readers denied', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), { ...file(), name: "apuntes académicos's.pdf" });
+  const response = await original(saved.id, saved.files[0].id); assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store'); assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(response.headers.get('content-disposition')!, /^attachment; filename\*=UTF-8''apuntes%20acad%C3%A9micos%27s.pdf$/);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), pdf);
+  const other = await service.createDigitalPublication(auth, input(), file()); assert.equal((await original(saved.id, other.files[0].id)).status, 404);
+  const receiver = await peer(); current = receiver;
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 403);
+  current = await peer(foreignCampus, foreignInstitution); assert.equal((await original(saved.id, saved.files[0].id)).status, 404);
+});
+test('legitimate acquisition requires persisted access, matching completed transaction and both confirmations', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file()), receiver = await peer();
+  const transactionId = await acquisition(saved.id, receiver.userId, 1); current = receiver;
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 403);
+  await db.query("insert into confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) values($1,$2,'RECEPTOR')", [transactionId, receiver.userId]);
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 200);
+  await db.query("update transaccion_recurso set estado_transaccion='PENDIENTE_CONFIRMACION',completada_en=null where id=$1", [transactionId]);
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 403);
+  await db.query("update transaccion_recurso set estado_transaccion='COMPLETADA',completada_en=now() where id=$1", [transactionId]);
+  await db.query('delete from acceso_recurso_digital where transaccion_id=$1', [transactionId]);
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 403);
+});
+test('acquired access survives owner/publication deactivation but never crosses institutions', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file()), receiver = await peer();
+  await acquisition(saved.id, receiver.userId); current = receiver;
+  await db.query("update perfil_usuario set estado_cuenta='DESACTIVADA' where id=$1", [auth.userId]);
+  await db.query("update publicacion_recurso set deleted_at=now(),estado_publicacion='OCULTO' where id=$1", [saved.id]);
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 200);
+  await db.query('update perfil_usuario set campus_id=$2,institucion_id=$3 where id=$1', [receiver.userId, foreignCampus, foreignInstitution]);
+  current = { ...receiver, campusId: foreignCampus, profile: { ...receiver.profile, campus_id: foreignCampus, institucion_id: foreignInstitution } };
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 404);
+});
+test('download rechecks current account/acquisition after Storage I/O, and Storage failures return sanitized errors', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file()), receiver = await peer();
+  await acquisition(saved.id, receiver.userId); current = receiver;
+  onDownload = () => db.query('delete from acceso_recurso_digital where receptor_id=$1', [receiver.userId]).then(() => {});
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 403);
+  current = structuredClone(auth); onDownload = null; failDownload = true;
+  const failure = await original(saved.id, saved.files[0].id); assert.equal(failure.status, 503); assert.doesNotMatch(await failure.text(), /storage_path|password|private|digital-resources/);
+  failDownload = false; corruptDownload = true; assert.equal((await original(saved.id, saved.files[0].id)).status, 503);
+  corruptDownload = false; onDownload = () => db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1", [auth.userId]).then(() => {});
+  assert.equal((await original(saved.id, saved.files[0].id)).status, 403); assert.equal(objects.size, 1);
+});
+
+test('stored routes outside the canonical publication prefix or traversal paths never reach Storage', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  const reference = (await db.query('select storage_path from archivo_publicacion where id=$1', [saved.files[0].id])).rows[0].storage_path;
+  for (const path of [reference.replace(campus, foreignCampus), `${campus}/${auth.userId}/${saved.id}/../private.pdf`]) {
+    await db.query('update archivo_publicacion set storage_path=$2 where id=$1', [saved.files[0].id, path]);
+    const before = storageCalls.length; assert.equal((await original(saved.id, saved.files[0].id)).status, 404); assert.equal(storageCalls.length, before);
+  }
 });

@@ -6,6 +6,7 @@ export interface DigitalInput {
   price: number | null;
 }
 export interface DigitalFile { name: string; uri: string; sizeBytes: number; webFile?: File }
+export interface DigitalAttachment { id: string; name: string; mimeType: string; sizeBytes: number }
 export interface DigitalPublication extends DigitalInput {
   id: string;
   ownerId: string;
@@ -14,5 +15,5 @@ export interface DigitalPublication extends DigitalInput {
   institutionId: string;
   status: 'DISPONIBLE';
   currency: 'CLP';
-  files: { name: string; mimeType: string; sizeBytes: number }[];
+  files: DigitalAttachment[];
 }

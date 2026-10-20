@@ -5,8 +5,22 @@ import { authorizeDigitalAccess, createDigitalPublication, getDigitalPublication
 import { sendSuccess } from '../../../services/api-response.js';
 import type { AuthLocals } from '../../auth/auth.types.js';
 import { readDigitalUpload } from './elibrary.upload.js';
+import { addDigitalAttachment, getDigitalOriginal } from './elibrary.files.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const addDigitalFileController: DigitalHandler = async (request, response) => {
+  authorizeDigitalAccess(response.locals.auth);
+  const { file } = await readDigitalUpload(request, false);
+  sendSuccess(response, await addDigitalAttachment(response.locals.auth, request.params.publicationId, file), 201);
+};
+export const downloadDigitalFileController: DigitalHandler = async (request, response) => {
+  const file = await getDigitalOriginal(response.locals.auth, request.params.publicationId, request.params.fileId);
+  const name = encodeURIComponent(file.name).replace(/['()*]/g, character => '%' + character.charCodeAt(0).toString(16));
+  response.setHeader('Content-Type', 'application/octet-stream');
+  response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${name}`);
+  response.setHeader('Content-Length', file.bytes.length);
+  response.send(file.bytes);
+};
 export const createDigitalController: DigitalHandler = async (request, response) => {
   authorizeDigitalAccess(response.locals.auth);
   const { metadata, file } = await readDigitalUpload(request);
