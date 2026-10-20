@@ -4,7 +4,6 @@ import type { DependencyChecks } from '../../../types/api.types.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import { createServerSupabaseClient } from '../../../database/supabase/client.js';
 import type { PoolClient } from 'pg';
-import type { AuthAssignment, AuthProfile } from '../../auth/auth.types.js';
 import type { PhysicalgoodsCatalog, PhysicalgoodsCreated, PhysicalgoodsInput, PrincipalPhoto } from './physicalgoods.types.js';
 
 // Bucket privado existente en Storage; las rutas siempre las genera el servidor.
@@ -19,17 +18,7 @@ export async function retirePhysicalgoods(client: PoolClient, id: string) {
   await client.query('UPDATE public.publicacion_recurso SET deleted_at=clock_timestamp() WHERE id=$1', [id]);
 }
 
-export async function lockPhysicalgoodsPublisher(client: PoolClient, userId: string) {
-  // Impide cambios de cuenta/campus sin bloquear las referencias FK de otros participantes al perfil.
-  const profile = (await client.query<AuthProfile>(
-    `SELECT id, campus_id, institucion_id, nombre_completo, foto_path, verificado_en, estado_cuenta, deleted_at
-     FROM public.perfil_usuario WHERE id=$1 FOR NO KEY UPDATE`, [userId])).rows[0] ?? null;
-  const roles = (await client.query<AuthAssignment>(
-    `SELECT r.id, r.nombre AS name, ur.campus_id AS "campusId" FROM public.usuario_rol ur
-     JOIN public.rol r ON r.id=ur.rol_id WHERE ur.perfil_usuario_id=$1 AND ur.revocado_en IS NULL
-     ORDER BY ur.id FOR SHARE OF ur,r`, [userId])).rows;
-  return { profile, roles };
-}
+export { lockAccountContext as lockPhysicalgoodsPublisher } from '../../auth/auth.repository.js';
 
 export async function findPhysicalgoodsCatalog(client: PoolClient, campusId: string): Promise<PhysicalgoodsCatalog> {
   const campus = (await client.query<NonNullable<PhysicalgoodsCatalog['campus']>>(

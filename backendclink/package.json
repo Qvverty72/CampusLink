@@ -15,15 +15,18 @@
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
     "@supabase/supabase-js": "latest",
+    "busboy": "^1.6.0",
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",
     "mongodb": "^7.6.0",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.23.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@types/busboy": "^1.5.5",
     "@types/cors": "latest",
     "@types/express": "latest",
     "@types/node": "^22",

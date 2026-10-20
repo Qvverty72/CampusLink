@@ -5,6 +5,20 @@ import { probeSupabaseTables } from '../../database/supabase/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
 import type { NewAuthProfile, RegistrationCampusRow, RegistrationDomainRow, RegistrationInput } from './auth.types.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PoolClient } from 'pg';
+import type { AuthAssignment } from './auth.types.js';
+
+/** Bloqueo compartido con cambios de perfil, cuenta y concesiones de roles. */
+export async function lockAccountContext(client: PoolClient, userId: string) {
+  const profile = (await client.query<AuthProfile>(
+    `SELECT id, campus_id, institucion_id, nombre_completo, foto_path, verificado_en, estado_cuenta, deleted_at
+     FROM public.perfil_usuario WHERE id=$1 FOR NO KEY UPDATE`, [userId])).rows[0] ?? null;
+  const roles = (await client.query<AuthAssignment>(
+    `SELECT r.id, r.nombre AS name, ur.campus_id AS "campusId" FROM public.usuario_rol ur
+     JOIN public.rol r ON r.id=ur.rol_id WHERE ur.perfil_usuario_id=$1 AND ur.revocado_en IS NULL
+     ORDER BY ur.id FOR SHARE OF ur,r`, [userId])).rows;
+  return { profile, roles };
+}
 
 export async function findRegistrationDomains() {
   return createServerSupabaseClient().from('dominio_institucional')

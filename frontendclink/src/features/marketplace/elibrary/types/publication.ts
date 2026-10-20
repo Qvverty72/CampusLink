@@ -1,0 +1,18 @@
+export const DIGITAL_MAX_BYTES = 25 * 1024 * 1024;
+export interface DigitalInput {
+  title: string;
+  description: string;
+  modality: 'VENTA' | 'DONACION';
+  price: number | null;
+}
+export interface DigitalFile { name: string; uri: string; sizeBytes: number; webFile?: File }
+export interface DigitalPublication extends DigitalInput {
+  id: string;
+  ownerId: string;
+  campusId: string;
+  campusName: string;
+  institutionId: string;
+  status: 'DISPONIBLE';
+  currency: 'CLP';
+  files: { name: string; mimeType: string; sizeBytes: number }[];
+}

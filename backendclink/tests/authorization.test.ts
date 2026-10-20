@@ -142,7 +142,9 @@ test('unimplemented business operations remain unavailable without inventing CRU
     const response=await originalFetch(base+'/maps/'+campus+'/active',{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({campusId:other})});
     assert.equal(response.status,404);assert.equal(mongoReads,0);
   }
-  for(const path of ['/analytics','/reports','/marketplace/elibrary'])assert.equal((await originalFetch(base+path)).status,404);
+  for(const path of ['/analytics','/reports'])assert.equal((await originalFetch(base+path)).status,404);
   // F2.4-02 implementa la lista física; la ruta debe exigir autenticación.
   assert.equal((await originalFetch(base+'/marketplace/physicalgoods')).status,401);
+  // F2.5-01 incorpora consulta digital autenticada.
+  assert.equal((await originalFetch(base+'/marketplace/elibrary')).status,401);
 });

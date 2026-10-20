@@ -520,6 +520,21 @@ La denuncia queda para moderación F2.8-02/03; este ticket no añade lectura/lis
 
 Validación local:381/381 tests backend con Node22.23.3 (113 físicos,9 nuevos), TypeScript/build backend, TypeScript frontend y export web/Android/iOS --no-bytecode. QA Edge390×844/1280×900 como propietario/receptor: publicación/acuerdos en todos sus estados, motivo/descripción, doble clic, error/reintento, recibo,404, respuesta incierta/recibo incorrecto, campus anterior, respuesta tardía descartada y regresión del envío de actividades desde notificaciones. Regresiones de fotografías/contenido/retirada, transacciones/coordinación, valoraciones, historial y recordatorios aprobadas. QA con datos/dispositivos reales y contención remota multiconexión quedan para cierre de fase.
 
+## Publicación digital (F2.5-01)
+
+Biblioteca Digital utiliza las tablas existentes y el bucket privado `digital-resources` (25 MiB). No se crean tablas, columnas ni buckets. El servidor comprueba la configuración del bucket antes de cargar. La política inicial admite un PDF obligatorio, sin cifrado, acciones ni adjuntos; el catálogo definitivo y la gestión de varios archivos corresponden a F2.5-02.
+
+- `POST /api/v1/marketplace/elibrary`: Bearer y multipart con un campo `metadata` (JSON exacto `{title,description,modality,price}`) y un archivo `file`. Título 1..200, descripción 1..4000; VENTA requiere precio numérico positivo, DONACION acepta precio ausente/null. Responde 201 `{data:publicación}`.
+- `GET /api/v1/marketplace/elibrary`: últimas 30 publicaciones disponibles de la institución. `GET /:publicationId`: detalle por UUID. Ambos requieren sesión/cuenta habilitada y relación persistida perfil→campus→institución. Otros campus de la misma institución pueden consultar; otra institución recibe lista sin esos recursos/404 en detalle.
+- DTO: datos de publicación, propietario, campus de origen/institución derivados del servidor y `files:[{name,mimeType,sizeBytes}]`. Nunca retorna bucket, path ni URL del original. No hay endpoint de descarga, adquisición, preview ni filtros avanzados.
+- Errores compartidos: 400 validación, 401 sesión, 403 cuenta/capacidad/campus, 404 publicación inaccesible, 409 contexto cambiado, 413 tamaño, 503 dependencia; respuestas no-store.
+
+La transacción registra publicación DIGITAL/DISPONIBLE, subtipo y referencia RECURSO después de cargar los bytes. Se revalida perfil/roles bajo bloqueo. Un fallo revierte SQL y compensa Storage; una barrera advisory por UUID espera la resolución de COMMIT antes de comprobar referencias. Un COMMIT confirmado por referencia devuelve éxito; si no puede comprobarse o falla la limpieza, conserva el archivo y registra solo el UUID para reconciliación operativa (consultar referencia por publicación antes de eliminar). No hay transacción distribuida ni limpieza automática de archivos con estado desconocido.
+
+`src/database/supabase/migrations/f2_5_01_publicacion_digital.sql` es repetible: protege `recurso_digital` y agrega una policy restrictiva de Storage que deniega originales a anon/authenticated incluso ante policies permisivas futuras. Conserva permisos físicos y requiere la frontera compartida de F2.4-01. Preparada y probada localmente; **no aplicada en remoto**. El remoto inspeccionado ya tenía RLS/privilegios de tablas adecuados y ninguna policy de Storage para clientes.
+
+Validación de PDF utiliza `pdf-lib`; transporte multipart acotado usa `busboy`; Expo incorpora `expo-document-picker` compatible con SDK57. Documentación de los contratos de librerías: [multipart y límites](https://github.com/mscdex/busboy), [opciones de carga PDF](https://pdf-lib.js.org/docs/api/interfaces/loadoptions), [selector Expo](https://docs.expo.dev/versions/latest/sdk/document-picker/). Esta validación no sustituye un análisis antivirus. Los originales permanecen privados.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

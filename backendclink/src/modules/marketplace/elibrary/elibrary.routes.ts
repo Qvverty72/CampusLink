@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import { getElibraryHealthController } from './elibrary.controller.js';
+import { createDigitalController, detailDigitalController, listDigitalController } from './elibrary.controller.js';
+import { requireAuthentication } from '../../auth/auth.middleware.js';
 
-// Solo expone diagnósticos técnicos; las rutas de negocio deberán definir autenticación y autorización.
+// El cuerpo binario se analiza en controller después de verificar la identidad.
 export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getElibraryHealthController);
+  router.post('/', requireAuthentication, createDigitalController);
+  router.get('/', requireAuthentication, listDigitalController);
+  router.get('/:publicationId', requireAuthentication, detailDigitalController);
   return router;
 }
