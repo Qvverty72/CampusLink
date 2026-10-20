@@ -117,6 +117,16 @@
           "imageKeys": [
             "ebuilding-floor1-caja-de-pago.jpg"
           ]
+        },
+        {
+          "poiKey": "ebuilding-floor1-enfermeria",
+          "name": "Enfermería",
+          "type": "SERVICE",
+          "icon": "medical-services",
+          "description": "Enfermería. Edificio E, Piso 1.",
+          "imageKeys": [
+            "ebuilding-floor1-enfermeria.jpg"
+          ]
         }
       ]
     },
@@ -157,6 +167,16 @@
           "description": "Capilla. Edificio F, Piso 1.",
           "imageKeys": [
             "fbuilding-floor1-capilla.jpg"
+          ]
+        },
+        {
+          "poiKey": "fbuilding-floor1-patio-de-comidas",
+          "name": "Patio de comidas",
+          "type": "CAFETERIA",
+          "icon": "restaurant",
+          "description": "Patio de comidas. Edificio F, Piso 1.",
+          "imageKeys": [
+            "fbuilding-floor1-patio-de-comidas.jpg"
           ]
         }
       ]
@@ -250,12 +270,14 @@
       "buildingId": "cabin03",
       "buildingName": "Cabaña 3",
       "level": 1,
+      "floorMeshName": "cabin03_floor1",
       "pois": []
     },
     {
       "buildingId": "cabin03",
       "buildingName": "Cabaña 3",
       "level": 2,
+      "floorMeshName": "cabin03_floor2",
       "pois": [
         {
           "poiKey": "cabin03-floor2-ciit",
@@ -273,6 +295,7 @@
       "buildingId": "cabin03",
       "buildingName": "Cabaña 3",
       "level": 3,
+      "floorMeshName": "cabin03_floor3",
       "pois": [
         {
           "poiKey": "cabin03-floor3-punto-estudiantil",
@@ -300,36 +323,42 @@
       "buildingId": "cabin02",
       "buildingName": "Cabaña 2",
       "level": 1,
+      "floorMeshName": "cabin02_floor1",
       "pois": []
     },
     {
       "buildingId": "cabin02",
       "buildingName": "Cabaña 2",
       "level": 2,
+      "floorMeshName": "cabin02_floor2",
       "pois": []
     },
     {
       "buildingId": "cabin02",
       "buildingName": "Cabaña 2",
       "level": 3,
+      "floorMeshName": "cabin02_floor3",
       "pois": []
     },
     {
       "buildingId": "cabin01",
       "buildingName": "Cabaña 1",
       "level": 1,
+      "floorMeshName": "cabin01_floor1",
       "pois": []
     },
     {
       "buildingId": "cabin01",
       "buildingName": "Cabaña 1",
       "level": 2,
+      "floorMeshName": "cabin01_floor2",
       "pois": []
     },
     {
       "buildingId": "cabin01",
       "buildingName": "Cabaña 1",
       "level": 3,
+      "floorMeshName": "cabin01_floor3",
       "pois": []
     },
     {
@@ -411,7 +440,12 @@
     const buildingIndex = map.buildings.findIndex((building) => building.id === entry.buildingId);
     if (buildingIndex < 0) fail('Missing building: ' + entry.buildingId);
     const building = map.buildings[buildingIndex];
-    const floorIndex = building.floors.findIndex((floor) => floor.level === entry.level);
+    // Los tres pisos originales de cabañas conservan meshName/IDs aunque cambie su nivel.
+    // El nuevo -3 no pertenece al inventario histórico y sus POI no se alteran aquí.
+    const floorMatches = building.floors.map((floor, index) => ({ floor, index })).filter(({ floor }) =>
+      entry.floorMeshName ? floor.meshName === entry.floorMeshName : floor.level === entry.level);
+    if (floorMatches.length > 1) fail('Ambiguous floor: ' + entry.buildingId + ' / ' + entry.level);
+    const floorIndex = floorMatches[0]?.index ?? -1;
     if (floorIndex < 0) fail('Missing floor: ' + entry.buildingId + ' / ' + entry.level);
     const floor = building.floors[floorIndex];
     if (building.deletedAt || building.isVisible === false || floor.deletedAt || floor.isVisible === false) {
@@ -419,7 +453,7 @@
     }
     const before = floor.pois ?? [];
     const next = before.map((poi) => ({ ...poi }));
-    const details = { building: entry.buildingName, level: entry.level, floorId: floor.id,
+    const details = { building: building.name, level: floor.level, floorId: floor.id,
       inserted: [], updated: [], deactivated: [], preservedExtra: [] };
 
     if (entry.pois.length === 0) {
@@ -433,6 +467,9 @@
     } else {
       const matched = new Set();
       for (const spec of entry.pois) {
+        const description = entry.floorMeshName
+          ? spec.name + '. ' + building.name + ', Piso ' + floor.level + '.'
+          : spec.description;
         const owner = keys.get(spec.poiKey);
         if (owner && (owner.buildingId !== building.id || owner.floorId !== floor.id)) {
           fail('Inventory key belongs to another location: ' + spec.poiKey);
@@ -442,7 +479,7 @@
         if (matches.length > 1) fail('Ambiguous existing POI: ' + spec.poiKey);
         if (matches.length === 0) {
           // Coordenadas deliberadamente provisionales; aún no sirven para marcadores 3D individuales.
-          next.push({ ...spec, position: { x: 0, y: 0, z: 0 }, positionPending: true,
+          next.push({ ...spec, description, position: { x: 0, y: 0, z: 0 }, positionPending: true,
             isFixed: true, isVisible: true, createdAt: now, updatedAt: now });
           keys.set(spec.poiKey, { buildingId: building.id, floorId: floor.id });
           matched.add(spec.poiKey);
@@ -457,7 +494,7 @@
         // Coincide por clave o nombre inequívoco dentro del piso; no renombra claves históricas.
         const candidate = { ...poi, name: spec.name, isVisible: true,
           type: poi.type || spec.type, icon: poi.icon || spec.icon,
-          description: poi.description || spec.description,
+          description: poi.description || description,
           imageKeys: [...new Set([...(poi.imageKeys ?? []), ...spec.imageKeys])] };
         if (JSON.stringify(candidate) !== JSON.stringify(poi)) {
           next[index] = { ...candidate, updatedAt: now };

@@ -217,6 +217,57 @@ Después de autorizar al solicitante, consulta public.campus por id y activo=tru
 
 El servidor no utiliza CAMPUS_ID, MAP_VERSION ni MAP_STATUS en el .env: eran parámetros del script de carga inicial eliminado. El campus solicitado llega en /api/v1/maps/:campusId/active, el repository filtra status=ACTIVE y la versión devuelta pertenece al documento almacenado en MongoDB. La misma API puede resolver distintos campus válidos sin cambiar el entorno del proceso.
 
+### Modelo de cuatro pisos de cabañas (GH-35 / F2.1-01)
+
+El GLB incluido desde el 2026-10-20 representa las cabañas A/B/C con pisos físicos
+1, -1, -2 y -3. Los IDs existentes siguen siendo `cabin03`/`cabin02`/`cabin01`;
+los tres pisos históricos conservan sus `floor.id` y `meshName` para mantener
+actividades y POI en la misma ubicación física:
+
+| meshName histórico | Nivel físico actual | Submallas |
+| --- | --- | --- |
+| `cabinNN_floor1` | -2 | `cabinNN_floor1_Mesh001…` |
+| `cabinNN_floor2` | -1 | `cabinNN_floor1_Mesh…` |
+| `cabinNN_floor3` | 1 | `cabinNN_floor2_Mesh…` |
+| `cabinNN_floor-3` (nuevo) | -3 | `cabinNN_floor1_Mesh002…` |
+
+`src/database/mongodb/006_cabin_basement.mongosh.js` sincroniza manualmente el mapa
+ACTIVE existente. Antes de aplicarlo, respaldar el documento completo en EJSON
+fuera de Mongo y verificar el preview. Desde mongosh, tras elegir la base existente:
+
+~~~javascript
+globalThis.CABIN_BASEMENT_CAMPUS_ID = '22222222-2222-4222-8222-222222222222';
+load('src/database/mongodb/006_cabin_basement.mongosh.js'); // solo preview
+// Después de revisar el preview y conservar el respaldo:
+globalThis.CABIN_BASEMENT_APPLY = true;
+load('src/database/mongodb/006_cabin_basement.mongosh.js');
+~~~
+
+Una sola actualización compara la jerarquía original y rechaza modificaciones
+concurrentes, sin upsert. Conserva `_id`, campus, versión, estado, IDs, claves POI,
+visibilidad, imágenes y metadata. Añade solo tres pisos vacíos, ordena las cabañas
+por altura (-3, -2, -1, 1) y corrige menciones explícitas del nivel anterior en sus
+descripciones de piso/POI; no modifica actividades, participaciones ni su historial.
+También sincroniza los transforms de los demás pisos con el mismo export, incluidos
+los cambios de CTI y G, y ajusta el encuadre de CTI/cabañas para mostrar sus límites
+en pantalla vertical con FOV 50°. Los campos `model.sourceHash`/`dataSource` conservan
+su procedencia histórica; no se reinterpretan como hash del nuevo GLB.
+
+La segunda ejecución sin cambios no escribe. No se crean colecciones, versiones,
+índices ni validadores. No ejecutar el bootstrap legado `001` para esta operación:
+usa otro contrato y restringe los niveles a valores positivos. Tras aplicar,
+recargar la aplicación para renovar el mapa almacenado en memoria.
+
+El inventario `004_campus_poi_inventory.mongosh.js` identifica los pisos históricos
+de cabañas por `meshName` estable, por lo que admite tanto el mapa anterior como el
+migrado. Conserva las claves/fotos existentes y no interviene los nuevos pisos -3.
+El catálogo tiene 17 POI: incluye Enfermería en E1 y Patio de comidas en F1,
+con `imageKeys` de fotografías locales. Las 15 claves anteriores se conservan;
+las fotos finales y su manifiesto están documentados en
+[poimages/README.md](../frontendclink/assets/images/poimages/README.md).
+Las pruebas de `cabin-basement.test.ts` comparan los 36 pisos con el JSON del GLB
+empaquetado y comprueban preservación de datos, preview, idempotencia y concurrencia.
+
 ## Diagnosticar un mapa que no carga
 
 La ruta del mapa activo exige sesión autorizada en el campus vigente y dos datos compatibles:

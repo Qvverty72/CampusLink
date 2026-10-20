@@ -68,7 +68,7 @@ function harness(map = fixture(), options: { absentCollection?: boolean; duplica
   };
 }
 
-test('preview writes nothing; apply adds exactly the supplied 15 POI and rerun is a no-op', () => {
+test('preview writes nothing; apply adds exactly the supplied 17 POI and rerun is a no-op', () => {
   const h = harness();
   const before = JSON.stringify(h.map);
   h.run();
@@ -78,8 +78,8 @@ test('preview writes nothing; apply adds exactly the supplied 15 POI and rerun i
   assert.equal(h.writes, 1);
   const expected: Record<string, Record<number, string[]>> = {
     hbuilding: { 1: ['Auditorio', 'Casino'], 2: ['Biblioteca'], 4: ['Cetecom'] },
-    ebuilding: { 1: ['Caja de pago'] },
-    fbuilding: { 1: ['Capilla'], 2: ['Casino'], 3: ['Cetecom', 'Central de apuntes'], 4: ['Terraza'] },
+    ebuilding: { 1: ['Caja de pago', 'Enfermería'] },
+    fbuilding: { 1: ['Capilla', 'Patio de comidas'], 2: ['Casino'], 3: ['Cetecom', 'Central de apuntes'], 4: ['Terraza'] },
     cabin03: { 2: ['CIIT'], 3: ['Punto estudiantil', 'Radio'] },
     gym: { 1: ['Multicancha', 'Sala de musculación'] },
   };
@@ -97,12 +97,70 @@ test('preview writes nothing; apply adds exactly the supplied 15 POI and rerun i
       assert.match(poi.imageKeys[0], /^[a-z0-9-]+\.jpg$/);
     }
   }
-  assert.equal(count, 15);
+  assert.equal(count, 17);
   assert.equal(h.map.version, 7);
   const applied = JSON.stringify(h.map);
   h.run(true);
   assert.equal(h.writes, 1);
   assert.equal(JSON.stringify(h.map), applied);
+});
+
+test('the applied 15-POI catalog gains only Enfermería and Patio de comidas while preserving historical records', () => {
+  const map = fixture();
+  const historicalCatalog: [string, number, string, string][] = [
+    ['hbuilding', 1, 'hbuilding-floor1-auditorio', 'Auditorio'],
+    ['hbuilding', 1, 'hbuilding-floor1-casino', 'Casino'],
+    ['hbuilding', 2, 'hbuilding-floor2-biblioteca', 'Biblioteca'],
+    ['hbuilding', 4, 'hbuilding-floor4-cetecom', 'Cetecom'],
+    ['ebuilding', 1, 'ebuilding-floor1-caja-de-pago', 'Caja de pago'],
+    ['fbuilding', 1, 'fbuilding-floor1-capilla', 'Capilla'],
+    ['fbuilding', 2, 'fbuilding-floor2-casino', 'Casino'],
+    ['fbuilding', 3, 'fbuilding-floor3-cetecom', 'Cetecom'],
+    ['fbuilding', 3, 'fbuilding-floor3-central-de-apuntes', 'Central de apuntes'],
+    ['fbuilding', 4, 'fbuilding-floor4-terraza', 'Terraza'],
+    ['cabin03', 2, 'cabin03-floor2-ciit', 'CIIT'],
+    ['cabin03', 3, 'cabin03-floor3-punto-estudiantil', 'Punto estudiantil'],
+    ['cabin03', 3, 'cabin03-floor3-radio', 'Radio'],
+    ['gym', 1, 'gym-floor1-multicancha', 'Multicancha'],
+    ['gym', 1, 'gym-floor1-sala-de-musculacion', 'Sala de musculación'],
+  ];
+  for (const [buildingId, level, poiKey, name] of historicalCatalog) {
+    floor(map, buildingId, level).pois.push({ ...existingPoi(poiKey, name),
+      id: `preserved-${poiKey}`, imageKeys: [`${poiKey}.jpg`],
+      createdAt: '2026-10-10T00:00:00.000Z', updatedAt: '2026-10-10T00:00:00.000Z' });
+  }
+  const before = structuredClone(map);
+  const h = harness(map);
+  h.run();
+  assert.equal(h.writes, 0);
+  assert.deepEqual(map, before);
+  h.run(true);
+  assert.equal(h.writes, 1);
+  const newPoiKeys = ['ebuilding-floor1-enfermeria', 'fbuilding-floor1-patio-de-comidas'];
+  const withoutNewPois = structuredClone(map);
+  for (const building of withoutNewPois.buildings) for (const item of building.floors) {
+    item.pois = item.pois.filter((poi) => !newPoiKeys.includes(poi.poiKey));
+  }
+  // Only the map's update timestamp may change alongside the two insertions.
+  const { updatedAt: mapUpdatedAt, ...preservedMap } = withoutNewPois as typeof withoutNewPois & { updatedAt: Date };
+  assert.ok(mapUpdatedAt instanceof Date);
+  // This compares IDs, coordinates, metadata, POI timestamps, photos and the whole existing hierarchy.
+  assert.deepEqual(preservedMap, before);
+  const enfermeria = floor(map, 'ebuilding', 1).pois.find((poi) => poi.poiKey === newPoiKeys[0])!;
+  const patio = floor(map, 'fbuilding', 1).pois.find((poi) => poi.poiKey === newPoiKeys[1])!;
+  assert.equal(enfermeria.name, 'Enfermería');
+  assert.equal(enfermeria.type, 'SERVICE');
+  assert.equal(enfermeria.icon, 'medical-services');
+  assert.deepEqual(enfermeria.imageKeys, ['ebuilding-floor1-enfermeria.jpg']);
+  assert.equal(patio.name, 'Patio de comidas');
+  assert.equal(patio.type, 'CAFETERIA');
+  assert.equal(patio.icon, 'restaurant');
+  assert.deepEqual(patio.imageKeys, ['fbuilding-floor1-patio-de-comidas.jpg']);
+  assert.equal(map.buildings.flatMap((building) => building.floors.flatMap((item) => item.pois)).length, 17);
+  const applied = JSON.stringify(map);
+  h.run(true);
+  assert.equal(h.writes, 1);
+  assert.equal(JSON.stringify(map), applied);
 });
 
 test('empty floors are deactivated without deleting history; existing names keep their keys and real data', () => {
@@ -161,4 +219,29 @@ test('concurrent hierarchy edit rejects the atomic write without replacing the m
   assert.throws(() => h.run(true), /Map changed during preflight/);
   assert.equal(h.writes, 1);
   assert.equal(JSON.stringify(h.map), before);
+});
+
+test('migrated cabin levels retain historical POI ownership and leave the new basement outside the old inventory', () => {
+  const map = fixture();
+  for (const building of map.buildings.filter((item) => item.id.startsWith('cabin'))) {
+    for (const item of building.floors) item.level = ({ 1: -2, 2: -1, 3: 1 } as Record<number, number>)[item.level];
+    building.floors.unshift({ id: building.id + '-new-basement', level: -3,
+      meshName: building.id + '_floor-3', transform: { x: 12 },
+      pois: [existingPoi(building.id + '-future-basement-poi', 'Futuro lugar del subterráneo')] });
+  }
+  const basements = map.buildings.filter((item) => item.id.startsWith('cabin'))
+    .map((building) => structuredClone(building.floors[0]));
+  const h = harness(map);
+  h.run(true);
+  assert.equal(h.writes, 1);
+  assert.deepEqual(floor(map, 'cabin03', -1).pois.map((poi) => poi.poiKey), ['cabin03-floor2-ciit']);
+  assert.deepEqual(floor(map, 'cabin03', 1).pois.map((poi) => poi.poiKey),
+    ['cabin03-floor3-punto-estudiantil', 'cabin03-floor3-radio']);
+  assert.match(floor(map, 'cabin03', -1).pois[0].description, /Piso -1\./);
+  assert.deepEqual(map.buildings.filter((item) => item.id.startsWith('cabin'))
+    .map((building) => building.floors[0]), basements);
+  const applied = JSON.stringify(map);
+  h.run(true);
+  assert.equal(h.writes, 1);
+  assert.equal(JSON.stringify(map), applied);
 });

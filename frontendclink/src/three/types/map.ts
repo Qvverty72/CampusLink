@@ -42,7 +42,7 @@ export interface FloorDefinition {
   id: string;
   /** Edificio al que pertenece. */
   buildingId: BuildingId;
-  /** Nivel del piso, comenzando en 1. */
+  /** Nivel lógico firmado; admite subterráneos negativos y niveles históricos. */
   level: number;
   /** Nombre del grupo del piso en el modelo GLB, por ejemplo `ebuilding_floor1`. */
   meshName: string;

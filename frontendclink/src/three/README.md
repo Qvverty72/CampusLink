@@ -3,6 +3,37 @@
 Esta carpeta contiene escenas, componentes, modelos tipados y controles de cámara
 para React Three Fiber.
 
+## Modelo actualizado de las cabañas
+
+`assets/models/modelomejoradojunto.glb` incorpora cuatro niveles por cabaña:
+Piso 1 y subterráneos -1, -2 y -3. La ruta activa sigue recibiendo sus metadatos
+desde la API/MongoDB; `data/floors.ts` conserva la maqueta histórica y no se usa.
+Los IDs y `meshName` de los pisos existentes permanecen estables aunque sus niveles
+o nombres visibles cambien. El GLB llama `cabina` a la cabaña A (`cabin03`),
+`cabinb` a B (`cabin02`) y `cabinc` a C (`cabin01`); los nombres de submesh
+continúan usando `cabin01/02/03`. No inferir ubicación a partir del sufijo del ID.
+
+`components/CampusModel.tsx` clona la escena del GLB y retira de esa copia solo los
+submeshes que reconstruye como pisos interactivos. Así conserva transformaciones,
+materiales, terreno, pasarela y árboles nuevos sin duplicar los pisos durante la
+separación ni alterar la caché de `useGLTF`. Los hijos geométricos de los grupos de
+piso de este GLB tienen transforms identidad; su transform raíz proviene del mapa.
+Las mallas se identifican mediante `isMesh`, sin `instanceof THREE.Mesh`: Metro
+puede resolver Three ESM para la escena y CJS para el loader de `three-stdlib`.
+Solo se retiran de la decoración las mallas efectivamente reconstruidas como pisos.
+La regresión se comprueba con `node --test tests/campus-model.test.mjs` desde
+`frontendclink`, usando ambos módulos Three y el GLB real.
+La animación ordena por `FloorMeshConfig.position[1]`, independientemente del orden
+de la respuesta y de `level`. La elevación de las cabañas usa su rango de alturas
+más un margen de 0.02 para descubrir también el -3 sobre la pasarela. Al cerrar,
+todos los grupos regresan exactamente a su posición original.
+
+El nodo `pine_tree13(easteregg)` se conserva como decoración sin `isFloor`, eventos
+ni mecánica activada. Su punto de entrada futuro es la copia de la escena en
+`CampusModelScene`: resolver allí `decoration.getObjectByName('pine_tree13(easteregg)')`
+y diseñar su interacción en una tarea posterior. No reutilizar `isFloor` para ese
+árbol, pues `CameraController` lo interpreta como selección de edificio/piso.
+
 ## Integración de actividades
 
 `features/activities` contiene el contrato, cliente autenticado, hook y componentes
@@ -82,6 +113,8 @@ por `poiKey`, sin petición adicional ni copia persistente del documento.
 `PointOfInterestDefinition.imageKeys` contiene nombres de archivo opcionales que
 se resuelven mediante el registro generado por `npm run poi:images`. Instrucciones
 y ejemplo Mongo en [poimages/README.md](../../assets/images/poimages/README.md).
+El inventario incluye 17 fotografías reales (2026-10-20), con Enfermería en E1 y
+Patio de comidas en F1; se conservan las claves históricas de imágenes y POI.
 Las tarjetas y fichas detalladas se muestran dentro de los modales.
 Los contenedores mantienen una altura del 86% del espacio disponible y un ancho
 máximo de 980 mientras cargan o cambian de vista; el contenido usa ScrollView.
