@@ -25,6 +25,7 @@ let filesService: typeof import('../src/modules/marketplace/elibrary/elibrary.fi
 let uploads: string[], removals: string[], storageCalls: string[], logs: unknown[][];
 let objects = new Map<string, Buffer>(), connectionLease = Promise.resolve();
 let barriers = 0;
+let failAcademicInsert = false, failAudit = false;
 
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
@@ -36,6 +37,8 @@ before(async () => {
     connectionLease = new Promise<void>(resolve => { releaseLease = resolve; }); await previous;
     return { query: async (sql: string, values: unknown[] = []) => {
       if (failInsert && sql.startsWith('INSERT INTO public.archivo_publicacion')) throw new Error('private SQL password');
+      if (failAcademicInsert && sql.startsWith('INSERT INTO public.publicacion_asignatura')) throw new Error('private academic SQL');
+      if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL');
       if (failReference && sql.includes('SELECT EXISTS(SELECT 1 FROM public.archivo_publicacion')) throw new Error('private connection');
       if (failCommit && sql === 'COMMIT') { failCommit = false; throw new Error('failed commit'); }
       if (sql.includes('pg_advisory_xact_lock')) barriers++;
@@ -85,8 +88,8 @@ before(async () => {
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
-  for (const name of ['institucion', 'campus', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion',
-    'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital']) {
+  for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion',
+    'publicacion_carrera', 'publicacion_asignatura', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'reporte_contenido', 'auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -104,6 +107,8 @@ before(async () => {
     CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text);
     ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects TO anon,authenticated,service_role;`);
   await db.exec(await readFile('src/database/supabase/migrations/f2_5_01_publicacion_digital.sql', 'utf8'));
+  await db.exec(`ALTER TABLE auditoria DROP CONSTRAINT auditoria_accion_check;
+    ALTER TABLE auditoria ADD CHECK(accion IN ('PUBLICAR_PUBLICACION','EDITAR_PUBLICACION','RETIRAR_PUBLICACION'))`);
   await db.query('insert into institucion(id,nombre) values($1,$2),($3,$4)', [institution, 'Institución A', foreignInstitution, 'Institución B']);
   await db.query('insert into campus(id,institucion_id,nombre) values($1,$2,$3),($4,$2,$5),($6,$7,$8)',
     [campus, institution, 'Origen', sibling, 'Otra sede', foreignCampus, foreignInstitution, 'Ajeno']);
@@ -114,6 +119,7 @@ before(async () => {
   base = 'http://127.0.0.1:' + (server.address() as AddressInfo).port + '/api/v1/marketplace/elibrary';
 });
 beforeEach(async () => {
+  failAcademicInsert = failAudit = false;
   onDownload = null; failDownload = corruptDownload = false;
   uploads = []; removals = []; storageCalls = []; logs = []; objects = new Map(); barriers = 0;
   failUpload = failInsert = failRemove = failReference = lostCommit = failCommit = publicBucket = missingBucket = smallBucket = false; onUpload = null;
@@ -377,6 +383,174 @@ async function attach(id: string, bytes: Buffer | null = pdf, extra = false) {
   return originalFetch(`${base}/${id}/files`, { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body });
 }
 const original = (publicationId: string, fileId: string) => get(`/${publicationId}/files/${fileId}/download`);
+
+async function academicCatalog() {
+  const careerA = randomUUID(), careerB = randomUUID(), foreignCareer = randomUUID(), inactiveCareer = randomUUID();
+  const shared = randomUUID(), other = randomUUID(), foreignSubject = randomUUID(), inactive = randomUUID(), orphan = randomUUID();
+  await db.query(`INSERT INTO carrera(id,institucion_id,nombre,codigo,activo) VALUES
+    ($1,$5,'Ingeniería','ING',true),($2,$5,'Ciencias','CIE',true),($3,$6,'Ajena','EXT',true),($4,$5,'Inactiva','OFF',false)`,
+    [careerA, careerB, foreignCareer, inactiveCareer, institution, foreignInstitution]);
+  for (const [id, name, active] of [[shared, 'Cálculo compartido', true], [other, 'Física', true], [foreignSubject, 'Ajena', true],
+    [inactive, 'Inactiva', false], [orphan, 'Sin carrera', true]] as const) {
+    await db.query('INSERT INTO asignatura(id,nombre,codigo,activo) VALUES($1::uuid,$2,$1::uuid::text,$3)', [id, name, active]);
+  }
+  await db.query(`INSERT INTO carrera_asignatura(carrera_id,asignatura_id,semestre_nivel) VALUES
+    ($1,$4,1),($2,$4,2),($2,$5,1),($3,$6,1),($1,$7,1)`, [careerA, careerB, foreignCareer, shared, other, foreignSubject, inactive]);
+  return { careerA, careerB, foreignCareer, inactiveCareer, shared, other, foreignSubject, inactive, orphan };
+}
+const patchAcademics = (id: string, body: unknown, suffix = '', authorization: string | null = 'Bearer ' + token) =>
+  originalFetch(`${base}/${id}/academics${suffix}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...(authorization ? { Authorization: authorization } : {}) }, body: JSON.stringify(body) });
+const selection = (publication: { updatedAt: string }, careerIds: string[] = [], subjectIds: string[] = []) => ({ careerIds, subjectIds, updatedAt: publication.updatedAt });
+
+test('academic options use current institution across campuses and keep a shared subject as one identity', async () => {
+  const data = await academicCatalog();
+  await switchCampus(sibling);
+  const response = await get('/academic-options'); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+  const { data: catalog } = await response.json();
+  assert.ok(catalog.careers.some((row: { id: string }) => row.id === data.careerA));
+  assert.ok(!catalog.careers.some((row: { id: string }) => [data.foreignCareer, data.inactiveCareer].includes(row.id)));
+  const shared = catalog.subjects.filter((row: { id: string }) => row.id === data.shared);
+  assert.equal(shared.length, 1); assert.deepEqual([...shared[0].careerIds].sort(), [data.careerA, data.careerB].sort());
+  assert.ok(!catalog.subjects.some((row: { id: string }) => [data.foreignSubject, data.inactive, data.orphan].includes(row.id)));
+  assert.equal((await get('/academic-options?institutionId=' + foreignInstitution)).status, 400);
+  assert.equal((await originalFetch(base + '/academic-options')).status, 401);
+});
+test('publication creates multiple direct associations atomically and returns names/codes in same-institution reads', async () => {
+  const c = await academicCatalog();
+  const response = await post(input({ careerIds: [c.careerB, c.careerA], subjectIds: [c.shared, c.other] })); assert.equal(response.status, 201);
+  const { data: saved } = await response.json();
+  assert.deepEqual([...saved.careerIds].sort(), [c.careerA, c.careerB].sort()); assert.equal(saved.careers.length, 2);
+  assert.deepEqual([...saved.subjectIds].sort(), [c.shared, c.other].sort()); assert.equal(saved.subjects.length, 2);
+  assert.match(saved.updatedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/);
+  assert.equal((await db.query('SELECT * FROM publicacion_asignatura WHERE publicacion_id=$1 AND asignatura_id=$2', [saved.id, c.shared])).rows.length, 1);
+  await switchCampus(sibling); const detail = (await (await get('/' + saved.id)).json()).data;
+  assert.deepEqual(detail.subjects, saved.subjects); assert.deepEqual(detail.careers, saved.careers);
+  assert.deepEqual((await db.query('SELECT datos_despues FROM auditoria WHERE entidad_id=$1', [saved.id])).rows[0].datos_despues.subjects, saved.subjects);
+  await switchCampus(foreignCampus, foreignInstitution); assert.equal((await get('/' + saved.id)).status, 404);
+});
+test('direct associations need not be personal careers or dependent on selected career; omission remains compatible', async () => {
+  const c = await academicCatalog();
+  // Física pertenece a carreraB; el recurso puede servir también a carreraA mediante enlaces directos.
+  const saved = await service.createDigitalPublication(auth, input({ careerIds: [c.careerA], subjectIds: [c.other] }), file());
+  assert.deepEqual(saved.subjectIds, [c.other]);
+  const unclassified = await service.createDigitalPublication(auth, input(), file());
+  assert.deepEqual(unclassified.careers, []); assert.deepEqual(unclassified.subjects, []);
+});
+test('academic payload rejects duplicate/malformed IDs and privileged inputs before Storage', async () => {
+  const c = await academicCatalog();
+  for (const patch of [{ careerIds: [c.careerA, c.careerA.toUpperCase()] }, { subjectIds: [c.shared, c.shared] },
+    { careerIds: 'bad' }, { careerIds: null }, { subjectIds: null }, { subjectIds: [null] }, { careerIds: ["x'; DROP TABLE carrera; --"] }, { subjectIds: {} }]) {
+    assert.equal((await post(input(patch))).status, 400);
+  }
+  for (const patch of [{ careerIds: [randomUUID()] }, { careerIds: [c.foreignCareer] }, { careerIds: [c.inactiveCareer] },
+    { subjectIds: [c.foreignSubject] }, { subjectIds: [c.inactive] }, { subjectIds: [c.orphan] }]) assert.equal((await post(input(patch))).status, 400);
+  await noPublication(); assert.equal(uploads.length, 0);
+});
+test('academic availability is checked again after Storage and invalidated selection compensates bytes', async () => {
+  const c = await academicCatalog();
+  onUpload = () => db.query('UPDATE asignatura SET activo=false WHERE id=$1', [c.shared]).then(() => {});
+  assert.equal((await post(input({ careerIds: [c.careerA], subjectIds: [c.shared] }))).status, 400);
+  await noPublication(); assert.equal(objects.size, 0); assert.equal(removals.length, 1);
+});
+test('academic insertion or history failure rolls back publication/relations and compensates Storage', async () => {
+  const c = await academicCatalog();
+  for (const failure of ['academic', 'audit']) {
+    failAcademicInsert = failure === 'academic'; failAudit = failure === 'audit';
+    const response = await post(input({ careerIds: [c.careerA], subjectIds: [c.shared] })); assert.equal(response.status, 503);
+    assert.doesNotMatch(await response.text(), /private|SQL|password/); await noPublication(); assert.equal(objects.size, 0);
+  }
+  assert.equal((await db.query('SELECT * FROM auditoria WHERE actor_usuario_id=$1', [auth.userId])).rows.length, 0);
+});
+test('lost creation COMMIT receipt recovers the complete academic publication and its single history event', async () => {
+  const c = await academicCatalog(); onUpload = async () => { lostCommit = true; };
+  const response = await post(input({ careerIds: [c.careerA, c.careerB], subjectIds: [c.shared] })); assert.equal(response.status, 201);
+  const { data: saved } = await response.json(); assert.equal(saved.careers.length, 2); assert.deepEqual(saved.subjectIds, [c.shared]);
+  assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1', [saved.id])).rows.length, 1);
+  assert.equal(objects.size, 1); assert.equal(removals.length, 0);
+});
+test('deactivated catalog remains readable and historical names are retained when associations are removed', async () => {
+  const c = await academicCatalog(), saved = await service.createDigitalPublication(auth, input({ careerIds: [c.careerA], subjectIds: [c.shared] }), file());
+  await db.query("UPDATE asignatura SET nombre='Nombre nuevo',activo=false WHERE id=$1", [c.shared]);
+  const actual = (await service.getDigitalPublications(auth, saved.id))[0]; assert.equal(actual.subjects[0].name, 'Nombre nuevo');
+  assert.equal((await patchAcademics(saved.id, selection(actual, actual.careerIds, actual.subjectIds))).status, 400);
+  assert.equal((await patchAcademics(saved.id, selection(actual, actual.careerIds, []))).status, 200);
+  const snapshots = (await db.query('SELECT datos_antes,datos_despues FROM auditoria WHERE entidad_id=$1 ORDER BY created_at,id', [saved.id])).rows;
+  assert.equal(snapshots[0].datos_despues.subjects[0].name, 'Cálculo compartido'); assert.equal(snapshots[1].datos_antes.subjects[0].name, 'Nombre nuevo');
+  assert.deepEqual(snapshots[1].datos_despues.subjects, []);
+});
+test('owner can replace and remove associations from another campus with no changes to terms/files/acquisitions', async () => {
+  const c = await academicCatalog(), saved = await service.createDigitalPublication(auth, input({ careerIds: [c.careerA], subjectIds: [c.shared] }), file());
+  const receiver = await peer(); const transactionId = await acquisition(saved.id, receiver.userId);
+  const transaction = (await db.query('SELECT * FROM transaccion_recurso WHERE id=$1', [transactionId])).rows[0];
+  await switchCampus(sibling);
+  const response = await patchAcademics(saved.id, selection(saved, [c.careerB], [c.other, c.shared])); assert.equal(response.status, 200);
+  const after = (await response.json()).data; assert.deepEqual(after.careerIds, [c.careerB]); assert.equal(after.subjects.length, 2); assert.notEqual(after.updatedAt, saved.updatedAt);
+  assert.equal(after.campusId, campus); assert.deepEqual(after.files, saved.files); assert.equal(after.price, saved.price);
+  assert.deepEqual((await db.query('SELECT * FROM transaccion_recurso WHERE id=$1', [transactionId])).rows[0], transaction);
+  assert.deepEqual((await filesService.getDigitalOriginal(receiver, saved.id, saved.files[0].id)).bytes, pdf);
+  const history = (await db.query("SELECT datos_antes,datos_despues,campus_id FROM auditoria WHERE entidad_id=$1 AND accion='EDITAR_PUBLICACION'", [saved.id])).rows[0];
+  assert.deepEqual(history.datos_antes.careers, saved.careers); assert.deepEqual(history.datos_despues.careers, after.careers); assert.equal(history.campus_id, campus);
+  const cleared = await patchAcademics(saved.id, selection(after)); assert.equal(cleared.status, 200);
+  assert.deepEqual((await cleared.json()).data.subjects, []);
+  assert.equal((await db.query('SELECT * FROM publicacion_carrera WHERE publicacion_id=$1', [saved.id])).rows.length, 0);
+});
+test('academic editor rejects peers/admins/outsiders/disabled accounts and never accepts privileged fields', async () => {
+  const c = await academicCatalog(), saved = await service.createDigitalPublication(auth, input(), file());
+  const body = selection(saved, [c.careerA], [c.shared]);
+  assert.equal((await patchAcademics(saved.id, body, '', null)).status, 401);
+  for (const extra of [{ ownerId: auth.userId }, { title: 'changed' }, { institutionId: institution }, { files: [] }, { updatedAt: 'bad' },
+    { careerIds: [c.careerA, c.careerA] }, { subjectIds: [c.foreignSubject] }, { careerIds: null }]) assert.equal((await patchAcademics(saved.id, { ...body, ...extra })).status, 400);
+  assert.equal((await patchAcademics(saved.id, { updatedAt: saved.updatedAt })).status, 400);
+  assert.equal((await patchAcademics(saved.id, body, '?campusId=' + campus)).status, 400);
+  const receiver = await peer(); current = receiver; assert.equal((await patchAcademics(saved.id, body)).status, 403);
+  await db.query("INSERT INTO usuario_rol(perfil_usuario_id,campus_id,rol_id) SELECT $1,$2,id FROM rol WHERE nombre='ADMINISTRADOR'", [receiver.userId, receiver.campusId]);
+  current.roles = [{ id: randomUUID(), name: 'ADMINISTRADOR', campusId: receiver.campusId }]; assert.equal((await patchAcademics(saved.id, body)).status, 403);
+  current = await peer(foreignCampus, foreignInstitution); assert.equal((await patchAcademics(saved.id, body)).status, 404);
+  current = structuredClone(auth); current.profile.estado_cuenta = 'SUSPENDIDA'; assert.equal((await patchAcademics(saved.id, body)).status, 403);
+  current = structuredClone(auth); current.profile.verificado_en = null; assert.equal((await patchAcademics(saved.id, body)).status, 403);
+  // Revalida PostgreSQL aunque el contexto autenticado todavía describa una cuenta habilitada.
+  current = structuredClone(auth); await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1", [auth.userId]);
+  assert.equal((await patchAcademics(saved.id, body)).status, 403);
+});
+test('optimistic version prevents concurrent overwrite and unchanged sets create no history/version', async () => {
+  const c = await academicCatalog(), saved = await service.createDigitalPublication(auth, input({ careerIds: [c.careerA, c.careerB], subjectIds: [c.shared] }), file());
+  const unchanged = await patchAcademics(saved.id, selection(saved, [...saved.careerIds].reverse(), saved.subjectIds)); assert.equal(unchanged.status, 200);
+  assert.equal((await unchanged.json()).data.updatedAt, saved.updatedAt);
+  assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1', [saved.id])).rows.length, 1);
+  const responses = await Promise.all([patchAcademics(saved.id, selection(saved, [c.careerA], [c.other])), patchAcademics(saved.id, selection(saved, [c.careerB], []))]);
+  assert.deepEqual(responses.map(row => row.status).sort(), [200, 409]);
+  assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1', [saved.id])).rows.length, 2);
+});
+test('attachment changes invalidate academic version and removed resources reject academic edit', async () => {
+  const c = await academicCatalog(), saved = await service.createDigitalPublication(auth, input(), file());
+  await filesService.addDigitalAttachment(auth, saved.id, file());
+  assert.equal((await patchAcademics(saved.id, selection(saved, [c.careerA]))).status, 409);
+  for (const sql of ["deleted_at=now()", "estado_publicacion='OCULTO'"]) {
+    await db.query(`UPDATE publicacion_recurso SET ${sql} WHERE id=$1`, [saved.id]);
+    assert.equal((await patchAcademics(saved.id, selection(saved))).status, 409);
+    await db.query("UPDATE publicacion_recurso SET deleted_at=null,estado_publicacion='DISPONIBLE' WHERE id=$1", [saved.id]);
+  }
+});
+test('failed academic edit leaves previous sets and history intact; uncertain COMMIT requires read before retry', async () => {
+  const c = await academicCatalog(), saved = await service.createDigitalPublication(auth, input({ careerIds: [c.careerA], subjectIds: [c.shared] }), file());
+  const body = selection(saved, [c.careerB], [c.other]);
+  for (const failure of ['insert', 'audit', 'commit']) {
+    failAcademicInsert = failure === 'insert'; failAudit = failure === 'audit'; failCommit = failure === 'commit';
+    assert.equal((await patchAcademics(saved.id, body)).status, 503);
+    const actual = (await service.getDigitalPublications(auth, saved.id))[0]; assert.deepEqual(actual.subjectIds, saved.subjectIds); assert.equal(actual.updatedAt, saved.updatedAt);
+  }
+  failAcademicInsert = failAudit = false; lostCommit = true;
+  assert.equal((await patchAcademics(saved.id, body)).status, 503);
+  const actual = (await service.getDigitalPublications(auth, saved.id))[0]; assert.deepEqual(actual.subjectIds, [c.other]);
+  assert.equal((await patchAcademics(saved.id, body)).status, 409); assert.equal(objects.size, 1);
+  assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1', [saved.id])).rows.length, 2);
+});
+test('audit projection retains historical academic names/codes without arbitrary data or private paths', async () => {
+  const { auditSnapshot } = await import('../src/modules/users/audit.snapshot.js');
+  assert.deepEqual(auditSnapshot({ careers: [{ id: 'c', name: 'Old career', code: 'C', secret: 'bad' }],
+    subjects: [{ id: 's', name: 'Old subject', code: 'S', storage_path: 'private' }], bucket: 'private' }),
+  { careers: [{ id: 'c', name: 'Old career', code: 'C' }], subjects: [{ id: 's', name: 'Old subject', code: 'S' }] });
+});
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());

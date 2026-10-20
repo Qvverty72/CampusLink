@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
-import { attachDigitalFile, downloadDigitalFile, loadDigitalPublication, loadDigitalPublications, publishDigitalPublication } from '../api/elibraryApi';
+import { attachDigitalFile, downloadDigitalFile, loadDigitalAcademicCatalog, loadDigitalPublication, loadDigitalPublications, publishDigitalPublication, updateDigitalAcademics } from '../api/elibraryApi';
 import { pickDigitalFiles, releaseDigitalFile } from '../api/documentPicker';
 import { saveDigitalFile } from '../api/saveDigitalFile';
-import type { DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
+import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
 
 export function useDigitalLibrary() {
   const auth = useAuth();
@@ -17,6 +17,10 @@ export function useDigitalLibrary() {
   const [progress, setProgress] = useState(''), [downloading, setDownloading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null), [notice, setNotice] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [careerIds, setCareerIds] = useState<string[]>([]), [subjectIds, setSubjectIds] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<DigitalAcademicCatalog | null>(null), [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null), [catalogRevision, setCatalogRevision] = useState(0);
+  const [editingAcademics, setEditingAcademics] = useState(false), [academicConflict, setAcademicConflict] = useState(false);
   const mounted = useRef(true), saving = useRef(false), picking = useRef(false), pending = useRef<AbortController | null>(null);
   const detailRequest = useRef<AbortController | null>(null);
   const queue = useRef<DigitalFile[]>([]), currentTarget = useRef<DigitalPublication | null>(null);
@@ -44,6 +48,13 @@ export function useDigitalLibrary() {
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [revision]);
+  useEffect(() => {
+    const abort = new AbortController(); setCatalogLoading(true); setCatalogError(null);
+    void loadDigitalAcademicCatalog(abort.signal).then(data => { if (!abort.signal.aborted) setCatalog(data); })
+      .catch(() => { if (!abort.signal.aborted) setCatalogError('No pudimos cargar las carreras y asignaturas. Inténtalo nuevamente.'); })
+      .finally(() => { if (!abort.signal.aborted) setCatalogLoading(false); });
+    return () => abort.abort();
+  }, [catalogRevision]);
   async function chooseFile() {
     if (saving.current || picking.current) return;
     picking.current = true; setPickingFile(true); setError(null);
@@ -57,6 +68,7 @@ export function useDigitalLibrary() {
   }
   async function publish() {
     if (saving.current || picking.current) return;
+    if (!currentTarget.current && (catalogLoading || catalogError)) { setError('Carga el catálogo académico antes de publicar.'); return; }
     const numericPrice = Number(price.trim().replace(',', '.'));
     if (!files.length || (!currentTarget.current && (!title.trim() || !description.trim()))) { setError('Completa título, descripción y al menos un archivo PDF.'); return; }
     if (!currentTarget.current && modality === 'VENTA' && (!Number.isFinite(numericPrice) || numericPrice <= 0 || numericPrice > Number.MAX_SAFE_INTEGER)) {
@@ -68,7 +80,7 @@ export function useDigitalLibrary() {
       let publication = currentTarget.current;
       if (!publication) {
         setProgress(`Publicando ${queue.current[0].name}`);
-        publication = await publishDigitalPublication({ title, description, modality, price: modality === 'VENTA' ? numericPrice : null }, queue.current[0], abort.signal);
+        publication = await publishDigitalPublication({ title, description, modality, price: modality === 'VENTA' ? numericPrice : null, careerIds, subjectIds }, queue.current[0], abort.signal);
         if (abort.signal.aborted) return;
         currentTarget.current = publication; setTarget(publication);
         releaseDigitalFile(queue.current.shift()!); setFiles([...queue.current]);
@@ -83,7 +95,7 @@ export function useDigitalLibrary() {
       }
       setItems(previous => [publication, ...previous.filter(item => item.id !== publication.id)]);
       setDetail(publication); setFormOpen(false); setNotice(attachMode ? 'Los archivos se adjuntaron correctamente.' : 'Tu recurso ya está publicado y disponible para tu institución.');
-      setTitle(''); setDescription(''); setPrice(''); setModality('DONACION'); setFiles([]);
+      setTitle(''); setDescription(''); setPrice(''); setModality('DONACION'); setFiles([]); setCareerIds([]); setSubjectIds([]);
       currentTarget.current = null; setTarget(null); setAttachMode(false);
       setRevision(value => value + 1);
     } catch (reason) {
@@ -101,9 +113,35 @@ export function useDigitalLibrary() {
     if (saving.current) return;
     downloadRequest.current?.abort(); downloadRequest.current = null; setDownloading(null);
     detailRequest.current?.abort(); const abort = new AbortController(); detailRequest.current = abort;
-    setError(null); setNotice(null); setDetail(null);
+    setError(null); setNotice(null); setDetail(null); setEditingAcademics(false); setAcademicConflict(false);
     try { const result = await loadDigitalPublication(id, abort.signal); if (!abort.signal.aborted) setDetail(result); }
     catch (reason) { if (!abort.signal.aborted) showError(reason); }
+  }
+  async function openAcademicEditor() {
+    if (!detail || saving.current) return;
+    detailRequest.current?.abort(); const abort = new AbortController(); detailRequest.current = abort;
+    setError(null); setNotice(null);
+    try {
+      const fresh = await loadDigitalPublication(detail.id, abort.signal);
+      if (abort.signal.aborted) return;
+      setDetail(fresh); setCareerIds(fresh.careerIds); setSubjectIds(fresh.subjectIds);
+      setEditingAcademics(true); setAcademicConflict(false); setCatalogRevision(value => value + 1);
+    } catch (reason) { if (!abort.signal.aborted) showError(reason); }
+  }
+  async function saveAcademics() {
+    if (!detail || saving.current || academicConflict || catalogLoading || catalogError) return;
+    const abort = new AbortController(); pending.current = abort; saving.current = true; setBusy(true); setError(null);
+    try {
+      const result = await updateDigitalAcademics(detail.id, { careerIds, subjectIds, updatedAt: detail.updatedAt }, abort.signal);
+      if (abort.signal.aborted) return;
+      setDetail(result); setItems(previous => previous.map(item => item.id === result.id ? result : item));
+      setEditingAcademics(false); setNotice('Las asociaciones académicas se guardaron correctamente.');
+    } catch (reason) {
+      if (!abort.signal.aborted) {
+        showError(reason, true);
+        if (!(reason instanceof AuthApiError) || [409, 503].includes(reason.status)) setAcademicConflict(true);
+      }
+    } finally { saving.current = false; if (!abort.signal.aborted) setBusy(false); }
   }
   async function download(file: DigitalAttachment) {
     if (!detail || downloadRequest.current) return;
@@ -120,13 +158,17 @@ export function useDigitalLibrary() {
     setFormOpen(false); setError(null); setNotice(null); setTarget(null); currentTarget.current = null; setAttachMode(false);
   }
   return { items, detail, loading, busy, formOpen, title, setTitle, description, setDescription, price, setPrice,
+    careerIds, setCareerIds, subjectIds, setSubjectIds, catalog, catalogLoading, catalogError,
+    reloadCatalog: () => setCatalogRevision(value => value + 1),
+    editingAcademics, academicConflict, openAcademicEditor, saveAcademics,
+    cancelAcademics: () => { if (!saving.current) { detailRequest.current?.abort(); setEditingAcademics(false); setAcademicConflict(false); setError(null); } },
     modality, setModality: (value: DigitalInput['modality']) => { setModality(value); if (value === 'DONACION') setPrice(''); },
     files, pickingFile, chooseFile, publish, error, notice, openDetail, attachMode, target, progress, downloading, download,
     isOwner: detail?.ownerId === auth.identity?.userId,
     removeFile: (index: number) => { if (!saving.current) setFiles(previous => { releaseDigitalFile(previous[index]); return previous.filter((_, current) => current !== index); }); },
-    openForm: () => { detailRequest.current?.abort(); setFormOpen(true); setDetail(null); setError(null); setNotice(null); setAttachMode(false); },
-    openAttachments: () => { if (detail && !saving.current) { setAttachMode(true); setTarget(detail); currentTarget.current = detail; setFormOpen(true); setError(null); setNotice(null); } },
+    openForm: () => { detailRequest.current?.abort(); setFormOpen(true); setDetail(null); setError(null); setNotice(null); setAttachMode(false); setEditingAcademics(false); setCareerIds([]); setSubjectIds([]); setCatalogRevision(value => value + 1); },
+    openAttachments: () => { if (detail && !saving.current) { detailRequest.current?.abort(); setEditingAcademics(false); setAttachMode(true); setTarget(detail); currentTarget.current = detail; setFormOpen(true); setError(null); setNotice(null); } },
     closeForm,
-    closeDetail: () => { detailRequest.current?.abort(); downloadRequest.current?.abort(); downloadRequest.current = null; setDownloading(null); setDetail(null); setNotice(null); },
+    closeDetail: () => { if (saving.current) return; detailRequest.current?.abort(); downloadRequest.current?.abort(); downloadRequest.current = null; setDownloading(null); setDetail(null); setNotice(null); setEditingAcademics(false); },
     reload: () => { setError(null); setRevision(value => value + 1); } };
 }

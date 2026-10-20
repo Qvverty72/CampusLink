@@ -16,7 +16,9 @@ export async function findDigitalCampus(client: PoolClient, campusId: string) {
 export async function lockDigitalPersistence(client: PoolClient, id: string) {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [id]);
 }
-export async function insertDigitalPublication(client: PoolClient, publication: DigitalPublication, file: DigitalUpload, path: string) {
+export async function insertDigitalPublication(client: PoolClient,
+  publication: Pick<DigitalPublication, 'id' | 'campusId' | 'ownerId' | 'title' | 'description' | 'modality' | 'price'>,
+  file: DigitalUpload, path: string) {
   await client.query(
     `INSERT INTO public.publicacion_recurso(id,campus_id,propietario_id,tipo_recurso,titulo,descripcion,modalidad,precio,moneda,estado_publicacion)
      VALUES($1,$2,$3,'DIGITAL',$4,$5,$6,$7,'CLP','DISPONIBLE')`,
@@ -49,10 +51,17 @@ export async function digitalFileHasReference(id: string, path: string) {
 }
 /** Proyección pública institucional: nunca selecciona bucket, path ni enlaces del original. */
 export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null): Promise<DigitalPublication[]> {
-  return (await client.query<DigitalPublication>(
+  return (await client.query<Omit<DigitalPublication, 'careerIds' | 'subjectIds'>>(
     `SELECT p.id,p.titulo AS title,p.descripcion AS description,p.modalidad AS modality,p.precio::float8 AS price,
+      to_char(p.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt",
       p.moneda AS currency,p.estado_publicacion AS status,p.propietario_id AS "ownerId",p.campus_id AS "campusId",
       c.nombre AS "campusName",c.institucion_id AS "institutionId",
+      COALESCE((SELECT json_agg(json_build_object('id',c.id,'name',c.nombre,'code',c.codigo) ORDER BY c.nombre,c.id)
+       FROM public.publicacion_carrera pc JOIN public.carrera c ON c.id=pc.carrera_id
+       WHERE pc.publicacion_id=p.id AND c.institucion_id=$1),'[]'::json) AS careers,
+      COALESCE((SELECT json_agg(json_build_object('id',a.id,'name',a.nombre,'code',a.codigo) ORDER BY a.nombre,a.id)
+       FROM public.publicacion_asignatura pa JOIN public.asignatura a ON a.id=pa.asignatura_id
+       WHERE pa.publicacion_id=p.id),'[]'::json) AS subjects,
       (SELECT json_agg(json_build_object('id',a.id,'name',a.nombre_original,'mimeType',a.mime_type,'sizeBytes',a.tamano_bytes) ORDER BY a.orden,a.id)
        FROM public.archivo_publicacion a WHERE a.publicacion_id=p.id AND a.deleted_at IS NULL AND a.tipo_archivo='RECURSO') AS files
      FROM public.publicacion_recurso p JOIN public.recurso_digital d ON d.publicacion_id=p.id
@@ -60,7 +69,8 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
      WHERE c.institucion_id=$1 AND p.tipo_recurso='DIGITAL'
        AND p.estado_publicacion='DISPONIBLE' AND p.deleted_at IS NULL AND ($2::uuid IS NULL OR p.id=$2)
        AND EXISTS(SELECT 1 FROM public.archivo_publicacion a WHERE a.publicacion_id=p.id AND a.deleted_at IS NULL AND a.tipo_archivo='RECURSO')
-     ORDER BY p.publicado_en DESC,p.id DESC LIMIT 30`, [institutionId, id])).rows;
+     ORDER BY p.publicado_en DESC,p.id DESC LIMIT 30`, [institutionId, id])).rows
+    .map(row => ({ ...row, careerIds: row.careers.map(career => career.id), subjectIds: row.subjects.map(subject => subject.id) }));
 }
 
 export async function findDigitalResource(client: PoolClient, id: string, institutionId: string) {

@@ -1,6 +1,6 @@
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFStream } from 'pdf-lib';
 import { ApiError } from '../../../services/api-response.js';
-import type { DigitalInput, DigitalUpload } from './elibrary.types.js';
+import type { DigitalAcademicCatalog, DigitalInput, DigitalUpload } from './elibrary.types.js';
 
 export const DIGITAL_MAX_BYTES = 25 * 1024 * 1024;
 export function invalidDigital(field: string, message: string): never {
@@ -8,7 +8,9 @@ export function invalidDigital(field: string, message: string): never {
 }
 export function digitalId(value: unknown, field = 'publicationId'): string {
   if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-    return invalidDigital(field, field === 'fileId' ? 'Selecciona un archivo válido.' : 'Selecciona una publicación válida.');
+    return invalidDigital(field, field === 'fileId' ? 'Selecciona un archivo válido.'
+      : field === 'careerIds' ? 'Selecciona una carrera válida.' : field === 'subjectIds' ? 'Selecciona una asignatura válida.'
+        : 'Selecciona una publicación válida.');
   }
   return value.toLowerCase();
 }
@@ -21,7 +23,7 @@ function text(value: unknown, field: string, max: number): string {
 export function parseDigitalInput(raw: unknown): DigitalInput {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return invalidDigital('metadata', 'Revisa los datos de la publicación.');
   const body = raw as Record<string, unknown>;
-  if (Object.keys(body).some(key => !['title', 'description', 'modality', 'price'].includes(key))) {
+  if (Object.keys(body).some(key => !['title', 'description', 'modality', 'price', 'careerIds', 'subjectIds'].includes(key))) {
     return invalidDigital('metadata', 'La publicación contiene campos no admitidos.');
   }
   const title = text(body.title, 'title', 200), description = text(body.description, 'description', 4000);
@@ -33,7 +35,35 @@ export function parseDigitalInput(raw: unknown): DigitalInput {
     }
     price = body.price;
   } else if (body.price !== undefined && body.price !== null) return invalidDigital('price', 'Una donación no tiene precio.');
-  return { title, description, modality: body.modality, price };
+  return { title, description, modality: body.modality, price,
+    careerIds: academicIds(body.careerIds === undefined ? [] : body.careerIds, 'careerIds'),
+    subjectIds: academicIds(body.subjectIds === undefined ? [] : body.subjectIds, 'subjectIds') };
+}
+
+function academicIds(raw: unknown, field: string): string[] {
+  if (!Array.isArray(raw)) return invalidDigital(field, 'Selecciona carreras y asignaturas válidas.');
+  const ids = raw.map(value => digitalId(value, field)).sort();
+  if (new Set(ids).size !== ids.length) return invalidDigital(field, 'No repitas una carrera o asignatura.');
+  return ids;
+}
+export function parseDigitalAcademics(raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return invalidDigital('body', 'Revisa las asociaciones académicas.');
+  const body = raw as Record<string, unknown>;
+  if (Object.keys(body).some(key => !['careerIds', 'subjectIds', 'updatedAt'].includes(key))) {
+    return invalidDigital('body', 'La solicitud contiene campos no admitidos.');
+  }
+  if (typeof body.updatedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(body.updatedAt)) {
+    return invalidDigital('updatedAt', 'Recarga el detalle de la publicación.');
+  }
+  return { careerIds: academicIds(body.careerIds, 'careerIds'), subjectIds: academicIds(body.subjectIds, 'subjectIds'), updatedAt: body.updatedAt };
+}
+export function validateDigitalAcademics(input: Pick<DigitalInput, 'careerIds' | 'subjectIds'>, catalog: DigitalAcademicCatalog) {
+  if (input.careerIds.some(id => !catalog.careers.some(row => row.id === id))) {
+    invalidDigital('careerIds', 'Selecciona carreras activas de tu institución.');
+  }
+  if (input.subjectIds.some(id => !catalog.subjects.some(row => row.id === id))) {
+    invalidDigital('subjectIds', 'Selecciona asignaturas activas del catálogo de tu institución.');
+  }
 }
 
 /** Política PDF confirmada para F2.5-02: sin cifrado, acciones ni adjuntos embebidos. */

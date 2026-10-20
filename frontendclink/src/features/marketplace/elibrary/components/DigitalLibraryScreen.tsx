@@ -5,6 +5,7 @@ import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { APP_COLORS } from '@/types/colors';
 import { useDigitalLibrary } from '../hooks/useDigitalLibrary';
+import { DigitalAcademicSelector } from './DigitalAcademicSelector';
 import type { DigitalPublication } from '../types/publication';
 
 const terms = (item: DigitalPublication) => item.modality === 'DONACION' ? 'Donación' : `$${item.price?.toLocaleString('es-CL')} CLP`;
@@ -15,7 +16,7 @@ export default function DigitalLibraryScreen() {
 function Library() {
   const library = useDigitalLibrary();
   const scroll = useRef<ScrollView>(null);
-  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [library.error, library.notice, library.formOpen, library.detail?.id]);
+  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [library.error, library.notice, library.formOpen, library.detail?.id, library.editingAcademics]);
   const disabled = library.busy || library.pickingFile;
   return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
@@ -44,6 +45,9 @@ function Library() {
         {library.modality === 'VENTA' && <><Text style={styles.label}>Precio (CLP)</Text>
           <TextInput accessibilityLabel="Precio (CLP)" value={library.price} onChangeText={library.setPrice} keyboardType="decimal-pad" maxLength={20}
             editable={!disabled && !library.target} placeholder="Ej. 2500" placeholderTextColor="#758594" style={styles.input} /></>}
+        <DigitalAcademicSelector catalog={library.catalog} loading={library.catalogLoading} error={library.catalogError} reload={library.reloadCatalog}
+          careerIds={library.careerIds} subjectIds={library.subjectIds} onCareersChange={library.setCareerIds} onSubjectsChange={library.setSubjectIds}
+          disabled={disabled || Boolean(library.target)} />
         </>}
         <Text style={styles.label}>Archivos académicos</Text>
         <Text style={styles.helper}>Uno o varios PDF de hasta 25 MB cada uno, sin contraseña, acciones ni archivos adjuntos.</Text>
@@ -65,15 +69,34 @@ function Library() {
         <Text style={styles.sectionTitle}>{library.detail.title}</Text>
         <Text style={styles.body}>{library.detail.description}</Text>
         <Text style={styles.helper}>Campus de origen: {library.detail.campusName}</Text>
+        {library.editingAcademics ? <>
+          <DigitalAcademicSelector catalog={library.catalog} loading={library.catalogLoading} error={library.catalogError} reload={library.reloadCatalog}
+            careerIds={library.careerIds} subjectIds={library.subjectIds} onCareersChange={library.setCareerIds} onSubjectsChange={library.setSubjectIds}
+            disabled={disabled} previous={library.detail} />
+          {library.academicConflict && <Pressable accessibilityRole="button" disabled={disabled} onPress={library.openAcademicEditor} style={styles.smallButton}>
+            <Text style={styles.link}>Recargar asociaciones vigentes</Text></Pressable>}
+          <Pressable accessibilityRole="button" disabled={disabled || library.academicConflict || library.catalogLoading || Boolean(library.catalogError)} onPress={library.saveAcademics}
+            style={[styles.primary, (disabled || library.academicConflict || library.catalogLoading || Boolean(library.catalogError)) && styles.disabled]}>
+            {library.busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>Guardar asociaciones</Text>}
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={disabled} onPress={library.cancelAcademics} style={styles.smallButton}><Text style={styles.link}>Cancelar edición</Text></Pressable>
+        </> : <>
+          <Text style={styles.label}>Carreras</Text>
+          <Text style={styles.body}>{library.detail.careers.map(row => `${row.name}${row.code ? ` (${row.code})` : ''}`).join(' · ') || 'Sin carreras asociadas'}</Text>
+          <Text style={styles.label}>Asignaturas</Text>
+          <Text style={styles.body}>{library.detail.subjects.map(row => `${row.name}${row.code ? ` (${row.code})` : ''}`).join(' · ') || 'Sin asignaturas asociadas'}</Text>
+          {library.isOwner && <Pressable accessibilityRole="button" disabled={Boolean(library.downloading)} onPress={library.openAcademicEditor} style={styles.smallButton}>
+            <Text style={styles.link}>Editar asociaciones académicas</Text></Pressable>}
+        </>}
         {library.detail.files.map(file => <View key={file.id} style={styles.fileButton}><FileText color={APP_COLORS.PRIMARY} size={22} />
           <View style={styles.fileInfo}><Text style={styles.fileText}>{file.name}</Text><Text style={styles.helper}>PDF · {(file.sizeBytes / 1024 / 1024).toFixed(2)} MB</Text></View>
           {library.isOwner && <Pressable accessibilityRole="button" accessibilityLabel={`Descargar ${file.name}`} disabled={Boolean(library.downloading)} onPress={() => library.download(file)} style={styles.smallButton}>
             {library.downloading === file.id ? <ActivityIndicator /> : <Text style={styles.link}>Descargar</Text>}
           </Pressable>}
         </View>)}
-        {library.isOwner ? <Pressable accessibilityRole="button" disabled={Boolean(library.downloading)} onPress={library.openAttachments} style={styles.primary}><Plus size={20} color="#FFFFFF" /><Text style={styles.primaryText}>Añadir archivos</Text></Pressable>
+        {library.isOwner ? !library.editingAcademics && <Pressable accessibilityRole="button" disabled={Boolean(library.downloading)} onPress={library.openAttachments} style={styles.primary}><Plus size={20} color="#FFFFFF" /><Text style={styles.primaryText}>Añadir archivos</Text></Pressable>
           : <Text style={styles.helper}>Archivos privados. La adquisición estará disponible en una próxima etapa.</Text>}
-        <Pressable accessibilityRole="button" onPress={library.closeDetail} style={styles.smallButton}><Text style={styles.link}>Volver a la biblioteca</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={disabled} onPress={library.closeDetail} style={styles.smallButton}><Text style={styles.link}>Volver a la biblioteca</Text></Pressable>
       </View> : <>
         <Pressable accessibilityRole="button" onPress={library.openForm} style={styles.primary}><Plus color="#FFFFFF" size={20} /><Text style={styles.primaryText}>Publicar recurso</Text></Pressable>
         <View style={styles.listHeading}><Text style={styles.sectionTitle}>Publicaciones recientes</Text>
@@ -83,6 +106,7 @@ function Library() {
           <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Consultar ${item.title}`} onPress={() => library.openDetail(item.id)} style={styles.card}>
             <Text style={styles.badge}>{terms(item)}</Text><Text style={styles.itemTitle}>{item.title}</Text>
             <Text numberOfLines={2} style={styles.body}>{item.description}</Text><Text style={styles.helper}>{item.campusName} · {item.files.length} archivo{item.files.length === 1 ? '' : 's'}</Text>
+            {(item.careers.length > 0 || item.subjects.length > 0) && <Text numberOfLines={2} style={styles.helper}>{[...item.careers, ...item.subjects].map(row => row.name).join(' · ')}</Text>}
             <Text style={styles.link}>Consultar recurso</Text>
           </Pressable>) : <View style={styles.card}><FileText color="#607485" size={30} /><Text style={styles.sectionTitle}>El conocimiento empieza contigo</Text>
             <Text style={styles.body}>Aún no hay publicaciones disponibles. Comparte tu primer material académico.</Text></View>}

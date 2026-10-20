@@ -13,6 +13,7 @@ export const auditLabels: Record<string,string> = {
   PUBLICAR_PUBLICACION: 'Publicación creada', EDITAR_PUBLICACION: 'Publicación editada', RETIRAR_PUBLICACION: 'Publicación retirada',
   descripcion: 'Descripción', estado_uso: 'Condición', categoria_id: 'Categoría', modalidad: 'Modalidad', precio: 'Precio', moneda: 'Moneda',
   images: 'Imágenes', nombre_original: 'Archivo', mime_type: 'Tipo', tamano_bytes: 'Tamaño', orden: 'Orden (0: principal)',
+  careers: 'Carreras', subjects: 'Asignaturas', name: 'Nombre', code: 'Código',
   ASIGNAR_ROL: 'Asignación de rol', REVOCAR_ROL: 'Revocación de rol',
   ASIGNAR_PERMISO: 'Asignación de permiso', REVOCAR_PERMISO: 'Revocación de permiso',
   SUSPENDER_CUENTA: 'Suspensión de cuenta', DESACTIVAR_CUENTA: 'Desactivación de cuenta', REACTIVAR_CUENTA: 'Reactivación de cuenta',

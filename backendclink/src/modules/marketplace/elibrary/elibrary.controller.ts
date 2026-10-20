@@ -6,8 +6,18 @@ import { sendSuccess } from '../../../services/api-response.js';
 import type { AuthLocals } from '../../auth/auth.types.js';
 import { readDigitalUpload } from './elibrary.upload.js';
 import { addDigitalAttachment, getDigitalOriginal } from './elibrary.files.service.js';
+import { getDigitalAcademicCatalog, updateDigitalAcademics } from './elibrary.academics.service.js';
+import { invalidDigital } from './elibrary.validation.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const digitalAcademicCatalogController: DigitalHandler = async (request, response) => {
+  if (Object.keys(request.query).length) invalidDigital('query', 'La consulta no admite parámetros adicionales.');
+  sendSuccess(response, await getDigitalAcademicCatalog(response.locals.auth));
+};
+export const updateDigitalAcademicsController: DigitalHandler = async (request, response) => {
+  if (Object.keys(request.query).length) invalidDigital('query', 'La solicitud no admite parámetros adicionales.');
+  sendSuccess(response, await updateDigitalAcademics(response.locals.auth, request.params.publicationId, request.body));
+};
 export const addDigitalFileController: DigitalHandler = async (request, response) => {
   authorizeDigitalAccess(response.locals.auth);
   const { file } = await readDigitalUpload(request, false);

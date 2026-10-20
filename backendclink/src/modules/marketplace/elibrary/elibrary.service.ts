@@ -9,7 +9,8 @@ import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import { lockAccountContext } from '../../auth/auth.repository.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import type { DigitalPublication, DigitalUpload } from './elibrary.types.js';
-import { digitalId, parseDigitalInput, validateDigitalFile } from './elibrary.validation.js';
+import { digitalId, parseDigitalInput, validateDigitalAcademics, validateDigitalFile } from './elibrary.validation.js';
+import { auditDigitalAcademics, findDigitalAcademicCatalog, replaceDigitalAcademics } from './elibrary.academics.repository.js';
 import { digitalFileHasReference, findDigitalCampus, findDigitalPublications, insertDigitalPublication,
   lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from './elibrary.repository.js';
 
@@ -33,6 +34,15 @@ export async function currentDigitalContext(client: PoolClient, auth: VerifiedAu
 export async function createDigitalPublication(auth: VerifiedAuthConnection, raw: unknown, upload?: DigitalUpload): Promise<DigitalPublication> {
   requireCampusCapability(auth, auth.campusId, 'general');
   const input = parseDigitalInput(raw), file = await validateDigitalFile(upload);
+  // Rechaza selecciones inválidas antes de cargar bytes; se comprueban de nuevo tras Storage.
+  if (input.careerIds.length || input.subjectIds.length) {
+    try {
+      await withPostgresTransaction(async client => {
+        const { campus } = await currentDigitalContext(client, auth);
+        validateDigitalAcademics(input, await findDigitalAcademicCatalog(client, campus.institucion_id));
+      });
+    } catch (error) { if (error instanceof ApiError) throw error; throw unavailable(); }
+  }
   const id = randomUUID(), path = `${auth.campusId}/${auth.userId}/${id}/${randomUUID()}.pdf`;
   let persistenceAttempted = false, saved: DigitalPublication | undefined;
   try {
@@ -41,10 +51,11 @@ export async function createDigitalPublication(auth: VerifiedAuthConnection, raw
     return await withPostgresTransaction(async client => {
       await lockDigitalPersistence(client, id);
       const { current, campus } = await currentDigitalContext(client, auth);
-      saved = { ...input, id, ownerId: current.userId, campusId: campus.id, campusName: campus.nombre,
-        institutionId: campus.institucion_id, status: 'DISPONIBLE', currency: 'CLP',
-        files: [] };
-      saved.files = [await insertDigitalPublication(client, saved, file, path)];
+      validateDigitalAcademics(input, await findDigitalAcademicCatalog(client, campus.institucion_id));
+      await insertDigitalPublication(client, { ...input, id, ownerId: current.userId, campusId: campus.id }, file, path);
+      await replaceDigitalAcademics(client, id, input.careerIds, input.subjectIds);
+      saved = (await findDigitalPublications(client, campus.institucion_id, id))[0];
+      await auditDigitalAcademics(client, current, null, saved);
       return saved;
     });
   } catch (error) {

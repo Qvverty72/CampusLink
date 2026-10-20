@@ -7,6 +7,13 @@ export interface DigitalInput {
   description: string;
   modality: 'VENTA' | 'DONACION';
   price: number | null;
+  careerIds: string[];
+  subjectIds: string[];
+}
+export interface DigitalAcademicOption { id: string; name: string; code: string | null }
+export interface DigitalAcademicCatalog {
+  careers: DigitalAcademicOption[];
+  subjects: (DigitalAcademicOption & { careerIds: string[] })[];
 }
 export interface DigitalUpload { name: string; mimeType: string; bytes: Buffer }
 export interface DigitalAttachment { id: string; name: string; mimeType: string; sizeBytes: number }
@@ -19,6 +26,9 @@ export interface DigitalPublication extends DigitalInput {
   status: 'DISPONIBLE';
   currency: 'CLP';
   files: DigitalAttachment[];
+  careers: DigitalAcademicOption[];
+  subjects: DigitalAcademicOption[];
+  updatedAt: string;
 }
 export interface DigitalResourceRow {
   id: string; campus_id: string; propietario_id: string; institucion_id: string;

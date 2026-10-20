@@ -20,7 +20,8 @@ export function auditSnapshot(value: unknown): Record<string, unknown> | null {
   if (!record(value)) return null;
   const result = pick(value,fields);
   for (const [key,keys] of [['roles',assignmentFields],['permissions',assignmentFields],['publicacion_recurso',publicationFields],
-    ['images',['id','nombre_original','mime_type','tamano_bytes','orden','deleted_at']]] as const) {
+    ['images',['id','nombre_original','mime_type','tamano_bytes','orden','deleted_at']],
+    ['careers',['id','name','code']],['subjects',['id','name','code']]] as const) {
     if (Array.isArray(value[key])) result[key] = value[key].filter(record).map(row => pick(row,keys));
   }
   return result;

@@ -1,7 +1,12 @@
 import { authenticatedRequest, authenticatedResponseRequest } from '@/lib/api/authenticated-request';
-import type { DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
+import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
 
 const base = '/api/v1/marketplace/elibrary';
+export const loadDigitalAcademicCatalog = (signal?: AbortSignal) => authenticatedRequest<DigitalAcademicCatalog>(`${base}/academic-options`, { signal });
+export const updateDigitalAcademics = (id: string, input: Pick<DigitalInput, 'careerIds' | 'subjectIds'> & { updatedAt: string }, signal?: AbortSignal) =>
+  authenticatedRequest<DigitalPublication>(`${base}/${id}/academics`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+  });
 export const loadDigitalPublications = (signal?: AbortSignal) => authenticatedRequest<DigitalPublication[]>(base, { signal });
 export function loadDigitalPublication(id: string, signal?: AbortSignal) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Publicación inválida.');
