@@ -3,6 +3,9 @@ import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalInp
 import type { DigitalFilters, DigitalPage } from '../types/publication';
 
 const base = '/api/v1/marketplace/elibrary';
+export interface DigitalPreviewResult { available: boolean; text: string | null; page: number | null; message: string }
+export const loadDigitalPreview = (id: string, fileId: string, signal?: AbortSignal) =>
+  authenticatedRequest<DigitalPreviewResult>(`${base}/${id}/files/${fileId}/preview`, { signal });
 export const loadDigitalAcademicCatalog = (signal?: AbortSignal) => authenticatedRequest<DigitalAcademicCatalog>(`${base}/academic-options`, { signal });
 export const updateDigitalAcademics = (id: string, input: Pick<DigitalInput, 'careerIds' | 'subjectIds'> & { updatedAt: string }, signal?: AbortSignal) =>
   authenticatedRequest<DigitalPublication>(`${base}/${id}/academics`, {

@@ -10,8 +10,13 @@ import { getDigitalAcademicCatalog, updateDigitalAcademics } from './elibrary.ac
 import { invalidDigital } from './elibrary.validation.js';
 import { searchDigitalPublications } from './elibrary.search.service.js';
 import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
+import { getDigitalPreview } from './elibrary.preview.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const digitalPreviewController: DigitalHandler = async (request,response) => {
+  if (Object.keys(request.query).length) invalidDigital('query','La vista previa no admite parámetros adicionales.');
+  sendSuccess(response,await getDigitalPreview(response.locals.auth,request.params.publicationId,request.params.fileId));
+};
 export const digitalAcademicCatalogController: DigitalHandler = async (request, response) => {
   if (Object.keys(request.query).length) invalidDigital('query', 'La consulta no admite parámetros adicionales.');
   sendSuccess(response, await getDigitalAcademicCatalog(response.locals.auth));

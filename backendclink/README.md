@@ -558,6 +558,12 @@ Validación de PDF utiliza `pdf-lib`; transporte multipart acotado usa `busboy`;
 
 `GET /api/v1/marketplace/elibrary` admite únicamente `q` (hasta200 caracteres), `careerId`, `subjectId`, `modality` (VENTA/DONACION), `page` y `limit` (1..100, defecto20). Devuelve `{data:[publicación],meta:{page,limit,hasMore}}`; detalle conserva contrato anterior. Filtra título/descripción como texto literal (comodines escapados), asociaciones múltiples con EXISTS, disponibilidad/archivo válido y siempre institución derivada del servidor. No entrega contenido de archivos. Expo ofrece filtros, paginación y estado sin coincidencias.
 
+## Vista previa digital (F2.5-05)
+
+`GET /api/v1/marketplace/elibrary/:publicationId/files/:fileId/preview` requiere sesión/cuenta habilitada y publicación disponible de la misma institución. Sin query ni página/offset cliente. Devuelve JSON `{available,text,page,message}`: hasta400 caracteres y como máximo mitad de hasta800 caracteres extraídos de la primera página. PDF corto/escaneado/sin texto: sin muestra, conserva metadatos. Nunca devuelve PDF, enlaces ni rutas. Revalida identidad/recurso tras Storage/extracción. Descarga completa mantiene autorización separada.
+
+Mozilla `pdfjs-dist`6.4.299 se ejecuta en worker sin variables de entorno, evaluación ni descarga de fuentes; máximo2 concurrentes, heap128MB y8s. Workers, timers y slots se liberan en finally. Node requerido>=22.13 <23; manifest/lock coinciden. Sin SQL ni archivos PREVIEW persistidos nuevos.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

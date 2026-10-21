@@ -4,6 +4,7 @@ import { createDigitalController, detailDigitalController, listDigitalController
 import { requireAuthentication } from '../../auth/auth.middleware.js';
 import { addDigitalFileController, downloadDigitalFileController } from './elibrary.controller.js';
 import { digitalAcademicCatalogController, updateDigitalAcademicsController } from './elibrary.controller.js';
+import { digitalPreviewController } from './elibrary.controller.js';
 
 // El cuerpo binario se analiza en controller después de verificar la identidad.
 export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
@@ -16,5 +17,6 @@ export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
   router.patch('/:publicationId/academics', requireAuthentication, updateDigitalAcademicsController);
   router.post('/:publicationId/files', requireAuthentication, addDigitalFileController);
   router.get('/:publicationId/files/:fileId/download', requireAuthentication, downloadDigitalFileController);
+  router.get('/:publicationId/files/:fileId/preview', requireAuthentication, digitalPreviewController);
   return router;
 }

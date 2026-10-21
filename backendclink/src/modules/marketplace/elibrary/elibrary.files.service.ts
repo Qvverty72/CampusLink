@@ -8,7 +8,7 @@ import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.servic
 import { DIGITAL_MAX_BYTES, digitalId, validateDigitalFile } from './elibrary.validation.js';
 import { DIGITAL_BUCKET, digitalFileHasReference, downloadDigitalOriginal, findDigitalFile, findDigitalResource,
   hasDigitalAcquisition, insertDigitalAttachment, lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from './elibrary.repository.js';
-import type { DigitalAttachment, DigitalResourceRow, DigitalUpload } from './elibrary.types.js';
+import type { DigitalAttachment, DigitalResourceRow, DigitalStoredFile, DigitalUpload } from './elibrary.types.js';
 
 const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo completar la operación del archivo.');
 const notFound = () => new ApiError(404, 'NOT_FOUND', 'El recurso o archivo no está disponible en tu institución.');
@@ -57,11 +57,14 @@ async function authorizedFile(client: PoolClient, auth: VerifiedAuthConnection, 
     throw new ApiError(403, 'FORBIDDEN', 'Solo el propietario o un receptor con adquisición completada puede descargar el archivo.');
   }
   const file = await findDigitalFile(client, id, fileId);
-  const prefix = `${resource.campus_id}/${resource.propietario_id}/${id}/`;
+  assertStoredDigitalFile(resource, file);
+  return file;
+}
+export function assertStoredDigitalFile(resource: DigitalResourceRow, file: DigitalStoredFile | null): asserts file is DigitalStoredFile {
+  const prefix = `${resource.campus_id}/${resource.propietario_id}/${resource.id}/`;
   if (!file || file.bucket_id !== DIGITAL_BUCKET || !file.storage_path.startsWith(prefix)
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$/i.test(file.storage_path.slice(prefix.length))
     || file.mime_type !== 'application/pdf' || Number(file.tamano_bytes) <= 0 || Number(file.tamano_bytes) > DIGITAL_MAX_BYTES) throw notFound();
-  return file;
 }
 export async function getDigitalOriginal(auth: VerifiedAuthConnection, publicationId: unknown, attachmentId: unknown) {
   authorizeDigitalAccess(auth); const id = digitalId(publicationId), fileId = digitalId(attachmentId, 'fileId');

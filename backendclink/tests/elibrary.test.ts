@@ -585,6 +585,35 @@ test('digital search treats wildcard/SQL-like text literally and rejects malform
   assert.equal((await db.query('SELECT id FROM carrera LIMIT 1')).rows.length,1);
 });
 
+test('protected preview returns a fixed partial text fragment to institutional peers without original access', async () => {
+  const doc = await PDFDocument.create(); doc.addPage().drawText('Primera pagina\n'+ 'contenido academico limitado para estudiantes\n'.repeat(25), { x:30,y:740,size:12,lineHeight:16 });
+  doc.addPage().drawText('SEGUNDA_PAGINA_SECRETA'); const bytes = Buffer.from(await doc.save());
+  const saved = await service.createDigitalPublication(auth,input(),file(bytes)); current = await peer();
+  const response = await get(`/${saved.id}/files/${saved.files[0].id}/preview`); assert.equal(response.status,200);
+  const {data} = await response.json(); assert.equal(data.available,true); assert.ok(data.text.length<=400);assert.ok(data.text.length>20);
+  assert.doesNotMatch(JSON.stringify(data),/SEGUNDA_PAGINA_SECRETA|storage_path|bucket_id|https:|digital-resources|%PDF/);
+  assert.equal((await original(saved.id,saved.files[0].id)).status,403);
+  for(const suffix of ['?page=2','?offset=400','?url=https://evil.invalid'])assert.equal((await get(`/${saved.id}/files/${saved.files[0].id}/preview${suffix}`)).status,400);
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  current=await peer(foreignCampus,foreignInstitution); assert.equal((await get(`/${saved.id}/files/${saved.files[0].id}/preview`)).status,404);
+});
+test('preview falls back safely for short/scanned text and revalidates identity after reading Storage', async () => {
+  const saved = await service.createDigitalPublication(auth,input(),file());
+  const route=`/${saved.id}/files/${saved.files[0].id}/preview`;
+  const response=await get(route);assert.equal(response.status,200);assert.deepEqual((await response.json()).data.available,false);
+  assert.equal((await originalFetch(base+route)).status,401);
+  onDownload=()=>db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1",[auth.userId]).then(()=>{});
+  assert.equal((await get(route)).status,403);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA' WHERE id=$1",[auth.userId]);onDownload=null;failDownload=true;
+  const failure=await get(route);assert.equal(failure.status,503);assert.doesNotMatch(await failure.text(),/private|storage_path|password/);
+});
+test('preview worker concurrency is bounded and slots are released after extraction', async () => {
+  const {extractDigitalPreview}=await import('../src/modules/marketplace/elibrary/elibrary.preview.extractor.js');
+  const first=extractDigitalPreview(pdf), second=extractDigitalPreview(pdf);
+  await assert.rejects(extractDigitalPreview(pdf),{status:503});await Promise.all([first,second]);
+  assert.equal(await extractDigitalPreview(pdf),null);
+});
+
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());
   const results = await Promise.all(Array.from({ length: 8 }, (_, index) => filesService.addDigitalAttachment(auth, saved.id, { ...file(), name: `archivo${index}.pdf` })));
