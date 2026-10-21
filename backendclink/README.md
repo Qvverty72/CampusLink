@@ -586,6 +586,10 @@ DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad serv
 
 `POST /elibrary/:publicationId/transactions/:transactionId/rating` recibe `{score}` entero1..5, solo receptor del acuerdo COMPLETADA;201 recibo mínimo. Parser/elegibilidad son comunes con F2.4-11, cuyo contrato permanece igual. Lock del acuerdo y unique transaccion_id impiden simultáneas/duplicados; sin PATCH/DELETE ni valoración del dueño al receptor. Detalle privado añade rating/canRate para el formulario y resultado inmutable. La retirada del recurso no borra el respaldo.
 
+## Denuncias digitales (F2.5-12)
+
+`POST /api/v1/reports/elibrary/:publicationId` y `POST /elibrary/:publicationId/transactions/:transactionId` reutilizan reports con `{reason,description?}` y acuse privado. Recurso disponible institucional o acuerdo propio, incluso retirado; identidad, objetivo y campus de origen se derivan y comprueban en servidor. Conservan evidencia privada de metadatos y términos, nunca bytes, paths ni enlaces. Estado inicial PENDIENTE; no ocultan recursos ni cambian acuerdos/accesos. El formulario compartido distingue el campus de origen digital. La revisión y resolución administrativa corresponden a F2.8-02/03; enviar una denuncia no concede descarga. Sin SQL pendiente.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

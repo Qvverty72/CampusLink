@@ -4,7 +4,7 @@ export interface DigitalRequest {
   status:string;messageCode:string;message:string;requestedAt:string;transactionId:string|null;transactionStatus:string|null;
 }
 export interface DigitalTrade {
-  id:string;publicationId:string;title:string;ownerId:string;receiverId:string;status:string;modality:'VENTA'|'DONACION';amount:number|null;currency:string;
+  id:string;publicationId:string;campusId:string;title:string;ownerId:string;receiverId:string;status:string;modality:'VENTA'|'DONACION';amount:number|null;currency:string;
   startedAt:string;completedAt:string|null;cancelledAt:string|null;confirmations:{userId:string;role:string;confirmedAt:string}[];canConfirm:boolean;canCancel:boolean;
   rating:{id:string;score:number;createdAt:string}|null;canRate:boolean;
 }

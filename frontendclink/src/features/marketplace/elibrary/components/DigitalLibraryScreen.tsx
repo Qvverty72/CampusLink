@@ -13,6 +13,7 @@ import { AcquiredDigitalResources } from './AcquiredDigitalResources';
 import { OwnedDigitalResources } from './OwnedDigitalResources';
 import { DigitalPublicationEditor } from './DigitalPublicationEditor';
 import { DigitalRecommendations } from './DigitalRecommendations';
+import { ContentReportForm } from '@/features/reports/components/ContentReportForm';
 import type { DigitalPublication } from '../types/publication';
 
 const terms = (item: DigitalPublication) => item.modality === 'DONACION' ? 'Donación' : `$${item.price?.toLocaleString('es-CL')} CLP`;
@@ -23,7 +24,8 @@ export default function DigitalLibraryScreen() {
 function Library() {
   const library = useDigitalLibrary();
   const [contentEditor,setContentEditor]=useState(false);
-  useEffect(()=>setContentEditor(false),[library.detail?.id]);
+  const [reporting,setReporting]=useState(false);
+  useEffect(()=>{setContentEditor(false);setReporting(false);},[library.detail?.id]);
   const scroll = useRef<ScrollView>(null);
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [library.error, library.notice, library.formOpen, library.detail?.id, library.editingAcademics]);
   const disabled = library.busy || library.pickingFile;
@@ -74,7 +76,7 @@ function Library() {
         </Pressable>
         <Pressable accessibilityRole="button" disabled={disabled} onPress={library.closeForm} style={styles.smallButton}><Text style={styles.link}>{library.target ? 'Continuar con los archivos guardados' : 'Volver a la biblioteca'}</Text></Pressable>
       </View> : library.detail ? <View style={styles.card}>
-        {contentEditor?<DigitalPublicationEditor key={library.detail.id} resource={library.detail} onSaved={value=>{setContentEditor(false);library.savedContent(value);}} onClose={()=>setContentEditor(false)}/>:<>
+        {reporting?<ContentReportForm target={{type:'PUBLICACION_DIGITAL',publicationId:library.detail.id,campusId:library.detail.campusId}} title={library.detail.title} onBack={()=>setReporting(false)}/>:contentEditor?<DigitalPublicationEditor key={library.detail.id} resource={library.detail} onSaved={value=>{setContentEditor(false);library.savedContent(value);}} onClose={()=>setContentEditor(false)}/>:<>
         <Text style={styles.badge}>DISPONIBLE · {terms(library.detail)}</Text>
         {library.detail.acquired && <Text style={styles.notice}>Ya adquiriste este recurso.</Text>}
         <Text style={styles.sectionTitle}>{library.detail.title}</Text>
@@ -110,6 +112,7 @@ function Library() {
         {library.isOwner ? !library.editingAcademics && <Pressable accessibilityRole="button" disabled={Boolean(library.downloading)} onPress={library.openAttachments} style={styles.primary}><Plus size={20} color="#FFFFFF" /><Text style={styles.primaryText}>Añadir archivos</Text></Pressable>
           : <DigitalRequestAction id={library.detail.id} />}
         <Pressable accessibilityRole="button" disabled={disabled} onPress={library.closeDetail} style={styles.smallButton}><Text style={styles.link}>Volver a la biblioteca</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={disabled} onPress={()=>setReporting(true)} style={styles.smallButton}><Text style={styles.link}>Denunciar publicación digital</Text></Pressable>
         </>}
       </View> : <>
         <Pressable accessibilityRole="button" onPress={library.openForm} style={styles.primary}><Plus color="#FFFFFF" size={20} /><Text style={styles.primaryText}>Publicar recurso</Text></Pressable>

@@ -1,6 +1,8 @@
 import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 import { useDigitalRequestAction,useDigitalTradeCenter } from '../hooks/useDigitalTrades';
+import { useEffect,useState } from 'react';
+import { ContentReportForm } from '@/features/reports/components/ContentReportForm';
 export const digitalTradeStatus=(value:string)=>({PENDIENTE:'Pendiente',ACEPTADA:'Aceptada',RECHAZADA:'Rechazada',CANCELADA:'Cancelada',RESERVADA:'Acuerdo iniciado',PENDIENTE_CONFIRMACION:'Esperando confirmación',COMPLETADA:'Completada'}[value]??value);
 export function DigitalRequestAction({id}:{id:string}) {
   const state=useDigitalRequestAction(id);
@@ -13,11 +15,11 @@ export function DigitalRequestAction({id}:{id:string}) {
     </>:<Text style={styles.text}>Este recurso no admite una nueva solicitud en este momento.</Text>}
   </View>;
 }
-export function DigitalTradeCenter(){const state=useDigitalTradeCenter();return <View style={styles.box}>
-  <Pressable accessibilityRole="button" disabled={state.busy} onPress={state.toggle} style={styles.button}><Text style={styles.heading}>{state.open?'Cerrar solicitudes y acuerdos':'Mis solicitudes y acuerdos'}</Text></Pressable>
+export function DigitalTradeCenter(){const state=useDigitalTradeCenter();const [reporting,setReporting]=useState(false),[reportBusy,setReportBusy]=useState(false);useEffect(()=>setReporting(false),[state.trade?.id]);return <View style={styles.box}>
+  <Pressable accessibilityRole="button" disabled={state.busy||reportBusy} onPress={state.toggle} style={styles.button}><Text style={styles.heading}>{state.open?'Cerrar solicitudes y acuerdos':'Mis solicitudes y acuerdos'}</Text></Pressable>
   {state.open&&<>
     {state.error&&<Text style={styles.error} accessibilityLiveRegion="assertive">{state.error}</Text>}
-    {state.trade?<>
+    {state.trade?reporting?<ContentReportForm target={{type:'TRANSACCION_DIGITAL',publicationId:state.trade.publicationId,transactionId:state.trade.id,campusId:state.trade.campusId}} title={state.trade.title} onBack={()=>setReporting(false)} onBusyChange={setReportBusy}/>:<>
       <Text style={styles.heading}>{state.trade.title}</Text><Text style={styles.text}>{digitalTradeStatus(state.trade.status)}</Text>
       <Text style={styles.text}>Condiciones acordadas: {state.trade.modality==='DONACION'?'Donación':`${state.trade.amount?.toLocaleString('es-CL')} ${state.trade.currency}`}</Text>
       <Text style={styles.text}>{state.trade.confirmations.length} de 2 confirmaciones. Ambas partes deben confirmar para habilitar el archivo íntegro.</Text>
@@ -29,6 +31,7 @@ export function DigitalTradeCenter(){const state=useDigitalTradeCenter();return 
         <Pressable accessibilityRole="button" disabled={state.busy||!state.score} onPress={state.rate} style={styles.button}><Text style={styles.link}>Guardar valoración digital</Text></Pressable>
       </>}
       <Pressable accessibilityRole="button" disabled={state.busy} onPress={state.closeTrade} style={styles.button}><Text style={styles.link}>Volver a mis solicitudes</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={state.busy} onPress={()=>setReporting(true)} style={styles.button}><Text style={styles.link}>Denunciar acuerdo digital</Text></Pressable>
     </>:<>
       <View style={styles.row}><Pressable accessibilityRole="button" disabled={state.busy} onPress={()=>state.mode(false)} style={styles.button}><Text style={styles.link}>Enviadas</Text></Pressable><Pressable accessibilityRole="button" disabled={state.busy} onPress={()=>state.mode(true)} style={styles.button}><Text style={styles.link}>Recibidas</Text></Pressable><Pressable accessibilityRole="button" disabled={state.busy} onPress={state.reload} style={styles.button}><Text style={styles.link}>Actualizar acuerdos</Text></Pressable></View>
       <Text style={styles.heading}>{state.received?'Solicitudes recibidas':'Solicitudes enviadas'}</Text>

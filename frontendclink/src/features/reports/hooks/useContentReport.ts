@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
-import { submitActivityReport,submitPhysicalgoodsReport } from '../api/reportsApi';
+import { submitActivityReport,submitPhysicalgoodsReport,submitDigitalReport } from '../api/reportsApi';
 import type { ContentReportInput, ContentReportReceipt, ContentReportTarget } from '../types/contentReport';
 
 /** Aísla el envío por identidad/elemento y aborta la denuncia al cambiar o desmontar el formulario. */
@@ -24,7 +24,8 @@ export function useContentReport(target:ContentReportTarget) {
     setState({ key, busy: true, error: null, receipt: null });
     try {
       const receipt = target.type==='ACTIVIDAD'?await submitActivityReport(campusId,target.activityId,input,abort.signal)
-        :await submitPhysicalgoodsReport(campusId,target,input,abort.signal);
+        :target.type==='PUBLICACION_DIGITAL'||target.type==='TRANSACCION_DIGITAL'?await submitDigitalReport(target,input,abort.signal)
+          :await submitPhysicalgoodsReport(campusId,target,input,abort.signal);
       if (!abort.signal.aborted && activeKey.current === key) setState({ key, busy: false, error: null, receipt });
     } catch (error) {
       if (abort.signal.aborted || activeKey.current !== key) return;

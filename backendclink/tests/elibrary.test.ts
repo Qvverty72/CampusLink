@@ -27,6 +27,7 @@ let objects = new Map<string, Buffer>(), connectionLease = Promise.resolve();
 let barriers = 0;
 let failAcademicInsert = false, failAudit = false;
 let failDigitalAccess = false;
+let failDigitalReport = false;
 
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
@@ -41,6 +42,7 @@ before(async () => {
       if (failAcademicInsert && sql.startsWith('INSERT INTO public.publicacion_asignatura')) throw new Error('private academic SQL');
       if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL');
       if (failDigitalAccess && sql.includes('INSERT INTO public.acceso_recurso_digital')) throw new Error('private access SQL');
+      if (failDigitalReport && sql.includes('INSERT INTO public.reporte_contenido')) throw new Error('private report SQL');
       if (failReference && sql.includes('SELECT EXISTS(SELECT 1 FROM public.archivo_publicacion')) throw new Error('private connection');
       if (failCommit && sql === 'COMMIT') { failCommit = false; throw new Error('failed commit'); }
       if (sql.includes('pg_advisory_xact_lock')) barriers++;
@@ -127,6 +129,7 @@ before(async () => {
 beforeEach(async () => {
   failAcademicInsert = failAudit = false;
   failDigitalAccess = false;
+  failDigitalReport = false;
   onDownload = null; failDownload = corruptDownload = false;
   uploads = []; removals = []; storageCalls = []; logs = []; objects = new Map(); barriers = 0;
   failUpload = failInsert = failRemove = failReference = lostCommit = failCommit = publicBucket = missingBucket = smallBucket = false; onUpload = null;
@@ -781,6 +784,37 @@ test('digital rating shares physical rules: completed receiver only, integer 1..
   const row=(await db.query('SELECT * FROM valoracion WHERE transaccion_id=$1',[tradeId])).rows[0];assert.equal(row.evaluador_id,receiver.userId);assert.equal(row.evaluado_id,auth.userId);
   const detail=await trades.getDigitalTrade(receiver,saved.id,tradeId);assert.equal(detail.canRate,false);assert.ok(detail.rating);
   current=receiver;assert.equal((await digitalJson(`/${saved.id}/transactions/${tradeId}/rating`,'PATCH',{score:2})).status,404);
+});
+const digitalReport=(id:string,body:unknown,tradeId?:string)=>originalFetch(base.replace('/marketplace/elibrary','/reports/elibrary')+'/'+id+(tradeId?'/transactions/'+tradeId:''),{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+test('digital publication reports share storage/form contract, retain private evidence and use original campus across institution',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();current=receiver;
+  const response=await digitalReport(saved.id,{reason:' Material inapropiado ',description:' Revisión solicitada '});assert.equal(response.status,201);const receipt=(await response.json()).data;
+  assert.equal(receipt.campusId,campus);assert.equal(receipt.publicationId,saved.id);assert.equal(receipt.transactionId,null);assert.equal(receipt.status,'PENDIENTE');
+  assert.doesNotMatch(JSON.stringify(receipt),/snapshot|contenido_reportado|storage_path|bucket_id|reportante/);
+  const row=(await db.query('SELECT * FROM reporte_contenido WHERE id=$1',[receipt.id])).rows[0];assert.equal(row.reportante_id,receiver.userId);assert.equal(row.campus_id,campus);assert.equal(row.entidad_tipo,'PUBLICACION_DIGITAL');assert.equal(row.motivo,'Material inapropiado');
+  assert.equal(row.contenido_reportado_json.publication.titulo,saved.title);assert.doesNotMatch(JSON.stringify(row.contenido_reportado_json),/storage_path|bucket_id|https:|%PDF|digital-resources/);
+  await db.query("UPDATE publicacion_recurso SET titulo='Cambiado después',deleted_at=now() WHERE id=$1",[saved.id]);
+  assert.equal((await db.query('SELECT contenido_reportado_json FROM reporte_contenido WHERE id=$1',[receipt.id])).rows[0].contenido_reportado_json.publication.titulo,saved.title);
+  assert.equal((await digitalReport(saved.id,{reason:'Otro'})).status,404);
+});
+test('digital transaction reports require participation even after withdrawal, and do not grant files or mutate agreement',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
+  const before=(await db.query('SELECT * FROM transaccion_recurso WHERE id=$1',[tradeId])).rows[0];await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[saved.id]);current=receiver;
+  const response=await digitalReport(saved.id,{reason:'Problema con el acuerdo'},tradeId);assert.equal(response.status,201);const receipt=(await response.json()).data;
+  const snapshot=(await db.query('SELECT contenido_reportado_json FROM reporte_contenido WHERE id=$1',[receipt.id])).rows[0].contenido_reportado_json;assert.equal(snapshot.transaction.id,tradeId);assert.equal(snapshot.transaction.receptor_id,receiver.userId);
+  assert.deepEqual((await db.query('SELECT * FROM transaccion_recurso WHERE id=$1',[tradeId])).rows[0],before);assert.equal((await original(saved.id,saved.files[0].id)).status,403);
+  current=other;assert.equal((await digitalReport(saved.id,{reason:'Ajeno'},tradeId)).status,404);
+  current=await peer(foreignCampus,foreignInstitution);assert.equal((await digitalReport(saved.id,{reason:'Ajeno'})).status,404);
+  current=structuredClone(auth);assert.equal((await digitalReport(saved.id,{reason:'Problema'},tradeId)).status,201);
+  assert.equal((await trades.getDigitalTrade(auth,saved.id,tradeId)).status,'RESERVADA');
+});
+test('digital reports reject privileged/invalid fields, fail atomically and expose no private SQL on uncertain COMMIT',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();current=receiver;
+  for(const raw of [{reason:''},{reason:'x'.repeat(201)},{reason:'Motivo',campusId:sibling},{reason:'Motivo',snapshot:{}},{reason:'Motivo',reporterId:auth.userId},{reason:'bad\u0000value'}])assert.equal((await digitalReport(saved.id,raw)).status,400);
+  failDigitalReport=true;const failure=await digitalReport(saved.id,{reason:'Motivo'});assert.equal(failure.status,503);assert.doesNotMatch(await failure.text(),/private|SQL|password/);assert.equal((await db.query('SELECT * FROM reporte_contenido WHERE reportante_id=$1',[receiver.userId])).rows.length,0);
+  failDigitalReport=false;lostCommit=true;assert.equal((await digitalReport(saved.id,{reason:'Motivo'})).status,503);
+  assert.equal((await db.query('SELECT * FROM reporte_contenido WHERE reportante_id=$1',[receiver.userId])).rows.length,1);
+  assert.equal((await db.query('SELECT estado_publicacion FROM publicacion_recurso WHERE id=$1',[saved.id])).rows[0].estado_publicacion,'DISPONIBLE');
 });
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {

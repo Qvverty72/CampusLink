@@ -11,7 +11,7 @@ export interface PhysicalgoodsReportReceipt extends ContentReportReceipt {
   publicationId:string; transactionId:string|null;
 }
 export interface NewContentReport extends ContentReportInput {
-  userId:string;campusId:string;entityType:'ACTIVIDAD'|'PUBLICACION_FISICA'|'TRANSACCION';entityId:string;snapshot:unknown;
+  userId:string;campusId:string;entityType:'ACTIVIDAD'|'PUBLICACION_FISICA'|'PUBLICACION_DIGITAL'|'TRANSACCION';entityId:string;snapshot:unknown;
 }
 export interface ActivityReportReceipt {
   id: string; activityId: string; campusId: string; status: 'PENDIENTE'; reportedAt: string;

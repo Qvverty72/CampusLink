@@ -14,7 +14,7 @@ export function ContentReportForm(props:Props) {
 function ReportFields({target,title,onBack,onBusyChange}:Props) {
   const [reason,setReason]=useState(''),[description,setDescription]=useState(''),[validation,setValidation]=useState<string|null>(null);
   const {submit,busy,error,receipt}=useContentReport(target);
-  const activity=target.type==='ACTIVIDAD',transaction=target.type==='TRANSACCION';
+  const activity=target.type==='ACTIVIDAD',transaction=target.type==='TRANSACCION'||target.type==='TRANSACCION_DIGITAL',digital=target.type==='PUBLICACION_DIGITAL'||target.type==='TRANSACCION_DIGITAL';
   useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false);},[busy,onBusyChange]);
   const send=()=>{
     if(!reason.trim()||reason.trim().length>200||description.trim().length>2000){setValidation('Escribe un motivo de hasta 200 caracteres y una descripción opcional de hasta 2000.');return;}
@@ -28,7 +28,7 @@ function ReportFields({target,title,onBack,onBusyChange}:Props) {
       <Text style={styles.text}>Fecha: {new Date(receipt.reportedAt).toLocaleString('es-CL')}</Text>
       <Text style={styles.text}>{activity?'Enviar la denuncia no oculta la actividad ni cambia las inscripciones.':'Enviar la denuncia no oculta la publicación ni modifica la transacción.'}</Text>
     </>:<>
-      <Text style={styles.text}>{activity?'Describe el motivo para que la administración de tu campus pueda revisar el caso. La actividad seguirá visible mientras se revisa.':'Describe el motivo y lo ocurrido para que la administración de tu campus pueda revisar el caso. Enviar la denuncia no cambia el estado de la publicación ni del intercambio.'}</Text>
+      <Text style={styles.text}>{activity?'Describe el motivo para que la administración de tu campus pueda revisar el caso. La actividad seguirá visible mientras se revisa.':digital?'Describe el motivo para que la administración del campus de origen pueda revisar el caso. El recurso y sus accesos se conservan.':'Describe el motivo y lo ocurrido para que la administración de tu campus pueda revisar el caso. Enviar la denuncia no cambia el estado de la publicación ni del intercambio.'}</Text>
       <Text style={styles.heading}>Motivo (obligatorio)</Text>
       <TextInput accessibilityLabel="Motivo de la denuncia" value={reason} onChangeText={setReason} editable={!busy} maxLength={200}
         placeholder={activity?'¿Por qué denuncias esta actividad?':'Motivo de la denuncia'} style={styles.input}/>

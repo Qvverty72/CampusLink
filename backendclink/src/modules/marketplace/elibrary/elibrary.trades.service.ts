@@ -32,7 +32,7 @@ export async function withDigitalTradeContext<T>(auth: VerifiedAuthConnection, r
     const resource=await findDigitalResource(client,id,campus.institucion_id);
     if(!resource)throw missing();if(resource.propietario_id!==participants.ownerId)throw conflict('La publicación cambió. Recarga el recurso.');
     return operation(client,resource,current);
-  });} catch(error) {if(error instanceof ApiError)throw error;throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudo confirmar la operación. Recarga tus solicitudes y acuerdos antes de reintentar.');}
+  });} catch(error) {if(error instanceof ApiError)throw error;throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudo confirmar la operación. Revisa su estado antes de reintentar.');}
 }
 function requestDto(row: DigitalRequestRow) {
   return {id:row.id,publicationId:row.publicacion_id,title:row.title,ownerId:row.ownerId,requesterId:row.solicitante_id,requesterName:row.requesterName,
@@ -43,7 +43,7 @@ export async function digitalTradeDto(client: PoolClient, resource: DigitalResou
   if(![trade.propietario_id,trade.receptor_id].includes(current.userId))throw missing();
   const active=['RESERVADA','PENDIENTE_CONFIRMACION'].includes(trade.estado_transaccion), confirmations=await digitalConfirmations(client,trade.id);
   const rating=await findDigitalRating(client,trade.id);
-  return {id:trade.id,publicationId:resource.id,title:resource.title,ownerId:trade.propietario_id,receiverId:trade.receptor_id,status:trade.estado_transaccion,
+  return {id:trade.id,publicationId:resource.id,campusId:resource.campus_id,title:resource.title,ownerId:trade.propietario_id,receiverId:trade.receptor_id,status:trade.estado_transaccion,
     modality:trade.modalidad_acordada,amount:trade.monto_acordado===null?null:Number(trade.monto_acordado),currency:trade.moneda,
     startedAt:new Date(trade.iniciada_en).toISOString(),completedAt:trade.completada_en?new Date(trade.completada_en).toISOString():null,
     cancelledAt:trade.cancelada_en?new Date(trade.cancelada_en).toISOString():null,

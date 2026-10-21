@@ -6,6 +6,7 @@ import { getValidatedRequest } from '../../middleware/validateRequest.js';
 import type { AuthLocals } from '../auth/auth.types.js';
 import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
 import { reportPhysicalgoods } from './reports.physicalgoods.service.js';
+import { reportDigitalResource } from './reports.elibrary.service.js';
 
 export const getReportsHealthController: RequestHandler = async (_request, response) => {
   sendModuleHealth(response, await getReportsHealth());
@@ -13,6 +14,9 @@ export const getReportsHealthController: RequestHandler = async (_request, respo
 
 export const createPhysicalgoodsReportController:RequestHandler<Record<string,string>,unknown,unknown,Record<string,string>,AuthLocals>=async(request,response)=>{
   sendSuccess(response,await reportPhysicalgoods(response.locals.auth,request.params.publicationId,request.params.transactionId??null,request.body),201);
+};
+export const createDigitalReportController:RequestHandler<Record<string,string>,unknown,unknown,Record<string,string>,AuthLocals>=async(request,response)=>{
+  sendSuccess(response,await reportDigitalResource(response.locals.auth,request.params.publicationId,request.params.transactionId??null,request.body),201);
 };
 
 /** Crea el adaptador HTTP de denuncia usando parámetros y cuerpo previamente validados. */
