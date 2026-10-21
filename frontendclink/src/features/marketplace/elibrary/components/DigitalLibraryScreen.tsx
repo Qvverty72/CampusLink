@@ -9,6 +9,7 @@ import { DigitalAcademicSelector } from './DigitalAcademicSelector';
 import { DigitalSearchForm } from './DigitalSearchForm';
 import { DigitalPreview } from './DigitalPreview';
 import { DigitalRequestAction, DigitalTradeCenter } from './DigitalTradeCenter';
+import { AcquiredDigitalResources } from './AcquiredDigitalResources';
 import type { DigitalPublication } from '../types/publication';
 
 const terms = (item: DigitalPublication) => item.modality === 'DONACION' ? 'Donación' : `$${item.price?.toLocaleString('es-CL')} CLP`;
@@ -105,6 +106,7 @@ function Library() {
       </View> : <>
         <Pressable accessibilityRole="button" onPress={library.openForm} style={styles.primary}><Plus color="#FFFFFF" size={20} /><Text style={styles.primaryText}>Publicar recurso</Text></Pressable>
         <DigitalTradeCenter />
+        <AcquiredDigitalResources />
         <View style={styles.listHeading}><Text style={styles.sectionTitle}>Publicaciones recientes</Text>
           <Pressable accessibilityRole="button" onPress={library.reload} style={styles.smallButton}><Text style={styles.link}>Actualizar</Text></Pressable>
         </View>

@@ -5,6 +5,7 @@ import { requireAuthentication } from '../../auth/auth.middleware.js';
 import { addDigitalFileController, downloadDigitalFileController } from './elibrary.controller.js';
 import { digitalAcademicCatalogController, updateDigitalAcademicsController } from './elibrary.controller.js';
 import { digitalPreviewController } from './elibrary.controller.js';
+import { acquiredDigitalController,acquiredDigitalDetailController } from './elibrary.controller.js';
 import { createDigitalRequestController, digitalRequestOptionsController, receivedDigitalRequestsController, sentDigitalRequestsController,
   resolveDigitalRequestController, detailDigitalTradeController, transitionDigitalTradeController } from './elibrary.controller.js';
 
@@ -15,6 +16,8 @@ export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
   router.post('/', requireAuthentication, createDigitalController);
   router.get('/', requireAuthentication, listDigitalController);
   router.get('/academic-options', requireAuthentication, digitalAcademicCatalogController);
+  router.get('/acquired', requireAuthentication, acquiredDigitalController);
+  router.get('/acquired/:publicationId', requireAuthentication, acquiredDigitalDetailController);
   router.get('/requests/received', requireAuthentication, receivedDigitalRequestsController);
   router.get('/requests/sent', requireAuthentication, sentDigitalRequestsController);
   router.get('/:publicationId', requireAuthentication, detailDigitalController);

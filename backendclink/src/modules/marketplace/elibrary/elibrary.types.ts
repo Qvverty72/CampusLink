@@ -23,13 +23,15 @@ export interface DigitalPublication extends DigitalInput {
   campusId: string;
   institutionId: string;
   campusName: string;
-  status: 'DISPONIBLE';
+  status: string;
   currency: 'CLP';
   files: DigitalAttachment[];
   careers: DigitalAcademicOption[];
   subjects: DigitalAcademicOption[];
   updatedAt: string;
   acquired: boolean;
+  isWithdrawn: boolean;
+  acquisition: { transactionId:string;acquiredAt:string;modality:string;amount:number|null;currency:string } | null;
 }
 export interface DigitalResourceRow {
   id: string; campus_id: string; propietario_id: string; institucion_id: string;

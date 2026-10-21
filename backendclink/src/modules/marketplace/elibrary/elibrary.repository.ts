@@ -55,12 +55,16 @@ export async function digitalFileHasReference(id: string, path: string) {
   });
 }
 /** Proyección pública institucional: nunca selecciona bucket, path ni enlaces del original. */
-export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null, filters?: DigitalSearch, viewerId: string | null = null): Promise<DigitalPublication[]> {
+export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null, filters?: DigitalSearch, viewerId: string | null = null, scope: 'available' | 'acquired' = 'available'): Promise<DigitalPublication[]> {
   return (await client.query<Omit<DigitalPublication, 'careerIds' | 'subjectIds'>>(
     `SELECT p.id,p.titulo AS title,p.descripcion AS description,p.modalidad AS modality,p.precio::float8 AS price,
       to_char(p.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt",
       p.moneda AS currency,p.estado_publicacion AS status,p.propietario_id AS "ownerId",p.campus_id AS "campusId",
       c.nombre AS "campusName",c.institucion_id AS "institutionId",
+      (p.deleted_at IS NOT NULL) AS "isWithdrawn",
+      CASE WHEN $10='acquired' THEN (SELECT json_build_object('transactionId',t.id,'acquiredAt',a.concedido_en,'modality',t.modalidad_acordada,'amount',t.monto_acordado,'currency',t.moneda)
+        FROM public.acceso_recurso_digital a JOIN public.transaccion_recurso t ON t.id=a.transaccion_id
+        WHERE a.publicacion_id=p.id AND a.receptor_id=$9 AND t.propietario_id=p.propietario_id AND ${DIGITAL_ACCESS_PROOF} LIMIT 1) ELSE NULL END AS acquisition,
       EXISTS(SELECT 1 FROM public.acceso_recurso_digital a JOIN public.transaccion_recurso t ON t.id=a.transaccion_id
         WHERE a.publicacion_id=p.id AND a.receptor_id=$9 AND t.propietario_id=p.propietario_id AND ${DIGITAL_ACCESS_PROOF}) AS acquired,
       COALESCE((SELECT json_agg(json_build_object('id',c.id,'name',c.nombre,'code',c.codigo) ORDER BY c.nombre,c.id)
@@ -74,7 +78,10 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
      FROM public.publicacion_recurso p JOIN public.recurso_digital d ON d.publicacion_id=p.id
      JOIN public.campus c ON c.id=p.campus_id JOIN public.institucion i ON i.id=c.institucion_id
      WHERE c.institucion_id=$1 AND p.tipo_recurso='DIGITAL'
-       AND p.estado_publicacion='DISPONIBLE' AND p.deleted_at IS NULL AND ($2::uuid IS NULL OR p.id=$2)
+       AND ($2::uuid IS NULL OR p.id=$2)
+       AND (($10='available' AND p.estado_publicacion='DISPONIBLE' AND p.deleted_at IS NULL)
+         OR ($10='acquired' AND EXISTS(SELECT 1 FROM public.acceso_recurso_digital a JOIN public.transaccion_recurso t ON t.id=a.transaccion_id
+           WHERE a.publicacion_id=p.id AND a.receptor_id=$9 AND t.propietario_id=p.propietario_id AND ${DIGITAL_ACCESS_PROOF})))
        AND ($3::text IS NULL OR p.titulo ILIKE $3 OR p.descripcion ILIKE $3)
        AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM public.publicacion_carrera pc WHERE pc.publicacion_id=p.id AND pc.carrera_id=$4))
        AND ($5::uuid IS NULL OR EXISTS(SELECT 1 FROM public.publicacion_asignatura pa WHERE pa.publicacion_id=p.id AND pa.asignatura_id=$5))
@@ -82,7 +89,7 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
        AND EXISTS(SELECT 1 FROM public.archivo_publicacion a WHERE a.publicacion_id=p.id AND a.deleted_at IS NULL AND a.tipo_archivo='RECURSO')
      ORDER BY p.publicado_en DESC,p.id DESC LIMIT $7 OFFSET $8`, [institutionId, id,
        filters?.q ? '%' + filters.q.replace(/[\\%_]/g, '\\$&') + '%' : null,
-       filters?.careerId ?? null, filters?.subjectId ?? null, filters?.modality ?? null, filters ? filters.limit + 1 : 30, filters?.offset ?? 0, viewerId])).rows
+       filters?.careerId ?? null, filters?.subjectId ?? null, filters?.modality ?? null, filters ? filters.limit + 1 : 30, filters?.offset ?? 0, viewerId, scope])).rows
     .map(row => ({ ...row, careerIds: row.careers.map(career => career.id), subjectIds: row.subjects.map(subject => subject.id) }));
 }
 

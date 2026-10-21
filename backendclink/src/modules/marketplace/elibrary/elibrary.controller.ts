@@ -12,8 +12,15 @@ import { searchDigitalPublications } from './elibrary.search.service.js';
 import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 import { getDigitalPreview } from './elibrary.preview.service.js';
 import { createDigitalRequest, digitalAction, getDigitalRequestOptions, getDigitalRequests, getDigitalTrade, resolveDigitalRequest, transitionDigitalTrade } from './elibrary.trades.service.js';
+import { getAcquiredDigitalResources } from './elibrary.acquired.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const acquiredDigitalController:DigitalHandler=async(request,response)=>{
+  const result=await getAcquiredDigitalResources(response.locals.auth,request.query);sendEnvelope(response,result.data,{meta:result.meta});
+};
+export const acquiredDigitalDetailController:DigitalHandler=async(request,response)=>{
+  digitalAction(request.query);const result=await getAcquiredDigitalResources(response.locals.auth,{},request.params.publicationId);sendSuccess(response,result.data[0]);
+};
 export const digitalRequestOptionsController: DigitalHandler = async(request,response)=>{
   digitalAction(request.query);sendSuccess(response,await getDigitalRequestOptions(response.locals.auth,request.params.publicationId));
 };

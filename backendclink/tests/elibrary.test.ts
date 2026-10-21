@@ -702,6 +702,26 @@ test('multiple digital receivers complete independently without consuming public
   const fourth=await peer();assert.ok((await one.trades.createDigitalRequest(fourth,saved.id,{messageCode:'LIB_QA_INTERES'})).id);
   current=first;const result=await get('?q='+encodeURIComponent(saved.title));assert.ok((await result.json()).data.some((row:{id:string;acquired:boolean})=>row.id===saved.id&&row.acquired));
 });
+test('acquired materials are paginated private rights-backed reads with original terms after owner/resource deactivation',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();await acquisition(saved.id,receiver.userId);
+  await db.query("UPDATE publicacion_recurso SET precio=9999,deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1",[saved.id]);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='DESACTIVADA' WHERE id=$1",[auth.userId]);current=receiver;
+  const list=await get('/acquired?limit=1');assert.equal(list.status,200);const result=await list.json();assert.equal(result.data.length,1);assert.equal(result.meta.hasMore,false);
+  assert.equal(result.data[0].isWithdrawn,true);assert.equal(result.data[0].acquisition.amount,2500);assert.equal(result.data[0].acquired,true);
+  const detail=await get('/acquired/'+saved.id);assert.equal(detail.status,200);assert.doesNotMatch(JSON.stringify(await detail.json()),/storage_path|bucket_id|signedUrl|digital-resources/);
+  assert.equal((await get('/'+saved.id)).status,404);assert.deepEqual(Buffer.from(await(await original(saved.id,saved.files[0].id)).arrayBuffer()),pdf);
+  assert.equal((await get('/acquired?receiverId='+other.userId)).status,400);current=other;
+  assert.equal((await get('/acquired/'+saved.id)).status,404);assert.deepEqual((await(await get('/acquired')).json()).data,[]);
+});
+test('acquired material reads exclude incomplete/revoked/mismatched rights and institutional changes',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();const transactionId=await acquisition(saved.id,receiver.userId,1);current=receiver;
+  assert.deepEqual((await(await get('/acquired')).json()).data,[]);
+  await db.query("INSERT INTO confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) VALUES($1,$2,'RECEPTOR')",[transactionId,receiver.userId]);assert.equal((await get('/acquired/'+saved.id)).status,200);
+  await db.query('DELETE FROM acceso_recurso_digital WHERE transaccion_id=$1',[transactionId]);assert.equal((await get('/acquired/'+saved.id)).status,404);
+  await db.query('INSERT INTO acceso_recurso_digital(transaccion_id,publicacion_id,receptor_id) VALUES($1,$2,$3)',[transactionId,saved.id,receiver.userId]);
+  await db.query('UPDATE perfil_usuario SET campus_id=$2,institucion_id=$3 WHERE id=$1',[receiver.userId,foreignCampus,foreignInstitution]);current={...receiver,campusId:foreignCampus,profile:{...receiver.profile,campus_id:foreignCampus,institucion_id:foreignInstitution}};
+  assert.deepEqual((await(await get('/acquired')).json()).data,[]);assert.equal((await get('/acquired/'+saved.id)).status,404);
+});
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());

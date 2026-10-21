@@ -22,11 +22,13 @@ export interface DigitalPublication extends DigitalInput {
   campusId: string;
   campusName: string;
   institutionId: string;
-  status: 'DISPONIBLE';
+  status: string;
   currency: 'CLP';
   files: DigitalAttachment[];
   careers: DigitalAcademicOption[];
   subjects: DigitalAcademicOption[];
   updatedAt: string;
   acquired: boolean;
+  isWithdrawn: boolean;
+  acquisition: { transactionId:string;acquiredAt:string;modality:string;amount:number|null;currency:string } | null;
 }

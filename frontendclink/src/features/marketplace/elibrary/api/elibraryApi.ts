@@ -12,6 +12,8 @@ export const updateDigitalAcademics = (id: string, input: Pick<DigitalInput, 'ca
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
   });
 export const loadDigitalPublications = (signal?: AbortSignal) => authenticatedRequest<DigitalPublication[]>(base, { signal });
+export const loadAcquiredDigitalResources=(page:number,signal?:AbortSignal)=>authenticatedEnvelopeRequest<DigitalPublication[],DigitalPage>(`${base}/acquired`,{signal},new URLSearchParams({page:String(page),limit:'20'}));
+export const loadAcquiredDigitalResource=(id:string,signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/acquired/${id}`,{signal});
 export function searchDigitalPublications(filters: DigitalFilters, page: number, signal?: AbortSignal) {
   const query = new URLSearchParams({ page: String(page), limit: '20' });
   for (const [key, value] of Object.entries(filters)) if (value.trim()) query.set(key, value.trim());

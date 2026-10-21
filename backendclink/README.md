@@ -570,6 +570,10 @@ Bearer en todas las rutas. `GET /elibrary/:id/request-options` informa elegibili
 
 `GET /:id/transactions/:transactionId` es privado de los dos participantes. `POST /confirm|cancel` recibe `{}` exacto. Doble confirmación/completado/derecho se guardan atómicamente; una confirmación no habilita descarga. Cancelar registra actor/fecha/motivo USUARIO_DESISTE y cancela solo su solicitud, sin derecho. Operaciones terminales repetidas son idempotentes; red/COMMIT desconocido requiere reconsultar, sin reenvíos automáticos. Sin pagos ni conversación libre. Perfiles se bloquean ordenados antes de barrera/publicación/acuerdo; se revalidan ambos participantes institucionales antes de aceptar/completar. Sin SQL nuevo: se comprobaron índices/RLS/grants remotos existentes.
 
+## Materiales digitales adquiridos (F2.5-07/08)
+
+DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad servidor; cerrar/cancelar un acuerdo no cambia otros ni consume el digital. `GET /elibrary/acquired` (page/limit) y `GET /acquired/:publicationId` consultan únicamente derechos válidos propios con el mismo predicado de la descarga. Respetan institución actual, aunque recurso/propietario estén desactivados; incorporan `isWithdrawn` y `acquisition:{transactionId,acquiredAt,modality,amount,currency}` con términos originales. Expo ofrece sección paginada y descarga autenticada en web/nativo. Sin permiso por usuario/receptor en query ni URLs privadas.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
