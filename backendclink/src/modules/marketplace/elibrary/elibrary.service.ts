@@ -49,8 +49,8 @@ export async function createDigitalPublication(auth: VerifiedAuthConnection, raw
     await uploadDigitalFile(path, file);
     persistenceAttempted = true;
     return await withPostgresTransaction(async client => {
-      await lockDigitalPersistence(client, id);
       const { current, campus } = await currentDigitalContext(client, auth);
+      await lockDigitalPersistence(client, id);
       validateDigitalAcademics(input, await findDigitalAcademicCatalog(client, campus.institucion_id));
       await insertDigitalPublication(client, { ...input, id, ownerId: current.userId, campusId: campus.id }, file, path);
       await replaceDigitalAcademics(client, id, input.careerIds, input.subjectIds);

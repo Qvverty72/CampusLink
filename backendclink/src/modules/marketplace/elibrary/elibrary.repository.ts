@@ -82,7 +82,7 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
 
 export async function findDigitalResource(client: PoolClient, id: string, institutionId: string) {
   return (await client.query<DigitalResourceRow>(
-    `SELECT p.id,p.campus_id,p.propietario_id,p.estado_publicacion,p.deleted_at,c.institucion_id
+    `SELECT p.id,p.campus_id,p.propietario_id,p.titulo AS title,p.estado_publicacion,p.deleted_at,c.institucion_id
      FROM public.publicacion_recurso p JOIN public.recurso_digital d ON d.publicacion_id=p.id
      JOIN public.campus c ON c.id=p.campus_id
      WHERE p.id=$1 AND p.tipo_recurso='DIGITAL' AND c.institucion_id=$2 FOR NO KEY UPDATE OF p`, [id, institutionId])).rows[0] ?? null;

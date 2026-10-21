@@ -8,6 +8,7 @@ import { useDigitalLibrary } from '../hooks/useDigitalLibrary';
 import { DigitalAcademicSelector } from './DigitalAcademicSelector';
 import { DigitalSearchForm } from './DigitalSearchForm';
 import { DigitalPreview } from './DigitalPreview';
+import { DigitalRequestAction, DigitalTradeCenter } from './DigitalTradeCenter';
 import type { DigitalPublication } from '../types/publication';
 
 const terms = (item: DigitalPublication) => item.modality === 'DONACION' ? 'Donación' : `$${item.price?.toLocaleString('es-CL')} CLP`;
@@ -98,10 +99,11 @@ function Library() {
         </View>)}
         {library.detail.files.map(file => <DigitalPreview key={file.id} publicationId={library.detail!.id} fileId={file.id} name={file.name} />)}
         {library.isOwner ? !library.editingAcademics && <Pressable accessibilityRole="button" disabled={Boolean(library.downloading)} onPress={library.openAttachments} style={styles.primary}><Plus size={20} color="#FFFFFF" /><Text style={styles.primaryText}>Añadir archivos</Text></Pressable>
-          : <Text style={styles.helper}>Archivos privados. La adquisición estará disponible en una próxima etapa.</Text>}
+          : <DigitalRequestAction id={library.detail.id} />}
         <Pressable accessibilityRole="button" disabled={disabled} onPress={library.closeDetail} style={styles.smallButton}><Text style={styles.link}>Volver a la biblioteca</Text></Pressable>
       </View> : <>
         <Pressable accessibilityRole="button" onPress={library.openForm} style={styles.primary}><Plus color="#FFFFFF" size={20} /><Text style={styles.primaryText}>Publicar recurso</Text></Pressable>
+        <DigitalTradeCenter />
         <View style={styles.listHeading}><Text style={styles.sectionTitle}>Publicaciones recientes</Text>
           <Pressable accessibilityRole="button" onPress={library.reload} style={styles.smallButton}><Text style={styles.link}>Actualizar</Text></Pressable>
         </View>

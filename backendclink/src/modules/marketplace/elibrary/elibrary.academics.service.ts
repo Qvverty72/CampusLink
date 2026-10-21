@@ -23,8 +23,8 @@ export async function updateDigitalAcademics(auth: VerifiedAuthConnection, rawId
   const id = digitalId(rawId), input = parseDigitalAcademics(raw);
   try {
     return await withPostgresTransaction(async client => {
-      await lockDigitalPersistence(client, id);
       const { current, campus } = await currentDigitalContext(client, auth);
+      await lockDigitalPersistence(client, id);
       const resource = await findDigitalResource(client, id, campus.institucion_id);
       if (!resource) throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible en tu institución.');
       if (resource.propietario_id !== current.userId) throw new ApiError(403, 'FORBIDDEN', 'Solo el propietario puede editar las asociaciones.');

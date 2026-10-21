@@ -11,8 +11,30 @@ import { invalidDigital } from './elibrary.validation.js';
 import { searchDigitalPublications } from './elibrary.search.service.js';
 import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 import { getDigitalPreview } from './elibrary.preview.service.js';
+import { createDigitalRequest, digitalAction, getDigitalRequestOptions, getDigitalRequests, getDigitalTrade, resolveDigitalRequest, transitionDigitalTrade } from './elibrary.trades.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const digitalRequestOptionsController: DigitalHandler = async(request,response)=>{
+  digitalAction(request.query);sendSuccess(response,await getDigitalRequestOptions(response.locals.auth,request.params.publicationId));
+};
+export const createDigitalRequestController: DigitalHandler = async(request,response)=>{
+  digitalAction(request.query);sendSuccess(response,await createDigitalRequest(response.locals.auth,request.params.publicationId,request.body),201);
+};
+export const receivedDigitalRequestsController: DigitalHandler = async(request,response)=>{
+  const result=await getDigitalRequests(response.locals.auth,request.query,true);sendEnvelope(response,result.data,{meta:result.meta});
+};
+export const sentDigitalRequestsController: DigitalHandler = async(request,response)=>{
+  const result=await getDigitalRequests(response.locals.auth,request.query,false);sendEnvelope(response,result.data,{meta:result.meta});
+};
+export const resolveDigitalRequestController: DigitalHandler = async(request,response)=>{
+  digitalAction(request.query);sendSuccess(response,await resolveDigitalRequest(response.locals.auth,request.params.publicationId,request.params.requestId,request.body));
+};
+export const detailDigitalTradeController: DigitalHandler = async(request,response)=>{
+  digitalAction(request.query);sendSuccess(response,await getDigitalTrade(response.locals.auth,request.params.publicationId,request.params.transactionId));
+};
+export const transitionDigitalTradeController = (action:'CONFIRMAR'|'CANCELAR'):DigitalHandler=>async(request,response)=>{
+  digitalAction(request.query);sendSuccess(response,await transitionDigitalTrade(response.locals.auth,request.params.publicationId,request.params.transactionId,request.body,action));
+};
 export const digitalPreviewController: DigitalHandler = async (request,response) => {
   if (Object.keys(request.query).length) invalidDigital('query','La vista previa no admite parámetros adicionales.');
   sendSuccess(response,await getDigitalPreview(response.locals.auth,request.params.publicationId,request.params.fileId));

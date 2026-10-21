@@ -26,6 +26,7 @@ let uploads: string[], removals: string[], storageCalls: string[], logs: unknown
 let objects = new Map<string, Buffer>(), connectionLease = Promise.resolve();
 let barriers = 0;
 let failAcademicInsert = false, failAudit = false;
+let failDigitalAccess = false;
 
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
@@ -39,6 +40,7 @@ before(async () => {
       if (failInsert && sql.startsWith('INSERT INTO public.archivo_publicacion')) throw new Error('private SQL password');
       if (failAcademicInsert && sql.startsWith('INSERT INTO public.publicacion_asignatura')) throw new Error('private academic SQL');
       if (failAudit && sql.startsWith('INSERT INTO public.auditoria')) throw new Error('private audit SQL');
+      if (failDigitalAccess && sql.includes('INSERT INTO public.acceso_recurso_digital')) throw new Error('private access SQL');
       if (failReference && sql.includes('SELECT EXISTS(SELECT 1 FROM public.archivo_publicacion')) throw new Error('private connection');
       if (failCommit && sql === 'COMMIT') { failCommit = false; throw new Error('failed commit'); }
       if (sql.includes('pg_advisory_xact_lock')) barriers++;
@@ -100,6 +102,9 @@ before(async () => {
     ALTER TABLE acceso_recurso_digital ADD UNIQUE(publicacion_id,receptor_id);
     ALTER TABLE confirmacion_transaccion ADD UNIQUE(transaccion_id,rol_confirmante);
     ALTER TABLE confirmacion_transaccion ADD UNIQUE(transaccion_id,usuario_id);
+    CREATE UNIQUE INDEX solicitud_activa_test ON solicitud_recurso(publicacion_id,solicitante_id) WHERE estado_solicitud IN ('PENDIENTE','ACEPTADA');
+    ALTER TABLE transaccion_recurso ADD CHECK(propietario_id<>receptor_id);
+    ALTER TABLE transaccion_recurso ADD CHECK((estado_transaccion='COMPLETADA')=(completada_en IS NOT NULL));
     ALTER TABLE publicacion_recurso ADD CHECK ((modalidad='VENTA' AND precio>0 AND precio IS NOT NULL) OR (modalidad='DONACION' AND precio IS NULL));
     ALTER TABLE publicacion_recurso ENABLE ROW LEVEL SECURITY; ALTER TABLE archivo_publicacion ENABLE ROW LEVEL SECURITY;
     GRANT SELECT,INSERT ON publicacion_recurso,archivo_publicacion TO service_role;
@@ -113,6 +118,7 @@ before(async () => {
   await db.query('insert into campus(id,institucion_id,nombre) values($1,$2,$3),($4,$2,$5),($6,$7,$8)',
     [campus, institution, 'Origen', sibling, 'Otra sede', foreignCampus, foreignInstitution, 'Ajeno']);
   await db.exec("insert into rol(nombre) values('USUARIO_AUTORIZADO'),('ADMINISTRADOR')");
+  await db.exec("insert into mensaje_solicitud(codigo,descripcion) values('LIB_QA_INTERES','Me interesa este recurso académico')");
   const document = await PDFDocument.create(); document.addPage().drawText('Apuntes academicos'); pdf = Buffer.from(await document.save());
   const { createApp } = await import('../src/app.js');
   server = createApp().listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
@@ -120,6 +126,7 @@ before(async () => {
 });
 beforeEach(async () => {
   failAcademicInsert = failAudit = false;
+  failDigitalAccess = false;
   onDownload = null; failDownload = corruptDownload = false;
   uploads = []; removals = []; storageCalls = []; logs = []; objects = new Map(); barriers = 0;
   failUpload = failInsert = failRemove = failReference = lostCommit = failCommit = publicBucket = missingBucket = smallBucket = false; onUpload = null;
@@ -612,6 +619,76 @@ test('preview worker concurrency is bounded and slots are released after extract
   const first=extractDigitalPreview(pdf), second=extractDigitalPreview(pdf);
   await assert.rejects(extractDigitalPreview(pdf),{status:503});await Promise.all([first,second]);
   assert.equal(await extractDigitalPreview(pdf),null);
+});
+
+const digitalJson=(path:string,method:string,body:unknown)=>originalFetch(base+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+async function requestAndAccept(saved:{id:string},receiver:VerifiedAuthConnection) {
+  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const requested=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});
+  const accepted=await trades.resolveDigitalRequest(auth,saved.id,requested.id,{decision:'ACEPTAR'});assert.ok(accepted.transactionId);return {trades,requested,accepted,tradeId:accepted.transactionId!};
+}
+test('digital request, owner acceptance and both confirmations grant institutional cross-campus access for sale/donation',async()=>{
+  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  for(const modality of ['VENTA','DONACION']) {
+    const saved=await service.createDigitalPublication(auth,input({modality,price:modality==='VENTA'?2500:null}),file()),receiver=await peer();current=receiver;
+    const options=await get('/'+saved.id+'/request-options');assert.equal(options.status,200);assert.equal((await options.json()).data.canRequest,true);
+    const response=await digitalJson('/'+saved.id+'/requests','POST',{messageCode:'LIB_QA_INTERES'});assert.equal(response.status,201);const requested=(await response.json()).data;
+    current=structuredClone(auth);const accepted=await digitalJson(`/${saved.id}/requests/${requested.id}`,'PATCH',{decision:'ACEPTAR'});assert.equal(accepted.status,200);const tradeId=(await accepted.json()).data.transactionId;
+    assert.equal((await originalFetch(`${base}/${saved.id}/transactions/${tradeId}`)).status,401);
+    assert.equal((await digitalJson(`/${saved.id}/transactions/${tradeId}/confirm`,'POST',{})).status,200);
+    assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE publicacion_id=$1',[saved.id])).rows.length,0);
+    current=receiver;assert.equal((await original(saved.id,saved.files[0].id)).status,403);
+    const completed=await digitalJson(`/${saved.id}/transactions/${tradeId}/confirm`,'POST',{});assert.equal(completed.status,200);assert.equal((await completed.json()).data.status,'COMPLETADA');
+    assert.deepEqual(Buffer.from(await (await original(saved.id,saved.files[0].id)).arrayBuffer()),pdf);
+    assert.equal((await trades.getDigitalTrade(receiver,saved.id,tradeId)).amount,modality==='VENTA'?2500:null);
+    assert.equal((await db.query('SELECT estado_publicacion FROM publicacion_recurso WHERE id=$1',[saved.id])).rows[0].estado_publicacion,'DISPONIBLE');
+  }
+});
+test('digital requests prevent simultaneous duplicates, self requests, spoofing and non-owner resolution',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const results=await Promise.allSettled([trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'}),trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'})]);
+  assert.equal(results.filter(row=>row.status==='fulfilled').length,1);assert.equal(results.filter(row=>row.status==='rejected'&&row.reason.status===409).length,1);
+  const requested=(await trades.getDigitalRequests(receiver,{},false)).data[0];
+  await assert.rejects(trades.createDigitalRequest(auth,saved.id,{messageCode:'LIB_QA_INTERES'}),{status:403});
+  await assert.rejects(trades.resolveDigitalRequest(other,saved.id,requested.id,{decision:'ACEPTAR'}),{status:403});
+  await assert.rejects(trades.resolveDigitalRequest(await peer(foreignCampus,foreignInstitution),saved.id,requested.id,{decision:'ACEPTAR'}),{status:404});
+  for(const raw of [{messageCode:'bad'},{messageCode:'LIB_QA_INTERES',ownerId:auth.userId},{messageCode:'LIB_QA_INTERES',requesterId:other.userId}])await assert.rejects(trades.createDigitalRequest(other,saved.id,raw),{status:400});
+  current=receiver;assert.equal((await get('/requests/received')).status,200);assert.equal((await (await get('/requests/received')).json()).data.length,0);
+  assert.equal((await get('/requests/sent?ownerId='+auth.userId)).status,400);
+});
+test('digital cancellation and rejection preserve history without granting access; terms never change retroactively',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
+  await db.query("UPDATE publicacion_recurso SET precio=9999,modalidad='VENTA' WHERE id=$1",[saved.id]);
+  assert.equal((await trades.getDigitalTrade(receiver,saved.id,tradeId)).amount,2500);
+  await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
+  const cancelled=await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CANCELAR');assert.equal(cancelled.status,'CANCELADA');
+  assert.equal((await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CANCELAR')).status,'CANCELADA');
+  await assert.rejects(trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR'),{status:409});
+  assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE publicacion_id=$1',[saved.id])).rows.length,0);
+  const again=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});
+  assert.equal((await trades.resolveDigitalRequest(auth,saved.id,again.id,{decision:'RECHAZAR'})).status,'RECHAZADA');
+  assert.equal((await db.query('SELECT * FROM transaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,1);
+});
+test('digital grant and confirmations roll back together; lost COMMIT is reconciled by reads and idempotent confirmation',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
+  await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');failDigitalAccess=true;
+  await assert.rejects(trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR'),{status:503});
+  assert.equal((await db.query('SELECT * FROM confirmacion_transaccion WHERE transaccion_id=$1',[tradeId])).rows.length,1);
+  assert.equal((await trades.getDigitalTrade(receiver,saved.id,tradeId)).status,'PENDIENTE_CONFIRMACION');
+  failDigitalAccess=false;lostCommit=true;await assert.rejects(trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR'),{status:503});
+  assert.equal((await trades.getDigitalTrade(receiver,saved.id,tradeId)).status,'COMPLETADA');
+  assert.equal((await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR')).status,'COMPLETADA');
+  assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE publicacion_id=$1',[saved.id])).rows.length,1);
+});
+test('digital operations revalidate both institutional participants and private transaction participation',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
+  await assert.rejects(trades.getDigitalTrade(other,saved.id,tradeId),{status:404});
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1",[receiver.userId]);
+  await assert.rejects(trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR'),{status:409});
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA',campus_id=$2,institucion_id=$3 WHERE id=$1",[receiver.userId,foreignCampus,foreignInstitution]);
+  await assert.rejects(trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR'),{status:409});
+  assert.equal((await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CANCELAR')).status,'CANCELADA');
+  current=other;assert.equal((await digitalJson(`/${saved.id}/transactions/${tradeId}/confirm`,'POST',{role:'PROPIETARIO'})).status,400);
 });
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {

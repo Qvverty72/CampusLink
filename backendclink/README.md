@@ -564,6 +564,12 @@ Validación de PDF utiliza `pdf-lib`; transporte multipart acotado usa `busboy`;
 
 Mozilla `pdfjs-dist`6.4.299 se ejecuta en worker sin variables de entorno, evaluación ni descarga de fuentes; máximo2 concurrentes, heap128MB y8s. Workers, timers y slots se liberan en finally. Node requerido>=22.13 <23; manifest/lock coinciden. Sin SQL ni archivos PREVIEW persistidos nuevos.
 
+## Solicitudes y adquisición digital (F2.5-06)
+
+Bearer en todas las rutas. `GET /elibrary/:id/request-options` informa elegibilidad/derecho existente y mensajes activos del catálogo; `POST /:id/requests` recibe `{messageCode}`. `GET /requests/sent|received` pagina únicamente solicitudes propias institucionales, incluso tras retirada. `PATCH /:id/requests/:requestId` recibe `{decision:"ACEPTAR"|"RECHAZAR"}` y solo dueño habilitado resuelve. Aceptar crea acuerdo con modalidad/importe/moneda originales sin reservar ni agotar el digital.
+
+`GET /:id/transactions/:transactionId` es privado de los dos participantes. `POST /confirm|cancel` recibe `{}` exacto. Doble confirmación/completado/derecho se guardan atómicamente; una confirmación no habilita descarga. Cancelar registra actor/fecha/motivo USUARIO_DESISTE y cancela solo su solicitud, sin derecho. Operaciones terminales repetidas son idempotentes; red/COMMIT desconocido requiere reconsultar, sin reenvíos automáticos. Sin pagos ni conversación libre. Perfiles se bloquean ordenados antes de barrera/publicación/acuerdo; se revalidan ambos participantes institucionales antes de aceptar/completar. Sin SQL nuevo: se comprobaron índices/RLS/grants remotos existentes.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
