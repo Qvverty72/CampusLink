@@ -554,6 +554,10 @@ Validación de PDF utiliza `pdf-lib`; transporte multipart acotado usa `busboy`;
 - Snapshots anteriores/posteriores en `auditoria` se guardan atómicamente con la edición, con IDs/nombres/códigos y términos de publicación; la lectura administrativa existente los filtra. No modifica solicitudes, condiciones de transacciones, derechos ni archivos. Un fallo SQL/auditoría revierte el conjunto; ante COMMIT incierto responde503 y exige recargar antes de reintentar.
 - Sin tablas/columnas/dependencias ni migración nueva. Permisos/RLS y acciones de auditoría ya instalados fueron comprobados en Supabase. El catálogo operativo debe ser provisto por la institución; no se inventan asignaturas. Filtros/recomendaciones y edición general permanecen en F2.5-04/10/09.
 
+## Búsqueda digital (F2.5-04)
+
+`GET /api/v1/marketplace/elibrary` admite únicamente `q` (hasta200 caracteres), `careerId`, `subjectId`, `modality` (VENTA/DONACION), `page` y `limit` (1..100, defecto20). Devuelve `{data:[publicación],meta:{page,limit,hasMore}}`; detalle conserva contrato anterior. Filtra título/descripción como texto literal (comodines escapados), asociaciones múltiples con EXISTS, disponibilidad/archivo válido y siempre institución derivada del servidor. No entrega contenido de archivos. Expo ofrece filtros, paginación y estado sin coincidencias.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

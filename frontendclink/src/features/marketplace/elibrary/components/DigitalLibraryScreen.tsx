@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { APP_COLORS } from '@/types/colors';
 import { useDigitalLibrary } from '../hooks/useDigitalLibrary';
 import { DigitalAcademicSelector } from './DigitalAcademicSelector';
+import { DigitalSearchForm } from './DigitalSearchForm';
 import type { DigitalPublication } from '../types/publication';
 
 const terms = (item: DigitalPublication) => item.modality === 'DONACION' ? 'Donación' : `$${item.price?.toLocaleString('es-CL')} CLP`;
@@ -102,14 +103,20 @@ function Library() {
         <View style={styles.listHeading}><Text style={styles.sectionTitle}>Publicaciones recientes</Text>
           <Pressable accessibilityRole="button" onPress={library.reload} style={styles.smallButton}><Text style={styles.link}>Actualizar</Text></Pressable>
         </View>
+        <DigitalSearchForm catalog={library.catalog} onSearch={library.search} loading={library.loading} />
         {library.loading ? <ActivityIndicator accessibilityLabel="Cargando publicaciones" color={APP_COLORS.PRIMARY} /> : library.items.length ? library.items.map(item =>
           <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Consultar ${item.title}`} onPress={() => library.openDetail(item.id)} style={styles.card}>
             <Text style={styles.badge}>{terms(item)}</Text><Text style={styles.itemTitle}>{item.title}</Text>
             <Text numberOfLines={2} style={styles.body}>{item.description}</Text><Text style={styles.helper}>{item.campusName} · {item.files.length} archivo{item.files.length === 1 ? '' : 's'}</Text>
             {(item.careers.length > 0 || item.subjects.length > 0) && <Text numberOfLines={2} style={styles.helper}>{[...item.careers, ...item.subjects].map(row => row.name).join(' · ')}</Text>}
             <Text style={styles.link}>Consultar recurso</Text>
-          </Pressable>) : <View style={styles.card}><FileText color="#607485" size={30} /><Text style={styles.sectionTitle}>El conocimiento empieza contigo</Text>
-            <Text style={styles.body}>Aún no hay publicaciones disponibles. Comparte tu primer material académico.</Text></View>}
+          </Pressable>) : <View style={styles.card}><FileText color="#607485" size={30} /><Text style={styles.sectionTitle}>Sin coincidencias</Text>
+            <Text style={styles.body}>No encontramos recursos con estos filtros. Prueba otra búsqueda o comparte tu material académico.</Text></View>}
+        <View style={styles.row}>
+          <Pressable accessibilityRole="button" disabled={library.loading || library.page === 1} onPress={library.previousPage} style={styles.smallButton}><Text style={styles.link}>Anterior</Text></Pressable>
+          <Text style={styles.helper}>Página {library.page}</Text>
+          <Pressable accessibilityRole="button" disabled={library.loading || !library.hasMore} onPress={library.nextPage} style={styles.smallButton}><Text style={styles.link}>Siguiente</Text></Pressable>
+        </View>
       </>}
     </ScrollView>
     <BottomNavigationBar activeItemId="elibrary" />

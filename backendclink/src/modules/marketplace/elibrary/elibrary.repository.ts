@@ -5,6 +5,7 @@ import type { PoolClient } from 'pg';
 import { createServerSupabaseClient } from '../../../database/supabase/client.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import type { DigitalPublication, DigitalResourceRow, DigitalStoredFile, DigitalUpload } from './elibrary.types.js';
+import type { DigitalSearch } from './elibrary.search.service.js';
 
 export const DIGITAL_BUCKET = 'digital-resources';
 export async function findDigitalCampus(client: PoolClient, campusId: string) {
@@ -50,7 +51,7 @@ export async function digitalFileHasReference(id: string, path: string) {
   });
 }
 /** Proyección pública institucional: nunca selecciona bucket, path ni enlaces del original. */
-export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null): Promise<DigitalPublication[]> {
+export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null, filters?: DigitalSearch): Promise<DigitalPublication[]> {
   return (await client.query<Omit<DigitalPublication, 'careerIds' | 'subjectIds'>>(
     `SELECT p.id,p.titulo AS title,p.descripcion AS description,p.modalidad AS modality,p.precio::float8 AS price,
       to_char(p.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt",
@@ -68,8 +69,14 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
      JOIN public.campus c ON c.id=p.campus_id JOIN public.institucion i ON i.id=c.institucion_id
      WHERE c.institucion_id=$1 AND p.tipo_recurso='DIGITAL'
        AND p.estado_publicacion='DISPONIBLE' AND p.deleted_at IS NULL AND ($2::uuid IS NULL OR p.id=$2)
+       AND ($3::text IS NULL OR p.titulo ILIKE $3 OR p.descripcion ILIKE $3)
+       AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM public.publicacion_carrera pc WHERE pc.publicacion_id=p.id AND pc.carrera_id=$4))
+       AND ($5::uuid IS NULL OR EXISTS(SELECT 1 FROM public.publicacion_asignatura pa WHERE pa.publicacion_id=p.id AND pa.asignatura_id=$5))
+       AND ($6::text IS NULL OR p.modalidad=$6)
        AND EXISTS(SELECT 1 FROM public.archivo_publicacion a WHERE a.publicacion_id=p.id AND a.deleted_at IS NULL AND a.tipo_archivo='RECURSO')
-     ORDER BY p.publicado_en DESC,p.id DESC LIMIT 30`, [institutionId, id])).rows
+     ORDER BY p.publicado_en DESC,p.id DESC LIMIT $7 OFFSET $8`, [institutionId, id,
+       filters?.q ? '%' + filters.q.replace(/[\\%_]/g, '\\$&') + '%' : null,
+       filters?.careerId ?? null, filters?.subjectId ?? null, filters?.modality ?? null, filters ? filters.limit + 1 : 30, filters?.offset ?? 0])).rows
     .map(row => ({ ...row, careerIds: row.careers.map(career => career.id), subjectIds: row.subjects.map(subject => subject.id) }));
 }
 

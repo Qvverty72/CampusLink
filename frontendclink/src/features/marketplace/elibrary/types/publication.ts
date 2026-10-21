@@ -1,4 +1,6 @@
 export const DIGITAL_MAX_BYTES = 25 * 1024 * 1024;
+export interface DigitalFilters { q: string; careerId: string; subjectId: string; modality: '' | 'VENTA' | 'DONACION' }
+export interface DigitalPage { page: number; limit: number; hasMore: boolean }
 export interface DigitalInput {
   title: string;
   description: string;

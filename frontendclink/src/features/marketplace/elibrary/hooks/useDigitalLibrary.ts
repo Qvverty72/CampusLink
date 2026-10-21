@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
-import { attachDigitalFile, downloadDigitalFile, loadDigitalAcademicCatalog, loadDigitalPublication, loadDigitalPublications, publishDigitalPublication, updateDigitalAcademics } from '../api/elibraryApi';
+import { attachDigitalFile, downloadDigitalFile, loadDigitalAcademicCatalog, loadDigitalPublication, searchDigitalPublications, publishDigitalPublication, updateDigitalAcademics } from '../api/elibraryApi';
 import { pickDigitalFiles, releaseDigitalFile } from '../api/documentPicker';
 import { saveDigitalFile } from '../api/saveDigitalFile';
-import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
+import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalFilters, DigitalInput, DigitalPublication } from '../types/publication';
 
 export function useDigitalLibrary() {
   const auth = useAuth();
@@ -17,6 +17,8 @@ export function useDigitalLibrary() {
   const [progress, setProgress] = useState(''), [downloading, setDownloading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null), [notice, setNotice] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [filters, setFilters] = useState<DigitalFilters>({ q: '', careerId: '', subjectId: '', modality: '' });
+  const [page, setPage] = useState(1), [hasMore, setHasMore] = useState(false);
   const [careerIds, setCareerIds] = useState<string[]>([]), [subjectIds, setSubjectIds] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<DigitalAcademicCatalog | null>(null), [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null), [catalogRevision, setCatalogRevision] = useState(0);
@@ -42,12 +44,12 @@ export function useDigitalLibrary() {
     };
   }, []);
   useEffect(() => {
-    const abort = new AbortController(); setLoading(true);
-    void loadDigitalPublications(abort.signal).then(data => { if (!abort.signal.aborted) setItems(data); })
+    const abort = new AbortController(); setLoading(true); setItems([]); setHasMore(false);
+    void searchDigitalPublications(filters, page, abort.signal).then(result => { if (!abort.signal.aborted) { setItems(result.data); setHasMore(result.meta.hasMore); } })
       .catch(reason => { if (!abort.signal.aborted) showError(reason); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
-  }, [revision]);
+  }, [revision, filters, page]);
   useEffect(() => {
     const abort = new AbortController(); setCatalogLoading(true); setCatalogError(null);
     void loadDigitalAcademicCatalog(abort.signal).then(data => { if (!abort.signal.aborted) setCatalog(data); })
@@ -158,6 +160,8 @@ export function useDigitalLibrary() {
     setFormOpen(false); setError(null); setNotice(null); setTarget(null); currentTarget.current = null; setAttachMode(false);
   }
   return { items, detail, loading, busy, formOpen, title, setTitle, description, setDescription, price, setPrice,
+    page, hasMore, search: (value: DigitalFilters) => { setPage(1); setFilters({ ...value }); },
+    previousPage: () => setPage(value => Math.max(1, value - 1)), nextPage: () => { if (hasMore && !loading) setPage(value => value + 1); },
     careerIds, setCareerIds, subjectIds, setSubjectIds, catalog, catalogLoading, catalogError,
     reloadCatalog: () => setCatalogRevision(value => value + 1),
     editingAcademics, academicConflict, openAcademicEditor, saveAcademics,

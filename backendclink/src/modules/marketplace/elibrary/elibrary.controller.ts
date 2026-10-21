@@ -8,6 +8,8 @@ import { readDigitalUpload } from './elibrary.upload.js';
 import { addDigitalAttachment, getDigitalOriginal } from './elibrary.files.service.js';
 import { getDigitalAcademicCatalog, updateDigitalAcademics } from './elibrary.academics.service.js';
 import { invalidDigital } from './elibrary.validation.js';
+import { searchDigitalPublications } from './elibrary.search.service.js';
+import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
 export const digitalAcademicCatalogController: DigitalHandler = async (request, response) => {
@@ -36,8 +38,9 @@ export const createDigitalController: DigitalHandler = async (request, response)
   const { metadata, file } = await readDigitalUpload(request);
   sendSuccess(response, await createDigitalPublication(response.locals.auth, metadata, file), 201);
 };
-export const listDigitalController: DigitalHandler = async (_request, response) => {
-  sendSuccess(response, await getDigitalPublications(response.locals.auth));
+export const listDigitalController: DigitalHandler = async (request, response) => {
+  const result = await searchDigitalPublications(response.locals.auth, request.query);
+  sendEnvelope(response, result.data, { meta: result.meta });
 };
 export const detailDigitalController: DigitalHandler = async (request, response) => {
   sendSuccess(response, (await getDigitalPublications(response.locals.auth, request.params.publicationId))[0]);

@@ -552,6 +552,39 @@ test('audit projection retains historical academic names/codes without arbitrary
   { careers: [{ id: 'c', name: 'Old career', code: 'C' }], subjects: [{ id: 's', name: 'Old subject', code: 'S' }] });
 });
 
+test('digital search combines text, modality and direct multiple associations without duplicate rows', async () => {
+  const c = await academicCatalog(), marker = randomUUID();
+  const sale = await service.createDigitalPublication(auth, input({ title: marker + ' Apuntes', careerIds: [c.careerA,c.careerB], subjectIds: [c.shared,c.other] }), file());
+  await service.createDigitalPublication(auth, input({ description: marker, modality: 'DONACION', price: null }), file());
+  await switchCampus(sibling);
+  const response = await get(`?q=${marker}&careerId=${c.careerB}&subjectId=${c.shared}&modality=VENTA`); assert.equal(response.status, 200);
+  const result = await response.json(); assert.deepEqual(result.data.map((row: {id:string}) => row.id), [sale.id]);
+  assert.deepEqual(result.meta, {page:1,limit:20,hasMore:false});
+  assert.equal((await (await get(`?q=${marker}&modality=DONACION`)).json()).data.length, 1);
+  assert.equal((await (await get(`?q=${marker}`)).json()).data.length, 2);
+  await switchCampus(foreignCampus, foreignInstitution); assert.deepEqual((await (await get(`?q=${marker}`)).json()).data, []);
+});
+test('digital search paginates deterministically and hides withdrawn/hidden resources', async () => {
+  const marker = randomUUID(), ids = [];
+  for (let i=0;i<8;i++) ids.push((await service.createDigitalPublication(auth, input({title:marker+' '+i}), file())).id);
+  const pages = [];
+  for (let page=1;page<=3;page++) { const response = await get(`?q=${marker}&page=${page}&limit=3`); assert.equal(response.status,200); pages.push(await response.json()); }
+  assert.deepEqual(pages.map(row=>row.data.length),[3,3,2]); assert.deepEqual(pages.map(row=>row.meta.hasMore),[true,true,false]);
+  assert.equal(new Set(pages.flatMap(row=>row.data.map((item:{id:string})=>item.id))).size,8);
+  await db.query("UPDATE publicacion_recurso SET estado_publicacion='OCULTO' WHERE id=$1",[ids[0]]);
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[ids[1]]);
+  assert.equal((await (await get(`?q=${marker}`)).json()).data.length,6);
+  assert.deepEqual((await (await get(`?q=${marker}&page=9`)).json()).data,[]);
+});
+test('digital search treats wildcard/SQL-like text literally and rejects malformed/privileged filters', async () => {
+  const marker = randomUUID();
+  await service.createDigitalPublication(auth, input({title:marker+' 100%_\\'}), file());
+  assert.equal((await (await get('?q='+encodeURIComponent(marker+' 100%_\\'))).json()).data.length,1);
+  assert.deepEqual((await (await get('?q='+encodeURIComponent("'; DROP TABLE carrera; --"))).json()).data,[]);
+  for (const query of ['campusId='+campus,'institutionId='+institution,'ownerId='+auth.userId,'page=0','limit=101','page=2&page=3','q[]=x','q='+('x'.repeat(201)),"careerId=bad",'subjectId=bad','modality=AMBAS']) assert.equal((await get('?'+query)).status,400,query);
+  assert.equal((await db.query('SELECT id FROM carrera LIMIT 1')).rows.length,1);
+});
+
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());
   const results = await Promise.all(Array.from({ length: 8 }, (_, index) => filesService.addDigitalAttachment(auth, saved.id, { ...file(), name: `archivo${index}.pdf` })));

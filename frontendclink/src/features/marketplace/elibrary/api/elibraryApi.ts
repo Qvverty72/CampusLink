@@ -1,5 +1,6 @@
-import { authenticatedRequest, authenticatedResponseRequest } from '@/lib/api/authenticated-request';
+import { authenticatedEnvelopeRequest, authenticatedRequest, authenticatedResponseRequest } from '@/lib/api/authenticated-request';
 import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
+import type { DigitalFilters, DigitalPage } from '../types/publication';
 
 const base = '/api/v1/marketplace/elibrary';
 export const loadDigitalAcademicCatalog = (signal?: AbortSignal) => authenticatedRequest<DigitalAcademicCatalog>(`${base}/academic-options`, { signal });
@@ -8,6 +9,11 @@ export const updateDigitalAcademics = (id: string, input: Pick<DigitalInput, 'ca
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
   });
 export const loadDigitalPublications = (signal?: AbortSignal) => authenticatedRequest<DigitalPublication[]>(base, { signal });
+export function searchDigitalPublications(filters: DigitalFilters, page: number, signal?: AbortSignal) {
+  const query = new URLSearchParams({ page: String(page), limit: '20' });
+  for (const [key, value] of Object.entries(filters)) if (value.trim()) query.set(key, value.trim());
+  return authenticatedEnvelopeRequest<DigitalPublication[], DigitalPage>(base, { signal }, query);
+}
 export function loadDigitalPublication(id: string, signal?: AbortSignal) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Publicación inválida.');
   return authenticatedRequest<DigitalPublication>(`${base}/${id}`, { signal });
