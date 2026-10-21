@@ -578,6 +578,10 @@ DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad serv
 
 `GET /elibrary/mine` pagina publicaciones del dueño, incluidas retiradas; `GET /mine/:id` devuelve detalle propio. `PATCH /:id` admite exactamente `{title,description,modality,price,updatedAt}` y `DELETE /:id` solo `{updatedAt}`; no-store y dueño vigente. Versión de seis decimales bajo locks evita perder edición/adjuntos/asociaciones concurrentes; no-op no escribe. Retirada usa deleted_at y auditoría atómica, conserva solicitudes/acuerdos/derechos/bytes y excluye descubrimiento/nuevas solicitudes. Respuestas inciertas exigen recarga. Los originales no se reemplazan ni borran; política confirmada por el usuario: archivo diferente requiere otra publicación.
 
+## Recomendaciones digitales (F2.5-10)
+
+`GET /elibrary/recommendations` admite page/limit y devuelve publicaciones institucionales activas con `{recommendation:{score,reasons}}`; excluye propios/adquiridos mediante el predicado de derecho de descarga. Pesos revisables en DIGITAL_RECOMMENDATION_WEIGHTS:30 por carrera,20 por asignatura relacionada (máximo3 cada una),5 por vista propia,10 por solicitud propia activa y1 por actividad agregada (máximo5). Desempata por fecha/id; nuevos usan perfil y sin perfil actividad/recientes. No ML ni proveedores externos; explicaciones no revelan identidades ni conversaciones. Detalle registra VISTA propia como máximo una vez por recurso/24h; fallo de señal no impide leer metadatos. Orden/paginación SQL y proyección en bloque, no N+1.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

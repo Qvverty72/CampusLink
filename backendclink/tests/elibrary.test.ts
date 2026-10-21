@@ -91,7 +91,7 @@ before(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion',
-    'publicacion_carrera', 'publicacion_asignatura', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'reporte_contenido', 'auditoria']) {
+    'publicacion_carrera', 'publicacion_asignatura', 'usuario_carrera', 'interaccion_recurso', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'reporte_contenido', 'auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -747,6 +747,27 @@ test('digital editor rejects privileged/non-owner inputs and rollback/uncertain 
   lostCommit=true;assert.equal((await digitalJson('/'+saved.id,'DELETE',{updatedAt:saved.updatedAt})).status,503);
   const owned=(await(await get('/mine/'+saved.id)).json()).data;assert.equal(owned.isWithdrawn,true);
   assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1',[saved.id])).rows.length,2);assert.equal(objects.size,1);
+});
+test('digital recommendations use academic cold-start, exclude own/acquired/hidden/foreign and paginate with explanations',async()=>{
+  const c=await academicCatalog(),matching=await service.createDigitalPublication(auth,input({title:'Afinidad '+randomUUID(),careerIds:[c.careerA],subjectIds:[c.shared]}),file()),generic=await service.createDigitalPublication(auth,input({title:'Reciente '+randomUUID()}),file());
+  const receiver=await peer();await db.query('INSERT INTO usuario_carrera(perfil_usuario_id,carrera_id) VALUES($1,$2)',[receiver.userId,c.careerA]);
+  current=receiver;let result=await(await get('/recommendations?limit=100')).json();assert.equal(result.data[0].id,matching.id);assert.ok(result.data[0].recommendation.reasons.includes('Coincide con tus carreras'));
+  assert.ok(result.data[0].recommendation.score>=50);assert.doesNotMatch(JSON.stringify(result.data),/storage_path|bucket_id|signedUrl/);
+  const {trades,tradeId}=await requestAndAccept(matching,receiver);await trades.transitionDigitalTrade(auth,matching.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,matching.id,tradeId,{},'CONFIRMAR');
+  result=await(await get('/recommendations?limit=100')).json();assert.ok(!result.data.some((row:{id:string})=>row.id===matching.id));assert.ok(result.data.some((row:{id:string})=>row.id===generic.id));
+  const own=await service.createDigitalPublication(receiver,input({title:'Propio '+randomUUID()}),file());assert.ok(!(await(await get('/recommendations?limit=100')).json()).data.some((row:{id:string})=>row.id===own.id));
+  await db.query("UPDATE publicacion_recurso SET estado_publicacion='OCULTO' WHERE id=$1",[generic.id]);assert.ok(!(await(await get('/recommendations?limit=100')).json()).data.some((row:{id:string})=>row.id===generic.id));
+  current=await peer(foreignCampus,foreignInstitution);assert.deepEqual((await(await get('/recommendations')).json()).data,[]);
+});
+test('view/request signals affect recommendations, views coalesce and do not expose users or permit spoofed signals',async()=>{
+  const saved=await service.createDigitalPublication(auth,input({title:'Interes '+randomUUID()}),file()),receiver=await peer();current=receiver;
+  await get('/'+saved.id);await get('/'+saved.id);
+  assert.equal((await db.query("SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2 AND tipo_interaccion='VISTA'",[receiver.userId,saved.id])).rows.length,1);
+  await digitalJson('/'+saved.id+'/requests','POST',{messageCode:'LIB_QA_INTERES'});
+  const result=await(await get('/recommendations?limit=100')).json(),row=result.data.find((item:{id:string})=>item.id===saved.id);assert.ok(row);assert.ok(row.recommendation.score>=15);
+  assert.ok(row.recommendation.reasons.includes('Relacionado con tu interés reciente'));
+  assert.equal((await get('/recommendations?userId='+auth.userId)).status,400);assert.equal((await get('/recommendations?page=0')).status,400);
+  current=structuredClone(auth);await get('/'+saved.id);assert.equal((await db.query('SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2',[auth.userId,saved.id])).rows.length,0);
 });
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {

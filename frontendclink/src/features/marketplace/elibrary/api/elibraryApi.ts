@@ -1,6 +1,7 @@
 import { authenticatedEnvelopeRequest, authenticatedRequest, authenticatedResponseRequest } from '@/lib/api/authenticated-request';
 import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
 import type { DigitalFilters, DigitalPage } from '../types/publication';
+import type { RecommendedDigitalPublication } from '../types/publication';
 
 const base = '/api/v1/marketplace/elibrary';
 export interface DigitalPreviewResult { available: boolean; text: string | null; page: number | null; message: string }
@@ -16,6 +17,7 @@ export const loadAcquiredDigitalResources=(page:number,signal?:AbortSignal)=>aut
 export const loadAcquiredDigitalResource=(id:string,signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/acquired/${id}`,{signal});
 export const loadOwnedDigitalResources=(page:number,signal?:AbortSignal)=>authenticatedEnvelopeRequest<DigitalPublication[],DigitalPage>(`${base}/mine`,{signal},new URLSearchParams({page:String(page),limit:'20'}));
 export const loadOwnedDigitalResource=(id:string,signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/mine/${id}`,{signal});
+export const loadDigitalRecommendations=(page:number,signal?:AbortSignal)=>authenticatedEnvelopeRequest<RecommendedDigitalPublication[],DigitalPage>(`${base}/recommendations`,{signal},new URLSearchParams({page:String(page),limit:'6'}));
 export const editDigitalContent=(id:string,input:Pick<DigitalInput,'title'|'description'|'modality'|'price'>&{updatedAt:string},signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal});
 export const retireDigitalResource=(id:string,updatedAt:string,signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/${id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({updatedAt}),signal});
 export function searchDigitalPublications(filters: DigitalFilters, page: number, signal?: AbortSignal) {

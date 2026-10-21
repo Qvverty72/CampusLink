@@ -33,3 +33,4 @@ export interface DigitalPublication extends DigitalInput {
   deletedAt: string | null;
   acquisition: { transactionId:string;acquiredAt:string;modality:string;amount:number|null;currency:string } | null;
 }
+export interface RecommendedDigitalPublication extends DigitalPublication { recommendation:{score:number;reasons:string[]} }

@@ -55,7 +55,7 @@ export async function digitalFileHasReference(id: string, path: string) {
   });
 }
 /** Proyección pública institucional: nunca selecciona bucket, path ni enlaces del original. */
-export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null, filters?: DigitalSearch, viewerId: string | null = null, scope: 'available' | 'acquired' | 'owned' = 'available'): Promise<DigitalPublication[]> {
+export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null, filters?: DigitalSearch, viewerId: string | null = null, scope: 'available' | 'acquired' | 'owned' = 'available', selectedIds: string[] | null = null): Promise<DigitalPublication[]> {
   return (await client.query<Omit<DigitalPublication, 'careerIds' | 'subjectIds'>>(
     `SELECT p.id,p.titulo AS title,p.descripcion AS description,p.modalidad AS modality,p.precio::float8 AS price,
       to_char(p.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt",
@@ -80,6 +80,7 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
      JOIN public.campus c ON c.id=p.campus_id JOIN public.institucion i ON i.id=c.institucion_id
      WHERE c.institucion_id=$1 AND p.tipo_recurso='DIGITAL'
        AND ($2::uuid IS NULL OR p.id=$2)
+       AND ($11::uuid[] IS NULL OR p.id=ANY($11::uuid[]))
        AND (($10='available' AND p.estado_publicacion='DISPONIBLE' AND p.deleted_at IS NULL)
          OR ($10='acquired' AND EXISTS(SELECT 1 FROM public.acceso_recurso_digital a JOIN public.transaccion_recurso t ON t.id=a.transaccion_id
            WHERE a.publicacion_id=p.id AND a.receptor_id=$9 AND t.propietario_id=p.propietario_id AND ${DIGITAL_ACCESS_PROOF}))
@@ -91,7 +92,7 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
        AND ($10='owned' OR EXISTS(SELECT 1 FROM public.archivo_publicacion a WHERE a.publicacion_id=p.id AND a.deleted_at IS NULL AND a.tipo_archivo='RECURSO'))
      ORDER BY p.publicado_en DESC,p.id DESC LIMIT $7 OFFSET $8`, [institutionId, id,
        filters?.q ? '%' + filters.q.replace(/[\\%_]/g, '\\$&') + '%' : null,
-       filters?.careerId ?? null, filters?.subjectId ?? null, filters?.modality ?? null, filters ? filters.limit + 1 : 30, filters?.offset ?? 0, viewerId, scope])).rows
+       filters?.careerId ?? null, filters?.subjectId ?? null, filters?.modality ?? null, filters ? filters.limit + 1 : 30, filters?.offset ?? 0, viewerId, scope, selectedIds])).rows
     .map(row => ({ ...row, careerIds: row.careers.map(career => career.id), subjectIds: row.subjects.map(subject => subject.id) }));
 }
 

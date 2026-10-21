@@ -12,6 +12,7 @@ import { DigitalRequestAction, DigitalTradeCenter } from './DigitalTradeCenter';
 import { AcquiredDigitalResources } from './AcquiredDigitalResources';
 import { OwnedDigitalResources } from './OwnedDigitalResources';
 import { DigitalPublicationEditor } from './DigitalPublicationEditor';
+import { DigitalRecommendations } from './DigitalRecommendations';
 import type { DigitalPublication } from '../types/publication';
 
 const terms = (item: DigitalPublication) => item.modality === 'DONACION' ? 'Donación' : `$${item.price?.toLocaleString('es-CL')} CLP`;
@@ -115,6 +116,7 @@ function Library() {
         <DigitalTradeCenter />
         <AcquiredDigitalResources />
         <OwnedDigitalResources />
+        <DigitalRecommendations onOpen={library.openDetail} />
         <View style={styles.listHeading}><Text style={styles.sectionTitle}>Publicaciones recientes</Text>
           <Pressable accessibilityRole="button" onPress={library.reload} style={styles.smallButton}><Text style={styles.link}>Actualizar</Text></Pressable>
         </View>

@@ -14,8 +14,10 @@ import { getDigitalPreview } from './elibrary.preview.service.js';
 import { createDigitalRequest, digitalAction, getDigitalRequestOptions, getDigitalRequests, getDigitalTrade, resolveDigitalRequest, transitionDigitalTrade } from './elibrary.trades.service.js';
 import { getAcquiredDigitalResources,getOwnedDigitalResources } from './elibrary.acquired.service.js';
 import { editDigitalPublication } from './elibrary.edit.service.js';
+import { getDigitalRecommendations,recordDigitalView } from './elibrary.recommendations.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const recommendationsDigitalController:DigitalHandler=async(request,response)=>{const result=await getDigitalRecommendations(response.locals.auth,request.query);sendEnvelope(response,result.data,{meta:result.meta});};
 export const ownedDigitalController:DigitalHandler=async(request,response)=>{const result=await getOwnedDigitalResources(response.locals.auth,request.query);sendEnvelope(response,result.data,{meta:result.meta});};
 export const ownedDigitalDetailController:DigitalHandler=async(request,response)=>{digitalAction(request.query);const result=await getOwnedDigitalResources(response.locals.auth,{},request.params.publicationId);sendSuccess(response,result.data[0]);};
 export const editDigitalController=(retiring:boolean):DigitalHandler=>async(request,response)=>{digitalAction(request.query);sendSuccess(response,await editDigitalPublication(response.locals.auth,request.params.publicationId,request.body,retiring));};
@@ -81,7 +83,8 @@ export const listDigitalController: DigitalHandler = async (request, response) =
   sendEnvelope(response, result.data, { meta: result.meta });
 };
 export const detailDigitalController: DigitalHandler = async (request, response) => {
-  sendSuccess(response, (await getDigitalPublications(response.locals.auth, request.params.publicationId))[0]);
+  const publication=(await getDigitalPublications(response.locals.auth, request.params.publicationId))[0];
+  await recordDigitalView(response.locals.auth,publication.id);sendSuccess(response,publication);
 };
 
 export const getElibraryHealthController: RequestHandler = async (_request, response) => {
