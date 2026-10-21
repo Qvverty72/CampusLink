@@ -15,11 +15,11 @@ export interface ActivitiesState {
 
 /** Carga actividades del campus, revalida al volver a primer plano y descarta resultados obsoletos. */
 export function useLocationActivities(query: ActivityLocationQuery = {}, enabled = true): ActivitiesState {
-  const { identity, session, refreshIdentity } = useAuth();
+  const { identity, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;
-  const token = session?.access_token;
+  const userId = identity?.userId;
   const { buildingKey, floorKey, poiKey } = query;
-  const key = JSON.stringify([campusId, token, buildingKey, floorKey, poiKey, enabled]);
+  const key = JSON.stringify([campusId, userId, buildingKey, floorKey, poiKey, enabled]);
   const [revision, setRevision] = useState({ value: 0, background: false });
   const refresh = useCallback(() => setRevision(previous => ({ value: previous.value + 1, background: false })), []);
   const [clock, setClock] = useState(Date.now);
@@ -28,7 +28,7 @@ export function useLocationActivities(query: ActivityLocationQuery = {}, enabled
   });
 
   useEffect(() => {
-    if (!enabled || !campusId || !token) return;
+    if (!enabled || !campusId || !userId) return;
     const abort = new AbortController();
     setState(previous => revision.background && previous.key === key && !previous.isLoading && !previous.error
       ? { ...previous, error: null } : { key, activities: [], isLoading: true, error: null });
@@ -45,10 +45,10 @@ export function useLocationActivities(query: ActivityLocationQuery = {}, enabled
       if (unauthorized) refreshIdentity();
     });
     return () => abort.abort();
-  }, [key, enabled, campusId, token, buildingKey, floorKey, poiKey, revision, refresh, refreshIdentity]);
+  }, [key, enabled, campusId, userId, buildingKey, floorKey, poiKey, revision, refresh, refreshIdentity]);
 
   useEffect(() => {
-    if (!enabled || !campusId || !token || state.key !== key || state.isLoading) return;
+    if (!enabled || !campusId || !userId || state.key !== key || state.isLoading) return;
     const visible = selectActivityOccurrences(state.activities);
     const end = Math.min(...visible.map(activity => Date.parse(activity.endAt)));
     if (!Number.isFinite(end)) return;
@@ -59,20 +59,20 @@ export function useLocationActivities(query: ActivityLocationQuery = {}, enabled
       if (now >= end) setRevision(previous => ({ value: previous.value + 1, background: true }));
     }, Math.min(2_147_483_647, Math.max(1, end - Date.now())));
     return () => clearTimeout(expiry);
-  }, [key, enabled, campusId, token, state, clock]);
+  }, [key, enabled, campusId, userId, state, clock]);
 
   useEffect(() => {
-    if (!enabled || !campusId || !token) return;
+    if (!enabled || !campusId || !userId) return;
     const subscription = AppState.addEventListener('change', status => {
       if (status !== 'active') return;
       setClock(Date.now());
       setRevision(previous => ({ value: previous.value + 1, background: true }));
     });
     return () => subscription.remove();
-  }, [key, enabled, campusId, token]);
+  }, [key, enabled, campusId, userId]);
 
   // Un cambio de campus, sesión o ubicación nunca muestra los datos de la consulta anterior.
-  return state.key === key && enabled && campusId && token
+  return state.key === key && enabled && campusId && userId
     ? { activities: selectActivityOccurrences(state.activities), isLoading: state.isLoading, error: state.error, refresh }
-    : { activities: [], isLoading: Boolean(enabled && campusId && token), error: null, refresh };
+    : { activities: [], isLoading: Boolean(enabled && campusId && userId), error: null, refresh };
 }

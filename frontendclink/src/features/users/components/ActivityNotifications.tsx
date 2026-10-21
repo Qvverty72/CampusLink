@@ -12,8 +12,8 @@ import type {PhysicalgoodsTransactionTarget} from '@/features/marketplace/physic
 
 /** Pantalla de notificaciones; los cambios visibles esperan confirmación del servidor. */
 export function NotificationsScreen() {
-  const { identity, session } = useAuth();
-  return <NotificationsContent key={JSON.stringify([identity?.userId, identity?.campusId, session?.access_token])} />;
+  const { identity } = useAuth();
+  return <NotificationsContent key={JSON.stringify([identity?.userId, identity?.campusId])} />;
 }
 
 function NotificationsContent() {

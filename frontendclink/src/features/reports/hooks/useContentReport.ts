@@ -8,7 +8,7 @@ import type { ContentReportInput, ContentReportReceipt, ContentReportTarget } fr
 export function useContentReport(target:ContentReportTarget) {
   const { identity, session, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;
-  const key = JSON.stringify([identity?.userId, campusId, session?.access_token, target]);
+  const key = JSON.stringify([identity?.userId, campusId, target]);
   const activeKey = useRef(key); activeKey.current = key;
   const request = useRef<AbortController | null>(null);
   const [state, setState] = useState<{ key: string; busy: boolean; error: string | null; receipt: ContentReportReceipt | null }>({ key, busy: false, error: null, receipt: null });

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -20,7 +20,9 @@ import { useLocationActivities } from '@/features/activities/hooks/useLocationAc
 export default function MapScreen() {
   const auth = useAuth();
   const campusId = auth.identity?.campusId;
-  const accessToken = auth.session?.access_token;
+  const userId = auth.identity?.userId;
+  const accessToken = useRef(auth.session?.access_token);
+  accessToken.current = auth.session?.access_token;
   const data = useMapDataStore((state) => state.data);
   const activities = useLocationActivities({}, Boolean(data && data.campusId === campusId));
   const selectedFloor = useMapStore(state => state.selectedFloor);
@@ -32,7 +34,7 @@ export default function MapScreen() {
   const clearMap = useMapDataStore((state) => state.clearMap);
   // Si el backend rechaza la identidad, solicita refrescar sus capacidades actuales.
   const load = () => {
-    if (campusId && accessToken) void loadMap(campusId, accessToken).catch(reason => {
+    if (campusId && accessToken.current) void loadMap(campusId, accessToken.current).catch(reason => {
       if (reason instanceof ApiClientError && [401, 403].includes(reason.status)) auth.refreshIdentity();
     });
   };
@@ -41,7 +43,8 @@ export default function MapScreen() {
     useMapStore.getState().resetBuilding();
     load();
     return clearMap;
-  }, [loadMap, clearMap, campusId, accessToken, auth.refreshIdentity]);
+    // El token vigente se lee al solicitar; su rotación no reinicia cámara, piso ni modal.
+  }, [loadMap, clearMap, campusId, userId, auth.refreshIdentity]);
 
   if (!data || data.campusId !== campusId) {
     return (

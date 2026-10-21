@@ -15,6 +15,7 @@ export function useAuthSession(): AuthContextValue {
   const [restored, setRestored] = useState(false);
   const [revision, setRevision] = useState(0);
   const pendingRequest = useRef<AbortController | null>(null);
+  const verifiedIdentity = useRef<AuthIdentity | null>(null);
   const signOut = useCallback(async () => {
     try {
       const client = getSupabaseClient();
@@ -31,8 +32,7 @@ export function useAuthSession(): AuthContextValue {
   }, []);
   const refreshIdentity = useCallback(() => {
     pendingRequest.current?.abort();
-    setIdentity(null);
-    setStatus('loading');
+    // Revalidar la misma cuenta no debe retirar rutas ni descartar sus formularios.
     setRevision(value => value + 1);
   }, []);
 
@@ -48,9 +48,13 @@ export function useAuthSession(): AuthContextValue {
     // Supabase emite INITIAL_SESSION al restaurar persistencia; el callback se mantiene síncrono.
     const { data: { subscription } } = auth.onAuthStateChange((_event, nextSession) => {
       pendingRequest.current?.abort();
-      setIdentity(null);
+      const sameAccount = nextSession && verifiedIdentity.current?.userId === nextSession.user.id;
+      if (!sameAccount) {
+        verifiedIdentity.current = null;
+        setIdentity(null);
+        setStatus(nextSession ? 'loading' : 'signedOut');
+      }
       setError(null);
-      setStatus(nextSession ? 'loading' : 'signedOut');
       setSession(nextSession);
       setRestored(true);
       setRevision(value => value + 1);
@@ -74,22 +78,36 @@ export function useAuthSession(): AuthContextValue {
 
   useEffect(() => {
     if (!restored) return;
-    if (!session) { setIdentity(null); setStatus('signedOut'); return; }
+    if (!session) { verifiedIdentity.current = null; setIdentity(null); setStatus('signedOut'); return; }
     const abort = new AbortController();
     pendingRequest.current = abort;
-    setIdentity(null);
+    const previousIdentity = verifiedIdentity.current;
+    const revalidating = previousIdentity?.userId === session.user.id;
+    if (!revalidating) {
+      verifiedIdentity.current = null;
+      setIdentity(null);
+      setStatus('loading');
+    }
     setError(null);
-    setStatus('loading');
     void loadAuthIdentity(abort.signal)
       .then(value => {
         if (abort.signal.aborted) return;
         if (value.userId !== session.user.id || value.profile.id !== session.user.id) {
           throw new AuthApiError(403);
         }
+        verifiedIdentity.current = value;
         setIdentity(value);
         setStatus('ready');
       }).catch(reason => {
         if (abort.signal.aborted) return;
+        const denied = reason instanceof AuthApiError && [401, 403].includes(reason.status);
+        // Una caída temporal no invalida la cuenta ya comprobada. El servidor sigue
+        // autorizando cada operación y la próxima activación vuelve a consultar /me.
+        if (revalidating && !denied) {
+          setError(reason instanceof AuthApiError ? reason.message : 'No se pudo consultar la cuenta.');
+          return;
+        }
+        verifiedIdentity.current = null;
         setIdentity(null);
         setStatus(reason instanceof AuthApiError && reason.status === 403 ? 'forbidden'
           : reason instanceof AuthApiError && reason.status === 401 ? 'signedOut' : 'error');

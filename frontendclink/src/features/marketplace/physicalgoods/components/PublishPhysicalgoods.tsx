@@ -16,10 +16,10 @@ import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory'
 
 /** Composición de búsqueda y publicación del módulo de bienes físicos. */
 export function PhysicalGoodsScreen() {
-  const { identity, session } = useAuth();
+  const { identity } = useAuth();
   const {publicationId}=useLocalSearchParams<{publicationId?:string}>();
   const initialPublicationId=typeof publicationId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publicationId)?publicationId:undefined;
-  return <PhysicalgoodsContent key={`${identity?.userId}:${identity?.campusId}:${session?.access_token}`} initialPublicationId={initialPublicationId} />;
+  return <PhysicalgoodsContent key={`${identity?.userId}:${identity?.campusId}`} initialPublicationId={initialPublicationId} />;
 }
 /** Mantiene en un flujo común el alta y la recuperación de su publicación. */
 function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:string}) {

@@ -6,15 +6,15 @@ import type { ActivityParticipantsPage } from '../types/activity';
 
 /** Consulta una página de inscritos para el campus actual y cancela la petición al cambiar de vista. */
 export function useActivityParticipants(activityId: string, refreshKey: string) {
-  const { identity, session, refreshIdentity } = useAuth();
+  const { identity, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;
-  const token = session?.access_token;
+  const userId = identity?.userId;
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
-  const key = JSON.stringify([campusId, token, activityId, page, revision, refreshKey]);
+  const key = JSON.stringify([campusId, userId, activityId, page, revision, refreshKey]);
   const [state, setState] = useState<{ key: string; data: ActivityParticipantsPage | null; error: string | null }>({ key: '', data: null, error: null });
   useEffect(() => {
-    if (!campusId || !token) return;
+    if (!campusId || !userId) return;
     const abort = new AbortController();
     void fetchActivityParticipants(campusId, activityId, page, abort.signal).then(data => {
       if (!abort.signal.aborted) setState({ key, data, error: null });
@@ -24,9 +24,9 @@ export function useActivityParticipants(activityId: string, refreshKey: string) 
       if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
     });
     return () => abort.abort();
-  }, [key, campusId, token, activityId, page, refreshIdentity]);
+  }, [key, campusId, userId, activityId, page, refreshIdentity]);
   const data = state.key === key ? state.data : null;
-  return { data, isLoading: !!campusId && !!token && state.key !== key,
+  return { data, isLoading: !!campusId && !!userId && state.key !== key,
     error: state.key === key ? state.error : null,
     refresh: () => setRevision(value => value + 1),
     goToPage: (target: number) => {

@@ -26,9 +26,9 @@ export function LocationActivities(props: {
   onEditOpen?: () => void;
   onPageChange?: () => void;
 }) {
-  const { identity, session } = useAuth();
-  // Reinicia navegador y formulario ante cambio de campus o sesión, y descarta borradores/respuestas obsoletos.
-  return <LocationActivitiesContent key={JSON.stringify([identity?.campusId, session?.access_token])} {...props}
+  const { identity } = useAuth();
+  // Reinicia borradores solo al cambiar de cuenta o campus; renovar el token conserva el flujo.
+  return <LocationActivitiesContent key={JSON.stringify([identity?.userId, identity?.campusId])} {...props}
     canCreate={!!identity?.capabilities.general && !!identity?.profile.verificado_en}
     canPublishOfficial={!!identity?.capabilities.officialActivities} />;
 }

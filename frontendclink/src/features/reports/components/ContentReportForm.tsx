@@ -8,8 +8,8 @@ import type { ContentReportTarget } from '../types/contentReport';
 interface Props {target:ContentReportTarget;title:string;onBack:()=>void;onBusyChange?:(busy:boolean)=>void}
 /** Formulario común de denuncias dentro del detalle; no lista ni expone casos administrativos. */
 export function ContentReportForm(props:Props) {
-  const {identity,session}=useAuth();
-  return <ReportFields key={JSON.stringify([identity?.userId,identity?.campusId,session?.access_token,props.target])} {...props}/>;
+  const {identity}=useAuth();
+  return <ReportFields key={JSON.stringify([identity?.userId,identity?.campusId,props.target])} {...props}/>;
 }
 function ReportFields({target,title,onBack,onBusyChange}:Props) {
   const [reason,setReason]=useState(''),[description,setDescription]=useState(''),[validation,setValidation]=useState<string|null>(null);

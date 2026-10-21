@@ -21,12 +21,12 @@ const unavailableMessage = 'Esta actividad ya no está disponible en el mapa.';
 
 /** Carga ficha y participación propia; serializa mutaciones y conserva claves idempotentes al reintentar. */
 export function useActivityDetail(activityId: string) {
-  const { identity, session, refreshIdentity } = useAuth();
+  const { identity, refreshIdentity } = useAuth();
   const campusId = identity?.campusId;
-  const token = session?.access_token;
+  const userId = identity?.userId;
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision(value => value + 1), []);
-  const key = JSON.stringify([campusId, token, activityId, revision]);
+  const key = JSON.stringify([campusId, userId, activityId, revision]);
   const request = useRef<AbortController | null>(null);
   const mutation = useRef<AbortController | null>(null);
   const interactionIntent = useRef<{ key: string; id: string } | null>(null);
@@ -34,7 +34,7 @@ export function useActivityDetail(activityId: string) {
     isLoading: false, pendingParticipation: null, error: null, participationError: null, pendingDeletion: false, deletionError: null });
 
   useEffect(() => {
-    if (!campusId || !token) return;
+    if (!campusId || !userId) return;
     const abort = new AbortController();
     request.current = abort;
     const initial: DetailState = { key, detail: null, ownParticipation: null, isLoading: false,
@@ -61,7 +61,7 @@ export function useActivityDetail(activityId: string) {
       }
     })();
     return () => { abort.abort(); if (request.current === abort) request.current = null; };
-  }, [key, campusId, token, activityId, refreshIdentity]);
+  }, [key, campusId, userId, activityId, refreshIdentity]);
 
   const detail = state.key === key ? state.detail : null;
   const ownParticipation = state.key === key ? state.ownParticipation : null;
@@ -77,7 +77,7 @@ export function useActivityDetail(activityId: string) {
     const abort = request.current;
     const status = detail?.participation.status ?? ownParticipation?.status;
     const canLeave = detail?.participation.canLeave ?? ownParticipation?.canLeave ?? false;
-    if (!campusId || !token || !abort || abort.signal.aborted || mutation.current === abort
+    if (!campusId || !userId || !abort || abort.signal.aborted || mutation.current === abort
       || state.key !== key || (target === 'JOINED' ? !detail?.participation.canJoin : status !== 'JOINED' || !canLeave)) return;
     mutation.current = abort;
     const intentKey = JSON.stringify([campusId, identity?.profile.id, activityId, target]);
@@ -127,7 +127,7 @@ export function useActivityDetail(activityId: string) {
   /** Retira la publicación con la revisión cargada e informa si el servidor confirmó la baja. */
   const remove = async (): Promise<boolean> => {
     const abort = request.current;
-    if (!campusId || !token || !abort || abort.signal.aborted || mutation.current === abort
+    if (!campusId || !userId || !abort || abort.signal.aborted || mutation.current === abort
       || state.key !== key || !detail?.editing) return false;
     mutation.current = abort;
     setState(current => current.key === key ? { ...current, pendingDeletion: true, deletionError: null } : current);

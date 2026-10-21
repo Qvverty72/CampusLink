@@ -19,7 +19,7 @@ import type { DigitalPublication } from '../types/publication';
 const terms = (item: DigitalPublication) => item.modality === 'DONACION' ? 'Donación' : `$${item.price?.toLocaleString('es-CL')} CLP`;
 export default function DigitalLibraryScreen() {
   const auth = useAuth();
-  return <Library key={`${auth.identity?.userId}:${auth.identity?.campusId}:${auth.session?.access_token}`} />;
+  return <Library key={`${auth.identity?.userId}:${auth.identity?.campusId}`} />;
 }
 function Library() {
   const library = useDigitalLibrary();

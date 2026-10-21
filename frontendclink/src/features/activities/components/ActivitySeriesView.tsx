@@ -101,15 +101,15 @@ function OccurrenceRow({ activity, reference, timeZone, current, now, onPress }:
 export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSelect }: {
   seriesId: string; currentActivityId: string; onBack: () => void; onSelect: (activityId: string) => void;
 }) {
-  const { identity, session, refreshIdentity } = useAuth(); const [revision, setRevision] = useState(0);
+  const { identity, refreshIdentity } = useAuth(); const [revision, setRevision] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [page, setPage] = useState(1);
   const closeModal = useActivityCompactHeader();
   const canViewOccurrences = identity?.capabilities.officialActivities === true;
-  const key = JSON.stringify([identity?.campusId, session?.access_token, canViewOccurrences, seriesId, revision]);
+  const key = JSON.stringify([identity?.campusId, identity?.userId, canViewOccurrences, seriesId, revision]);
   const [state, setState] = useState<{ key: string; series: ActivitySeries | null; error: string | null }>({ key: '', series: null, error: null });
   useEffect(() => {
-    if (!canViewOccurrences || !identity?.campusId || !session?.access_token) return;
+    if (!canViewOccurrences || !identity?.campusId || !identity?.userId) return;
     const abort = new AbortController(); setState({ key, series: null, error: null });
     void fetchActivitySeries(identity.campusId, seriesId, abort.signal).then(series => {
       if (!abort.signal.aborted) setState({ key, series, error: null });
@@ -120,7 +120,7 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
       if (reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
     });
     return () => abort.abort();
-  }, [key, canViewOccurrences, identity?.campusId, session?.access_token, seriesId, refreshIdentity]);
+  }, [key, canViewOccurrences, identity?.campusId, identity?.userId, seriesId, refreshIdentity]);
   const series = canViewOccurrences && state.key === key ? state.series : null; const error = state.key === key ? state.error : null;
   const totalPages = Math.max(1, Math.ceil((series?.occurrences.length ?? 0) / OCCURRENCES_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
