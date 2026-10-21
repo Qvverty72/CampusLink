@@ -14,6 +14,10 @@ export const updateDigitalAcademics = (id: string, input: Pick<DigitalInput, 'ca
 export const loadDigitalPublications = (signal?: AbortSignal) => authenticatedRequest<DigitalPublication[]>(base, { signal });
 export const loadAcquiredDigitalResources=(page:number,signal?:AbortSignal)=>authenticatedEnvelopeRequest<DigitalPublication[],DigitalPage>(`${base}/acquired`,{signal},new URLSearchParams({page:String(page),limit:'20'}));
 export const loadAcquiredDigitalResource=(id:string,signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/acquired/${id}`,{signal});
+export const loadOwnedDigitalResources=(page:number,signal?:AbortSignal)=>authenticatedEnvelopeRequest<DigitalPublication[],DigitalPage>(`${base}/mine`,{signal},new URLSearchParams({page:String(page),limit:'20'}));
+export const loadOwnedDigitalResource=(id:string,signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/mine/${id}`,{signal});
+export const editDigitalContent=(id:string,input:Pick<DigitalInput,'title'|'description'|'modality'|'price'>&{updatedAt:string},signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal});
+export const retireDigitalResource=(id:string,updatedAt:string,signal?:AbortSignal)=>authenticatedRequest<DigitalPublication>(`${base}/${id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({updatedAt}),signal});
 export function searchDigitalPublications(filters: DigitalFilters, page: number, signal?: AbortSignal) {
   const query = new URLSearchParams({ page: String(page), limit: '20' });
   for (const [key, value] of Object.entries(filters)) if (value.trim()) query.set(key, value.trim());

@@ -722,6 +722,32 @@ test('acquired material reads exclude incomplete/revoked/mismatched rights and i
   await db.query('UPDATE perfil_usuario SET campus_id=$2,institucion_id=$3 WHERE id=$1',[receiver.userId,foreignCampus,foreignInstitution]);current={...receiver,campusId:foreignCampus,profile:{...receiver.profile,campus_id:foreignCampus,institucion_id:foreignInstitution}};
   assert.deepEqual((await(await get('/acquired')).json()).data,[]);assert.equal((await get('/acquired/'+saved.id)).status,404);
 });
+test('digital owner edits and withdraws with audit/version while previous acquisition terms/files remain intact',async()=>{
+  const c=await academicCatalog(),saved=await service.createDigitalPublication(auth,input({careerIds:[c.careerA],subjectIds:[c.shared]}),file()),receiver=await peer();await acquisition(saved.id,receiver.userId);
+  const raw={title:'Título vigente',description:'Descripción vigente',modality:'DONACION',price:null,updatedAt:saved.updatedAt};
+  const response=await digitalJson('/'+saved.id,'PATCH',raw);assert.equal(response.status,200);const after=(await response.json()).data;
+  assert.equal(after.price,null);assert.deepEqual(after.files,saved.files);assert.deepEqual(after.careerIds,saved.careerIds);assert.equal(after.ownerId,auth.userId);assert.equal(after.campusId,campus);
+  assert.equal((await digitalJson('/'+saved.id,'PATCH',raw)).status,409);
+  current=receiver;const acquired=(await(await get('/acquired/'+saved.id)).json()).data;assert.equal(acquired.acquisition.amount,2500);
+  current=structuredClone(auth);const retired=await digitalJson('/'+saved.id,'DELETE',{updatedAt:after.updatedAt});assert.equal(retired.status,200);const result=(await retired.json()).data;assert.equal(result.isWithdrawn,true);
+  assert.equal((await get('/'+saved.id)).status,404);assert.equal((await get('/mine/'+saved.id)).status,200);
+  assert.equal((await digitalJson('/'+saved.id,'DELETE',{updatedAt:after.updatedAt})).status,200);
+  assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1',[saved.id])).rows.length,3);
+  const event=(await db.query("SELECT datos_antes,datos_despues FROM auditoria WHERE entidad_id=$1 AND accion='RETIRAR_PUBLICACION'",[saved.id])).rows[0];assert.equal(event.datos_antes.deleted_at,null);assert.ok(event.datos_despues.deleted_at);
+  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');await assert.rejects(trades.createDigitalRequest(await peer(),saved.id,{messageCode:'LIB_QA_INTERES'}),{status:409});
+  assert.deepEqual((await filesService.getDigitalOriginal(receiver,saved.id,saved.files[0].id)).bytes,pdf);assert.equal(objects.size,1);
+});
+test('digital editor rejects privileged/non-owner inputs and rollback/uncertain COMMIT preserves recoverable history',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),raw={title:saved.title,description:saved.description,modality:'VENTA',price:3000,updatedAt:saved.updatedAt};
+  for(const extra of [{ownerId:receiver.userId},{files:[]},{careerIds:[]},{campusId:sibling},{price:0},{modality:'DONACION',price:1},{updatedAt:'bad'}])assert.equal((await digitalJson('/'+saved.id,'PATCH',{...raw,...extra})).status,400);
+  current=receiver;assert.equal((await digitalJson('/'+saved.id,'PATCH',raw)).status,403);assert.equal((await get('/mine/'+saved.id)).status,404);
+  current=await peer(foreignCampus,foreignInstitution);assert.equal((await digitalJson('/'+saved.id,'PATCH',raw)).status,404);
+  current=structuredClone(auth);failAudit=true;assert.equal((await digitalJson('/'+saved.id,'PATCH',raw)).status,503);assert.equal((await service.getDigitalPublications(auth,saved.id))[0].price,2500);
+  failAudit=false;failCommit=true;assert.equal((await digitalJson('/'+saved.id,'DELETE',{updatedAt:saved.updatedAt})).status,503);assert.equal((await get('/'+saved.id)).status,200);
+  lostCommit=true;assert.equal((await digitalJson('/'+saved.id,'DELETE',{updatedAt:saved.updatedAt})).status,503);
+  const owned=(await(await get('/mine/'+saved.id)).json()).data;assert.equal(owned.isWithdrawn,true);
+  assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1',[saved.id])).rows.length,2);assert.equal(objects.size,1);
+});
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());

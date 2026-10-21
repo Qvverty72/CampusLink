@@ -574,6 +574,10 @@ Bearer en todas las rutas. `GET /elibrary/:id/request-options` informa elegibili
 
 DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad servidor; cerrar/cancelar un acuerdo no cambia otros ni consume el digital. `GET /elibrary/acquired` (page/limit) y `GET /acquired/:publicationId` consultan únicamente derechos válidos propios con el mismo predicado de la descarga. Respetan institución actual, aunque recurso/propietario estén desactivados; incorporan `isWithdrawn` y `acquisition:{transactionId,acquiredAt,modality,amount,currency}` con términos originales. Expo ofrece sección paginada y descarga autenticada en web/nativo. Sin permiso por usuario/receptor en query ni URLs privadas.
 
+## Editor y retirada digital (F2.5-09)
+
+`GET /elibrary/mine` pagina publicaciones del dueño, incluidas retiradas; `GET /mine/:id` devuelve detalle propio. `PATCH /:id` admite exactamente `{title,description,modality,price,updatedAt}` y `DELETE /:id` solo `{updatedAt}`; no-store y dueño vigente. Versión de seis decimales bajo locks evita perder edición/adjuntos/asociaciones concurrentes; no-op no escribe. Retirada usa deleted_at y auditoría atómica, conserva solicitudes/acuerdos/derechos/bytes y excluye descubrimiento/nuevas solicitudes. Respuestas inciertas exigen recarga. Los originales no se reemplazan ni borran; política confirmada por el usuario: archivo diferente requiere otra publicación.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.

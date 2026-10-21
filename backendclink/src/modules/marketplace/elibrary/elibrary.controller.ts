@@ -12,9 +12,13 @@ import { searchDigitalPublications } from './elibrary.search.service.js';
 import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
 import { getDigitalPreview } from './elibrary.preview.service.js';
 import { createDigitalRequest, digitalAction, getDigitalRequestOptions, getDigitalRequests, getDigitalTrade, resolveDigitalRequest, transitionDigitalTrade } from './elibrary.trades.service.js';
-import { getAcquiredDigitalResources } from './elibrary.acquired.service.js';
+import { getAcquiredDigitalResources,getOwnedDigitalResources } from './elibrary.acquired.service.js';
+import { editDigitalPublication } from './elibrary.edit.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const ownedDigitalController:DigitalHandler=async(request,response)=>{const result=await getOwnedDigitalResources(response.locals.auth,request.query);sendEnvelope(response,result.data,{meta:result.meta});};
+export const ownedDigitalDetailController:DigitalHandler=async(request,response)=>{digitalAction(request.query);const result=await getOwnedDigitalResources(response.locals.auth,{},request.params.publicationId);sendSuccess(response,result.data[0]);};
+export const editDigitalController=(retiring:boolean):DigitalHandler=>async(request,response)=>{digitalAction(request.query);sendSuccess(response,await editDigitalPublication(response.locals.auth,request.params.publicationId,request.body,retiring));};
 export const acquiredDigitalController:DigitalHandler=async(request,response)=>{
   const result=await getAcquiredDigitalResources(response.locals.auth,request.query);sendEnvelope(response,result.data,{meta:result.meta});
 };

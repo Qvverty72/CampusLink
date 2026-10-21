@@ -31,6 +31,7 @@ export interface DigitalPublication extends DigitalInput {
   updatedAt: string;
   acquired: boolean;
   isWithdrawn: boolean;
+  deletedAt: string | null;
   acquisition: { transactionId:string;acquiredAt:string;modality:string;amount:number|null;currency:string } | null;
 }
 export interface DigitalResourceRow {

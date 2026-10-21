@@ -33,16 +33,16 @@ export async function replaceDigitalAcademics(client: PoolClient, id: string, ca
 
 /** Historial inmutable en la misma transacción, sin rutas privadas ni cambios en acuerdos. */
 export async function auditDigitalAcademics(client: PoolClient, auth: VerifiedAuthConnection,
-  before: DigitalPublication | null, after: DigitalPublication) {
+  before: DigitalPublication | null, after: DigitalPublication, action?: 'EDITAR_PUBLICACION' | 'RETIRAR_PUBLICACION') {
   const snapshot = (publication: DigitalPublication | null) => publication && ({
     id: publication.id, tipo_recurso: 'DIGITAL', propietario_id: publication.ownerId, campus_id: publication.campusId,
     institucion_id: publication.institutionId, titulo: publication.title, descripcion: publication.description,
     modalidad: publication.modality, precio: publication.price, moneda: publication.currency,
-    estado_publicacion: publication.status, updated_at: publication.updatedAt,
+    estado_publicacion: publication.status, updated_at: publication.updatedAt, deleted_at: publication.deletedAt,
     careers: publication.careers, subjects: publication.subjects,
   });
   await client.query(`INSERT INTO public.auditoria(actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion,datos_antes,datos_despues)
     VALUES($1,$2,$3,'publicacion_recurso',$4,$5,$6::jsonb,$7::jsonb)`,
-    [auth.userId, after.institutionId, after.campusId, after.id, before ? 'EDITAR_PUBLICACION' : 'PUBLICAR_PUBLICACION',
+    [auth.userId, after.institutionId, after.campusId, after.id, action ?? (before ? 'EDITAR_PUBLICACION' : 'PUBLICAR_PUBLICACION'),
       JSON.stringify(snapshot(before)), JSON.stringify(snapshot(after))]);
 }

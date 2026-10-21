@@ -161,6 +161,7 @@ export function useDigitalLibrary() {
   }
   return { items, detail, loading, busy, formOpen, title, setTitle, description, setDescription, price, setPrice,
     page, hasMore, search: (value: DigitalFilters) => { setPage(1); setFilters({ ...value }); },
+    savedContent:(value:DigitalPublication)=>{setDetail(value.isWithdrawn?null:value);setNotice(value.isWithdrawn?'La publicación se retiró. Los archivos y adquisiciones se conservan.':'La publicación se actualizó.');setRevision(previous=>previous+1);},
     previousPage: () => setPage(value => Math.max(1, value - 1)), nextPage: () => { if (hasMore && !loading) setPage(value => value + 1); },
     careerIds, setCareerIds, subjectIds, setSubjectIds, catalog, catalogLoading, catalogError,
     reloadCatalog: () => setCatalogRevision(value => value + 1),
