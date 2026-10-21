@@ -594,11 +594,15 @@ DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad serv
 
 Aplicar `src/database/supabase/migrations/f2_7_01_eventos_analitica.sql` antes de publicar este backend. La migración es repetible, crea `evento_analitica`, reconstruye hechos anteriores desde las tablas de recursos y auditoría y agrega disparadores para vistas, solicitudes, transiciones de acuerdos y estados de cuenta. Cada evento conserva fecha exacta, institución, campus, actor cuando corresponde, referencia y asignaturas al momento del registro. Los detalles físico y digital registran una vista por usuario y publicación durante 24 horas, con serialización ante accesos simultáneos. Los eventos de actividades continúan en `activity_interactions` de MongoDB; `JOINED` mide inscripción y no asistencia. El tablero y la agrupación por períodos pertenecen a F2.7-02 y F2.7-04.
 
+## Tablero de cuatro KPI (F2.7-02)
+
+`GET /api/v1/analytics/dashboard?from=AAAA-MM-DD&to=AAAA-MM-DD` consulta el campus de la sesión. `campusId` es opcional para un campus de la misma institución con permiso vigente de reportería; el backend valida el rol o permiso por campus y el ámbito en PostgreSQL. El período incluye ambos días civiles en UTC y usa el comienzo del día siguiente como corte exclusivo. La respuesta contiene `period`, `scope`, `generatedAt`, `activeUsers`, `resourceDemand` (`views` y `requests`), `subjectDemand` (lista por asignatura con vistas y solicitudes) y `activityParticipation` (`JOINED`, inscripciones, no asistencia). Los cuatro KPI incluyen valor, período y ámbito. F2.7-03 ampliará los filtros institucionales y F2.7-04 agregará agrupación temporal y zona horaria institucional.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
-- Construir tableros y consultas de KPI sobre `evento_analitica` y `activity_interactions` según F2.7-02 y siguientes.
+- Ampliar los filtros y la agrupación del tablero según F2.7-03 y F2.7-04.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
 
 ## Referencias técnicas

@@ -1,9 +1,11 @@
 import { Router } from 'express';
-import { getAnalyticsHealthController } from './analytics.controller.js';
+import { getAnalyticsHealthController, getDashboardController } from './analytics.controller.js';
+import { requireAuthentication } from '../auth/auth.middleware.js';
 
-// Solo expone diagnósticos técnicos; las rutas de negocio deberán definir autenticación y autorización.
+// Los diagnósticos son opcionales; el tablero exige identidad y autorización en el servicio.
 export function createAnalyticsRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getAnalyticsHealthController);
+  router.get('/dashboard', requireAuthentication, getDashboardController);
   return router;
 }

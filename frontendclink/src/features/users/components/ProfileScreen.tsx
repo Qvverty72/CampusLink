@@ -62,7 +62,7 @@ export function ProfileScreen() {
             </Pressable>
           </Link>}
 
-          {identity?.capabilities.analytics && <Link href={'/analytics'} asChild>
+          {identity?.capabilities.reports && <Link href={'/analytics'} asChild>
             <Pressable
               accessibilityRole={'button'}
               accessibilityLabel={'Ir a Analítica'}
