@@ -1,7 +1,7 @@
 import { supabaseTechnical } from './client.js';
 
 export type SupabaseProbeTable = 'campus' | 'perfil_usuario' | 'publicacion_recurso' |
-  'recurso_digital' | 'recurso_fisico' | 'reporte_contenido' | 'interaccion_recurso' | 'reporte';
+  'recurso_digital' | 'recurso_fisico' | 'reporte_contenido' | 'interaccion_recurso' | 'evento_analitica' | 'reporte';
 export interface TableProbe {
   table: SupabaseProbeTable;
   column?: 'id' | 'publicacion_id';

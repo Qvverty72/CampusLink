@@ -136,13 +136,14 @@ before(async () => {
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
-    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria']) {
+    'interaccion_recurso','mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_06_mensajes_solicitud.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql','utf8'));
+  await db.exec(await readFile('src/database/supabase/migrations/f2_7_01_eventos_analitica.sql','utf8'));
   await db.exec('ALTER TABLE public.valoracion ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON public.valoracion TO service_role;');
   await db.exec('ALTER TABLE public.reporte_contenido ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON public.reporte_contenido TO service_role;');
   await db.query("insert into institucion(id,nombre) values($1,'Institution')", [institution]);
@@ -424,6 +425,10 @@ test('ordinary campus users can view galleries but cannot alter another owner im
   const owner = structuredClone(auth), saved = await create(owner, input());
   const viewer = await otherActor();
   const gallery = await imagesService.getPhysicalgoodsGallery(viewer, saved.id); assert.equal(gallery.canEdit, false);
+  await imagesService.getPhysicalgoodsGallery(viewer, saved.id);
+  const views=await db.query<{campus_id:string;actor_user_id:string}>(
+    "SELECT campus_id,actor_user_id FROM evento_analitica WHERE resource_id=$1 AND event_type='RESOURCE_VIEWED'",[saved.id]);
+  assert.equal(views.rows.length,1);assert.equal(views.rows[0].campus_id,campus);assert.equal(views.rows[0].actor_user_id,viewer.userId);
   const calls = storageCalls.length;
   await assert.rejects(imagesService.addPhysicalgoodsImage(viewer, saved.id, { photo: input().photo }), { status: 403 });
   assert.equal(storageCalls.length, calls);

@@ -10,6 +10,7 @@ import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasRefe
   signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { parsePhysicalgoodsSearch } from './physicalgoods.search.validation.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
+import { recordResourceView } from '../../analytics/analytics.repository.js';
 import { findPhysicalgoodsCategory, findPhysicalgoodsDetail, findPhysicalgoodsImages, findPhysicalgoodsMedia, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
   retirePhysicalgoodsImage, setPhysicalgoodsPrincipal, touchPhysicalgoods, updatePhysicalgoodsCategory } from './physicalgoods.images.repository.js';
 
@@ -66,6 +67,8 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
       if (image.bucket_id !== PHYSICALGOODS_BUCKET || !image.storage_path.startsWith(auth.campusId + '/')) throw new Error('Invalid stored image');
       images.push({ id: image.id, name: image.nombre_original, principal: image.orden === 0, url: await signPrincipalPhoto(image.storage_path) });
     }
+    await withPhysicalgoodsTransaction(client => recordResourceView(client, auth.profile.institucion_id,
+      auth.campusId, auth.userId, id, 'FISICO'));
     return { ...mediaDto(result.row), description: result.row.descripcion,
       campus: { id: result.row.campus_id, name: result.row.campus_nombre },
       owner: { id: result.row.propietario_id, fullName: result.row.propietario_nombre },

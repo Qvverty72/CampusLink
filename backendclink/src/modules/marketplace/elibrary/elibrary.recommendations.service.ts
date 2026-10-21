@@ -6,7 +6,8 @@ import { authorizeDigitalAccess,currentDigitalContext } from './elibrary.service
 import { digitalHistoryPage } from './elibrary.trades.service.js';
 import { digitalId } from './elibrary.validation.js';
 import { findDigitalPublications } from './elibrary.repository.js';
-import { insertDigitalView,rankDigitalRecommendations } from './elibrary.recommendations.repository.js';
+import { rankDigitalRecommendations } from './elibrary.recommendations.repository.js';
+import { recordResourceView } from '../../analytics/analytics.repository.js';
 export const DIGITAL_RECOMMENDATION_WEIGHTS=Object.freeze({career:30,subject:20,view:5,request:10,activity:1});
 export async function getDigitalRecommendations(auth:VerifiedAuthConnection,raw:unknown) {
   authorizeDigitalAccess(auth);const page=digitalHistoryPage(raw);
@@ -22,9 +23,12 @@ export async function getDigitalRecommendations(auth:VerifiedAuthConnection,raw:
       ...(!rank.score?['Recurso reciente de tu institución']:[])]}})),page);
   });}catch(error){if(error instanceof ApiError)throw error;throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudieron cargar las recomendaciones.');}
 }
-/** Señal accesoria: un fallo de analítica nunca impide consultar metadatos autorizados. */
+/** La vista del detalle forma parte del historial de demanda. */
 export async function recordDigitalView(auth:VerifiedAuthConnection,rawId:unknown) {
-  try{authorizeDigitalAccess(auth);const id=digitalId(rawId);await withPostgresTransaction(async client=>{
-    const {current,campus}=await currentDigitalContext(client,auth);await insertDigitalView(client,campus.institucion_id,current.userId,id);
-  });}catch{console.error('Digital view signal unavailable');}
+  authorizeDigitalAccess(auth);const id=digitalId(rawId);
+  try { await withPostgresTransaction(async client=>{
+    const {current,campus}=await currentDigitalContext(client,auth);
+    await recordResourceView(client,campus.institucion_id,null,current.userId,id,'DIGITAL');
+  }); } catch(error) { if(error instanceof ApiError)throw error;
+    throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudo registrar la vista del recurso.'); }
 }

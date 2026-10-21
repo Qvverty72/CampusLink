@@ -580,7 +580,7 @@ DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad serv
 
 ## Recomendaciones digitales (F2.5-10)
 
-`GET /elibrary/recommendations` admite page/limit y devuelve publicaciones institucionales activas con `{recommendation:{score,reasons}}`; excluye propios/adquiridos mediante el predicado de derecho de descarga. Pesos revisables en DIGITAL_RECOMMENDATION_WEIGHTS:30 por carrera,20 por asignatura relacionada (máximo3 cada una),5 por vista propia,10 por solicitud propia activa y1 por actividad agregada (máximo5). Desempata por fecha/id; nuevos usan perfil y sin perfil actividad/recientes. No ML ni proveedores externos; explicaciones no revelan identidades ni conversaciones. Detalle registra VISTA propia como máximo una vez por recurso/24h; fallo de señal no impide leer metadatos. Orden/paginación SQL y proyección en bloque, no N+1.
+`GET /elibrary/recommendations` admite page/limit y devuelve publicaciones institucionales activas con `{recommendation:{score,reasons}}`; excluye propios/adquiridos mediante el predicado de derecho de descarga. Pesos revisables en DIGITAL_RECOMMENDATION_WEIGHTS:30 por carrera,20 por asignatura relacionada (máximo3 cada una),5 por vista propia,10 por solicitud propia activa y1 por actividad agregada (máximo5). Desempata por fecha/id; nuevos usan perfil y sin perfil actividad/recientes. No ML ni proveedores externos; explicaciones no revelan identidades ni conversaciones. El detalle registra VISTA de otros usuarios como máximo una vez por recurso/24h; un fallo al guardar la vista impide completar el detalle. Orden/paginación SQL y proyección en bloque, no N+1.
 
 ## Valoración digital (F2.5-11)
 
@@ -590,11 +590,15 @@ DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad serv
 
 `POST /api/v1/reports/elibrary/:publicationId` y `POST /elibrary/:publicationId/transactions/:transactionId` reutilizan reports con `{reason,description?}` y acuse privado. Recurso disponible institucional o acuerdo propio, incluso retirado; identidad, objetivo y campus de origen se derivan y comprueban en servidor. Conservan evidencia privada de metadatos y términos, nunca bytes, paths ni enlaces. Estado inicial PENDIENTE; no ocultan recursos ni cambian acuerdos/accesos. El formulario compartido distingue el campus de origen digital. La revisión y resolución administrativa corresponden a F2.8-02/03; enviar una denuncia no concede descarga. Sin SQL pendiente.
 
+## Eventos para analítica (F2.7-01)
+
+Aplicar `src/database/supabase/migrations/f2_7_01_eventos_analitica.sql` antes de publicar este backend. La migración es repetible, crea `evento_analitica`, reconstruye hechos anteriores desde las tablas de recursos y auditoría y agrega disparadores para vistas, solicitudes, transiciones de acuerdos y estados de cuenta. Cada evento conserva fecha exacta, institución, campus, actor cuando corresponde, referencia y asignaturas al momento del registro. Los detalles físico y digital registran una vista por usuario y publicación durante 24 horas, con serialización ante accesos simultáneos. Los eventos de actividades continúan en `activity_interactions` de MongoDB; `JOINED` mide inscripción y no asistencia. El tablero y la agrupación por períodos pertenecen a F2.7-02 y F2.7-04.
+
 ## Trabajo posterior
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
-- Completar eventos de recursos/transacciones/cuentas y tableros para KPI; el log de actividades ya registra VIEWED/JOINED/LEFT. El health no demuestra cobertura analítica.
+- Construir tableros y consultas de KPI sobre `evento_analitica` y `activity_interactions` según F2.7-02 y siguientes.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
 
 ## Referencias técnicas
