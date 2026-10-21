@@ -95,6 +95,10 @@ export function useDigitalLibrary() {
         currentTarget.current = publication; setTarget(publication);
         releaseDigitalFile(queue.current.shift()!); setFiles([...queue.current]);
       }
+      // Los adjuntos cambian la versión; conservarla al abrir la edición posterior.
+      publication = await loadDigitalPublication(publication.id, abort.signal);
+      if (abort.signal.aborted) return;
+      currentTarget.current = publication; setTarget(publication);
       setItems(previous => [publication, ...previous.filter(item => item.id !== publication.id)]);
       setDetail(publication); setFormOpen(false); setNotice(attachMode ? 'Los archivos se adjuntaron correctamente.' : 'Tu recurso ya está publicado y disponible para tu institución.');
       setTitle(''); setDescription(''); setPrice(''); setModality('DONACION'); setFiles([]); setCareerIds([]); setSubjectIds([]);
