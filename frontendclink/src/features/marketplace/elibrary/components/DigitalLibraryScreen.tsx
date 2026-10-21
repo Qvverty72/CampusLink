@@ -69,6 +69,7 @@ function Library() {
         <Pressable accessibilityRole="button" disabled={disabled} onPress={library.closeForm} style={styles.smallButton}><Text style={styles.link}>{library.target ? 'Continuar con los archivos guardados' : 'Volver a la biblioteca'}</Text></Pressable>
       </View> : library.detail ? <View style={styles.card}>
         <Text style={styles.badge}>DISPONIBLE · {terms(library.detail)}</Text>
+        {library.detail.acquired && <Text style={styles.notice}>Ya adquiriste este recurso.</Text>}
         <Text style={styles.sectionTitle}>{library.detail.title}</Text>
         <Text style={styles.body}>{library.detail.description}</Text>
         <Text style={styles.helper}>Campus de origen: {library.detail.campusName}</Text>
@@ -110,7 +111,7 @@ function Library() {
         <DigitalSearchForm catalog={library.catalog} onSearch={library.search} loading={library.loading} />
         {library.loading ? <ActivityIndicator accessibilityLabel="Cargando publicaciones" color={APP_COLORS.PRIMARY} /> : library.items.length ? library.items.map(item =>
           <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Consultar ${item.title}`} onPress={() => library.openDetail(item.id)} style={styles.card}>
-            <Text style={styles.badge}>{terms(item)}</Text><Text style={styles.itemTitle}>{item.title}</Text>
+            <Text style={styles.badge}>{terms(item)}{item.acquired ? ' · Adquirido' : ''}</Text><Text style={styles.itemTitle}>{item.title}</Text>
             <Text numberOfLines={2} style={styles.body}>{item.description}</Text><Text style={styles.helper}>{item.campusName} · {item.files.length} archivo{item.files.length === 1 ? '' : 's'}</Text>
             {(item.careers.length > 0 || item.subjects.length > 0) && <Text numberOfLines={2} style={styles.helper}>{[...item.careers, ...item.subjects].map(row => row.name).join(' · ')}</Text>}
             <Text style={styles.link}>Consultar recurso</Text>

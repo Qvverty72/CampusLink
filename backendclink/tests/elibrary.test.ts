@@ -690,6 +690,18 @@ test('digital operations revalidate both institutional participants and private 
   assert.equal((await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CANCELAR')).status,'CANCELADA');
   current=other;assert.equal((await digitalJson(`/${saved.id}/transactions/${tradeId}/confirm`,'POST',{role:'PROPIETARIO'})).status,400);
 });
+test('multiple digital receivers complete independently without consuming publication or cancelling other requests',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),first=await peer(),second=await peer(),third=await peer();
+  const one=await requestAndAccept(saved,first),two=await requestAndAccept(saved,second),three=await requestAndAccept(saved,third);
+  await Promise.all([one.trades.transitionDigitalTrade(auth,saved.id,one.tradeId,{},'CONFIRMAR'),two.trades.transitionDigitalTrade(second,saved.id,two.tradeId,{},'CONFIRMAR')]);
+  await Promise.all([one.trades.transitionDigitalTrade(first,saved.id,one.tradeId,{},'CONFIRMAR'),two.trades.transitionDigitalTrade(auth,saved.id,two.tradeId,{},'CONFIRMAR'),three.trades.transitionDigitalTrade(third,saved.id,three.tradeId,{},'CANCELAR')]);
+  assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE publicacion_id=$1',[saved.id])).rows.length,2);
+  assert.equal((await db.query('SELECT estado_publicacion FROM publicacion_recurso WHERE id=$1',[saved.id])).rows[0].estado_publicacion,'DISPONIBLE');
+  for(const receiver of [first,second]) {assert.deepEqual((await filesService.getDigitalOriginal(receiver,saved.id,saved.files[0].id)).bytes,pdf);assert.equal((await service.getDigitalPublications(receiver,saved.id))[0].acquired,true);await assert.rejects(one.trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'}),{status:409});}
+  assert.equal((await service.getDigitalPublications(third,saved.id))[0].acquired,false);
+  const fourth=await peer();assert.ok((await one.trades.createDigitalRequest(fourth,saved.id,{messageCode:'LIB_QA_INTERES'})).id);
+  current=first;const result=await get('?q='+encodeURIComponent(saved.title));assert.ok((await result.json()).data.some((row:{id:string;acquired:boolean})=>row.id===saved.id&&row.acquired));
+});
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());

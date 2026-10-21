@@ -74,7 +74,7 @@ export async function getDigitalPublications(auth: VerifiedAuthConnection, publi
   try {
     return await withPostgresTransaction(async client => {
       const { campus } = await currentDigitalContext(client, auth);
-      const publications = await findDigitalPublications(client, campus.institucion_id, id);
+      const publications = await findDigitalPublications(client, campus.institucion_id, id, undefined, auth.userId);
       if (id && !publications.length) throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible en tu institución.');
       return publications;
     });

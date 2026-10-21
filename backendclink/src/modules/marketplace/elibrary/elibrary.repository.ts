@@ -8,6 +8,10 @@ import type { DigitalPublication, DigitalResourceRow, DigitalStoredFile, Digital
 import type { DigitalSearch } from './elibrary.search.service.js';
 
 export const DIGITAL_BUCKET = 'digital-resources';
+/** Predicado común para derechos existentes: solicitud/visibilidad por sí solas no conceden acceso. */
+export const DIGITAL_ACCESS_PROOF = `t.publicacion_id=a.publicacion_id AND t.receptor_id=a.receptor_id AND t.estado_transaccion='COMPLETADA'
+  AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirm WHERE confirm.transaccion_id=t.id AND confirm.rol_confirmante='PROPIETARIO' AND confirm.usuario_id=t.propietario_id)
+  AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirm WHERE confirm.transaccion_id=t.id AND confirm.rol_confirmante='RECEPTOR' AND confirm.usuario_id=t.receptor_id)`;
 export async function findDigitalCampus(client: PoolClient, campusId: string) {
   return (await client.query<{ id: string; nombre: string; institucion_id: string; activo: boolean }>(
     `SELECT c.id,c.nombre,c.institucion_id,c.activo FROM public.campus c
@@ -51,12 +55,14 @@ export async function digitalFileHasReference(id: string, path: string) {
   });
 }
 /** Proyección pública institucional: nunca selecciona bucket, path ni enlaces del original. */
-export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null, filters?: DigitalSearch): Promise<DigitalPublication[]> {
+export async function findDigitalPublications(client: PoolClient, institutionId: string, id: string | null = null, filters?: DigitalSearch, viewerId: string | null = null): Promise<DigitalPublication[]> {
   return (await client.query<Omit<DigitalPublication, 'careerIds' | 'subjectIds'>>(
     `SELECT p.id,p.titulo AS title,p.descripcion AS description,p.modalidad AS modality,p.precio::float8 AS price,
       to_char(p.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt",
       p.moneda AS currency,p.estado_publicacion AS status,p.propietario_id AS "ownerId",p.campus_id AS "campusId",
       c.nombre AS "campusName",c.institucion_id AS "institutionId",
+      EXISTS(SELECT 1 FROM public.acceso_recurso_digital a JOIN public.transaccion_recurso t ON t.id=a.transaccion_id
+        WHERE a.publicacion_id=p.id AND a.receptor_id=$9 AND t.propietario_id=p.propietario_id AND ${DIGITAL_ACCESS_PROOF}) AS acquired,
       COALESCE((SELECT json_agg(json_build_object('id',c.id,'name',c.nombre,'code',c.codigo) ORDER BY c.nombre,c.id)
        FROM public.publicacion_carrera pc JOIN public.carrera c ON c.id=pc.carrera_id
        WHERE pc.publicacion_id=p.id AND c.institucion_id=$1),'[]'::json) AS careers,
@@ -76,7 +82,7 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
        AND EXISTS(SELECT 1 FROM public.archivo_publicacion a WHERE a.publicacion_id=p.id AND a.deleted_at IS NULL AND a.tipo_archivo='RECURSO')
      ORDER BY p.publicado_en DESC,p.id DESC LIMIT $7 OFFSET $8`, [institutionId, id,
        filters?.q ? '%' + filters.q.replace(/[\\%_]/g, '\\$&') + '%' : null,
-       filters?.careerId ?? null, filters?.subjectId ?? null, filters?.modality ?? null, filters ? filters.limit + 1 : 30, filters?.offset ?? 0])).rows
+       filters?.careerId ?? null, filters?.subjectId ?? null, filters?.modality ?? null, filters ? filters.limit + 1 : 30, filters?.offset ?? 0, viewerId])).rows
     .map(row => ({ ...row, careerIds: row.careers.map(career => career.id), subjectIds: row.subjects.map(subject => subject.id) }));
 }
 
@@ -105,11 +111,8 @@ export async function findDigitalFile(client: PoolClient, publicationId: string,
 /** Solo comprueba derechos existentes; no crea solicitudes, transacciones ni adquisiciones. */
 export async function hasDigitalAcquisition(client: PoolClient, publicationId: string, ownerId: string, receiverId: string) {
   return (await client.query<{ granted: boolean }>(
-    `SELECT EXISTS(SELECT 1 FROM public.acceso_recurso_digital a
-       JOIN public.transaccion_recurso t ON t.id=a.transaccion_id AND t.publicacion_id=a.publicacion_id AND t.receptor_id=a.receptor_id
-       WHERE a.publicacion_id=$1 AND a.receptor_id=$2 AND t.propietario_id=$3 AND t.estado_transaccion='COMPLETADA'
-       AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion c WHERE c.transaccion_id=t.id AND c.rol_confirmante='PROPIETARIO' AND c.usuario_id=t.propietario_id)
-       AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion c WHERE c.transaccion_id=t.id AND c.rol_confirmante='RECEPTOR' AND c.usuario_id=t.receptor_id)) AS granted`,
+    `SELECT EXISTS(SELECT 1 FROM public.acceso_recurso_digital a JOIN public.transaccion_recurso t ON t.id=a.transaccion_id
+       WHERE a.publicacion_id=$1 AND a.receptor_id=$2 AND t.propietario_id=$3 AND ${DIGITAL_ACCESS_PROOF}) AS granted`,
     [publicationId, receiverId, ownerId])).rows[0].granted;
 }
 export async function downloadDigitalOriginal(file: DigitalStoredFile) {

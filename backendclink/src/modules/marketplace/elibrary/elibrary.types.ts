@@ -29,6 +29,7 @@ export interface DigitalPublication extends DigitalInput {
   careers: DigitalAcademicOption[];
   subjects: DigitalAcademicOption[];
   updatedAt: string;
+  acquired: boolean;
 }
 export interface DigitalResourceRow {
   id: string; campus_id: string; propietario_id: string; institucion_id: string;
