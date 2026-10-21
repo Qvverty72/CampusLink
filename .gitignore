@@ -15,9 +15,11 @@ AGENTS.md
 .agents/
 
 Contexto técnico de tareas
-context/
+context/*
+!context/TASK_INDEX.md
+!context/tasks/
+!context/tasks/**
 **/.context/
-**/context/tasks/
 
 /backend/docs/
 /backendclink/docs/

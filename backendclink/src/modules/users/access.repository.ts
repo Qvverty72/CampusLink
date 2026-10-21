@@ -65,7 +65,8 @@ export function accessRepository(client: AccessConnection) {
         to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
        FROM public.publicacion_recurso WHERE propietario_id=$1 AND tipo_recurso='FISICO'
        AND deleted_at IS NULL ORDER BY id FOR UPDATE`, [userId])).rows,
-    setAccountState: async (userId: string, state: AccountStateUpdate['accountState']) => {
+    setAccountState: async (userId: string, state: AccountStateUpdate['accountState'], actorId: string) => {
+      await client.query("SELECT set_config('campuslink.actor_user_id',$1,true)", [actorId]);
       const result = await client.query<{ updated_at: string }>(
         `UPDATE public.perfil_usuario SET estado_cuenta=$2,
           updated_at=greatest(clock_timestamp(),updated_at + interval '1 microsecond') WHERE id=$1

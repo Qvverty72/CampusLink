@@ -197,7 +197,7 @@ export async function updateAccountState(auth: VerifiedAuthConnection, rawCampus
     // activas, aunque conserva el campus de origen y su historial.
     const publications = input.accountState === 'DESACTIVADA'
       ? (await repository.lockPhysicalPublications(userId)).filter(row => ['DISPONIBLE','RESERVADO','OCULTO'].includes(row.estado_publicacion)) : [];
-    const changedAt = await repository.setAccountState(userId, input.accountState);
+    const changedAt = await repository.setAccountState(userId, input.accountState, auth.userId);
     const after = { ...profile, estado_cuenta: input.accountState, updated_at: changedAt };
     const retired = publications.length ? await repository.retirePhysicalPublications(publications.map(row => row.id), changedAt) : [];
     await repository.auditAccountState(auth.userId, campus, userId,

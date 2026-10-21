@@ -114,6 +114,7 @@ before(async () => {
     CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text);
     ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects TO anon,authenticated,service_role;`);
   await db.exec(await readFile('src/database/supabase/migrations/f2_5_01_publicacion_digital.sql', 'utf8'));
+  await db.exec(await readFile('src/database/supabase/migrations/f2_7_01_eventos_analitica.sql', 'utf8'));
   await db.exec(`ALTER TABLE auditoria DROP CONSTRAINT auditoria_accion_check;
     ALTER TABLE auditoria ADD CHECK(accion IN ('PUBLICAR_PUBLICACION','EDITAR_PUBLICACION','RETIRAR_PUBLICACION'))`);
   await db.query('insert into institucion(id,nombre) values($1,$2),($3,$4)', [institution, 'Institución A', foreignInstitution, 'Institución B']);
@@ -766,7 +767,11 @@ test('view/request signals affect recommendations, views coalesce and do not exp
   const saved=await service.createDigitalPublication(auth,input({title:'Interes '+randomUUID()}),file()),receiver=await peer();current=receiver;
   await get('/'+saved.id);await get('/'+saved.id);
   assert.equal((await db.query("SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2 AND tipo_interaccion='VISTA'",[receiver.userId,saved.id])).rows.length,1);
+  const views=await db.query<{campus_id:string;actor_user_id:string;subject_ids:string[]}>(
+    "SELECT campus_id,actor_user_id,subject_ids FROM evento_analitica WHERE resource_id=$1 AND event_type='RESOURCE_VIEWED'",[saved.id]);
+  assert.equal(views.rows.length,1);assert.equal(views.rows[0].actor_user_id,receiver.userId);assert.equal(views.rows[0].campus_id,campus);
   await digitalJson('/'+saved.id+'/requests','POST',{messageCode:'LIB_QA_INTERES'});
+  assert.equal((await db.query("SELECT * FROM evento_analitica WHERE resource_id=$1 AND event_type='RESOURCE_REQUESTED'",[saved.id])).rows.length,1);
   const result=await(await get('/recommendations?limit=100')).json(),row=result.data.find((item:{id:string})=>item.id===saved.id);assert.ok(row);assert.ok(row.recommendation.score>=15);
   assert.ok(row.recommendation.reasons.includes('Relacionado con tu interés reciente'));
   assert.equal((await get('/recommendations?userId='+auth.userId)).status,400);assert.equal((await get('/recommendations?page=0')).status,400);
