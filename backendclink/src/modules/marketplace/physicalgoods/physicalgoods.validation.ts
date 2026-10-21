@@ -1,4 +1,5 @@
 import { ApiError } from '../../../services/api-response.js';
+import { parseMarketplaceRating } from '../marketplace.rating.js';
 import type { PhysicalgoodsCondition, PhysicalgoodsInput, PrincipalPhoto } from './physicalgoods.types.js';
 
 export const PRINCIPAL_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
@@ -92,10 +93,7 @@ export function parsePhysicalgoodsEmptyAction(body: unknown) {
 }
 /** La valoración solo acepta la puntuación; identidad, acuerdo y fecha proceden del servidor. */
 export function parsePhysicalgoodsRating(body:unknown):number {
-  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(key=>key!=='score'))return invalid('body','Selecciona una puntuación de 1 a 5.');
-  const score=(body as Record<string,unknown>).score;
-  if(typeof score!=='number'||!Number.isInteger(score)||score<1||score>5)return invalid('score','La puntuación debe ser un entero de 1 a 5.');
-  return score;
+  return parseMarketplaceRating(body);
 }
 export function parsePhysicalgoodsCoordination(body: unknown) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['buildingId','floorId'].includes(key))) return invalid('body','Selecciona un edificio y un piso.');

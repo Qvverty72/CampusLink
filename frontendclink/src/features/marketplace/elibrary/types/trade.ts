@@ -6,4 +6,5 @@ export interface DigitalRequest {
 export interface DigitalTrade {
   id:string;publicationId:string;title:string;ownerId:string;receiverId:string;status:string;modality:'VENTA'|'DONACION';amount:number|null;currency:string;
   startedAt:string;completedAt:string|null;cancelledAt:string|null;confirmations:{userId:string;role:string;confirmedAt:string}[];canConfirm:boolean;canCancel:boolean;
+  rating:{id:string;score:number;createdAt:string}|null;canRate:boolean;
 }

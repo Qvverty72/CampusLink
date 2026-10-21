@@ -10,6 +10,7 @@ import type { DigitalRequestRow, DigitalResourceRow, DigitalTradeRow } from './e
 import { activeDigitalRequest, confirmDigitalParticipant, digitalConfirmations, digitalMembersEnabled, digitalRequestMessages,
   digitalTradeParticipants, findDigitalRequest, findDigitalTrade, insertDigitalRequest, insertDigitalTrade, listDigitalRequests,
   lockDigitalProfiles, setDigitalRequestStatus, setDigitalTradeStatus } from './elibrary.trades.repository.js';
+import { findDigitalRating } from './elibrary.rating.repository.js';
 
 export function digitalAction(raw: unknown, fields: string[] = []): Record<string,unknown> {
   if (!raw || typeof raw!=='object' || Array.isArray(raw) || Object.keys(raw).some(key=>!fields.includes(key))) return invalidDigital('body','La solicitud contiene campos no admitidos.');
@@ -41,10 +42,13 @@ function requestDto(row: DigitalRequestRow) {
 export async function digitalTradeDto(client: PoolClient, resource: DigitalResourceRow, current: VerifiedAuthConnection, trade: DigitalTradeRow) {
   if(![trade.propietario_id,trade.receptor_id].includes(current.userId))throw missing();
   const active=['RESERVADA','PENDIENTE_CONFIRMACION'].includes(trade.estado_transaccion), confirmations=await digitalConfirmations(client,trade.id);
+  const rating=await findDigitalRating(client,trade.id);
   return {id:trade.id,publicationId:resource.id,title:resource.title,ownerId:trade.propietario_id,receiverId:trade.receptor_id,status:trade.estado_transaccion,
     modality:trade.modalidad_acordada,amount:trade.monto_acordado===null?null:Number(trade.monto_acordado),currency:trade.moneda,
     startedAt:new Date(trade.iniciada_en).toISOString(),completedAt:trade.completada_en?new Date(trade.completada_en).toISOString():null,
     cancelledAt:trade.cancelada_en?new Date(trade.cancelada_en).toISOString():null,
+    rating:rating?{...rating,createdAt:new Date(rating.createdAt).toISOString()}:null,
+    canRate:trade.estado_transaccion==='COMPLETADA'&&current.userId===trade.receptor_id&&current.userId!==trade.propietario_id&&!rating,
     confirmations:confirmations.map(row=>({...row,confirmedAt:new Date(row.confirmedAt).toISOString()})),
     canConfirm:active&&!confirmations.some(row=>row.userId===current.userId)&&await digitalMembersEnabled(client,[trade.propietario_id,trade.receptor_id],resource.institucion_id),canCancel:active};
 }

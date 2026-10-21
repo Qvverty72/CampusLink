@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { assertMarketplaceRatingEligible } from '../marketplace.rating.js';
 import { ApiError } from '../../../services/api-response.js';
 import { createPaginatedResult,parsePaginationQuery } from '../../../services/pagination.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
@@ -45,8 +46,7 @@ const ratingDto=(row:PhysicalgoodsRatingRow)=>({id:row.id,score:row.puntuacion,c
 export async function ratePhysicalgoodsOwner(auth:VerifiedAuthConnection,publicationId:unknown,transactionId:unknown,body:unknown) {
   const score=parsePhysicalgoodsRating(body);
   return transactionContext(auth,publicationId,transactionId,async(client,_resource,transaction,current)=>{
-    if(current.userId!==transaction.receptor_id||current.userId===transaction.propietario_id)throw new ApiError(403,'FORBIDDEN','Solo el comprador o receptor puede valorar al propietario.');
-    if(transaction.estado_transaccion!=='COMPLETADA')throw new ApiError(409,'CONFLICT','Completa el intercambio antes de valorar al propietario.');
+    assertMarketplaceRatingEligible(current.userId,transaction.propietario_id,transaction.receptor_id,transaction.estado_transaccion);
     if(await findPhysicalgoodsRating(client,transaction.id))throw new ApiError(409,'CONFLICT','Esta transacción ya tiene una valoración. No se puede editar.');
     return ratingDto(await insertPhysicalgoodsRating(client,transaction.id,current.userId,transaction.propietario_id,score));
   });

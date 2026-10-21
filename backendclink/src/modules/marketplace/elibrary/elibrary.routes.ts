@@ -8,6 +8,7 @@ import { digitalPreviewController } from './elibrary.controller.js';
 import { acquiredDigitalController,acquiredDigitalDetailController } from './elibrary.controller.js';
 import { ownedDigitalController,ownedDigitalDetailController,editDigitalController } from './elibrary.controller.js';
 import { recommendationsDigitalController } from './elibrary.controller.js';
+import { rateDigitalController } from './elibrary.controller.js';
 import { createDigitalRequestController, digitalRequestOptionsController, receivedDigitalRequestsController, sentDigitalRequestsController,
   resolveDigitalRequestController, detailDigitalTradeController, transitionDigitalTradeController } from './elibrary.controller.js';
 
@@ -38,5 +39,6 @@ export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
   router.get('/:publicationId/transactions/:transactionId', requireAuthentication, detailDigitalTradeController);
   router.post('/:publicationId/transactions/:transactionId/confirm', requireAuthentication, transitionDigitalTradeController('CONFIRMAR'));
   router.post('/:publicationId/transactions/:transactionId/cancel', requireAuthentication, transitionDigitalTradeController('CANCELAR'));
+  router.post('/:publicationId/transactions/:transactionId/rating',requireAuthentication,rateDigitalController);
   return router;
 }

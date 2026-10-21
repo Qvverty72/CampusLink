@@ -91,7 +91,7 @@ before(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion',
-    'publicacion_carrera', 'publicacion_asignatura', 'usuario_carrera', 'interaccion_recurso', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'reporte_contenido', 'auditoria']) {
+    'publicacion_carrera', 'publicacion_asignatura', 'usuario_carrera', 'interaccion_recurso', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'valoracion', 'reporte_contenido', 'auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -768,6 +768,19 @@ test('view/request signals affect recommendations, views coalesce and do not exp
   assert.ok(row.recommendation.reasons.includes('Relacionado con tu interés reciente'));
   assert.equal((await get('/recommendations?userId='+auth.userId)).status,400);assert.equal((await get('/recommendations?page=0')).status,400);
   current=structuredClone(auth);await get('/'+saved.id);assert.equal((await db.query('SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2',[auth.userId,saved.id])).rows.length,0);
+});
+test('digital rating shares physical rules: completed receiver only, integer 1..5, one immutable row under concurrency',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
+  const rating=await import('../src/modules/marketplace/elibrary/elibrary.rating.service.js');
+  await assert.rejects(rating.rateDigitalOwner(receiver,saved.id,tradeId,{score:5}),{status:409});
+  await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
+  await assert.rejects(rating.rateDigitalOwner(auth,saved.id,tradeId,{score:5}),{status:403});await assert.rejects(rating.rateDigitalOwner(other,saved.id,tradeId,{score:5}),{status:404});
+  for(const raw of [{score:0},{score:6},{score:1.5},{score:'5'},{score:5,evaluadoId:other.userId},{}])await assert.rejects(rating.rateDigitalOwner(receiver,saved.id,tradeId,raw),{status:400});
+  const results=await Promise.allSettled([rating.rateDigitalOwner(receiver,saved.id,tradeId,{score:4}),rating.rateDigitalOwner(receiver,saved.id,tradeId,{score:5})]);assert.equal(results.filter(row=>row.status==='fulfilled').length,1);
+  assert.equal(results.filter(row=>row.status==='rejected'&&row.reason.status===409).length,1);
+  const row=(await db.query('SELECT * FROM valoracion WHERE transaccion_id=$1',[tradeId])).rows[0];assert.equal(row.evaluador_id,receiver.userId);assert.equal(row.evaluado_id,auth.userId);
+  const detail=await trades.getDigitalTrade(receiver,saved.id,tradeId);assert.equal(detail.canRate,false);assert.ok(detail.rating);
+  current=receiver;assert.equal((await digitalJson(`/${saved.id}/transactions/${tradeId}/rating`,'PATCH',{score:2})).status,404);
 });
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
