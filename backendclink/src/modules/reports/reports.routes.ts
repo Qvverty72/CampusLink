@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { getReportsHealthController, createActivityReportController, createPhysicalgoodsReportController } from './reports.controller.js';
+import { getReportsHealthController, getOwnActivityReportController, createActivityReportController, createPhysicalgoodsReportController } from './reports.controller.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { parseActivityId, parseEmptyActivityInput } from '../activities/activities.validation.js';
-import { parseContentReport } from './reports.validation.js';
+import { parseActivityReport, parseContentReport } from './reports.validation.js';
 import type { ReportsDependencies } from './reports.types.js';
 import { createDigitalReportController } from './reports.controller.js';
 
@@ -11,8 +11,11 @@ import { createDigitalReportController } from './reports.controller.js';
 export function createReportsRouter(diagnosticsEnabled: boolean, dependencies: ReportsDependencies = {}): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getReportsHealthController);
+  router.get('/activities/:activityId/own', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseEmptyActivityInput }),
+    getOwnActivityReportController(dependencies));
   router.post('/activities/:activityId', requireAuthentication,
-    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseContentReport }),
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseActivityReport }),
     createActivityReportController(dependencies));
   router.post('/physicalgoods/:publicationId',requireAuthentication,
     validateRequest({query:parseEmptyActivityInput,body:parseContentReport}),createPhysicalgoodsReportController);

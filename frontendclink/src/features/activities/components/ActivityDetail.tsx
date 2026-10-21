@@ -1,7 +1,7 @@
 import { APP_COLORS } from '@/types/colors';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MapPinSearch, Repeat2, SquarePen, Trash, type LucideIcon } from 'lucide-react-native';
+import { Flag, MapPinSearch, Repeat2, SquarePen, Trash, type LucideIcon } from 'lucide-react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, type Activity, type ActivityDetail as ActivityDetailData } from '../types/activity';
 import { ActivitySeriesView } from './ActivitySeriesView';
@@ -12,9 +12,10 @@ import { ActivityParticipationControls } from './ActivityParticipationControls';
 import { ActivityParticipants } from './ActivityParticipants';
 import { ActivityDetailSkeleton } from './ActivityDetailSkeleton';
 import { ActivityDescription } from './ActivityDescription';
+import { ActivityBackButton } from './ActivityBackButton';
 import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
-import { useActivityRefresh, useActivityScrollReset } from './ActivityRefreshScrollView';
+import { useActivityCompactHeader, useActivityRefresh, useActivityScrollReset } from './ActivityRefreshScrollView';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { recordViewedActivity } from '../api/activitiesApi';
 import { activityOperationId } from '../types/interaction';
@@ -33,6 +34,14 @@ function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = fal
     </View>
     <Text style={[styles.managementLabel, danger && styles.danger]}>{label}</Text>
   </TouchableOpacity>;
+}
+
+/** La denuncia usa su retorno a la ficha y oculta el cierre exterior hasta desmontarse. */
+function ActivityReportView({ activityId, title, onBack }: {
+  activityId: string; title: string; onBack: () => void;
+}) {
+  useActivityCompactHeader();
+  return <ContentReportForm target={{ type: 'ACTIVIDAD', activityId }} title={title} onBack={onBack} />;
 }
 
 /** La ficha completa, edición y denuncia permanecen dentro del modal nativo actual. */
@@ -78,7 +87,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   useActivityRefresh(refreshSheet, isLoading,
     !busy && !isLoading && !editingOpen && !reporting && !showSeries);
   if (reporting?.id === activityId) return <ActivityContentTransition transitionKey="report">
-    <ContentReportForm key={activityId} target={{type:'ACTIVIDAD',activityId}}
+    <ActivityReportView key={activityId} activityId={activityId}
       title={reporting.title} onBack={() => { setReporting(null); refresh(); }} />
   </ActivityContentTransition>;
   if (editing && locations) return <ActivityContentTransition transitionKey="edit">
@@ -93,9 +102,7 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
     ? detail.location.floorName : `${detail.location.buildingName} · ${detail.location.floorName}`);
   return <ActivityContentTransition transitionKey={isLoading ? 'loading' : error ? 'error' : `detail:${activityId}`}>
     <View style={styles.content}>
-      <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={onBack} style={styles.action}>
-        <Text style={styles.link}>‹ Volver a las actividades</Text>
-      </TouchableOpacity>
+      <ActivityBackButton label="Volver a las actividades" onBack={onBack} disabled={busy}/>
       {isLoading ? <ActivityDetailSkeleton />
         : error ? <>
           <Text accessibilityRole="alert" style={styles.text}>{error}</Text>
@@ -154,10 +161,8 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
                 label={`Eliminar ${canViewOccurrences && detail.series ? 'esta ocurrencia' : 'actividad'}`}
                 onPress={() => setConfirmDelete(true)} />}
               {deletionError ? <Text accessibilityRole="alert" style={styles.danger}>{deletionError}</Text> : null}
-            </> : <TouchableOpacity accessibilityRole="button" disabled={busy}
-              onPress={() => setReporting({ id: detail.id, title: detail.title })} style={styles.action}>
-              <Text style={styles.link}>Denunciar actividad</Text>
-            </TouchableOpacity>}
+            </> : <DetailActionButton icon={Flag} disabled={busy} label="Denunciar actividad"
+              onPress={() => setReporting({ id: detail.id, title: detail.title })} />}
             {onExplore ? <DetailActionButton icon={MapPinSearch} disabled={busy}
               label="Explorar este piso" onPress={() => onExplore(detail)} /> : null}
           </View>

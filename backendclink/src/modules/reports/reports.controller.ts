@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import { sendModuleHealth } from '../../services/health-response.js';
-import { getReportsHealth, reportActivity } from './reports.service.js';
+import { getReportsHealth, getOwnActivityReport, reportActivity } from './reports.service.js';
 import { sendSuccess } from '../../services/api-response.js';
 import { getValidatedRequest } from '../../middleware/validateRequest.js';
 import type { AuthLocals } from '../auth/auth.types.js';
@@ -19,7 +19,15 @@ export const createDigitalReportController:RequestHandler<Record<string,string>,
   sendSuccess(response,await reportDigitalResource(response.locals.auth,request.params.publicationId,request.params.transactionId??null,request.body),201);
 };
 
-/** Crea el adaptador HTTP de denuncia usando parámetros y cuerpo previamente validados. */
+/** Consulta únicamente el acuse del usuario autenticado en su campus actual. */
+export function getOwnActivityReportController(dependencies: ReportsDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
+  return async (_request, response) => {
+    const { params } = getValidatedRequest<{ params: { activityId: string } }>(response);
+    sendSuccess(response, await getOwnActivityReport(response.locals.auth, params.activityId, dependencies));
+  };
+}
+
+/** Crea o recupera el acuse sin insertar nuevamente una denuncia ya enviada. */
 export function createActivityReportController(dependencies: ReportsDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {
   return async (_request, response) => {
     const { params, body } = getValidatedRequest<{ params: { activityId: string }; body: ReportActivityInput }>(response);

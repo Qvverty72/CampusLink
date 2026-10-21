@@ -7,10 +7,20 @@ import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { spatialBuildings } from '../activities/activities.location.js';
 import { toVisibleActivity } from '../activities/activities.policy.js';
 import { ApiError } from '../../services/apiError.js';
-import { parseContentReport } from './reports.validation.js';
+import { parseActivityReport } from './reports.validation.js';
+import { requireCampusCapability } from '../auth/auth.authorization.js';
 
 export const getReportsHealth: () => Promise<ReportsHealth> =
   createModuleHealthCheck('reports', probeReportsDependencies);
+
+/** Solo el usuario autenticado y su campus actual pueden recuperar su propio acuse. */
+export async function getOwnActivityReport(auth: VerifiedAuthConnection, activityId: string,
+  dependencies: ReportsDependencies = {}): Promise<ActivityReportReceipt | null> {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'Identificador de actividad inválido.');
+  requireCampusCapability(auth, auth.campusId, 'general');
+  const find = dependencies.findOwnActivityReport ?? (await import('./reports.repository.js')).findOwnActivityReport;
+  return find(auth.userId, auth.campusId, activityId.toLowerCase());
+}
 
 /**
  * Registra una denuncia de actividad visible en el mapa actual del usuario.
@@ -19,7 +29,7 @@ export const getReportsHealth: () => Promise<ReportsHealth> =
 export async function reportActivity(auth: VerifiedAuthConnection, activityId: string, input: ReportActivityInput,
   dependencies: ReportsDependencies = {}): Promise<ActivityReportReceipt> {
   if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new ApiError(400, 'VALIDATION_ERROR', 'Identificador de actividad inválido.');
-  const parsed = parseContentReport(input);
+  const parsed = parseActivityReport(input);
   if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los datos de la denuncia.', { details: parsed.issues });
   const id = activityId.toLowerCase();
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);

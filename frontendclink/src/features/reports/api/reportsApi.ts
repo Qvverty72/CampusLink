@@ -1,7 +1,25 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
-import type { ActivityReportInput, ActivityReportReceipt } from '../types/activityReport';
+import type { ActivityReportInput, ActivityReportReceipt } from '@/features/activities/types/activityReport';
 import type { ContentReportInput, ContentReportTarget, PhysicalgoodsReportReceipt } from '../types/contentReport';
+
+function validateActivityReceipt(receipt: ActivityReportReceipt, campusId: string, activityId: string): ActivityReportReceipt {
+  if (!receipt || !/^[0-9a-f-]{36}$/i.test(receipt.id) || receipt.campusId !== campusId
+    || receipt.activityId !== activityId.toLowerCase()
+    || !['PENDIENTE','EN_REVISION','RESUELTO','DESESTIMADO'].includes(receipt.status)
+    || typeof receipt.reason !== 'string' || !receipt.reason.trim()
+    || (receipt.description !== null && typeof receipt.description !== 'string')
+    || !Number.isFinite(Date.parse(receipt.reportedAt))) throw new Error('No se pudo confirmar el envío de la denuncia.');
+  return receipt;
+}
+
+/** Recupera el envío propio persistido, incluso después de cerrar la app. */
+export async function fetchOwnActivityReport(campusId: string, activityId: string,
+  signal?: AbortSignal): Promise<ActivityReportReceipt | null> {
+  if (!/^[0-9a-f]{24}$/i.test(activityId)) throw new Error('Identificador de actividad inválido.');
+  const { data } = await authenticatedEnvelopeRequest<ActivityReportReceipt | null>(`/api/v1/reports/activities/${activityId}/own`, { signal });
+  return data === null ? null : validateActivityReceipt(data, campusId, activityId);
+}
 
 /** Envía una denuncia y valida que el recibo corresponda al campus y actividad solicitados. */
 export async function submitActivityReport(campusId: string, activityId: string, input: ActivityReportInput,
@@ -10,11 +28,7 @@ export async function submitActivityReport(campusId: string, activityId: string,
   const response = await authenticatedEnvelopeRequest<ActivityReportReceipt>(`/api/v1/reports/activities/${activityId}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
   });
-  const receipt = response.data;
-  if (!receipt || !/^[0-9a-f-]{36}$/i.test(receipt.id) || receipt.campusId !== campusId
-    || receipt.activityId !== activityId.toLowerCase() || receipt.status !== 'PENDIENTE'
-    || !Number.isFinite(Date.parse(receipt.reportedAt))) throw new Error('No se pudo confirmar el envío de la denuncia.');
-  return receipt;
+  return validateActivityReceipt(response.data, campusId, activityId);
 }
 
 /** Denuncia física desde contenido accesible o un acuerdo propio; solo devuelve el acuse privado. */
