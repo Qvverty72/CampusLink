@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { AnalyticalReport, DashboardData, DashboardInterval, DashboardMetric } from '../types/dashboard';
+import { ReportExportActions } from './ReportExportActions';
 
 const number = (value: number | null) => value === null ? 'Sin datos' : new Intl.NumberFormat('es-CL').format(value);
 
@@ -49,6 +50,7 @@ export function AnalyticsResults({ dashboard, report }: { dashboard: DashboardDa
           <Text style={styles.detail}>Responsable: {report.generatedBy.name}</Text>
           <Text style={styles.detail}>Versión de cálculo: {report.calculationVersion}</Text>
           <Text style={styles.note}>Esta instantánea conserva sus cifras. Para obtener resultados actualizados, genera un nuevo reporte.</Text>
+          <ReportExportActions reportId={report.id} />
         </View>}
         <Text style={styles.scope}>{dashboard.scope.institutionName} · {dashboard.scope.campusName}</Text>
         <KpiCard title="Usuarios activos al corte" metric={dashboard.activeUsers}>

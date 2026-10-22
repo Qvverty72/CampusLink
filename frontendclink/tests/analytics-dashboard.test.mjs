@@ -255,11 +255,21 @@ test('visual access considers reporting grants in other campuses, with role and 
   identity.roles = []; assert.equal(canAccessAnalytics(identity), false);
 });
 
+function exportActionsComponent(require, actions) {
+  const native = require('react-native-web');
+  return load('../src/features/analytics/components/ReportExportActions.tsx', {
+    'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-native': { ...native, Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); } },
+    '../hooks/useReportExport': { useReportExport: () => ({ allowed: true, exporting: null, error: '', exportFile() {} }) },
+  });
+}
+
 function renderDashboard(state, actions = []) {
   const require = createRequire(import.meta.url);
   const native = require('react-native-web');
   const results = load('../src/features/analytics/components/AnalyticsResults.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': native,
+    './ReportExportActions': exportActionsComponent(require, actions),
   });
   const { default: Screen } = load('../app/(analytics)/analytics.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': { ...native,
@@ -472,6 +482,7 @@ function renderHistory(state, actions = [], fields = []) {
   const require = createRequire(import.meta.url), native = require('react-native-web');
   const results = load('../src/features/analytics/components/AnalyticsResults.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': native,
+    './ReportExportActions': exportActionsComponent(require, actions),
   });
   const { default: Screen } = load('../app/(analytics)/history.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),

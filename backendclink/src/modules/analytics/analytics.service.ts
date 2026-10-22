@@ -207,6 +207,32 @@ export async function getAnalyticalReport(auth: VerifiedAuthConnection, rawId: u
   }
 }
 
+/** Autoriza el snapshot, genera bytes y comprueba permisos de nuevo antes de entregarlos. */
+export async function exportAnalyticalReport(auth: VerifiedAuthConnection, rawId: unknown, rawFormat: unknown) {
+  if (rawFormat !== 'pdf' && rawFormat !== 'xlsx') {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Selecciona formato pdf o xlsx.');
+  }
+  const report = await getAnalyticalReport(auth, rawId);
+  try {
+    const { renderReportExcel, renderReportPdf } = await import('./analytics.export.js');
+    const bytes = rawFormat === 'pdf' ? await renderReportPdf(report) : await renderReportExcel(report);
+    // No mantener locks durante serialización; detectar revocación/suspensión durante la generación.
+    await withPostgresTransaction(async client => {
+      const { profile, roles } = await lockAccountContext(client, auth.userId);
+      if (!profile || profile.institucion_id !== report.scope.institutionId || profile.campus_id !== auth.campusId) {
+        throw new ApiError(403, 'FORBIDDEN', 'Tu contexto cambió. Vuelve a consultar el reporte.');
+      }
+      const current = { ...auth, profile, roles, permissions: await readAnalyticsPermissions(client, auth.userId) };
+      for (const campus of report.scope.campuses) requireCampusCapability(current, campus.id, 'reports');
+    });
+    return { bytes, filename: `campuslink-reporte-${report.id}.${rawFormat}`,
+      contentType: rawFormat === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo exportar el reporte. Inténtalo nuevamente.');
+  }
+}
+
 /** Identidad de operación suministrada por el cliente; nunca identidad del actor o campus. */
 export function parseResourceOperationId(raw: unknown): string | undefined {
   if (raw === undefined) return undefined;

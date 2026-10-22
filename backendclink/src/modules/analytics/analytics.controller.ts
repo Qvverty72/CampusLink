@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import { sendModuleHealth } from '../../services/health-response.js';
-import { generateAnalyticalReport, getAnalyticalReport, getAnalyticsHealth, getDashboard, getDashboardOptions, listHistoricalReports, recordResourceView } from './analytics.service.js';
+import { exportAnalyticalReport, generateAnalyticalReport, getAnalyticalReport, getAnalyticsHealth, getDashboard, getDashboardOptions, listHistoricalReports, recordResourceView } from './analytics.service.js';
 import type { AuthLocals } from '../auth/auth.types.js';
 import { sendSuccess } from '../../services/api-response.js';
 import { ApiError } from '../../services/api-response.js';
@@ -35,4 +35,11 @@ export const getAnalyticalReportController: RequestHandler<{reportId:string},unk
 export const getDashboardOptionsController: RequestHandler<Record<string,string>,unknown,unknown,Record<string,string>,AuthLocals> = async (request,response) => {
   if (Object.keys(request.query).length) throw new ApiError(400, 'VALIDATION_ERROR', 'La consulta de opciones no admite filtros.');
   sendSuccess(response, await getDashboardOptions(response.locals.auth));
+};
+
+export const exportAnalyticalReportController: RequestHandler<{reportId:string;format:string},unknown,unknown,Record<string,string>,AuthLocals> = async (request,response) => {
+  if (Object.keys(request.query).length) throw new ApiError(400, 'VALIDATION_ERROR', 'La exportación del reporte guardado no admite filtros.');
+  const file = await exportAnalyticalReport(response.locals.auth, request.params.reportId, request.params.format);
+  response.set({ 'Content-Type': file.contentType, 'Content-Disposition': `attachment; filename="${file.filename}"`, 'Cache-Control': 'no-store' });
+  response.send(file.bytes);
 };

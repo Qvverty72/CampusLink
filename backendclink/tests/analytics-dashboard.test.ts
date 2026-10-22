@@ -7,6 +7,8 @@ import type { AddressInfo } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
 import { Pool, type PoolClient } from 'pg';
 import { Db } from 'mongodb';
+import ExcelJS from 'exceljs';
+import { PDFDocument } from 'pdf-lib';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), otherCampus = randomUUID(), foreignInstitution = randomUUID(), foreignCampus = randomUUID();
@@ -20,6 +22,7 @@ const localStart = new Date('2026-10-10T03:00:00Z'), localUntil = new Date('2026
 let server: Server, base: string, sqlFailure = false, mongoFailure = false, mongoReads = 0, metricReads = 0, invalidAuth = false;
 let reportWriteFailure = false, reportCommitFailure = false, viewer = reader;
 let afterCalculation: (() => Promise<void>) | undefined;
+let afterSnapshotRead: (() => Promise<void>) | undefined;
 let statements: string[] = [];
 let events: { campusId: string; userId?: string; occurredAt: Date; type: string; provenance?: string }[] = [];
 let readMetrics: typeof import('../src/modules/analytics/analytics.repository.js').readDashboardMetrics;
@@ -40,7 +43,9 @@ before(async () => {
     if (reportWriteFailure && sql.includes('INSERT INTO public.reporte(')) throw new Error('private report write details');
     if (reportCommitFailure && sql === 'COMMIT' && statements.some(sql => sql.includes('INSERT INTO public.reporte('))) throw new Error('private commit details');
     if (sql.includes('jsonb_to_recordset')) metricReads++;
-    return db.query(sql, params);
+    const result = db.query(sql, params);
+    return sql.includes('SELECT snapshot_json FROM public.reporte') && afterSnapshotRead
+      ? result.then(async rows => { await afterSnapshotRead?.(); return rows; }) : result;
   }, release() {} }));
   mock.method(Db.prototype, 'collection', (name: string) => ({ aggregate: (pipeline: any[]) => {
     assert.equal(name, 'activity_interactions'); mongoReads++;
@@ -101,6 +106,7 @@ before(async () => {
 beforeEach(async () => {
   sqlFailure = false; mongoFailure = false; invalidAuth = false; mongoReads = 0; metricReads = 0; events = [];
   reportWriteFailure = false; reportCommitFailure = false; afterCalculation = undefined; viewer = reader; statements = [];
+  afterSnapshotRead = undefined;
   await db.exec('TRUNCATE ' + tables.join(',') + ',auth.users CASCADE');
   await db.query("INSERT INTO institucion(id,nombre) VALUES($1,'Institución'),($2,'Ajena')", [institution, foreignInstitution]);
   await db.query("INSERT INTO campus(id,institucion_id,nombre) VALUES($1,$4,'Principal'),($2,$4,'Otra'),($3,$5,'Ajena')",
@@ -157,6 +163,92 @@ const savedReport = (id: string, query = '', authorization = 'Bearer ' + token) 
   originalFetch(base.replace('/dashboard', '/reports/') + id + query, { headers: { Authorization: authorization } });
 const history = (query = '', authorization = 'Bearer ' + token) =>
   originalFetch(base.replace('/dashboard', '/reports') + (query ? '?' + query : ''), { headers: { Authorization: authorization } });
+
+const exportReport = (id: string, format: string, query = '', authorization = 'Bearer ' + token) =>
+  savedReport(`${id}/export/${format}`, query, authorization);
+
+test('PDF and Excel export the saved snapshot without recalculation or writes after operational changes', async () => {
+  const resource = await publication(); await view(resource, '2026-10-10T12:00:00Z');
+  await grant('ADMINISTRADOR', otherCampus);
+  const report = (await (await generateReport({ ...reportFilters, campusIds: `${campus},${otherCampus}` })).json()).data;
+  const before = (await db.query('SELECT * FROM reporte WHERE id=$1', [report.id])).rows[0];
+  await view(resource, '2026-10-10T15:00:00Z');
+  await db.query("UPDATE campus SET nombre='Nombre cambiado',activo=false");
+  await db.query("UPDATE perfil_usuario SET nombre_completo='Otro nombre'");
+  const reads = { metricReads, mongoReads }; mongoFailure = true; statements = [];
+  const excel = await exportReport(report.id, 'xlsx'); assert.equal(excel.status, 200);
+  assert.equal(excel.headers.get('content-type'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(excel.headers.get('cache-control'), 'no-store');
+  assert.equal(excel.headers.get('content-disposition'), `attachment; filename="campuslink-reporte-${report.id}.xlsx"`);
+  const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(Buffer.from(await excel.arrayBuffer()));
+  const meta = new Map<string, unknown>(); workbook.getWorksheet('Reporte')!.eachRow((row, index) => { if (index > 1) meta.set(String(row.getCell(1).value), row.getCell(2).value); });
+  assert.equal(meta.get('Reporte ID'), report.id); assert.equal(meta.get('Institución'), report.scope.institutionName);
+  assert.equal(meta.get('Campus 1'), report.scope.campuses[0].name); assert.equal(meta.get('Campus 2'), report.scope.campuses[1].name);
+  assert.equal(meta.get('Responsable'), report.generatedBy.name); assert.equal(meta.get('Fecha original de generación (ISO)'), report.generatedAt);
+  assert.equal(meta.get('Desde (inclusivo)'), report.period.from); assert.equal(meta.get('Hasta (inclusivo)'), report.period.to);
+  assert.equal(meta.get('Versión de cálculo'), report.calculationVersion);
+  assert.equal(workbook.getWorksheet('Indicadores')!.getCell('K2').value, 1); // La vista posterior no se incluye.
+  const pdf = await exportReport(report.id, 'pdf'); assert.equal(pdf.status, 200);
+  assert.equal(pdf.headers.get('content-type'), 'application/pdf'); assert.equal(pdf.headers.get('cache-control'), 'no-store');
+  const document = await PDFDocument.load(await pdf.arrayBuffer());
+  assert.equal(document.getAuthor(), report.generatedBy.name); assert.equal(document.getCreationDate()?.toISOString(), new Date(report.generatedAt).toISOString().replace(/\.\d{3}Z$/, '.000Z'));
+  assert.ok(document.getPageCount() >= 2);
+  assert.deepEqual({ metricReads, mongoReads }, reads);
+  assert.ok(!statements.some(sql => /\b(INSERT|UPDATE|DELETE)\s+(INTO|public\.reporte|FROM)/i.test(sql)), 'export never writes');
+  assert.deepEqual((await db.query('SELECT * FROM reporte WHERE id=$1', [report.id])).rows[0], before);
+});
+
+test('exports recheck all saved campuses and current reporting permission regardless of authorship', async () => {
+  await grant('ADMINISTRADOR', otherCampus);
+  const report = (await (await generateReport({ ...reportFilters, campusIds: `${campus},${otherCampus}` })).json()).data;
+  await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE campus_id=$1', [otherCampus]);
+  for (const format of ['pdf', 'xlsx']) assert.equal((await exportReport(report.id, format)).status, 403);
+  await db.query('DELETE FROM usuario_rol'); await grant('USUARIO_AUTORIZADO');
+  await grant('ACCEDER_REPORTERIA', campus, 'permiso');
+  assert.equal((await exportReport(report.id, 'xlsx')).status, 403);
+  await grant('USUARIO_AUTORIZADO', otherCampus); await grant('ACCEDER_REPORTERIA', otherCampus, 'permiso');
+  assert.equal((await exportReport(report.id, 'xlsx')).status, 200);
+  await db.query("UPDATE usuario_permiso SET revocado_en=now()");
+  assert.equal((await exportReport(report.id, 'pdf')).status, 403);
+});
+
+test('a revocation, account suspension or context change during export prevents delivery', async () => {
+  const report = (await (await generateReport()).json()).data;
+  for (const change of [
+    "UPDATE usuario_rol SET revocado_en=now()",
+    "UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA'",
+    `UPDATE perfil_usuario SET campus_id='${otherCampus}'`,
+  ]) {
+    await db.query('UPDATE usuario_rol SET revocado_en=null');
+    await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA',campus_id=$1", [campus]);
+    afterSnapshotRead = async () => { await db.exec(change); };
+    const response = await exportReport(report.id, 'xlsx'); assert.equal(response.status, 403, change);
+    assert.match(response.headers.get('content-type')!, /application\/json/);
+    assert.equal(response.headers.get('content-disposition'), null);
+  }
+});
+
+test('export validates IDs/formats/query and never exposes other institutions or private failures', async () => {
+  const report = (await (await generateReport()).json()).data;
+  for (const [id, format, query] of [[report.id, 'csv', ''], ['invalid', 'pdf', ''], [report.id, 'pdf', '?from=2026-10-10'], [report.id, 'xlsx', '?format=pdf']]) {
+    assert.equal((await exportReport(id, format, query)).status, 400);
+  }
+  assert.equal((await exportReport(randomUUID(), 'pdf')).status, 404);
+  await db.query('UPDATE reporte SET institucion_id=$1', [foreignInstitution]);
+  assert.equal((await exportReport(report.id, 'pdf')).status, 404);
+  await db.query('UPDATE reporte SET institucion_id=$1', [institution]);
+  assert.equal((await exportReport(report.id, 'pdf', '', '')).status, 401);
+  invalidAuth = true; assert.equal((await exportReport(report.id, 'xlsx')).status, 401); invalidAuth = false;
+  sqlFailure = true;
+  const failed = await exportReport(report.id, 'xlsx'); assert.equal(failed.status, 503);
+  assert.ok(!(await failed.text()).includes('private'));
+  sqlFailure = false;
+  await db.query("UPDATE reporte SET snapshot_json=jsonb_set(snapshot_json,'{calculationVersion}','\"unknown-version\"')");
+  for (const format of ['pdf', 'xlsx']) {
+    const response = await exportReport(report.id, format); assert.equal(response.status, 503);
+    assert.ok(!(await response.text()).includes('Unsupported'));
+  }
+});
 
 test('history exposes saved metadata, supports scope and overlapping civil periods, and never recalculates', async () => {
   const { career } = await academicFixtures(); await grant('ADMINISTRADOR', otherCampus);
