@@ -44,7 +44,8 @@ export default function AnalyticsScreen() {
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
   const [grouping, setGrouping] = useState<DashboardGrouping>('month');
-  const { dashboard, loading, error, consult, options, filters, selectFilters } = useAnalyticsDashboard({ from, to });
+  const { dashboard: liveDashboard, report, reportRequested, generateReport, loading, error, consult, options, filters, selectFilters } = useAnalyticsDashboard({ from, to });
+  const dashboard = report ?? liveDashboard;
   const institution = options?.institutions.find(row => row.id === filters?.institutionId);
   const careers = institution?.careers.filter(row => row.campusIds.some(id => filters?.campusIds.includes(id))) ?? [];
 
@@ -92,10 +93,23 @@ export default function AnalyticsScreen() {
         </Pressable>)}
         <Text style={styles.note}>Referencia institucional: America/Santiago. Hasta 260 intervalos por consulta.</Text>
         <Pressable accessibilityRole="button" disabled={Boolean(filters && !filters.campusIds.length)} onPress={() => consult(from, to, grouping)} style={styles.button}><Text style={styles.buttonText}>{error ? 'Reintentar consulta' : 'Consultar'}</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={loading || !filters?.campusIds.length} onPress={() => generateReport(from, to, grouping)} style={styles.button}>
+          <Text style={styles.buttonText}>{reportRequested && error ? 'Reintentar reporte' : 'Generar reporte'}</Text>
+        </Pressable>
       </View>
-      {loading && <ActivityIndicator accessibilityLabel="Cargando indicadores" color="#0B6E75" style={styles.loading} />}
+      {loading && <ActivityIndicator accessibilityLabel={reportRequested ? 'Generando reporte' : 'Cargando indicadores'} color="#0B6E75" style={styles.loading} />}
       {Boolean(error) && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {!loading && dashboard && <>
+        {report && <View style={styles.card}>
+          <Text accessibilityRole="header" style={styles.cardTitle}>Reporte analítico</Text>
+          <Text style={styles.detail}>Institución: {report.scope.institutionName}</Text>
+          <Text style={styles.detail}>Campus: {report.scope.campuses.map(row => row.name).join(', ')}</Text>
+          <Text style={styles.detail}>Carrera: {report.scope.career?.name ?? 'Sin filtro de carrera'}</Text>
+          <Text style={styles.detail}>Período: {report.period.from} al {report.period.to} · {report.period.timeZone}</Text>
+          <Text style={styles.detail}>Agrupación: {report.grouping === 'week' ? 'Semanal (lunes a domingo)' : 'Mensual'}</Text>
+          <Text style={styles.detail}>Generado el {new Intl.DateTimeFormat('es-CL', { timeZone: report.period.timeZone, dateStyle: 'long', timeStyle: 'long', hourCycle: 'h23' }).format(new Date(report.generatedAt))} · {report.period.timeZone}</Text>
+          <Text style={styles.detail}>Responsable: {report.generatedBy.name}</Text>
+        </View>}
         <Text style={styles.scope}>{dashboard.scope.institutionName} · {dashboard.scope.campusName}</Text>
         <KpiCard title="Usuarios activos al corte" metric={dashboard.activeUsers}>
           <Text style={styles.detail}>Estado al corte exclusivo {dashboard.period.cutoff}, según la auditoría de cuentas.</Text>

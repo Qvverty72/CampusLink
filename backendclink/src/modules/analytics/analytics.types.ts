@@ -43,6 +43,12 @@ export interface DashboardData extends DashboardMetrics {
   notes: string[];
 }
 
+/** Resultado dinámico; el almacenamiento histórico corresponde a F2.7-06. */
+export interface AnalyticalReport extends DashboardData {
+  generatedBy: { userId: string; name: string };
+  calculationVersion: 'campuslink-kpi-v1';
+}
+
 export interface ResourceAnalyticsEvent {
   key: string;
   type: 'VISTA' | 'SOLICITUD_CREADA' | 'TRANSACCION_RESERVADA' | 'TRANSACCION_PENDIENTE_CONFIRMACION' | 'TRANSACCION_COMPLETADA' | 'TRANSACCION_CANCELADA';

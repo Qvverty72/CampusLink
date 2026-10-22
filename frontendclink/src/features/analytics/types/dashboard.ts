@@ -39,3 +39,8 @@ export interface DashboardData extends DashboardMetrics {
   intervals: DashboardInterval[];
   notes: string[];
 }
+
+export interface AnalyticalReport extends DashboardData {
+  generatedBy: { userId: string; name: string };
+  calculationVersion: 'campuslink-kpi-v1';
+}

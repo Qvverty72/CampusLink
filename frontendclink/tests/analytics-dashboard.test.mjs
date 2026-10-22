@@ -45,6 +45,7 @@ function harness() {
     '../api/dashboardApi': {
       loadDashboardOptions: signal => new Promise((resolve, reject) => optionCalls.push({ signal, resolve, reject })),
       loadDashboard: (from, to, campusId, signal, filters, grouping) => new Promise((resolve, reject) => calls.push({ from, to, campusId, signal, filters, grouping, resolve, reject })),
+      generateAnalyticalReport: (from, to, campusId, signal, filters, grouping) => new Promise((resolve, reject) => calls.push({ report: true, from, to, campusId, signal, filters, grouping, resolve, reject })),
     },
   });
   const h = { auth, calls, optionCalls, get refreshes() { return refreshes; },
@@ -274,4 +275,96 @@ test('future totals render Sin datos and hide numerical demand details', () => {
     activityParticipation: { ...metric, legacyEvents: 0 }, notes: [], intervals: [] } });
   assert.equal(html.split('Sin datos').length - 1, 4);
   assert.ok(!html.includes('0 vistas')); assert.ok(!html.includes('0 solicitudes'));
+});
+
+test('report transport posts only selected filters with the same institutional query contract', async () => {
+  const observed = [], signal = new AbortController().signal;
+  const { generateAnalyticalReport } = load('../src/features/analytics/api/dashboardApi.ts', {
+    '@/lib/api/authenticated-request': { authenticatedEnvelopeRequest: async (path, init, query) => {
+      observed.push({ path, init, query }); return { data: { generatedAt: 'server-time' } };
+    } },
+  });
+  const data = await generateAnalyticalReport('2026-09-01', '2026-10-10', 'campus-a', signal,
+    { institutionId: 'institution-a', campusIds: ['campus-a', 'campus-b'], careerId: 'career-a' }, 'week');
+  assert.equal(data.generatedAt, 'server-time');
+  const call = observed[0]; assert.equal(call.path, '/api/v1/analytics/reports'); assert.equal(call.query, undefined);
+  assert.equal(call.init.method, 'POST'); assert.equal(call.init.signal, signal);
+  assert.equal(call.init.headers['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(call.init.body), { from: '2026-09-01', to: '2026-10-10', grouping: 'week',
+    institutionId: 'institution-a', campusIds: 'campus-a,campus-b', careerId: 'career-a' });
+});
+
+test('report generation is explicit, sends the requested dates/grouping and discards previous dashboard responses', async () => {
+  const h = harness();
+  try {
+    await h.ready(); assert.ok(!h.calls[0].report);
+    h.render().generateReport('2026-09-01', '2026-09-30', 'week');
+    assert.equal(h.render().dashboard, null); assert.equal(h.render().report, null); assert.ok(h.render().reportRequested);
+    assert.equal(h.calls[0].signal.aborted, true);
+    await h.ready(); const call = h.calls[1];
+    assert.equal(call.report, true); assert.equal(call.from, '2026-09-01'); assert.equal(call.to, '2026-09-30');
+    assert.equal(call.grouping, 'week'); assert.equal(call.filters.campusIds[0], 'campus-a');
+    h.calls[0].resolve({ marker: 'late-dashboard' }); await setImmediate(); assert.equal(h.render().report, null);
+    call.resolve({ marker: 'report', generatedBy: { name: 'Server user' } }); await setImmediate();
+    assert.equal(h.render().dashboard, null); assert.equal(h.render().report.marker, 'report');
+    h.render().consult('2026-09-01', '2026-09-30'); assert.equal(h.render().report, null);
+    await h.ready(); assert.ok(!h.calls[2].report);
+  } finally { h.dispose(); }
+});
+
+test('filter changes, identity changes and unmount hide reports and discard late generations', async () => {
+  const h = harness();
+  try {
+    await h.ready();
+    h.render().generateReport('2026-09-01', '2026-09-30', 'month'); await h.ready();
+    const first = h.calls.at(-1);
+    h.render().selectFilters({ institutionId: 'institution-a', campusIds: ['campus-b'] });
+    assert.equal(h.render().report, null); assert.equal(h.render().reportRequested, false); assert.ok(first.signal.aborted);
+    first.resolve({ marker: 'wrong-campus' }); await setImmediate(); assert.equal(h.render().report, null);
+    h.render().generateReport('2026-09-01', '2026-09-30', 'month'); await h.ready();
+    const second = h.calls.at(-1);
+    second.resolve({ marker: 'current' }); await setImmediate(); assert.equal(h.render().report.marker, 'current');
+    h.auth.identity.userId = 'new-user'; assert.equal(h.render().report, null); assert.equal(h.render().options, null);
+    await h.ready(); assert.ok(!h.calls.at(-1).report);
+    h.render().generateReport('2026-09-01', '2026-09-30', 'week'); await h.ready();
+    const final = h.calls.at(-1); h.auth.identity.roles = []; assert.equal(h.render().report, null);
+    assert.ok(final.signal.aborted); h.dispose(); final.resolve({ marker: 'revoked' }); await setImmediate();
+    assert.equal(h.render().report, null);
+  } finally { h.dispose(); }
+});
+
+test('failed generation clears figures, refreshes revoked identity and retries via a new report request', async () => {
+  const h = harness();
+  try {
+    await h.ready(); h.calls[0].resolve({ marker: 'dashboard' }); await setImmediate();
+    h.render().generateReport('2026-09-01', '2026-09-30', 'week'); await h.ready();
+    h.calls[1].reject(new AuthApiError(403, 'Permiso revocado.')); await setImmediate();
+    assert.equal(h.render().error, 'Permiso revocado.'); assert.equal(h.render().report, null);
+    assert.equal(h.render().dashboard, null); assert.equal(h.refreshes, 1);
+    h.render().generateReport('2026-09-01', '2026-09-30', 'week'); await h.ready();
+    assert.equal(h.calls[2].report, true); assert.equal(h.calls[2].grouping, 'week');
+    h.calls[2].reject(new Error('network')); await setImmediate();
+    assert.equal(h.render().error, 'No se pudo generar el reporte. Inténtalo nuevamente.');
+  } finally { h.dispose(); }
+});
+
+test('report view presents server scope, period, grouping, generation time and responsible alongside the same KPI', () => {
+  const scope = { institutionName: 'Institución del reporte', campusName: 'Principal, Otra',
+    campuses: [{ id: 'a', name: 'Principal' }, { id: 'b', name: 'Otra' }], career: null };
+  const period = { from: '2026-09-01', to: '2026-09-30', timeZone: 'America/Santiago' };
+  const metric = { value: 0, scope, period }, report = { scope, period, generatedAt: '2026-10-22T16:35:42Z',
+    generatedBy: { name: 'Responsable del servidor' }, grouping: 'week', activeUsers: { ...metric, value: 7 },
+    resourceDemand: { ...metric, views: 0, requests: 0 }, subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] },
+    activityParticipation: { ...metric, legacyEvents: 0 }, intervals: [], notes: [] };
+  let argumentsReceived;
+  const actions = [], html = renderDashboard({ report, loading: false, error: '', dashboard: null, options,
+    filters: { institutionId: 'institution-a', campusIds: ['campus-a'] }, generateReport(...args) { argumentsReceived = args; } }, actions);
+  for (const text of ['Reporte analítico', 'Institución del reporte', 'Principal, Otra', 'Sin filtro de carrera',
+    '2026-09-01 al 2026-09-30', 'Semanal (lunes a domingo)', 'Generado el', '13:35:42', 'America/Santiago',
+    'Responsable del servidor', 'Usuarios activos al corte', 'Participación en actividades']) assert.ok(html.includes(text), text);
+  const button = actions.find(p => p.children.props.children === 'Generar reporte');
+  assert.equal(button.disabled, false); button.onPress();
+  assert.equal(argumentsReceived[2], 'month'); // El formulario se envía; no se copian los metadatos del reporte anterior.
+  const loading = renderDashboard({ report: null, reportRequested: true, loading: true, error: '', dashboard: null });
+  assert.ok(loading.includes('Generando reporte')); assert.ok(!loading.includes('Responsable del servidor'));
 });

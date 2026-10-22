@@ -138,6 +138,93 @@ async function requestResource(id: string, when: string) {
 const request = (query = 'from=2026-10-10&to=2026-10-10', authorization = 'Bearer ' + token) =>
   originalFetch(base + '?' + query, { headers: { Authorization: authorization } });
 
+const reportFilters = { from: '2026-10-10', to: '2026-10-10', grouping: 'month' };
+const generateReport = (body: unknown = reportFilters, authorization = 'Bearer ' + token, query = '') =>
+  originalFetch(base.replace('/dashboard', '/reports') + query, { method: 'POST',
+    headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+test('generated report reuses all dashboard results and carries server-owned attribution and calculation version', async () => {
+  const { career } = await academicFixtures(); await grant('ADMINISTRADOR', otherCampus);
+  await db.query('INSERT INTO usuario_carrera(perfil_usuario_id,carrera_id) VALUES($1,$2)', [reader, career]);
+  const resource = await publication();
+  await db.query('INSERT INTO publicacion_carrera VALUES($1,$2)', [resource, career]);
+  const subject = randomUUID();
+  await db.query("INSERT INTO asignatura(id,nombre,codigo) VALUES($1,'Álgebra','ALG')", [subject]);
+  await db.query('INSERT INTO publicacion_asignatura VALUES($1,$2)', [resource, subject]);
+  await view(resource, '2026-10-10T12:00:00Z'); await requestResource(resource, '2026-10-10T12:00:00Z');
+  events = [{ campusId: campus, userId: reader, occurredAt: new Date('2026-10-10T12:00:00Z'), type: 'JOINED' }];
+  for (const grouping of ['week', 'month']) {
+    const filters = { from: '2026-09-01', to: '2026-10-10', grouping, institutionId: institution,
+      campusIds: [campus, otherCampus].join(','), careerId: career };
+    const dashboard = (await (await request(new URLSearchParams(filters).toString())).json()).data;
+    const before = Date.now(), response = await generateReport(filters), after = Date.now();
+    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+    const { data } = await response.json();
+    assert.deepEqual(data.generatedBy, { userId: reader, name: 'Perfil' });
+    assert.equal(data.calculationVersion, 'campuslink-kpi-v1');
+    assert.ok(Date.parse(data.generatedAt) >= before && Date.parse(data.generatedAt) <= after);
+    const { generatedBy, calculationVersion, generatedAt, ...reportData } = data;
+    const { generatedAt: dashboardTime, ...dashboardData } = dashboard;
+    assert.deepEqual(reportData, dashboardData);
+    assert.equal(data.resourceDemand.views, 1); assert.equal(data.resourceDemand.requests, 1);
+    assert.equal(data.subjectDemand.subjects[0].subjectName, 'Álgebra'); assert.equal(data.activityParticipation.value, 1);
+    assert.equal(data.scope.campusId, null); assert.equal(data.scope.career.id, career);
+  }
+});
+
+test('report generation validates its entire body before reading metrics and rejects spoofed metadata or results', async () => {
+  for (const body of [null, [], 'filters', {}, { ...reportFilters, from: '2026-02-30' },
+    { ...reportFilters, to: '2026-10-09' }, { ...reportFilters, grouping: ['week'] },
+    { ...reportFilters, grouping: 'day' }, { ...reportFilters, from: '2000-01-01', grouping: 'week' },
+    { ...reportFilters, campusIds: [campus] }, { ...reportFilters, campusIds: '' },
+    { ...reportFilters, campusId: campus, campusIds: campus }, { ...reportFilters, careerId: 'invalid' },
+    ...['generatedAt', 'generatedBy', 'calculationVersion', 'activeUsers', 'intervals'].map(key => ({ ...reportFilters, [key]: 'spoofed' }))]) {
+    assert.equal((await generateReport(body)).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await generateReport(reportFilters, undefined, '?from=2026-01-01')).status, 400);
+  assert.equal(metricReads, 0); assert.equal(mongoReads, 0);
+});
+
+test('generation checks fresh reporting grants and account status even after a successful dashboard read', async () => {
+  await db.exec('DELETE FROM usuario_rol'); await grant('USUARIO_AUTORIZADO');
+  await grant('ACCEDER_REPORTERIA', campus, 'permiso');
+  assert.equal((await request()).status, 200); assert.equal((await generateReport()).status, 200);
+  await db.exec('UPDATE usuario_permiso SET revocado_en=now()');
+  const reads = mongoReads; assert.equal((await generateReport()).status, 403); assert.equal(mongoReads, reads);
+  await grant('ACCEDER_ANALITICA', campus, 'permiso'); assert.equal((await generateReport()).status, 403);
+  await grant('ADMINISTRADOR');
+  for (const state of ['SUSPENDIDA', 'DESACTIVADA']) {
+    await db.query('UPDATE perfil_usuario SET estado_cuenta=$1 WHERE id=$2', [state, reader]);
+    assert.equal((await generateReport()).status, 403);
+  }
+  assert.equal((await generateReport(undefined, '')).status, 401);
+  invalidAuth = true; assert.equal((await generateReport()).status, 401);
+});
+
+test('report generation rejects mixed unauthorized campuses, other institutions and unrelated careers before Mongo', async () => {
+  const { foreignCareer, unavailableCareer } = await academicFixtures();
+  for (const filters of [{ campusIds: [campus, otherCampus].join(',') }, { institutionId: foreignInstitution },
+    { careerId: foreignCareer }, { careerId: unavailableCareer }]) {
+    assert.equal((await generateReport({ ...reportFilters, ...filters })).status, 403);
+  }
+  await grant('ADMINISTRADOR', foreignCampus);
+  assert.equal((await generateReport({ ...reportFilters, campusIds: [campus, foreignCampus].join(',') })).status, 403);
+  await db.query('UPDATE campus SET activo=false WHERE id=$1', [campus]);
+  assert.equal((await generateReport()).status, 403); assert.equal(mongoReads, 0);
+});
+
+test('report generation preserves observed zeroes, future unavailability and dependency failures', async () => {
+  const observed = (await (await generateReport()).json()).data;
+  assert.equal(observed.resourceDemand.value, 0); assert.equal(observed.intervals[0].status, 'no_activity');
+  const future = (await (await generateReport({ from: '9999-01-01', to: '9999-01-31', grouping: 'week' })).json()).data;
+  assert.equal(future.resourceDemand.value, null); assert.ok(future.intervals.every((row: any) => row.metrics === null));
+  for (const dependency of ['SQL', 'MongoDB']) {
+    sqlFailure = dependency === 'SQL'; mongoFailure = dependency === 'MongoDB';
+    const response = await generateReport(); assert.equal(response.status, 503);
+    assert.doesNotMatch(await response.text(), /private|credentials|generatedBy|activeUsers/);
+  }
+});
+
 test('account cutoff reconstructs past states, creation/deletion and exact boundary without requiring a creation event', async () => {
   const suspended = await profile(undefined, 'SUSPENDIDA');
   await change(suspended, 'ACTIVA', 'SUSPENDIDA', '2026-10-12T12:00:00Z', otherCampus);

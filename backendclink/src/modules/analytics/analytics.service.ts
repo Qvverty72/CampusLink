@@ -1,6 +1,6 @@
 import { createModuleHealthCheck } from '../../services/module-health.js';
 import { probeAnalyticsDependencies } from './analytics.repository.js';
-import type { AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount } from './analytics.types.js';
+import type { AnalyticalReport, AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount } from './analytics.types.js';
 import { ANALYTICS_TIME_ZONE, dashboardIntervals } from './analytics.periods.js';
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../services/api-response.js';
@@ -113,6 +113,13 @@ export async function getDashboard(auth: VerifiedAuthConnection, rawQuery: unkno
     if (error instanceof ApiError) throw error;
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo consultar el tablero. Inténtalo nuevamente.');
   }
+}
+
+/** Un solo cálculo/validación para tablero y reporte; nunca recibe cifras del cliente. */
+export async function generateAnalyticalReport(auth: VerifiedAuthConnection, filters: unknown): Promise<AnalyticalReport> {
+  const dashboard = await getDashboard(auth, filters);
+  return { ...dashboard, generatedBy: { userId: auth.userId, name: auth.profile.nombre_completo },
+    calculationVersion: 'campuslink-kpi-v1' };
 }
 
 /** Identidad de operación suministrada por el cliente; nunca identidad del actor o campus. */

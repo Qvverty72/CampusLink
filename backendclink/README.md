@@ -635,7 +635,30 @@ Servicio valida fechas, agrupación, límites y permisos, genera un solo instant
 
 Expo ofrece semana/mes, resumen y evolución por intervalo con fechas, ámbito, usuarios al corte, vistas/solicitudes separadas, asignaturas e inscripciones. La agrupación confirmada forma parte de la identidad de consulta: una respuesta mensual tardía no reemplaza una semanal. Fechas iniciales de pantalla también se calculan en `America/Santiago`.
 
-La issue menciona ANA-10, cuya definición no existe en el backlog primario actual. La decisión del usuario en GH-99 fija explícitamente zona y semanas; no se afirma conformidad con un texto no disponible. No hay DDL, funciones SQL nuevas, triggers, tablas, migraciones, paquetes ni escrituras de analítica adicionales. Reportes persistidos siguen fuera de alcance (F2.7-05/06).
+La issue menciona ANA-10, cuya definición no existe en el backlog primario actual. La decisión del usuario en GH-99 fija explícitamente zona y semanas; no se afirma conformidad con un texto no disponible. No hay DDL, funciones SQL nuevas, triggers, tablas, migraciones, paquetes ni escrituras de analítica adicionales. Reportes persistidos siguen fuera de alcance (F2.7-06).
+
+## Generación de reporte analítico (F2.7-05)
+
+`POST /api/v1/analytics/reports` requiere Bearer y `Content-Type: application/json`. Recibe los mismos filtros que el tablero en un cuerpo JSON, sin query:
+
+```json
+{
+  "institutionId": "<uuid>",
+  "campusIds": "<uuid>,<uuid>",
+  "careerId": "<uuid>",
+  "from": "2026-09-01",
+  "to": "2026-09-30",
+  "grouping": "week"
+}
+```
+
+`from/to` son obligatorios, civiles inclusivos en America/Santiago. `grouping` admite `week|month` (mes por defecto); semanas lunes-domingo, hasta 260 intervalos. Institución y campus omitidos usan el perfil vigente. `careerId` se omite para consultar sin filtro de carrera. `campusIds` conserva la cadena de UUID separados por coma del tablero; `campusId` sigue disponible como alternativa de una sede y no se combina con `campusIds`. El servicio normaliza y valida todos los filtros; no acepta cifras, fechas de generación ni responsables aportados por el cliente.
+
+200 `{data: AnalyticalReport}`: mismo contrato completo de `DashboardData` (`scope`, `period`, `generatedAt`, `grouping`, cuatro KPI, `intervals`, `notes`), más `generatedBy:{userId,name}` obtenido de la identidad verificada y `calculationVersion:"campuslink-kpi-v1"`. Los nombres institucionales/campus/carrera proceden del repositorio. `generatedAt` es el instante de inicio del cálculo; es también el límite común de observación del período en curso. La versión identifica las definiciones actuales de F2.7-01..04; un cambio semántico futuro debe revisarla. Los indicadores, notas y metadatos de disponibilidad conservan su significado del tablero: cuentas activas al corte (no sumar saldos), vistas/solicitudes separadas, demanda por asignatura no exclusiva, inscripciones sin afirmar asistencia y asociaciones académicas actuales.
+
+Router autenticado → controller de transporte → `generateAnalyticalReport` → `getDashboard` → repositorios existentes. Toda generación vuelve a verificar cuenta y asignaciones vigentes; se exige `reports` en **cada** campus y la institución/carrera deben ser válidas para ese ámbito. No reutiliza resultados recibidos del navegador. 400 por filtros/cuerpo/query inválidos, 401 por sesión, 403 por autorización/ámbito y 503 por fuente no disponible, sin cifras parciales; `Cache-Control:no-store` en todas las respuestas autenticadas. Mismos parámetros y hechos disponibles producen iguales cifras que el tablero; consultas separadas pueden observar nuevas escrituras, y SQL/Mongo no comparten instantánea distribuida.
+
+En Expo, “Generar reporte” envía los filtros y fechas del formulario y presenta ámbito, carrera o ausencia de filtro, período, agrupación, fecha/hora institucional y responsable junto a las mismas tarjetas/evolución del tablero. Durante carga/error se retiran las cifras anteriores; cambiar selección/identidad o salir cancela la solicitud y descarta respuestas tardías. “Consultar” vuelve al tablero. La generación actual es dinámica y no crea un ID persistido: almacenamiento, historial y exportación PDF/Excel corresponden a F2.7-06/07/08. Sin tablas, funciones SQL, triggers, migraciones, paquetes ni variables de entorno adicionales.
 
 Referencias: [PostgreSQL date_trunc y zonas](https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC), [MongoDB $dateTrunc](https://www.mongodb.com/docs/manual/reference/operator/aggregation/datetrunc/).
 
