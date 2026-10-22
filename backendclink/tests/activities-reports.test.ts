@@ -37,18 +37,22 @@ let saveActivityReport: typeof import('../src/modules/reports/reports.repository
 const deps = (value = document()): ReportsDependencies => ({ now: () => now,
   getActiveMap: async campus => { assert.equal(campus, campusId); return map; },
   findActivity: async (campus, activityId) => { assert.equal(campus, campusId); assert.equal(activityId, id.toHexString()); return value; },
-  saveActivityReport: report => saveActivityReport(report, transaction),
+  saveActivityReport: report => saveActivityReport(report, auth, transaction),
 });
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://reports-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
   await db.exec(`CREATE TABLE public.campus(id uuid PRIMARY KEY);
-    CREATE TABLE public.perfil_usuario(id uuid PRIMARY KEY,campus_id uuid REFERENCES public.campus(id),estado_cuenta text,deleted_at timestamptz);`);
+    CREATE TABLE public.perfil_usuario(id uuid PRIMARY KEY,campus_id uuid REFERENCES public.campus(id),
+      institucion_id uuid,nombre_completo text,foto_path text,verificado_en timestamptz,estado_cuenta text,deleted_at timestamptz);
+    CREATE TABLE public.rol(id uuid PRIMARY KEY,nombre text);
+    CREATE TABLE public.usuario_rol(id uuid PRIMARY KEY,perfil_usuario_id uuid,rol_id uuid,campus_id uuid,revocado_en timestamptz);`);
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   const definition = /CREATE TABLE public\.reporte_contenido \([\s\S]*?\n\);/.exec(schema)?.[0];
   assert.ok(definition); await db.exec(definition);
   await db.query('INSERT INTO campus VALUES ($1),($2)', [campusId, otherCampus]);
-  await db.query("INSERT INTO perfil_usuario VALUES ($1,$2,'ACTIVA',NULL)", [userId, campusId]);
+  await db.query(`INSERT INTO perfil_usuario(id,campus_id,institucion_id,verificado_en,estado_cuenta)
+    VALUES ($1,$2,$2,now(),'ACTIVA')`, [userId, campusId]);
   ({ reportActivity } = await import('../src/modules/reports/reports.service.js'));
   ({ saveActivityReport } = await import('../src/modules/reports/reports.repository.js'));
 });
@@ -58,6 +62,7 @@ test('report validation requires a bounded free-text reason, accepts optional de
   assert.deepEqual(parseContentReport({ reason: '  Uso indebido  ', description: '  ' }), { success: true, data: { reason: 'Uso indebido' } });
   for (const input of [undefined, null, [], 'texto', {}, { reason: ' ' }, { reason: 42 }, { reason: 'x'.repeat(201) },
     { reason: 'Motivo', description: null }, { reason: 'Motivo', description: 'x'.repeat(2001) },
+    { reason: 'Motivo\u0000' }, { reason: 'Motivo', description: 'Detalle\u0000' },
     ...['campusId', 'userId', 'status', 'snapshot', 'activityId', 'reportedAt'].map(key => ({ reason: 'Motivo', [key]: 'override' }))]) {
     assert.equal(parseContentReport(input).success, false);
   }
@@ -128,6 +133,34 @@ test('SQL rechecks current profile campus/state at commit and rejects stale iden
   assert.equal((await db.query<{ count: number }>('SELECT count(*)::int AS count FROM reporte_contenido')).rows[0].count, baseline);
 });
 
+test('activity reports revalidate verification, institution and campus roles from SQL rather than the earlier auth context', async () => {
+  const roleId = randomUUID(), assignmentId = randomUUID();
+  const baseline = (await db.query<{ count: number }>('SELECT count(*)::int AS count FROM reporte_contenido')).rows[0].count;
+  await db.query("INSERT INTO rol VALUES ($1,'USUARIO_AUTORIZADO')", [roleId]);
+  await db.query('INSERT INTO usuario_rol VALUES ($1,$2,$3,$4,NULL)', [assignmentId, userId, roleId, campusId]);
+  try {
+    await db.query('UPDATE perfil_usuario SET verificado_en=NULL WHERE id=$1', [userId]);
+    const authorized = { ...auth, profile: { ...auth.profile, verificado_en: null },
+      roles: [{ id: roleId, name: 'USUARIO_AUTORIZADO', campusId }] };
+    const receipt = await reportActivity(authorized, id.toHexString(), { reason: 'Comportamiento en actividad' }, deps());
+    assert.equal(receipt.status, 'PENDIENTE');
+    await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE id=$1', [assignmentId]);
+    // La solicitud conserva verificación o rol anterior, pero el guardado debe usar el estado persistido.
+    for (const actor of [auth, authorized]) {
+      await assert.rejects(reportActivity(actor, id.toHexString(), { reason: 'Motivo' }, deps()), { status: 403 });
+    }
+    await db.query('UPDATE usuario_rol SET revocado_en=NULL,campus_id=$2 WHERE id=$1', [assignmentId, otherCampus]);
+    await assert.rejects(reportActivity(authorized, id.toHexString(), { reason: 'Motivo' }, deps()), { status: 403 });
+    await db.query('UPDATE perfil_usuario SET verificado_en=now(),institucion_id=$2 WHERE id=$1', [userId, otherCampus]);
+    await assert.rejects(reportActivity(auth, id.toHexString(), { reason: 'Motivo' }, deps()), { status: 403 });
+    assert.equal((await db.query<{ count: number }>('SELECT count(*)::int AS count FROM reporte_contenido')).rows[0].count, baseline + 1);
+  } finally {
+    await db.query('UPDATE perfil_usuario SET verificado_en=now(),institucion_id=$2 WHERE id=$1', [userId, campusId]);
+    await db.query('DELETE FROM usuario_rol WHERE id=$1', [assignmentId]);
+    await db.query('DELETE FROM rol WHERE id=$1', [roleId]);
+  }
+});
+
 test('SQL failure is rolled back; snapshot/participation are not changed and no success is fabricated', async () => {
   const value = document(); const original = JSON.stringify(value);
   const baseline = (await db.query<{ count: number }>('SELECT count(*)::int AS count FROM reporte_contenido')).rows[0].count;
@@ -135,7 +168,7 @@ test('SQL failure is rolled back; snapshot/participation are not changed and no 
     await operation(client); throw new Error('Commit failed');
   });
   await assert.rejects(reportActivity(auth, id.toHexString(), { reason: 'Motivo' }, { ...deps(value),
-    saveActivityReport: report => saveActivityReport(report, failAfterInsert) }), /Commit failed/);
+    saveActivityReport: report => saveActivityReport(report, auth, failAfterInsert) }), { status: 503 });
   assert.equal(JSON.stringify(value), original);
   assert.equal((await db.query<{ count: number }>('SELECT count(*)::int AS count FROM reporte_contenido')).rows[0].count, baseline);
 });
@@ -150,9 +183,14 @@ test('HTTP report is authenticated, scoped, validated and private; no admin/repo
   };
   const { createReportsRouter } = await import('../src/modules/reports/reports.routes.js');
   const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
-  let saves = 0;
+  let saves = 0, loseCommit = false;
+  const uncertainTransaction: typeof transaction = async operation => {
+    const receipt = await transaction(operation);
+    if (loseCommit) throw new Error('private SQL connection details');
+    return receipt;
+  };
   const app = express(); app.use(express.json()); app.use('/api/v1/reports', createReportsRouter(false, {
-    ...deps(), saveActivityReport: async (report: NewActivityReport) => { saves++; return saveActivityReport(report, transaction); },
+    ...deps(), saveActivityReport: async (report: NewActivityReport) => { saves++; return saveActivityReport(report, auth, uncertainTransaction); },
   })); app.use(apiErrorHandler);
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v1/reports/activities/${id.toHexString()}`;
@@ -161,7 +199,8 @@ test('HTTP report is authenticated, scoped, validated and private; no admin/repo
     assert.equal((await originalFetch(url, { method: 'POST' })).status, 401);
     for (const [target, body] of [[url + '?campusId=' + otherCampus, { reason: 'Motivo' }],
       [url.replace(id.toHexString(), 'invalid'), { reason: 'Motivo' }], [url, { reason: 'Motivo', userId: creatorId }],
-      [url, { reason: 'Motivo', status: 'RESUELTO' }], [url, { reason: ' ' }]]) {
+      [url, { reason: 'Motivo', status: 'RESUELTO' }], [url, { reason: ' ' }],
+      [url, { reason: 'Motivo\u0000' }], [url, { reason: 'Motivo', description: 'Detalle\u0000' }]]) {
       assert.equal((await originalFetch(target as string, { method: 'POST', headers, body: JSON.stringify(body) })).status, 400);
     }
     assert.equal(saves, 0);
@@ -170,6 +209,13 @@ test('HTTP report is authenticated, scoped, validated and private; no admin/repo
     const receipt = (await response.json()).data;
     assert.equal(receipt.campusId, campusId); assert.equal(receipt.activityId, id.toHexString()); assert.equal(receipt.status, 'PENDIENTE');
     assert.equal('snapshot' in receipt, false); assert.equal('userId' in receipt, false); assert.equal(saves, 1);
+    const baseline = (await db.query<{ count: number }>('SELECT count(*)::int AS count FROM reporte_contenido')).rows[0].count;
+    loseCommit = true;
+    const uncertain = await originalFetch(url, { method: 'POST', headers, body: JSON.stringify({ reason: 'Prueba incierta' }) });
+    assert.equal(uncertain.status, 503);
+    assert.equal(uncertain.headers.get('cache-control'), 'no-store');
+    assert.doesNotMatch(await uncertain.text(), /private|SQL|connection/);
+    assert.equal((await db.query<{ count: number }>('SELECT count(*)::int AS count FROM reporte_contenido')).rows[0].count, baseline + 1);
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

@@ -1705,6 +1705,7 @@ test('physical reports revalidate persisted suspension, verification, role revoc
 test('report payload cannot supply identities, a rating target, state or snapshot; bounded reason and optional description reuse activity validation',async()=>{
   const saved=await create(auth,input()),before=(await reportCount()).rows[0].count;
   for(const body of [null,[],{},'text',{reason:3},{reason:' '},{reason:'x'.repeat(201)},{reason:'Motivo',description:null},{reason:'Motivo',description:'x'.repeat(2001)},
+    {reason:'Motivo\u0000'},{reason:'Motivo',description:'Detalle\u0000'},
     ...['campusId','userId','entityType','entityId','ratingId','transactionId','publicationId','snapshot','reportedAt','status','resolution'].map(key=>({reason:'Motivo',[key]:'override'}))]){
     await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,null,body),{status:400});
   }

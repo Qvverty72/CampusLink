@@ -722,6 +722,24 @@ Referencias de serialización: [ExcelJS](https://github.com/exceljs/exceljs#read
 
 `POST /api/v1/reports/elibrary/:publicationId` y `POST /elibrary/:publicationId/transactions/:transactionId` reutilizan reports con `{reason,description?}` y acuse privado. Recurso disponible institucional o acuerdo propio, incluso retirado; identidad, objetivo y campus de origen se derivan y comprueban en servidor. Conservan evidencia privada de metadatos y términos, nunca bytes, paths ni enlaces. Estado inicial PENDIENTE; no ocultan recursos ni cambian acuerdos/accesos. El formulario compartido distingue el campus de origen digital. La revisión y resolución administrativa corresponden a F2.8-02/03; enviar una denuncia no concede descarga. Sin SQL pendiente.
 
+## Denuncias comunes de contenido (F2.8-01)
+
+Los tres módulos usan `reports` y el mismo registro `reporte_contenido`. El formulario compartido se abre desde el detalle del contenido o del acuerdo propio. No se admiten valoraciones como objetivo ni denuncias de cuentas desvinculadas del contenido/intercambio.
+
+Los recursos digitales accesibles también pueden denunciarse desde otro campus de la misma institución. La denuncia pertenece al campus de origen del recurso. Este alcance fue confirmado por el usuario el 2026-10-22 para resolver la diferencia entre F2.5-01 y F2.5-12; se conserva la autorización institucional existente.
+
+| Método | Ruta bajo `/api/v1/reports` | Objetivo |
+| --- | --- | --- |
+| POST | `/activities/:activityId` | Actividad comunitaria o evento oficial accesible del campus vigente |
+| POST | `/physicalgoods/:publicationId` | Publicación física accesible del campus vigente |
+| POST | `/physicalgoods/:publicationId/transactions/:transactionId` | Acuerdo físico propio |
+| POST | `/elibrary/:publicationId` | Publicación digital accesible |
+| POST | `/elibrary/:publicationId/transactions/:transactionId` | Acuerdo digital propio |
+
+Todos requieren Bearer, sin query, con JSON `{reason,description?}`: motivo obligatorio de 1–200 caracteres y descripción opcional de hasta 2000, normalizados en la API. Se rechazan campos adicionales y caracteres NUL antes de acceder a persistencia. Identidad, campus, relación, evidencia, estado y fecha se determinan en el servidor. El guardado de actividades reutiliza `lockAccountContext` para revalidar cuenta, institución, campus, verificación y roles persistidos dentro de la transacción, como los otros flujos; una concesión revocada no autoriza un envío iniciado previamente.
+
+Respuesta 201 `no-store` con acuse mínimo (id, campusId, status PENDIENTE, reportedAt y actividad o publicación/transacción). No devuelve denunciante ni evidencia. Un fallo SQL o acuse de commit incierto devuelve 503 sin detalles internos; no se reintenta automáticamente. La evidencia conserva el contenido validado durante el envío. No se ocultan publicaciones/actividades, cambian acuerdos ni conceden archivos al denunciar. Revisión y resolución corresponden a F2.8-02/03. Sin nuevas tablas, funciones SQL, triggers, migraciones o dependencias.
+
 ## Trabajo posterior
 
 Para preparar datos de QA entre módulos, consultar [Seeder general](qa/README.md).

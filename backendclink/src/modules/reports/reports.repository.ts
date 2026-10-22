@@ -5,6 +5,9 @@ import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { ApiError } from '../../services/apiError.js';
 import type { PoolClient } from 'pg';
 import type { ActivityReportReceipt, ContentReportReceipt, NewActivityReport, NewContentReport } from './reports.types.js';
+import { lockAccountContext } from '../auth/auth.repository.js';
+import { requireCampusCapability } from '../auth/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 
 export function probeReportsDependencies(): Promise<DependencyChecks> {
   return inspectDependencies({
@@ -22,13 +25,21 @@ export async function insertContentReport(client:PoolClient,report:NewContentRep
   return {id:row.id,campusId:report.campusId,status:'PENDIENTE',reportedAt:new Date(row.reportado_en).toISOString()};
 }
 
-export async function saveActivityReport(report: NewActivityReport,
+export async function saveActivityReport(report: NewActivityReport, auth: VerifiedAuthConnection,
   transaction = withPostgresTransaction): Promise<ActivityReportReceipt> {
-  return transaction(async client => {
-    // Una suspensión o cambio de campus concurrente no debe permitir guardar con contexto vencido.
-    const profile = await client.query(`SELECT id FROM public.perfil_usuario WHERE id=$1 AND campus_id=$2
-      AND estado_cuenta='ACTIVA' AND deleted_at IS NULL FOR SHARE`, [report.userId, report.campusId]);
-    if (profile.rows.length !== 1) throw new ApiError(403, 'FORBIDDEN', 'Tu cuenta o campus cambió. Actualiza la sesión.');
-    return {...await insertContentReport(client,{...report,entityType:'ACTIVIDAD',entityId:report.activityId}),activityId:report.activityId};
-  });
+  try {
+    return await transaction(async client => {
+      // Reutiliza el bloqueo que serializa cambios de cuenta, campus y concesiones de roles.
+      const { profile, roles } = await lockAccountContext(client, auth.userId);
+      if (!profile || report.userId !== auth.userId || report.campusId !== auth.campusId
+        || profile.campus_id !== auth.campusId || profile.institucion_id !== auth.profile.institucion_id) {
+        throw new ApiError(403, 'FORBIDDEN', 'Tu cuenta o campus cambió. Actualiza la sesión.');
+      }
+      requireCampusCapability({ ...auth, profile, roles }, report.campusId, 'general');
+      return {...await insertContentReport(client,{...report,entityType:'ACTIVIDAD',entityId:report.activityId}),activityId:report.activityId};
+    });
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo confirmar el envío de la denuncia.');
+  }
 }

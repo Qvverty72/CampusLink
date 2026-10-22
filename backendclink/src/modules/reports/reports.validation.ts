@@ -17,5 +17,9 @@ export const parseContentReport: RequestParser = (input: unknown): ValidationRes
   if (body.description !== undefined && (typeof body.description !== 'string' || description.length > 2000)) {
     issues.push({ field: 'description', message: 'La descripción debe ser texto de hasta 2000 caracteres.' });
   }
+  // PostgreSQL no admite NUL en texto ni JSON; se rechaza en la API para todos los objetivos.
+  for (const [field, value] of [['reason', reason], ['description', description]]) {
+    if (value.includes('\u0000')) issues.push({ field, message: 'El texto contiene caracteres inválidos.' });
+  }
   return issues.length ? { success: false, issues } : { success: true, data: { reason, ...(description ? { description } : {}) } };
 };
