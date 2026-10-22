@@ -16,7 +16,8 @@ const tables = ['institucion','campus','carrera','campus_carrera','perfil_usuari
   'interaccion_recurso','reporte_contenido','auditoria'];
 const client = { query: (sql: string, params?: unknown[]) => db.query(sql, params) } as unknown as PoolClient;
 const start = new Date('2026-10-10T00:00:00Z'), until = new Date('2026-10-11T00:00:00Z');
-let server: Server, base: string, sqlFailure = false, mongoFailure = false, mongoReads = 0, invalidAuth = false;
+const localStart = new Date('2026-10-10T03:00:00Z'), localUntil = new Date('2026-10-11T03:00:00Z');
+let server: Server, base: string, sqlFailure = false, mongoFailure = false, mongoReads = 0, metricReads = 0, invalidAuth = false;
 let events: { campusId: string; userId?: string; occurredAt: Date; type: string; provenance?: string }[] = [];
 let readMetrics: typeof import('../src/modules/analytics/analytics.repository.js').readDashboardMetrics;
 
@@ -32,6 +33,7 @@ before(async () => {
   }
   mock.method(Pool.prototype, 'connect', async () => ({ query: (sql: string, params?: unknown[]) => {
     if (sqlFailure && !['BEGIN', 'ROLLBACK'].includes(sql)) throw new Error('private SQL credentials');
+    if (sql.includes('jsonb_to_recordset')) metricReads++;
     return db.query(sql, params);
   }, release() {} }));
   mock.method(Db.prototype, 'collection', (name: string) => ({ aggregate: (pipeline: any[]) => {
@@ -39,14 +41,33 @@ before(async () => {
     if (mongoFailure) throw new Error('private MongoDB credentials');
     const match = pipeline[0].$match;
     assert.deepEqual(match.type.$in, ['VIEWED', 'JOINED', 'LEFT']);
-    const groups = new Map<string, { _id: string; count: number; legacy: number }>();
-    for (const event of events.filter(row => (typeof match.campusId === 'string' ? row.campusId === match.campusId : match.campusId.$in.includes(row.campusId))
+    const selected = events.filter(row => (typeof match.campusId === 'string' ? row.campusId === match.campusId : match.campusId.$in.includes(row.campusId))
       && (!match.userId || match.userId.$in.includes(row.userId)) && row.occurredAt >= match.occurredAt.$gte
-      && row.occurredAt < match.occurredAt.$lt && match.type.$in.includes(row.type))) {
-      const group = groups.get(event.type) ?? { _id: event.type, count: 0, legacy: 0 };
-      group.count++; if (event.provenance === 'LEGACY_STATE') group.legacy++; groups.set(event.type, group);
-    }
-    return { toArray: async () => [...groups.values()] };
+      && row.occurredAt < match.occurredAt.$lt && match.type.$in.includes(row.type));
+    const group = (rows: typeof events, period?: (event: typeof events[number]) => string) => {
+      const groups = new Map<string, { _id: any; count: number; legacy: number }>();
+      for (const event of rows) {
+        const bucket = period?.(event), key = `${bucket ?? ''}:${event.type}`;
+        const row = groups.get(key) ?? { _id: bucket ? { type: event.type, period: bucket } : event.type, count: 0, legacy: 0 };
+        row.count++; if (event.provenance === 'LEGACY_STATE') row.legacy++; groups.set(key, row);
+      }
+      return [...groups.values()];
+    };
+    const facet = pipeline[1].$facet;
+    if (!facet) return { toArray: async () => group(selected) };
+    const trunc = facet.periods[0].$group._id.period.$dateToString.date.$dateTrunc;
+    assert.equal(trunc.date, '$occurredAt'); assert.equal(trunc.timezone, 'America/Santiago');
+    assert.equal(facet.periods[0].$group._id.period.$dateToString.timezone, 'America/Santiago');
+    assert.ok(['week', 'month'].includes(trunc.unit));
+    if (trunc.unit === 'week') assert.equal(trunc.startOfWeek, 'monday');
+    const period = (event: typeof events[number]) => {
+      const civil = new Intl.DateTimeFormat('sv-SE', { timeZone: trunc.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(event.occurredAt);
+      const date = new Date(`${civil}T00:00:00Z`);
+      if (trunc.unit === 'month') date.setUTCDate(1);
+      else date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+      return date.toISOString().slice(0, 10);
+    };
+    return { toArray: async () => [{ total: group(selected), periods: group(selected, period) }] };
   } }));
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
@@ -68,7 +89,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
-  sqlFailure = false; mongoFailure = false; invalidAuth = false; mongoReads = 0; events = [];
+  sqlFailure = false; mongoFailure = false; invalidAuth = false; mongoReads = 0; metricReads = 0; events = [];
   await db.exec('TRUNCATE ' + tables.join(',') + ',auth.users CASCADE');
   await db.query("INSERT INTO institucion(id,nombre) VALUES($1,'Institución'),($2,'Ajena')", [institution, foreignInstitution]);
   await db.query("INSERT INTO campus(id,institucion_id,nombre) VALUES($1,$4,'Principal'),($2,$4,'Otra'),($3,$5,'Ajena')",
@@ -162,16 +183,16 @@ test('resource and subject SQL distinguish facts, retain logical deletions, use 
 test('HTTP returns four scoped KPI; JOINED events survive LEFT without reading current activities', async () => {
   const id = await publication(); await view(id, '2026-10-10T10:00:00Z');
   events = [
-    { campusId: campus, occurredAt: start, type: 'JOINED' },
+    { campusId: campus, occurredAt: localStart, type: 'JOINED' },
     { campusId: campus, occurredAt: new Date('2026-10-10T12:00:00Z'), type: 'LEFT' },
     { campusId: campus, occurredAt: new Date('2026-10-10T13:00:00Z'), type: 'JOINED', provenance: 'LEGACY_STATE' },
-    { campusId: campus, occurredAt: start, type: 'VIEWED' },
-    { campusId: otherCampus, occurredAt: start, type: 'JOINED' },
-    { campusId: campus, occurredAt: until, type: 'JOINED' },
+    { campusId: campus, occurredAt: localStart, type: 'VIEWED' },
+    { campusId: otherCampus, occurredAt: localStart, type: 'JOINED' },
+    { campusId: campus, occurredAt: localUntil, type: 'JOINED' },
   ];
   const response = await request(); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
   const { data } = await response.json();
-  assert.deepEqual(data.period, { from: '2026-10-10', to: '2026-10-10', timeZone: 'UTC', cutoff: until.toISOString() });
+  assert.deepEqual(data.period, { from: '2026-10-10', to: '2026-10-10', timeZone: 'America/Santiago', cutoff: localUntil.toISOString() });
   for (const key of ['activeUsers', 'resourceDemand', 'subjectDemand', 'activityParticipation']) {
     assert.equal(data[key].scope.campusId, campus); assert.equal(data[key].scope.institutionId, institution);
     assert.deepEqual(data[key].period, data.period); assert.equal(typeof data[key].value, 'number');
@@ -284,12 +305,12 @@ test('multi-campus and career filters apply to all KPI with current associations
   await view(resource, '2026-10-10T12:00Z'); await requestResource(resource, '2026-10-10T12:00Z');
   await view(otherResource, '2026-10-10T23:59:59.999999Z'); await view(excludedResource, '2026-10-10T12:00Z');
   events = [
-    { campusId: campus, userId: member, occurredAt: start, type: 'JOINED' },
-    { campusId: campus, userId: member, occurredAt: start, type: 'LEFT' },
-    { campusId: otherCampus, userId: otherMember, occurredAt: start, type: 'JOINED', provenance: 'LEGACY_STATE' },
-    { campusId: campus, userId: reader, occurredAt: start, type: 'JOINED' },
-    { campusId: foreignCampus, userId: member, occurredAt: start, type: 'JOINED' },
-    { campusId: campus, userId: member, occurredAt: until, type: 'JOINED' },
+    { campusId: campus, userId: member, occurredAt: localStart, type: 'JOINED' },
+    { campusId: campus, userId: member, occurredAt: localStart, type: 'LEFT' },
+    { campusId: otherCampus, userId: otherMember, occurredAt: localStart, type: 'JOINED', provenance: 'LEGACY_STATE' },
+    { campusId: campus, userId: reader, occurredAt: localStart, type: 'JOINED' },
+    { campusId: foreignCampus, userId: member, occurredAt: localStart, type: 'JOINED' },
+    { campusId: campus, userId: member, occurredAt: localUntil, type: 'JOINED' },
   ];
   const filters = `from=2026-10-10&to=2026-10-10&institutionId=${institution}&campusIds=${campus},${otherCampus},${campus}`;
   const response = await request(filters + '&careerId=' + career); assert.equal(response.status, 200);
@@ -298,6 +319,10 @@ test('multi-campus and career filters apply to all KPI with current associations
   assert.deepEqual(data.subjectDemand.subjects.map((s: any) => [s.subjectId, s.views, s.requests]), [[shared, 2, 1], [unrelated, 1, 1]]);
   assert.equal(data.activityParticipation.value, 2); assert.equal(data.activityParticipation.legacyEvents, 1);
   assert.equal(data.scope.campusId, null); assert.equal(data.scope.campuses.length, 2); assert.equal(data.scope.career.id, career);
+  assert.equal(data.intervals[0].metrics.activeUsers.value, data.activeUsers.value);
+  assert.deepEqual(data.intervals[0].metrics.resourceDemand, data.resourceDemand);
+  assert.deepEqual(data.intervals[0].metrics.subjectDemand, data.subjectDemand);
+  assert.deepEqual(data.intervals[0].metrics.activityParticipation, data.activityParticipation);
   for (const metric of ['activeUsers','resourceDemand','subjectDemand','activityParticipation']) assert.deepEqual(data[metric].scope, data.scope);
   assert.ok(data.notes.some((n: string) => n.includes('no deben sumarse')));
   const all = (await (await request(filters)).json()).data;
@@ -340,4 +365,131 @@ test('direct digital careers need not be offered at origin campus, and independe
   assert.equal(data.resourceDemand.views, 1); assert.equal(data.subjectDemand.value, 1);
   assert.equal(data.subjectDemand.subjects[0].subjectId, subject);
   assert.equal(data.scope.campusId, campus); assert.equal(data.scope.career.id, unavailableCareer);
+});
+
+test('weekly series clips ISO weeks across years and preserves identical SQL/Mongo boundaries and per-cutoff account state', async () => {
+  const id = await publication(), subject = randomUUID();
+  await db.query("INSERT INTO asignatura(id,codigo,nombre) VALUES($1,'WEEK','Semanal')", [subject]);
+  await db.query('INSERT INTO publicacion_asignatura VALUES($1,$2)', [id, subject]);
+  const suspended = await profile(undefined, 'SUSPENDIDA', '2025-01-01');
+  await change(suspended, 'ACTIVA', 'SUSPENDIDA', '2026-01-05T03:00:00Z');
+  for (const when of ['2025-12-31T03:00:00Z', '2026-01-05T02:59:59.999999Z', '2026-01-05T03:00:00Z',
+    '2026-01-12T02:59:59.999999Z', '2026-01-12T03:00:00Z', '2026-01-14T02:59:59.999999Z', '2026-01-14T03:00:00Z']) {
+    await view(id, when); await requestResource(id, when);
+    // BSON Date tiene precisión de milisegundos; PostgreSQL conserva microsegundos.
+    events.push({ campusId: campus, occurredAt: new Date(when), type: 'JOINED' });
+  }
+  events.push({ campusId: campus, occurredAt: new Date('2026-01-05T03:00:00Z'), type: 'LEFT' });
+  events.push({ campusId: otherCampus, occurredAt: new Date('2026-01-05T03:00:00Z'), type: 'JOINED' });
+  const response = await request('from=2025-12-31&to=2026-01-13&grouping=week');
+  assert.equal(response.status, 200); const { data } = await response.json();
+  assert.equal(data.grouping, 'week'); assert.equal(mongoReads, 1);
+  assert.deepEqual(data.intervals.map((row: any) => [row.key, row.period.from, row.period.to, row.period.cutoff]), [
+    ['2025-12-29','2025-12-31','2026-01-04','2026-01-05T03:00:00.000Z'],
+    ['2026-01-05','2026-01-05','2026-01-11','2026-01-12T03:00:00.000Z'],
+    ['2026-01-12','2026-01-12','2026-01-13','2026-01-14T03:00:00.000Z'],
+  ]);
+  assert.deepEqual(data.intervals.map((row: any) => row.metrics.activeUsers.value), [2, 1, 1]);
+  for (const row of data.intervals) {
+    assert.equal(row.status, 'recorded'); assert.equal(row.coverage, 'partial');
+    assert.equal(row.metrics.resourceDemand.views, 2); assert.equal(row.metrics.resourceDemand.requests, 2);
+    assert.equal(row.metrics.subjectDemand.subjects[0].views, 2); assert.equal(row.metrics.subjectDemand.subjects[0].requests, 2);
+    assert.equal(row.metrics.activityParticipation.value, 2);
+    for (const key of ['activeUsers', 'resourceDemand', 'subjectDemand', 'activityParticipation']) {
+      assert.deepEqual(row.metrics[key].period, row.period); assert.deepEqual(row.metrics[key].scope, data.scope);
+    }
+  }
+  assert.equal(data.activeUsers.value, 1); // Saldo final, no suma de saldos semanales.
+  assert.equal(data.resourceDemand.views, 6); assert.equal(data.activityParticipation.value, 6);
+  const adjacent = (await (await request('from=2026-01-14&to=2026-01-14&grouping=week')).json()).data;
+  assert.equal(adjacent.resourceDemand.views, 1); assert.equal(adjacent.activityParticipation.value, 1);
+});
+
+test('monthly series includes empty leap-year intervals and clips the first/last month without losing microseconds', async () => {
+  const id = await publication();
+  await view(id, '2024-02-29T02:59:59.999999Z'); await view(id, '2024-03-01T02:59:59.999999Z');
+  await view(id, '2024-03-01T03:00:00Z'); await view(id, '2024-05-03T03:59:59.999999Z');
+  await view(id, '2024-05-03T04:00:00Z');
+  events = [
+    { campusId: campus, occurredAt: new Date('2024-03-01T02:59:59.999Z'), type: 'JOINED', provenance: 'LEGACY_STATE' },
+    { campusId: campus, occurredAt: new Date('2024-03-01T03:00:00Z'), type: 'JOINED' },
+  ];
+  const response = await request('from=2024-02-29&to=2024-05-02&grouping=month');
+  assert.equal(response.status, 200); const { data } = await response.json();
+  assert.deepEqual(data.intervals.map((row: any) => [row.key, row.period.from, row.period.to, row.metrics.resourceDemand.views]), [
+    ['2024-02-01','2024-02-29','2024-02-29',1], ['2024-03-01','2024-03-01','2024-03-31',1],
+    ['2024-04-01','2024-04-01','2024-04-30',0], ['2024-05-01','2024-05-01','2024-05-02',1],
+  ]);
+  assert.equal(data.intervals[0].metrics.activityParticipation.legacyEvents, 1);
+  const empty = data.intervals[2];
+  assert.equal(empty.status, 'no_activity'); assert.equal(empty.coverage, 'partial');
+  assert.equal(empty.metrics.activeUsers.value, 0); assert.equal(empty.metrics.resourceDemand.value, 0);
+  assert.equal(empty.metrics.subjectDemand.value, 0); assert.equal(empty.metrics.activityParticipation.value, 0);
+  assert.equal(data.resourceDemand.views, 3); assert.equal(mongoReads, 1);
+});
+
+test('future intervals are unavailable rather than observed zeroes; current intervals stop at one generation instant', async () => {
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const nextMonth = new Date(`${today.slice(0, 7)}-01T00:00:00Z`); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+  const response = await request(`from=${today}&to=${nextMonth.toISOString().slice(0, 10)}&grouping=month`);
+  assert.equal(response.status, 200); const { data } = await response.json();
+  assert.equal(data.period.cutoff, data.generatedAt);
+  assert.equal(data.intervals[0].period.cutoff, data.generatedAt);
+  assert.ok(data.intervals[0].metrics); assert.equal(data.intervals[0].status, 'no_activity');
+  assert.equal(data.intervals[1].status, 'unavailable'); assert.equal(data.intervals[1].coverage, 'unavailable');
+  assert.equal(data.intervals[1].metrics, null);
+  const future = (await (await request('from=9999-12-30&to=9999-12-31&grouping=week')).json()).data;
+  assert.equal(future.activeUsers.value, null); assert.equal(future.resourceDemand.value, null);
+  assert.equal(future.subjectDemand.value, null); assert.equal(future.activityParticipation.value, null);
+  assert.equal(future.intervals[0].metrics, null);
+});
+
+test('grouping and interval count are validated before metrics; SQL session timezone cannot change institutional buckets', async () => {
+  for (const suffix of ['&grouping=day', '&grouping=', '&grouping=month&grouping=week', '&grouping[x]=week']) {
+    assert.equal((await request('from=2026-10-01&to=2026-10-10' + suffix)).status, 400, suffix);
+  }
+  assert.equal((await request('from=0001-01-01&to=9999-12-31&grouping=week')).status, 400);
+  assert.equal(mongoReads, 0);
+  const id = await publication(); await view(id, '2026-03-01T03:00:00Z');
+  await db.exec("SET TIME ZONE 'Asia/Tokyo'");
+  try {
+    const response = await request('from=2026-02-28&to=2026-03-01&grouping=month');
+    assert.equal(response.status, 200); const { data } = await response.json();
+    assert.deepEqual(data.intervals.map((row: any) => row.metrics.resourceDemand.views), [0, 1]);
+    assert.equal(data.period.timeZone, 'America/Santiago');
+  } finally { await db.exec("SET TIME ZONE 'UTC'"); }
+});
+
+test('Santiago DST days contain 23 or 25 hours with identical half-open event bounds in SQL and Mongo', async () => {
+  const { dashboardIntervals } = await import('../src/modules/analytics/analytics.periods.js');
+  const id = await publication();
+  for (const [date, from, until, hours] of [
+    ['2026-09-06','2026-09-06T04:00:00.000Z','2026-09-07T03:00:00.000Z',23],
+    ['2026-04-04','2026-04-04T03:00:00.000Z','2026-04-05T04:00:00.000Z',25],
+  ] as const) {
+    const [window] = dashboardIntervals(date, date, 'week');
+    assert.equal(window.from.toISOString(), from); assert.equal(window.until.toISOString(), until);
+    assert.equal((window.until.getTime() - window.from.getTime()) / 3_600_000, hours);
+    const before = (instant: string) => new Date(new Date(instant).getTime() - 1000).toISOString().replace('.000Z', '.999999Z');
+    events = [];
+    for (const when of [before(from), from, before(until), until]) {
+      await view(id, when); await requestResource(id, when);
+      events.push({ campusId: campus, occurredAt: new Date(when), type: 'JOINED' });
+    }
+    for (const grouping of ['week', 'month']) {
+      const response = await request(`from=${date}&to=${date}&grouping=${grouping}`);
+      assert.equal(response.status, 200); const { data } = await response.json();
+      assert.equal(data.period.cutoff, until); assert.equal(data.intervals[0].period.cutoff, until);
+      assert.equal(data.intervals[0].metrics.resourceDemand.views, 2);
+      assert.equal(data.intervals[0].metrics.resourceDemand.requests, 2);
+      assert.equal(data.intervals[0].metrics.activityParticipation.value, 2);
+    }
+  }
+});
+
+test('long ranges use two batched SQL metric queries and one Mongo aggregation, with no per-interval reads', async () => {
+  const response = await request('from=2023-01-01&to=2025-12-31&grouping=week');
+  assert.equal(response.status, 200); const { data } = await response.json();
+  assert.ok(data.intervals.length > 150); assert.equal(metricReads, 2); assert.equal(mongoReads, 1);
+  assert.ok(data.intervals.every((row: any) => row.metrics !== null && row.status === 'no_activity'));
 });

@@ -44,7 +44,7 @@ function harness() {
     '../types/access': access,
     '../api/dashboardApi': {
       loadDashboardOptions: signal => new Promise((resolve, reject) => optionCalls.push({ signal, resolve, reject })),
-      loadDashboard: (from, to, campusId, signal, filters) => new Promise((resolve, reject) => calls.push({ from, to, campusId, signal, filters, resolve, reject })),
+      loadDashboard: (from, to, campusId, signal, filters, grouping) => new Promise((resolve, reject) => calls.push({ from, to, campusId, signal, filters, grouping, resolve, reject })),
     },
   });
   const h = { auth, calls, optionCalls, get refreshes() { return refreshes; },
@@ -67,9 +67,10 @@ test('API sends single-campus compatibility and multi-campus/career filters, and
   await loadDashboard('2026-10-01', '2026-10-10', 'campus-a', controller.signal);
   assert.equal(observed[0].query.toString(), 'from=2026-10-01&to=2026-10-10&campusId=campus-a');
   await loadDashboard('2026-10-01', '2026-10-10', 'campus-a', controller.signal,
-    { institutionId: 'institution-a', campusIds: ['campus-a', 'campus-b'], careerId: 'career-a' });
+    { institutionId: 'institution-a', campusIds: ['campus-a', 'campus-b'], careerId: 'career-a' }, 'week');
   assert.equal(observed[1].query.get('campusIds'), 'campus-a,campus-b'); assert.equal(observed[1].query.get('careerId'), 'career-a');
   assert.equal(observed[1].query.get('institutionId'), 'institution-a'); assert.equal(observed[1].query.has('campusId'), false);
+  assert.equal(observed[1].query.get('grouping'), 'week');
   await loadDashboardOptions(controller.signal); assert.equal(observed[2].path, '/api/v1/analytics/options');
   assert.equal(observed[2].signal, controller.signal);
 });
@@ -233,4 +234,44 @@ test('each card displays the selected career alongside all-campus scope', () => 
     subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] }, activityParticipation: { ...metric, legacyEvents: 0 }, notes: [] } });
   assert.equal(html.split('Carrera: Informática').length - 1, 4);
   assert.equal(html.split('Principal, Otra').length - 1, 5);
+});
+
+test('changing grouping with the same dates retires monthly data and ignores its late response', async () => {
+  const h = harness();
+  try {
+    await h.ready(); assert.equal(h.calls[0].grouping, 'month');
+    h.render().consult('2026-10-01', '2026-10-10', 'week');
+    assert.equal(h.render().dashboard, null); assert.equal(h.calls[0].signal.aborted, true);
+    await h.ready(); assert.equal(h.calls[1].grouping, 'week');
+    h.calls[0].resolve({ marker: 'late-month' }); await setImmediate(); assert.equal(h.render().dashboard, null);
+    h.calls[1].resolve({ marker: 'week' }); await setImmediate(); assert.equal(h.render().dashboard.marker, 'week');
+    h.render().consult('2026-09-01', '2026-09-30'); await h.ready();
+    assert.equal(h.calls[2].grouping, 'week'); // Un reintento sin agrupación explícita conserva la confirmada.
+  } finally { h.dispose(); }
+});
+
+test('weekly evolution renders observed zeroes, unavailable intervals, subject demand and institutional timezone', () => {
+  const scope = { institutionName: 'Institución', campusName: 'Principal' };
+  const period = { from: '2026-09-06', to: '2026-09-06', timeZone: 'America/Santiago', cutoff: '2026-09-07T03:00:00Z' };
+  const metric = { value: 0, scope, period };
+  const metrics = { scope, period, activeUsers: { ...metric, value: 8 }, resourceDemand: { ...metric, views: 0, requests: 0 },
+    subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] }, activityParticipation: { ...metric, legacyEvents: 0 } };
+  const html = renderDashboard({ loading: false, error: '', dashboard: { ...metrics, notes: [], grouping: 'week', intervals: [
+    { key: '2026-08-31', label: 'Semana del 2026-08-31', period, metrics, status: 'no_activity', coverage: 'partial' },
+    { key: '2026-09-07', label: 'Semana del 2026-09-07', period: { ...period, from: '2026-09-07', to: '2026-09-13' }, metrics: null, status: 'unavailable', coverage: 'unavailable' },
+  ] } });
+  for (const text of ['Semana (lunes a domingo)', 'Mes calendario', 'Evolución semanal', 'Semana del 2026-08-31',
+    'America/Santiago', 'Usuarios activos al corte: 8', 'Sin actividad registrada: 0', 'Sin datos disponibles para este intervalo.',
+    'Cobertura histórica parcial', 'no se suman entre períodos']) assert.ok(html.includes(text), text);
+});
+
+test('future totals render Sin datos and hide numerical demand details', () => {
+  const scope = { institutionName: 'Institución', campusName: 'Principal' };
+  const period = { from: '9999-12-30', to: '9999-12-31', timeZone: 'America/Santiago' };
+  const metric = { value: null, scope, period };
+  const html = renderDashboard({ loading: false, error: '', dashboard: { scope, period, activeUsers: metric,
+    resourceDemand: { ...metric, views: 0, requests: 0 }, subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] },
+    activityParticipation: { ...metric, legacyEvents: 0 }, notes: [], intervals: [] } });
+  assert.equal(html.split('Sin datos').length - 1, 4);
+  assert.ok(!html.includes('0 vistas')); assert.ok(!html.includes('0 solicitudes'));
 });

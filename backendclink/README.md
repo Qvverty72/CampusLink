@@ -597,9 +597,9 @@ Actividades reutilizan `activity_interactions` VIEWED/JOINED/LEFT y su cobertura
 
 ## Tablero de cuatro KPI esenciales (F2.7-02)
 
-`GET /api/v1/analytics/dashboard?from=2026-10-01&to=2026-10-21&campusId=<uuid>` requiere Bearer y cuenta activa. `from` y `to` son fechas civiles UTC válidas e inclusivas; `campusId` es opcional y toma el campus vigente del perfil. El servicio exige `reports`: ADMINISTRADOR o USUARIO_AUTORIZADO con ACCEDER_REPORTERIA en cada sede consultada. ACCEDER_ANALITICA por sí solo no concede el tablero. Cada campus debe estar activo y pertenecer a la institución del perfil, aunque el usuario envíe otro UUID o tenga asignaciones inconsistentes. F2.7-03 amplía los filtros como se describe a continuación; agrupaciones semanales/mensuales corresponden a F2.7-04.
+`GET /api/v1/analytics/dashboard?from=2026-10-01&to=2026-10-21&campusId=<uuid>` requiere Bearer y cuenta activa. Desde F2.7-04, `from` y `to` son fechas civiles válidas e inclusivas de `America/Santiago`; `campusId` es opcional y toma el campus vigente del perfil. El servicio exige `reports`: ADMINISTRADOR o USUARIO_AUTORIZADO con ACCEDER_REPORTERIA en cada sede consultada. ACCEDER_ANALITICA por sí solo no concede el tablero. Cada campus debe estar activo y pertenecer a la institución del perfil, aunque el usuario envíe otro UUID o tenga asignaciones inconsistentes. Filtros institucionales y agrupaciones se describen a continuación.
 
-Respuesta `{data:{scope,period,generatedAt,activeUsers,resourceDemand,subjectDemand,activityParticipation,notes}}`. Cada KPI contiene `value`, `period` y `scope` (IDs/nombres de institución/campus). `period` incluye `from`, `to`, `timeZone:'UTC'` y `cutoff` exclusivo al inicio del día siguiente. Ambos motores consultan `[from,cutoff)`, sin truncar los microsegundos SQL. 400 filtros/fechas inválidos;401 sesión;403 ámbito/permiso;503 dependencia. Todas las respuestas son no-store; un fallo SQL o MongoDB no se convierte en cuatro ceros ni devuelve KPI parciales.
+Respuesta `{data:{scope,period,generatedAt,activeUsers,resourceDemand,subjectDemand,activityParticipation,grouping,intervals,notes}}`. Cada KPI contiene `value`, `period` y `scope` (IDs/nombres de institución/campus). `period` incluye `from`, `to`, `timeZone:'America/Santiago'` y `cutoff` exclusivo expresado como instante ISO UTC: inicio del día siguiente en la zona institucional, limitado a `generatedAt` para el período en curso. Ambos motores consultan `[from,cutoff)`, sin truncar los microsegundos SQL. Un rango totalmente futuro tiene valores KPI `null`. 400 filtros/fechas/agrupación/rango inválidos;401 sesión;403 ámbito/permiso;503 dependencia consultada. Todas las respuestas son no-store; un fallo SQL o MongoDB no se convierte en cuatro ceros ni devuelve KPI parciales.
 
 - `activeUsers`: cuentas creadas antes del corte y no eliminadas antes de él, con estado ACTIVA reconstruido usando estados antes/después de auditoría. Incluye perfiles hoy suspendidos/desactivados cuando eran activos al corte y perfiles sin evento de creación. No equivale a inicios de sesión. La pertenencia al campus es la del perfil al consultar: el esquema actual no tiene historial de cambios de campus.
 - `resourceDemand`: `views` y `requests` separados, `value=views+requests`. Cuenta VISTA de interaccion_recurso y cada solicitud por solicitada_en, incluso cancelada/resuelta y con publicaciones/actores retirados. Un recurso sin asignatura sigue contando.
@@ -620,6 +620,25 @@ El mismo ámbito llega a todos los KPI: cuentas por campus actual y `usuario_car
 
 Expo consulta las opciones del servidor y ofrece institución, selección múltiple de sedes y carrera opcional, con rótulo del ámbito en cada tarjeta. Permite abrir Analítica con permiso en otra sede aunque la sede actual del perfil carezca de él. Cambios de identidad, permisos o filtros retiran datos anteriores inmediatamente y abortan/descartan respuestas tardías; seleccionar cero campus no consulta métricas. Consultar/reintentar renueva opciones y fechas. El cálculo sigue en servicio/repositorio; no se filtran cifras en el cliente. Sin tablas, funciones SQL, triggers, migraciones ni dependencias nuevas.
 
+## Métricas por período (F2.7-04)
+
+El mismo endpoint admite `grouping=week|month` (predeterminado `month`). Ejemplo: `/api/v1/analytics/dashboard?from=2026-09-01&to=2026-10-21&grouping=week&campusIds=<uuid>,<uuid>`. La zona institucional es `America/Santiago`, confirmada por el usuario para GH-99; no se acepta una zona arbitraria del cliente. Semanas de lunes a domingo, meses calendario y máximo 260 intervalos por consulta (400 si se excede). El inicio/final del rango recortan los intervalos extremos. La API convierte fechas civiles mediante Temporal, ya instalado, respetando días de 23/25 horas y medianoches inexistentes por horario de verano. Los eventos originales no se modifican.
+
+`intervals` está ordenado y contiene `{key,label,period,status,coverage,metrics}`. `key` es la fecha civil de inicio de la semana/mes completo, incluso si se recorta. `period` identifica los días incluidos y el corte exclusivo efectivo. `metrics` contiene los cuatro KPI, con su ámbito/período y demanda por asignatura. La demanda y las inscripciones pueden sumarse entre intervalos contiguos del mismo reporte; los usuarios activos son saldos independientes al corte y **no se suman**. El total raíz usa la misma definición de cálculo y el último corte efectivo.
+
+- `status:'recorded'`: hay vistas, solicitudes o inscripciones registradas.
+- `status:'no_activity'`: cero vistas, solicitudes e inscripciones registradas. Puede haber cuentas activas al corte.
+- `status:'unavailable'`, `coverage:'unavailable'`, `metrics:null`: intervalo futuro, sin observaciones disponibles; no equivale a cero.
+- Para intervalos observables, `coverage:'partial'`: las fuentes históricas no tienen metadata que certifique captura completa. Cero registros no garantiza que toda actividad real haya sido capturada; la primera fila tampoco demuestra cuándo empezó la cobertura. Se conserva `legacyEvents` y la advertencia de vistas antiguas coalescidas. No se inventa una fecha de despliegue ni se introduce persistencia adicional. Para un rango enteramente futuro, los `value` raíz son `null`; los contadores auxiliares vacíos no deben interpretarse como observaciones.
+
+Servicio valida fechas, agrupación, límites y permisos, genera un solo instante de corte y coordina repositorios; frontend solo presenta resultados. SQL obtiene todos los cortes de cuentas en una consulta y toda la demanda/asignaturas en otra usando rangos parametrizados, `date_trunc` con zona explícita y relaciones existentes sin multiplicar hechos por carreras. MongoDB realiza una agregación con `$facet` (total/períodos), `$dateTrunc` y `startOfWeek:'monday'`. Ambos reciben los mismos extremos; no hay consultas de red por intervalo. Se conservan bajas lógicas, estado auditado, filtros institucionales y permisos de cada sede.
+
+Expo ofrece semana/mes, resumen y evolución por intervalo con fechas, ámbito, usuarios al corte, vistas/solicitudes separadas, asignaturas e inscripciones. La agrupación confirmada forma parte de la identidad de consulta: una respuesta mensual tardía no reemplaza una semanal. Fechas iniciales de pantalla también se calculan en `America/Santiago`.
+
+La issue menciona ANA-10, cuya definición no existe en el backlog primario actual. La decisión del usuario en GH-99 fija explícitamente zona y semanas; no se afirma conformidad con un texto no disponible. No hay DDL, funciones SQL nuevas, triggers, tablas, migraciones, paquetes ni escrituras de analítica adicionales. Reportes persistidos siguen fuera de alcance (F2.7-05/06).
+
+Referencias: [PostgreSQL date_trunc y zonas](https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC), [MongoDB $dateTrunc](https://www.mongodb.com/docs/manual/reference/operator/aggregation/datetrunc/).
+
 ## Valoración digital (F2.5-11)
 
 `POST /elibrary/:publicationId/transactions/:transactionId/rating` recibe `{score}` entero1..5, solo receptor del acuerdo COMPLETADA;201 recibo mínimo. Parser/elegibilidad son comunes con F2.4-11, cuyo contrato permanece igual. Lock del acuerdo y unique transaccion_id impiden simultáneas/duplicados; sin PATCH/DELETE ni valoración del dueño al receptor. Detalle privado añade rating/canRate para el formulario y resultado inmutable. La retirada del recurso no borra el respaldo.
@@ -636,7 +655,7 @@ y el manifiesto permanecen en `qa/local/` ignorado por Git y Docker.
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
-- Ampliar los filtros institucionales y agrupaciones del tablero en F2.7-03/04; el health no demuestra cobertura analítica.
+- Reutilizar filtros y agrupaciones del tablero para F2.7-05/06; el health no demuestra cobertura analítica.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
 
 ## Referencias técnicas

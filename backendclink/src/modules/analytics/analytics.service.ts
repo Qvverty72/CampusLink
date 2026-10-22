@@ -1,6 +1,7 @@
 import { createModuleHealthCheck } from '../../services/module-health.js';
 import { probeAnalyticsDependencies } from './analytics.repository.js';
-import type { AnalyticsHealth, DashboardData, DashboardQuery, DemandCount } from './analytics.types.js';
+import type { AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount } from './analytics.types.js';
+import { ANALYTICS_TIME_ZONE, dashboardIntervals } from './analytics.periods.js';
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../services/api-response.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
@@ -23,11 +24,11 @@ function dashboardDate(value: unknown): string {
   return value;
 }
 
-/** Fechas civiles UTC inclusivas en la API, convertidas a [from,until) para ambos motores. */
+/** Fechas civiles inclusivas; la política institucional las convierte a límites comunes. */
 export function parseDashboardQuery(raw: unknown, defaultCampusId: string, defaultInstitutionId: string): DashboardQuery {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros del tablero.');
   const query = raw as Record<string, unknown>;
-  if (Object.keys(query).some(key => !['institutionId', 'campusId', 'campusIds', 'careerId', 'from', 'to'].includes(key))
+  if (Object.keys(query).some(key => !['institutionId', 'campusId', 'campusIds', 'careerId', 'from', 'to', 'grouping'].includes(key))
     || (query.campusId !== undefined && query.campusIds !== undefined)) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros del tablero.');
   }
@@ -43,7 +44,9 @@ export function parseDashboardQuery(raw: unknown, defaultCampusId: string, defau
   const campusIds = [...new Set(campuses.toLowerCase().split(','))].sort();
   const from = dashboardDate(query.from), to = dashboardDate(query.to);
   if (from > to) throw new ApiError(400, 'VALIDATION_ERROR', 'La fecha inicial debe ser anterior o igual a la final.');
-  return { institutionId: institution.toLowerCase(), campusIds, careerId: (query.careerId as string | undefined)?.toLowerCase() ?? null, from, to };
+  const grouping = query.grouping ?? 'month';
+  if (grouping !== 'week' && grouping !== 'month') throw new ApiError(400, 'VALIDATION_ERROR', 'Selecciona agrupación semanal o mensual.');
+  return { institutionId: institution.toLowerCase(), campusIds, careerId: (query.careerId as string | undefined)?.toLowerCase() ?? null, from, to, grouping };
 }
 
 export async function getDashboardOptions(auth: VerifiedAuthConnection) {
@@ -66,23 +69,43 @@ export async function getDashboard(auth: VerifiedAuthConnection, rawQuery: unkno
   requireActiveAccount(auth.profile, auth.userId);
   if (query.institutionId !== auth.profile.institucion_id) throw new ApiError(403, 'FORBIDDEN', 'No tienes autorización para esta institución.');
   for (const id of query.campusIds) requireCampusCapability(auth, id, 'reports');
-  const from = new Date(`${query.from}T00:00:00.000Z`);
-  const until = new Date(new Date(`${query.to}T00:00:00.000Z`).getTime() + 86_400_000);
+  const intervals = dashboardIntervals(query.from, query.to, query.grouping);
+  const from = intervals[0].from;
+  const generatedAt = new Date();
+  const until = new Date(Math.min(intervals[intervals.length - 1].until.getTime(), generatedAt.getTime()));
+  const windows = intervals.filter(row => row.from < until).map(row => ({ ...row, until: new Date(Math.min(row.until.getTime(), until.getTime())) }));
   try {
-    const sql = await withPostgresTransaction(client => readDashboardMetrics(client, query.campusIds, query.institutionId, from, until, query.careerId));
+    const sql = await withPostgresTransaction(client => readDashboardMetrics(client, query.campusIds, query.institutionId, from, until, query.careerId, windows, query.grouping));
     if (!sql) throw new ApiError(403, 'FORBIDDEN', 'La institución, campus o carrera no están disponibles en tu ámbito de reportería.');
-    const activities = await countActivityInteractions(query.campusIds, from, until, sql.careerUserIds);
-    const period = { from: query.from, to: query.to, timeZone: 'UTC' as const, cutoff: until.toISOString() };
-    const metric = (value: number) => ({ value, period, scope: sql.scope });
-    const subjects = sql.subjectDemand.reduce<DemandCount>((total, row) =>
-      ({ views: total.views + row.views, requests: total.requests + row.requests }), { views: 0, requests: 0 });
-    return { period, scope: sql.scope, generatedAt: new Date().toISOString(),
-      activeUsers: metric(sql.activeUsers),
-      resourceDemand: { ...metric(sql.resourceDemand.views + sql.resourceDemand.requests), ...sql.resourceDemand },
-      subjectDemand: { ...metric(subjects.views + subjects.requests), ...subjects, subjects: sql.subjectDemand },
-      activityParticipation: { ...metric(activities.joined), label: 'Inscripciones registradas', legacyEvents: activities.legacyEvents },
+    // Un rango futuro no afirma ceros observados ni proyecta el estado actual de cuentas.
+    const activities = from < until ? await countActivityInteractions(query.campusIds, from, until, sql.careerUserIds, windows, query.grouping)
+      : { joined: 0, legacyEvents: 0, intervals: [] };
+    const period = { from: query.from, to: query.to, timeZone: ANALYTICS_TIME_ZONE, cutoff: until.toISOString() };
+    const metrics = (row: typeof sql.intervals[number], participation: { joined: number; legacyEvents: number }, period: DashboardPeriod, available = true): DashboardMetrics => {
+      const metric = (value: number) => ({ value: available ? value : null, period, scope: sql.scope });
+      const subjects = row.subjectDemand.reduce<DemandCount>((total, item) =>
+        ({ views: total.views + item.views, requests: total.requests + item.requests }), { views: 0, requests: 0 });
+      return { period, scope: sql.scope, activeUsers: metric(row.activeUsers),
+        resourceDemand: { ...metric(row.resourceDemand.views + row.resourceDemand.requests), ...row.resourceDemand },
+        subjectDemand: { ...metric(subjects.views + subjects.requests), ...subjects, subjects: row.subjectDemand },
+        activityParticipation: { ...metric(participation.joined), label: 'Inscripciones registradas', legacyEvents: participation.legacyEvents } };
+    };
+    return { ...metrics(sql, activities, period, from < until), generatedAt: generatedAt.toISOString(), grouping: query.grouping,
+      intervals: intervals.map(interval => {
+        if (interval.from >= until) return { key: interval.key, label: interval.label, period: interval.period,
+          status: 'unavailable', coverage: 'unavailable', metrics: null };
+        const row = sql.intervals.find(row => row.key === interval.key);
+        const activity = activities.intervals.find(row => row.key === interval.key);
+        if (!row || !activity) throw new Error('Missing dashboard interval.');
+        const result = metrics(row, activity, { ...interval.period, cutoff: new Date(Math.min(interval.until.getTime(), until.getTime())).toISOString() });
+        return { key: interval.key, label: interval.label, period: result.period,
+          status: row.resourceDemand.views + row.resourceDemand.requests + activity.joined === 0 ? 'no_activity' : 'recorded',
+          coverage: 'partial', metrics: result };
+      }),
       notes: [
         'Las cifras corresponden a registros disponibles; las vistas antiguas y las inscripciones importadas pueden tener cobertura parcial.',
+        'Referencia institucional America/Santiago: semanas de lunes a domingo y meses calendario, respetando el horario de verano. Los extremos se recortan al rango; el período en curso se consulta hasta la fecha de generación. Los intervalos futuros no tienen datos.',
+        'Sin actividad significa cero vistas, solicitudes e inscripciones registradas; no demuestra cobertura histórica completa. Los usuarios activos son un saldo al corte de cada intervalo y no deben sumarse.',
         'Usuarios: estado reconstruido al corte con auditoría; la pertenencia a campus y las asociaciones de asignaturas son las disponibles al consultar.',
         'Carreras: se usan las asociaciones actuales del usuario o recurso. En actividades se considera la carrera del participante. Una persona o recurso puede figurar en varias carreras; sus resultados no deben sumarse como exclusivos.',
       ] };

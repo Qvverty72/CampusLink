@@ -3,12 +3,12 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { loadDashboard, loadDashboardOptions } from '../api/dashboardApi';
 import { canAccessAnalytics } from '../types/access';
-import type { DashboardData, DashboardFilters, DashboardOptions } from '../types/dashboard';
+import type { DashboardData, DashboardFilters, DashboardGrouping, DashboardOptions } from '../types/dashboard';
 
 /** Cada resultado pertenece a una identidad y selección; el cleanup descarta respuestas tardías. */
 export function useAnalyticsDashboard(initialRange: { from: string; to: string }) {
   const auth = useAuth(), identity = auth.identity;
-  const [range, setRange] = useState(initialRange);
+  const [range, setRange] = useState({ ...initialRange, grouping: 'month' as DashboardGrouping });
   const [revision, setRevision] = useState(0);
   const [selection, setSelection] = useState<{ key: string; filters: DashboardFilters } | null>(null);
   const [catalog, setCatalog] = useState<{ key: string; data: DashboardOptions | null; error: string }>({ key: '', data: null, error: '' });
@@ -46,7 +46,7 @@ export function useAnalyticsDashboard(initialRange: { from: string; to: string }
     const controller = new AbortController();
     if (!identity || !allowed || !options || !filters || !filters.campusIds.length) return () => controller.abort();
     setResult({ key, loading: true, data: null, error: '' });
-    void loadDashboard(range.from, range.to, identity.campusId, controller.signal, filters).then(data => {
+    void loadDashboard(range.from, range.to, identity.campusId, controller.signal, filters, range.grouping).then(data => {
       if (!controller.signal.aborted) setResult({ key, loading: false, data, error: '' });
     }).catch(reason => {
       if (!controller.signal.aborted) setResult({ key, loading: false, data: null, error: failed(reason) });
@@ -60,5 +60,5 @@ export function useAnalyticsDashboard(initialRange: { from: string; to: string }
     loading: allowed && !optionsError && (!options || (Boolean(filters?.campusIds.length) && (!current || result.loading))),
     error: optionsError || (current ? result.error : ''),
     selectFilters(next: DashboardFilters) { setSelection({ key: identityKey, filters: next }); },
-    consult(from: string, to: string) { setRange({ from, to }); setRevision(value => value + 1); } };
+    consult(from: string, to: string, grouping: DashboardGrouping = range.grouping) { setRange({ from, to, grouping }); setRevision(value => value + 1); } };
 }
