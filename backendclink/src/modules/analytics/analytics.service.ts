@@ -5,9 +5,9 @@ import { createHash } from 'node:crypto';
 import { ApiError } from '../../services/api-response.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
-import { requireCampusCapability } from '../auth/auth.authorization.js';
+import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { countActivityInteractions, findAnalyticsResource, insertResourceView, readDashboardMetrics } from './analytics.repository.js';
+import { countActivityInteractions, findAnalyticsResource, insertResourceView, readDashboardMetrics, readDashboardOptions } from './analytics.repository.js';
 
 export const getAnalyticsHealth: () => Promise<AnalyticsHealth> =
   createModuleHealthCheck('analytics', probeAnalyticsDependencies);
@@ -24,30 +24,54 @@ function dashboardDate(value: unknown): string {
 }
 
 /** Fechas civiles UTC inclusivas en la API, convertidas a [from,until) para ambos motores. */
-export function parseDashboardQuery(raw: unknown, defaultCampusId: string): DashboardQuery {
+export function parseDashboardQuery(raw: unknown, defaultCampusId: string, defaultInstitutionId: string): DashboardQuery {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros del tablero.');
   const query = raw as Record<string, unknown>;
-  if (Object.keys(query).some(key => !['campusId', 'from', 'to'].includes(key))) {
+  if (Object.keys(query).some(key => !['institutionId', 'campusId', 'campusIds', 'careerId', 'from', 'to'].includes(key))
+    || (query.campusId !== undefined && query.campusIds !== undefined)) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros del tablero.');
   }
-  const campusId = query.campusId ?? defaultCampusId;
-  if (typeof campusId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campusId)) {
-    throw new ApiError(400, 'VALIDATION_ERROR', 'Campus inválido.');
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const campuses = query.campusIds ?? query.campusId ?? defaultCampusId;
+  const institution = query.institutionId ?? defaultInstitutionId;
+  if (typeof campuses !== 'string' || !campuses.split(',').every(id => uuid.test(id))
+    || (query.campusId !== undefined && campuses.includes(','))
+    || typeof institution !== 'string' || !uuid.test(institution)
+    || (query.careerId !== undefined && (typeof query.careerId !== 'string' || !uuid.test(query.careerId)))) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa institución, campus y carrera.');
   }
+  const campusIds = [...new Set(campuses.toLowerCase().split(','))].sort();
   const from = dashboardDate(query.from), to = dashboardDate(query.to);
   if (from > to) throw new ApiError(400, 'VALIDATION_ERROR', 'La fecha inicial debe ser anterior o igual a la final.');
-  return { campusId: campusId.toLowerCase(), from, to };
+  return { institutionId: institution.toLowerCase(), campusIds, careerId: (query.careerId as string | undefined)?.toLowerCase() ?? null, from, to };
+}
+
+export async function getDashboardOptions(auth: VerifiedAuthConnection) {
+  requireActiveAccount(auth.profile, auth.userId);
+  const campusIds = [...new Set(auth.roles.map(role => role.campusId))]
+    .filter(id => accountCapabilities(auth, id).reports);
+  if (!campusIds.length) throw new ApiError(403, 'FORBIDDEN', 'No tienes permiso de reportería.');
+  try {
+    const options = await withPostgresTransaction(client => readDashboardOptions(client, campusIds, auth.profile.institucion_id));
+    if (!options.institutions.length) throw new ApiError(403, 'FORBIDDEN', 'No tienes campus habilitados para reportería.');
+    return options;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudieron consultar los filtros. Inténtalo nuevamente.');
+  }
 }
 
 export async function getDashboard(auth: VerifiedAuthConnection, rawQuery: unknown): Promise<DashboardData> {
-  const query = parseDashboardQuery(rawQuery, auth.campusId);
-  requireCampusCapability(auth, query.campusId, 'reports');
+  const query = parseDashboardQuery(rawQuery, auth.campusId, auth.profile.institucion_id);
+  requireActiveAccount(auth.profile, auth.userId);
+  if (query.institutionId !== auth.profile.institucion_id) throw new ApiError(403, 'FORBIDDEN', 'No tienes autorización para esta institución.');
+  for (const id of query.campusIds) requireCampusCapability(auth, id, 'reports');
   const from = new Date(`${query.from}T00:00:00.000Z`);
   const until = new Date(new Date(`${query.to}T00:00:00.000Z`).getTime() + 86_400_000);
   try {
-    const sql = await withPostgresTransaction(client => readDashboardMetrics(client, query.campusId, auth.profile.institucion_id, from, until));
-    if (!sql) throw new ApiError(403, 'FORBIDDEN', 'No tienes autorización para este campus.');
-    const activities = await countActivityInteractions(query.campusId, from, until);
+    const sql = await withPostgresTransaction(client => readDashboardMetrics(client, query.campusIds, query.institutionId, from, until, query.careerId));
+    if (!sql) throw new ApiError(403, 'FORBIDDEN', 'La institución, campus o carrera no están disponibles en tu ámbito de reportería.');
+    const activities = await countActivityInteractions(query.campusIds, from, until, sql.careerUserIds);
     const period = { from: query.from, to: query.to, timeZone: 'UTC' as const, cutoff: until.toISOString() };
     const metric = (value: number) => ({ value, period, scope: sql.scope });
     const subjects = sql.subjectDemand.reduce<DemandCount>((total, row) =>
@@ -60,6 +84,7 @@ export async function getDashboard(auth: VerifiedAuthConnection, rawQuery: unkno
       notes: [
         'Las cifras corresponden a registros disponibles; las vistas antiguas y las inscripciones importadas pueden tener cobertura parcial.',
         'Usuarios: estado reconstruido al corte con auditoría; la pertenencia a campus y las asociaciones de asignaturas son las disponibles al consultar.',
+        'Carreras: se usan las asociaciones actuales del usuario o recurso. En actividades se considera la carrera del participante. Una persona o recurso puede figurar en varias carreras; sus resultados no deben sumarse como exclusivos.',
       ] };
   } catch (error) {
     if (error instanceof ApiError) throw error;

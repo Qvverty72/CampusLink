@@ -4,6 +4,7 @@ import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar
 import { useProfile } from '../hooks/useProfile';
 import { AcademicProfileSection } from './AcademicProfile';
 import { canManageAccess } from '../types/access';
+import { canAccessAnalytics } from '@/features/analytics/types/access';
 
 /** Reúne identidad, perfil académico, permisos visibles y cierre de sesión. */
 export function ProfileScreen() {
@@ -62,7 +63,7 @@ export function ProfileScreen() {
             </Pressable>
           </Link>}
 
-          {identity?.capabilities.reports && <Link href={'/analytics'} asChild>
+          {canAccessAnalytics(identity) && <Link href={'/analytics'} asChild>
             <Pressable
               accessibilityRole={'button'}
               accessibilityLabel={'Ir a Analítica'}

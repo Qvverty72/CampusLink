@@ -3,7 +3,7 @@ import { probeSupabaseTables } from '../../database/supabase/health.js';
 import { probeMongoCollections } from '../../database/mongodb/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
 import type { PoolClient } from 'pg';
-import type { DashboardScope, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
+import type { DashboardOptions, DashboardScope, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
 
 export function probeAnalyticsDependencies(): Promise<DependencyChecks> {
   return inspectDependencies({
@@ -84,11 +84,13 @@ export async function readAccountStateAnalyticsEvents(client: PoolClient, campus
  * Cuenta eventos ocurridos en `[from, until)` para un campus.
  * Usa el registro histórico de interacciones, no el estado JOINED actual como métrica pasada.
  */
-export async function countActivityInteractions(campusId: string, from: Date, until: Date) {
-  if (!campusId || !Number.isFinite(from.getTime()) || !Number.isFinite(until.getTime()) || until <= from) throw new Error('Invalid metric scope.');
+export async function countActivityInteractions(campusId: string | string[], from: Date, until: Date, userIds?: string[]) {
+  const campusIds = typeof campusId === 'string' ? [campusId] : campusId;
+  if (!campusIds.length || campusIds.some(id => !id) || !Number.isFinite(from.getTime()) || !Number.isFinite(until.getTime()) || until <= from) throw new Error('Invalid metric scope.');
   const { getMongoDb } = await import('../../config/mongodb.js');
   const counts = await getMongoDb().collection('activity_interactions').aggregate<{ _id: string; count: number; legacy: number }>([
-    { $match: { campusId, occurredAt: { $gte: from, $lt: until }, type: { $in: ['VIEWED', 'JOINED', 'LEFT'] } } },
+    { $match: { campusId: typeof campusId === 'string' ? campusId : { $in: campusIds }, ...(userIds ? { userId: { $in: userIds } } : {}),
+      occurredAt: { $gte: from, $lt: until }, type: { $in: ['VIEWED', 'JOINED', 'LEFT'] } } },
     { $group: { _id: '$type', count: { $sum: 1 }, legacy: { $sum: { $cond: [{ $eq: ['$provenance', 'LEGACY_STATE'] }, 1, 0] } } } },
   ]).toArray();
   return { viewed: counts.find(row => row._id === 'VIEWED')?.count ?? 0,
@@ -96,13 +98,46 @@ export async function countActivityInteractions(campusId: string, from: Date, un
     legacyEvents: counts.reduce((total, row) => total + row.legacy, 0) };
 }
 
-/** Agrega hechos existentes; no excluye contenido retirado ni actores desactivados. */
-export async function readDashboardMetrics(client: PoolClient, campusId: string, institutionId: string, from: Date, until: Date) {
-  const scope = (await client.query<DashboardScope>(
-    `SELECT c.id AS "campusId", c.nombre AS "campusName", i.id AS "institutionId", i.nombre AS "institutionName"
+/** Solo catálogos de sedes previamente autorizadas, dentro de la institución del perfil. */
+export async function readDashboardOptions(client: PoolClient, campusIds: string[], institutionId: string): Promise<DashboardOptions> {
+  const campuses = (await client.query<{ id: string; name: string; institutionName: string }>(
+    `SELECT c.id, c.nombre AS name, i.nombre AS "institutionName"
      FROM public.campus c JOIN public.institucion i ON i.id=c.institucion_id
-     WHERE c.id=$1 AND i.id=$2 AND c.activo`, [campusId, institutionId])).rows[0];
-  if (!scope) return null;
+     WHERE c.id=ANY($1::uuid[]) AND i.id=$2 AND c.activo ORDER BY c.nombre,c.id`, [campusIds, institutionId])).rows;
+  if (!campuses.length) return { institutions: [] };
+  const careers = (await client.query<{ id: string; name: string; campusIds: string[] }>(
+    `WITH relations AS (
+       SELECT carrera_id,campus_id FROM public.campus_carrera WHERE campus_id=ANY($1::uuid[])
+       UNION
+       SELECT pc.carrera_id,p.campus_id FROM public.publicacion_carrera pc
+       JOIN public.publicacion_recurso p ON p.id=pc.publicacion_id WHERE p.campus_id=ANY($1::uuid[])
+       UNION
+       SELECT uc.carrera_id,p.campus_id FROM public.usuario_carrera uc
+       JOIN public.perfil_usuario p ON p.id=uc.perfil_usuario_id
+       WHERE p.campus_id=ANY($1::uuid[]) AND p.institucion_id=$2
+     ) SELECT r.id,r.nombre AS name,array_agg(cc.campus_id ORDER BY cc.campus_id) AS "campusIds"
+     FROM public.carrera r JOIN relations cc ON cc.carrera_id=r.id
+     WHERE r.institucion_id=$2
+     GROUP BY r.id,r.nombre ORDER BY r.nombre,r.id`, [campuses.map(c => c.id), institutionId])).rows;
+  return { institutions: [{ id: institutionId, name: campuses[0].institutionName,
+    campuses: campuses.map(({ id, name }) => ({ id, name })), careers }] };
+}
+
+/** Agrega hechos existentes; no excluye contenido retirado ni actores desactivados. */
+export async function readDashboardMetrics(client: PoolClient, campusId: string | string[], institutionId: string, from: Date, until: Date, careerId: string | null = null) {
+  const campusIds = [...new Set(typeof campusId === 'string' ? [campusId] : campusId)];
+  const institution = (await readDashboardOptions(client, campusIds, institutionId)).institutions[0];
+  if (!institution || institution.campuses.length !== campusIds.length) return null;
+  const career = careerId ? institution.careers.find(row => row.id === careerId) : null;
+  if (careerId && !career) return null;
+  const scope: DashboardScope = { institutionId, institutionName: institution.name,
+    campusId: campusIds.length === 1 ? campusIds[0] : null,
+    campusName: institution.campuses.map(c => c.name).join(', '), campuses: institution.campuses,
+    career: career ? { id: career.id, name: career.name } : null };
+  const careerUserIds = careerId ? (await client.query<{ id: string }>(
+    `SELECT p.id FROM public.perfil_usuario p WHERE p.institucion_id=$1
+       AND EXISTS(SELECT 1 FROM public.usuario_carrera uc WHERE uc.perfil_usuario_id=p.id AND uc.carrera_id=$2)`,
+    [institutionId, careerId])).rows.map(row => row.id) : undefined;
 
   // El estado es global: una transición posterior en otro campus también permite deshacer el presente.
   // Conserva la precisión SQL y el corte exclusivo; no cuenta cuentas creadas después del corte.
@@ -120,32 +155,38 @@ export async function readDashboardMetrics(client: PoolClient, campusId: string,
      )
      SELECT count(*)::text AS count FROM public.perfil_usuario p
      LEFT JOIN following f ON f.entidad_id=p.id::text LEFT JOIN previous v ON v.entidad_id=p.id::text
-     WHERE p.campus_id=$1 AND p.institucion_id=$2 AND p.created_at<$3::timestamptz
+     WHERE p.campus_id=ANY($1::uuid[]) AND p.institucion_id=$2 AND p.created_at<$3::timestamptz
+       AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM public.usuario_carrera uc WHERE uc.perfil_usuario_id=p.id AND uc.carrera_id=$4))
        AND (p.deleted_at IS NULL OR p.deleted_at>=$3::timestamptz)
-       AND coalesce(f.before,v.after,p.estado_cuenta)='ACTIVA'`, [campusId, institutionId, until]);
+       AND coalesce(f.before,v.after,p.estado_cuenta)='ACTIVA'`, [campusIds, institutionId, until, careerId]);
 
   // Primero agrupa por publicación; asociar varias asignaturas no multiplica el total de recursos.
   const demand = (await client.query<{ views: string; requests: string; subjects: SubjectDemand[] }>(
-    `WITH facts AS (
+    `WITH eligible AS (
+       SELECT p.id,p.campus_id FROM public.publicacion_recurso p
+       WHERE p.campus_id=ANY($1::uuid[]) AND ($4::uuid IS NULL OR
+         EXISTS(SELECT 1 FROM public.publicacion_carrera pc WHERE pc.publicacion_id=p.id AND pc.carrera_id=$4))
+     ), facts AS (
        SELECT p.id, count(*) AS views, 0::bigint AS requests
-       FROM public.interaccion_recurso v JOIN public.publicacion_recurso p ON p.id=v.publicacion_id
-       WHERE p.campus_id=$1 AND v.tipo_interaccion='VISTA' AND v.created_at>=$2::timestamptz AND v.created_at<$3::timestamptz
+       FROM public.interaccion_recurso v JOIN eligible p ON p.id=v.publicacion_id
+       WHERE v.tipo_interaccion='VISTA' AND v.created_at>=$2::timestamptz AND v.created_at<$3::timestamptz
        GROUP BY p.id
        UNION ALL
        SELECT p.id, 0::bigint, count(*) FROM public.solicitud_recurso r
-       JOIN public.publicacion_recurso p ON p.id=r.publicacion_id
-       WHERE p.campus_id=$1 AND r.solicitada_en>=$2::timestamptz AND r.solicitada_en<$3::timestamptz
+       JOIN eligible p ON p.id=r.publicacion_id
+       WHERE r.solicitada_en>=$2::timestamptz AND r.solicitada_en<$3::timestamptz
        GROUP BY p.id
      ), publications AS (
        SELECT id, sum(views) AS views, sum(requests) AS requests FROM facts GROUP BY id
      ), subjects AS (
        SELECT a.id AS "subjectId", a.nombre AS "subjectName", sum(p.views) AS views, sum(p.requests) AS requests
        FROM publications p JOIN public.publicacion_asignatura pa ON pa.publicacion_id=p.id
-       JOIN public.asignatura a ON a.id=pa.asignatura_id GROUP BY a.id,a.nombre
+       JOIN public.asignatura a ON a.id=pa.asignatura_id
+       GROUP BY a.id,a.nombre
      )
      SELECT coalesce(sum(views),0)::text AS views, coalesce(sum(requests),0)::text AS requests,
        (SELECT coalesce(jsonb_agg(s ORDER BY s."subjectName",s."subjectId"),'[]'::jsonb) FROM subjects s) AS subjects
-     FROM publications`, [campusId, from, until])).rows[0];
-  return { scope, activeUsers: Number(active.rows[0].count),
+     FROM publications`, [campusIds, from, until, careerId])).rows[0];
+  return { scope, careerUserIds, activeUsers: Number(active.rows[0].count),
     resourceDemand: { views: Number(demand.views), requests: Number(demand.requests) }, subjectDemand: demand.subjects };
 }

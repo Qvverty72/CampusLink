@@ -11,13 +11,13 @@ import { Db } from 'mongodb';
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), otherCampus = randomUUID(), foreignInstitution = randomUUID(), foreignCampus = randomUUID();
 const reader = randomUUID(), token = 'analytics.test.token';
-const tables = ['institucion','campus','perfil_usuario','rol','permiso','usuario_rol','usuario_permiso',
-  'publicacion_recurso','asignatura','publicacion_asignatura','mensaje_solicitud','solicitud_recurso',
+const tables = ['institucion','campus','carrera','campus_carrera','perfil_usuario','usuario_carrera','rol','permiso','usuario_rol','usuario_permiso',
+  'publicacion_recurso','asignatura','carrera_asignatura','publicacion_carrera','publicacion_asignatura','mensaje_solicitud','solicitud_recurso',
   'interaccion_recurso','reporte_contenido','auditoria'];
 const client = { query: (sql: string, params?: unknown[]) => db.query(sql, params) } as unknown as PoolClient;
 const start = new Date('2026-10-10T00:00:00Z'), until = new Date('2026-10-11T00:00:00Z');
 let server: Server, base: string, sqlFailure = false, mongoFailure = false, mongoReads = 0, invalidAuth = false;
-let events: { campusId: string; occurredAt: Date; type: string; provenance?: string }[] = [];
+let events: { campusId: string; userId?: string; occurredAt: Date; type: string; provenance?: string }[] = [];
 let readMetrics: typeof import('../src/modules/analytics/analytics.repository.js').readDashboardMetrics;
 
 before(async () => {
@@ -40,7 +40,8 @@ before(async () => {
     const match = pipeline[0].$match;
     assert.deepEqual(match.type.$in, ['VIEWED', 'JOINED', 'LEFT']);
     const groups = new Map<string, { _id: string; count: number; legacy: number }>();
-    for (const event of events.filter(row => row.campusId === match.campusId && row.occurredAt >= match.occurredAt.$gte
+    for (const event of events.filter(row => (typeof match.campusId === 'string' ? row.campusId === match.campusId : match.campusId.$in.includes(row.campusId))
+      && (!match.userId || match.userId.$in.includes(row.userId)) && row.occurredAt >= match.occurredAt.$gte
       && row.occurredAt < match.occurredAt.$lt && match.type.$in.includes(row.type))) {
       const group = groups.get(event.type) ?? { _id: event.type, count: 0, legacy: 0 };
       group.count++; if (event.provenance === 'LEGACY_STATE') group.legacy++; groups.set(event.type, group);
@@ -213,7 +214,12 @@ test('strict dates and filters reject invalid calendar dates, array/object param
   for (const query of ['', 'from=2026-02-30&to=2026-03-01', 'from=2026-10-11&to=2026-10-10',
     'from=2026-10-10&to=2026-10-10&campusId=invalid', 'from=2026-10-10&from=2026-10-09&to=2026-10-10',
     'from[x]=2026-10-10&to=2026-10-10', 'from=0000-01-01&to=2026-10-10',
-    'from=2026-10-10&to=2026-10-10&institutionId=' + institution]) {
+    'from=2026-10-10&to=2026-10-10&institutionId=bad',
+    'from=2026-10-10&to=2026-10-10&campusIds=',
+    'from=2026-10-10&to=2026-10-10&campusIds=' + campus + ',bad',
+    'from=2026-10-10&to=2026-10-10&campusIds=' + campus + '&campusIds=' + otherCampus,
+    'from=2026-10-10&to=2026-10-10&campusId=' + campus + '&campusIds=' + campus,
+    'from=2026-10-10&to=2026-10-10&careerId=bad']) {
     assert.equal((await request(query)).status, 400, query);
   }
   assert.equal(mongoReads, 0);
@@ -230,4 +236,108 @@ test('empty periods produce genuine zeroes; either database failure returns sani
     const body = await failed.text(); assert.doesNotMatch(body, /private|credentials|"activeUsers"/);
     assert.equal(failed.headers.get('cache-control'), 'no-store');
   }
+});
+
+async function academicFixtures() {
+  const career = randomUUID(), secondCareer = randomUUID(), foreignCareer = randomUUID(), unavailableCareer = randomUUID();
+  await db.query(`INSERT INTO carrera(id,institucion_id,nombre) VALUES
+    ($1,$5,'Informática'),($2,$5,'Diseño'),($3,$6,'Ajena'),($4,$5,'Solo otra sede')`,
+    [career, secondCareer, foreignCareer, unavailableCareer, institution, foreignInstitution]);
+  await db.query(`INSERT INTO campus_carrera VALUES($1,$4),($2,$4),($1,$5),($3,$6),($2,$7)`,
+    [campus, otherCampus, foreignCampus, career, secondCareer, foreignCareer, unavailableCareer]);
+  return { career, secondCareer, foreignCareer, unavailableCareer };
+}
+
+test('options expose only current reporting campuses and their institution/careers, including grants outside profile campus', async () => {
+  const { career, unavailableCareer } = await academicFixtures();
+  const optionsRequest = () => originalFetch(base.replace('/dashboard', '/options'), { headers: { Authorization: 'Bearer ' + token } });
+  let response = await optionsRequest(); assert.equal(response.status, 200);
+  let options = (await response.json()).data;
+  assert.equal(options.institutions.length, 1); assert.equal(options.institutions[0].id, institution);
+  assert.deepEqual(options.institutions[0].campuses.map((c: any) => c.id), [campus]);
+  assert.ok(!options.institutions[0].careers.some((c: any) => c.id === unavailableCareer));
+  assert.deepEqual(options.institutions[0].careers.find((c: any) => c.id === career).campusIds, [campus]);
+  await grant('ADMINISTRADOR', foreignCampus); // Una asignación inconsistente no abre otra institución.
+  await grant('ADMINISTRADOR', otherCampus);
+  await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE campus_id=$1', [campus]);
+  response = await optionsRequest(); assert.equal(response.status, 200); options = (await response.json()).data;
+  assert.deepEqual(options.institutions[0].campuses.map((c: any) => c.id), [otherCampus]);
+  await db.query('UPDATE campus SET activo=false WHERE id=$1', [otherCampus]);
+  assert.equal((await optionsRequest()).status, 403);
+  await db.query('UPDATE campus SET activo=true WHERE id=$1', [otherCampus]);
+  sqlFailure = true; assert.equal((await optionsRequest()).status, 503);
+});
+
+test('multi-campus and career filters apply to all KPI with current associations and no relationship fan-out', async () => {
+  const { career, secondCareer } = await academicFixtures();
+  await grant('ADMINISTRADOR', otherCampus);
+  const member = await profile(), otherMember = await profile(undefined, 'DESACTIVADA', undefined, otherCampus);
+  await change(otherMember, 'ACTIVA', 'DESACTIVADA', '2026-10-12');
+  await db.query('INSERT INTO usuario_carrera(perfil_usuario_id,carrera_id) VALUES($1,$3),($1,$4),($2,$3)',
+    [member, otherMember, career, secondCareer]);
+  const resource = await publication(), otherResource = await publication(otherCampus), excludedResource = await publication();
+  await db.query('INSERT INTO publicacion_carrera VALUES($1,$3),($1,$4),($2,$3)', [resource, otherResource, career, secondCareer]);
+  const shared = randomUUID(), unrelated = randomUUID();
+  await db.query("INSERT INTO asignatura(id,nombre,codigo,activo) VALUES($1,'Compartida','SHARED',false),($2,'Otra','OTHER',true)", [shared, unrelated]);
+  await db.query('INSERT INTO carrera_asignatura VALUES($1,$3,1),($2,$3,1),($2,$4,1)', [career, secondCareer, shared, unrelated]);
+  await db.query('INSERT INTO publicacion_asignatura VALUES($1,$3),($1,$4),($2,$3)', [resource, otherResource, shared, unrelated]);
+  await view(resource, '2026-10-10T12:00Z'); await requestResource(resource, '2026-10-10T12:00Z');
+  await view(otherResource, '2026-10-10T23:59:59.999999Z'); await view(excludedResource, '2026-10-10T12:00Z');
+  events = [
+    { campusId: campus, userId: member, occurredAt: start, type: 'JOINED' },
+    { campusId: campus, userId: member, occurredAt: start, type: 'LEFT' },
+    { campusId: otherCampus, userId: otherMember, occurredAt: start, type: 'JOINED', provenance: 'LEGACY_STATE' },
+    { campusId: campus, userId: reader, occurredAt: start, type: 'JOINED' },
+    { campusId: foreignCampus, userId: member, occurredAt: start, type: 'JOINED' },
+    { campusId: campus, userId: member, occurredAt: until, type: 'JOINED' },
+  ];
+  const filters = `from=2026-10-10&to=2026-10-10&institutionId=${institution}&campusIds=${campus},${otherCampus},${campus}`;
+  const response = await request(filters + '&careerId=' + career); assert.equal(response.status, 200);
+  const { data } = await response.json();
+  assert.equal(data.activeUsers.value, 2); assert.deepEqual([data.resourceDemand.views, data.resourceDemand.requests], [2, 1]);
+  assert.deepEqual(data.subjectDemand.subjects.map((s: any) => [s.subjectId, s.views, s.requests]), [[shared, 2, 1], [unrelated, 1, 1]]);
+  assert.equal(data.activityParticipation.value, 2); assert.equal(data.activityParticipation.legacyEvents, 1);
+  assert.equal(data.scope.campusId, null); assert.equal(data.scope.campuses.length, 2); assert.equal(data.scope.career.id, career);
+  for (const metric of ['activeUsers','resourceDemand','subjectDemand','activityParticipation']) assert.deepEqual(data[metric].scope, data.scope);
+  assert.ok(data.notes.some((n: string) => n.includes('no deben sumarse')));
+  const all = (await (await request(filters)).json()).data;
+  assert.equal(all.resourceDemand.views, 3); assert.equal(all.activityParticipation.value, 3);
+  const other = (await (await request(filters + '&careerId=' + secondCareer)).json()).data;
+  assert.equal(other.activeUsers.value, 1); assert.equal(other.resourceDemand.views, 1); assert.equal(other.activityParticipation.value, 1);
+  // Las mismas personas/recursos pueden aparecer en otra carrera. Cambios posteriores afectan consultas dinámicas.
+  await db.query('DELETE FROM usuario_carrera WHERE carrera_id=$1', [career]);
+  await db.query('DELETE FROM publicacion_carrera WHERE carrera_id=$1', [career]);
+  const changed = (await (await request(filters + '&careerId=' + career)).json()).data;
+  assert.equal(changed.activeUsers.value, 0); assert.equal(changed.resourceDemand.value, 0); assert.equal(changed.activityParticipation.value, 0);
+});
+
+test('mixed unauthorized/inactive campuses, foreign institution and invalid career scope are rejected before Mongo reads', async () => {
+  const { foreignCareer, unavailableCareer } = await academicFixtures();
+  const filter = `from=2026-10-10&to=2026-10-10`;
+  for (const suffix of [`&campusIds=${campus},${otherCampus}`, `&institutionId=${foreignInstitution}`,
+    `&careerId=${foreignCareer}`, `&careerId=${unavailableCareer}`, `&careerId=${randomUUID()}`]) {
+    assert.equal((await request(filter + suffix)).status, 403, suffix);
+  }
+  assert.equal(mongoReads, 0);
+  await grant('ADMINISTRADOR', otherCampus);
+  assert.equal((await request(filter + '&careerId=' + unavailableCareer + '&campusIds=' + campus + ',' + otherCampus)).status, 200);
+  await db.query('UPDATE campus SET activo=false WHERE id=$1', [otherCampus]);
+  mongoReads = 0;
+  assert.equal((await request(filter + '&campusIds=' + campus + ',' + otherCampus)).status, 403);
+  assert.equal(mongoReads, 0);
+});
+
+test('direct digital careers need not be offered at origin campus, and independent subjects and inactive academic links remain reportable', async () => {
+  const { unavailableCareer } = await academicFixtures();
+  const digital = await publication(campus, 'DIGITAL'), subject = randomUUID();
+  await db.query('INSERT INTO publicacion_carrera VALUES($1,$2)', [digital, unavailableCareer]);
+  await db.query("INSERT INTO asignatura(id,codigo,nombre,activo) VALUES($1,'INDEPENDENT','Directa',false)", [subject]);
+  await db.query('INSERT INTO publicacion_asignatura VALUES($1,$2)', [digital, subject]);
+  await db.query('UPDATE carrera SET activo=false WHERE id=$1', [unavailableCareer]);
+  await view(digital, '2026-10-10T12:00Z');
+  const response = await request('from=2026-10-10&to=2026-10-10&careerId=' + unavailableCareer);
+  assert.equal(response.status, 200); const { data } = await response.json();
+  assert.equal(data.resourceDemand.views, 1); assert.equal(data.subjectDemand.value, 1);
+  assert.equal(data.subjectDemand.subjects[0].subjectId, subject);
+  assert.equal(data.scope.campusId, campus); assert.equal(data.scope.career.id, unavailableCareer);
 });

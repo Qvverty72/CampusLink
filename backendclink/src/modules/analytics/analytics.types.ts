@@ -2,12 +2,18 @@ import type { ModuleHealth } from '../../types/api.types.js';
 
 export type AnalyticsHealth = ModuleHealth<'analytics'>;
 
-export interface DashboardQuery { campusId: string; from: string; to: string }
+export interface DashboardQuery { institutionId: string; campusIds: string[]; careerId: string | null; from: string; to: string }
+export interface DashboardOptions {
+  institutions: { id: string; name: string; campuses: { id: string; name: string }[];
+    careers: { id: string; name: string; campusIds: string[] }[] }[];
+}
 export interface DashboardScope {
   institutionId: string;
   institutionName: string;
-  campusId: string;
+  campusId: string | null;
   campusName: string;
+  campuses: { id: string; name: string }[];
+  career: { id: string; name: string } | null;
 }
 export interface DashboardPeriod { from: string; to: string; timeZone: 'UTC'; cutoff: string }
 export interface DashboardMetric { value: number; period: DashboardPeriod; scope: DashboardScope }
