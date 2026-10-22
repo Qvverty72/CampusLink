@@ -3,7 +3,16 @@ import type { AuthProfile, VerifiedAuthConnection } from './auth.types.js';
 
 /** Exige que el perfil pertenezca al usuario y esté ACTIVA, sin marca de eliminación. */
 export function requireActiveAccount(profile: Pick<AuthProfile, 'id'> & { estado_cuenta: string; deleted_at: unknown }, userId: string) {
-  if (profile.id !== userId || profile.estado_cuenta !== 'ACTIVA' || profile.deleted_at) {
+  if (profile.id !== userId || profile.deleted_at) {
+    throw new ApiError(403, 'FORBIDDEN', 'An active account profile is required');
+  }
+  if (profile.estado_cuenta === 'SUSPENDIDA') {
+    throw new ApiError(403, 'ACCOUNT_SUSPENDED', 'Tu cuenta está suspendida. Contacta a la administración de tu campus.');
+  }
+  if (profile.estado_cuenta === 'DESACTIVADA') {
+    throw new ApiError(403, 'ACCOUNT_DEACTIVATED', 'Tu cuenta está desactivada. Contacta a la administración de tu campus.');
+  }
+  if (profile.estado_cuenta !== 'ACTIVA') {
     throw new ApiError(403, 'FORBIDDEN', 'An active account profile is required');
   }
 }

@@ -49,7 +49,7 @@ const bundle = await build({
     ` : args.path.endsWith('authApi') ? `
       export function loadAuthIdentity(signal) { return new Promise((resolve, reject) => globalThis.__qa.requests.push({ signal, resolve, reject })); }
     ` : args.path.endsWith('supabaseClient') ? `export const getSupabaseClient = () => globalThis.__qa.client;` : `
-      export class AuthApiError extends Error { constructor(status) { super('API ' + status); this.status = status; } }
+      export class AuthApiError extends Error { constructor(status, message, code) { super('API ' + status); this.status = status; this.code = code; } }
     `, loader: 'js' }));
   } }],
 });
@@ -108,9 +108,27 @@ try {
     await resolveRequest(index, identity('peer', 'other-campus')); await waitStatus('ready');
     index = await nextRequest(() => page.evaluate(() => globalThis.__qa.activate('active')));
     await resolveRequest(index, identity('wrong-uuid')); await waitStatus('forbidden');
-    index = await nextRequest(() => emit('SIGNED_IN', session('peer'))); await resolveRequest(index, identity('peer')); await waitStatus('ready');
+    index = await nextRequest(() => page.evaluate(() => globalThis.__qa.auth.refreshIdentity())); await resolveRequest(index, identity('peer')); await waitStatus('ready');
     index = await nextRequest(() => page.evaluate(() => globalThis.__qa.activate('active')));
     await rejectRequest(index, 403); await waitStatus('forbidden');
+    for (const code of ['ACCOUNT_SUSPENDED', 'ACCOUNT_DEACTIVATED', 'REGISTRATION_REQUIRED', 'FORBIDDEN']) {
+      index = await nextRequest(() => page.evaluate(() => globalThis.__qa.auth.refreshIdentity()));
+      await page.evaluate(([index, code]) => globalThis.__qa.requests[index].reject(new globalThis.__qa.AuthApiError(403, undefined, code)), [index, code]);
+      await waitStatus('forbidden');
+      assert.equal(await page.evaluate(() => globalThis.__qa.auth.denialCode), code);
+      const count = await requestCount();
+      for (let repeat = 0; repeat < 3; repeat++) {
+        await emit('TOKEN_REFRESHED', session('peer', 'token-' + repeat));
+        await emit('SIGNED_IN', session('peer', 'token-' + repeat));
+        await page.evaluate(() => { globalThis.__qa.activate('background'); globalThis.__qa.activate('active'); });
+      }
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await requestCount(), count, 'Blocked accounts must not revalidate automatically');
+      await waitStatus('forbidden');
+      assert.equal(await page.locator('input').count(), 0);
+    }
+    index = await nextRequest(() => emit('SIGNED_IN', session('another-account')));
+    await resolveRequest(index, identity('another-account')); await waitStatus('ready');
     await page.evaluate(() => globalThis.__qa.auth.signOut()); await waitStatus('signedOut');
     assert.equal(await page.evaluate(() => globalThis.__qa.signOutScope), 'local');
     await page.evaluate(() => globalThis.__qa.unmount());

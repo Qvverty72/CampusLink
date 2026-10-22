@@ -330,7 +330,7 @@ export async function verifyAuthConnection(accessToken: string): Promise<Verifie
     const profile = await findAuthProfile(accessToken, identity.userId);
     if (profile.error) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Profile service is unavailable');
     if (!profile.data) {
-      throw new ApiError(403, 'FORBIDDEN', 'An active account profile is required');
+      throw new ApiError(403, 'REGISTRATION_REQUIRED', 'Falta completar tu registro institucional.');
     }
     requireActiveProfile(profile.data, identity.userId);
     const [roles, permissions] = await Promise.all([

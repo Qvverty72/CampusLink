@@ -12,10 +12,12 @@ export function useAuthSession(): AuthContextValue {
   const [identity, setIdentity] = useState<AuthIdentity | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [denialCode, setDenialCode] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const [revision, setRevision] = useState(0);
   const pendingRequest = useRef<AbortController | null>(null);
   const verifiedIdentity = useRef<AuthIdentity | null>(null);
+  const deniedAccount = useRef<string | null>(null);
   const signOut = useCallback(async () => {
     try {
       const client = getSupabaseClient();
@@ -31,6 +33,7 @@ export function useAuthSession(): AuthContextValue {
     }
   }, []);
   const refreshIdentity = useCallback(() => {
+    deniedAccount.current = null;
     pendingRequest.current?.abort();
     // Revalidar la misma cuenta no debe retirar rutas ni descartar sus formularios.
     setRevision(value => value + 1);
@@ -47,6 +50,13 @@ export function useAuthSession(): AuthContextValue {
     const auth = client.auth;
     // Supabase emite INITIAL_SESSION al restaurar persistencia; el callback se mantiene síncrono.
     const { data: { subscription } } = auth.onAuthStateChange((_event, nextSession) => {
+      // Un token nuevo no cambia el estado de una cuenta rechazada por el servidor.
+      if (nextSession && deniedAccount.current === nextSession.user.id) {
+        setSession(nextSession);
+        return;
+      }
+      deniedAccount.current = null;
+      setDenialCode(null);
       pendingRequest.current?.abort();
       const sameAccount = nextSession && verifiedIdentity.current?.userId === nextSession.user.id;
       if (!sameAccount) {
@@ -63,7 +73,7 @@ export function useAuthSession(): AuthContextValue {
       if (Platform.OS !== 'web') {
         if (state === 'active') auth.startAutoRefresh(); else auth.stopAutoRefresh();
       }
-      if (state === 'active') refreshIdentity();
+      if (state === 'active' && !deniedAccount.current) refreshIdentity();
     });
     if (Platform.OS !== 'web') {
       if (AppState.currentState === 'active') auth.startAutoRefresh(); else auth.stopAutoRefresh();
@@ -79,6 +89,7 @@ export function useAuthSession(): AuthContextValue {
   useEffect(() => {
     if (!restored) return;
     if (!session) { verifiedIdentity.current = null; setIdentity(null); setStatus('signedOut'); return; }
+    if (deniedAccount.current === session.user.id) return;
     const abort = new AbortController();
     pendingRequest.current = abort;
     const previousIdentity = verifiedIdentity.current;
@@ -96,6 +107,7 @@ export function useAuthSession(): AuthContextValue {
           throw new AuthApiError(403);
         }
         verifiedIdentity.current = value;
+        setDenialCode(null);
         setIdentity(value);
         setStatus('ready');
       }).catch(reason => {
@@ -108,13 +120,19 @@ export function useAuthSession(): AuthContextValue {
           return;
         }
         verifiedIdentity.current = null;
+        if (reason instanceof AuthApiError && reason.status === 403) {
+          deniedAccount.current = session.user.id;
+          setDenialCode(reason.code ?? 'FORBIDDEN');
+        }
         setIdentity(null);
         setStatus(reason instanceof AuthApiError && reason.status === 403 ? 'forbidden'
           : reason instanceof AuthApiError && reason.status === 401 ? 'signedOut' : 'error');
-        setError(reason instanceof AuthApiError ? reason.message : 'No se pudo consultar la cuenta.');
+        // El rechazo esperado se presenta por denialCode; error queda para fallos operativos.
+        setError(reason instanceof AuthApiError && reason.status === 403 ? null
+          : reason instanceof AuthApiError ? reason.message : 'No se pudo consultar la cuenta.');
       });
     return () => abort.abort();
   }, [session, restored, revision]);
 
-  return { session, identity, status, error, refreshIdentity, signOut };
+  return { session, identity, status, error, denialCode, refreshIdentity, signOut };
 }

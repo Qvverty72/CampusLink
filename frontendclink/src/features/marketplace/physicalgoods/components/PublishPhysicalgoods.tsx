@@ -68,7 +68,7 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
 function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; onGallery: (id: string) => void }) {
   const form = usePublishPhysicalgoods(onPublished);
   const { options, loading, busy, created } = form;
-  const choice = (label: string, selected: boolean, onPress: () => void) => <Pressable key={label} accessibilityRole="radio"
+  const choice = (id: string, label: string, selected: boolean, onPress: () => void) => <Pressable key={id} accessibilityRole="radio"
     accessibilityLabel={label} accessibilityState={{ checked: selected, disabled: busy }} disabled={busy} onPress={onPress}
     style={[styles.choice, selected && styles.selected, busy && styles.disabled]}><Text style={[styles.choiceText, selected && styles.selectedText]}>{label}</Text></Pressable>;
   if (loading) return <ActivityIndicator style={styles.loading} accessibilityLabel="Cargando opciones de publicación" />;
@@ -103,23 +103,23 @@ function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; 
     <Text style={styles.label}>Descripción</Text>
     <TextInput accessibilityLabel="Descripción del recurso" placeholder="Describe el recurso y lo que incluye" value={form.description} onChangeText={form.setDescription} maxLength={4000} multiline editable={!busy} style={[styles.input, styles.textarea]} />
     <Text style={styles.label}>Condición</Text>
-    <View style={styles.choices}>{resourceConditions.map(row => choice(row.label, form.condition === row.value, () => form.setCondition(row.value)))}</View>
+    <View style={styles.choices}>{resourceConditions.map(row => choice(row.value, row.label, form.condition === row.value, () => form.setCondition(row.value)))}</View>
     <Text style={styles.label}>Categoría</Text>
     <Text style={styles.hint}>Tipo de objeto físico que publicas.</Text>
-    <View style={styles.choices}>{options.categories.map(row => choice(row.name, form.categoryId === row.id, () => form.setCategoryId(row.id)))}</View>
+    <View style={styles.choices}>{options.categories.map(row => choice(row.id, row.name, form.categoryId === row.id, () => form.setCategoryId(row.id)))}</View>
     {!options.categories.length && <Text style={styles.error}>No hay categorías disponibles para publicar.</Text>}
     <Text style={styles.label}>Modalidad</Text>
-    <View style={styles.choices}>{choice('Venta', form.modality === 'VENTA', () => form.setModality('VENTA'))}{choice('Donación', form.modality === 'DONACION', () => form.setModality('DONACION'))}</View>
+    <View style={styles.choices}>{choice('VENTA', 'Venta', form.modality === 'VENTA', () => form.setModality('VENTA'))}{choice('DONACION', 'Donación', form.modality === 'DONACION', () => form.setModality('DONACION'))}</View>
     {form.modality === 'VENTA' && <>
       <Text style={styles.label}>Precio de venta (CLP)</Text>
       <TextInput accessibilityLabel="Precio de venta (CLP)" value={form.price} onChangeText={form.setPrice} placeholder="Ej. 15000" inputMode="decimal" editable={!busy} style={styles.input} />
     </>}
     <Text style={styles.label}>Carrera (opcional)</Text>
-    <View style={styles.choices}>{choice('Sin carrera', !form.careerId, () => form.setCareerId(''))}
-      {options.careers.map(row => choice(row.name, form.careerId === row.id, () => form.setCareerId(row.id)))}</View>
+    <View style={styles.choices}>{choice('no-career', 'Sin carrera', !form.careerId, () => form.setCareerId(''))}
+      {options.careers.map(row => choice(row.id, row.name, form.careerId === row.id, () => form.setCareerId(row.id)))}</View>
     <Text style={styles.label}>Asignatura (opcional)</Text>
-    <View style={styles.choices}>{choice('Sin asignatura', !form.subjectId, () => form.setSubjectId(''))}
-      {options.subjects.map(row => choice(row.name, form.subjectId === row.id, () => form.setSubjectId(row.id)))}</View>
+    <View style={styles.choices}>{choice('no-subject', 'Sin asignatura', !form.subjectId, () => form.setSubjectId(''))}
+      {options.subjects.map(row => choice(row.id, row.name, form.subjectId === row.id, () => form.setSubjectId(row.id)))}</View>
     {form.error && <Text accessibilityRole="alert" style={styles.error}>{form.error}</Text>}
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy || !options.categories.length }} disabled={busy || !options.categories.length}
       style={[styles.button, (busy || !options.categories.length) && styles.disabled]} onPress={() => void form.publish()}>

@@ -149,6 +149,22 @@ test('missing, mismatched, suspended, deactivated and deleted profiles cannot op
   assert.equal((await me()).status, 403);
 });
 
+test('verified account denial distinguishes account state from registration without granting access', async () => {
+  for (const [state, code] of [['SUSPENDIDA', 'ACCOUNT_SUSPENDED'], ['DESACTIVADA', 'ACCOUNT_DEACTIVATED']]) {
+    calls = []; profile.estado_cuenta = state;
+    const response = await me();
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, code);
+    assert.equal(calls.length, 2, 'No roles or permissions loaded for blocked account');
+  }
+  profile.id = otherCampus;
+  assert.equal((await (await me()).json()).error.code, 'FORBIDDEN', 'Never disclose another profile state');
+  missingProfile = true;
+  const response = await me();
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'REGISTRATION_REQUIRED');
+});
+
 test('the same device token sees current campus, permission revocation and suspension immediately', async () => {
   assert.equal((await me()).status, 200);
   calls = []; profile.campus_id = otherCampus; permissionRows = [];

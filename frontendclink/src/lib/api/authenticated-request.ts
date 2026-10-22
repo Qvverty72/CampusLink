@@ -2,7 +2,7 @@ import { getSupabaseClient } from '@/features/auth/api/supabaseClient';
 
 /** Error de cliente que conserva el estado HTTP y un mensaje acotado del servidor. */
 export class AuthApiError extends Error {
-  constructor(public readonly status: number, public readonly serverMessage?: string) {
+  constructor(public readonly status: number, public readonly serverMessage?: string, public readonly code?: string) {
     super(status === 401 ? 'La sesión no es válida.' : status === 403
       ? 'La cuenta no tiene acceso.' : 'No se pudo consultar la cuenta.');
   }
@@ -42,12 +42,16 @@ export async function authenticatedResponseRequest(path: string, init: RequestIn
   const response = await fetch(baseUrl + path + (search ? '?' + search : ''), { ...init, headers, cache: 'no-store', redirect: 'error' });
   if (!response.ok) {
     let message: string | undefined;
+    let code: string | undefined;
     try {
       const body: unknown = await response.json();
       if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'object'
+        && body.error !== null && 'code' in body.error && typeof body.error.code === 'string'
+        && /^[A-Z_]{1,64}$/.test(body.error.code)) code = body.error.code;
+      if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'object'
         && body.error !== null && 'message' in body.error && typeof body.error.message === 'string' && body.error.message.length <= 500) message = body.error.message;
     } catch { /* Si la respuesta no es JSON, se conserva de todos modos el estado HTTP. */ }
-    throw new AuthApiError(response.status, message);
+    throw new AuthApiError(response.status, message, code);
   }
   return response;
 }

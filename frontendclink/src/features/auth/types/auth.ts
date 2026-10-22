@@ -35,6 +35,8 @@ export interface AuthContextValue {
   identity: AuthIdentity | null;
   status: AuthStatus;
   error: string | null;
+  /** Motivo confirmado por /me; nunca se deduce de metadatos del token. */
+  denialCode?: string | null;
   refreshIdentity: () => void;
   signOut: () => Promise<void>;
 }

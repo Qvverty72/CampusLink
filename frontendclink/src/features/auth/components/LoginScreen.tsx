@@ -9,6 +9,14 @@ export function LoginScreen() {
   const { auth, email, setEmail, password, setPassword, busy, setBusy, error, submit } = useLogin();
   if (auth.status === 'ready') return <Redirect href="/profile" />;
   const loading = auth.status === 'loading';
+  const denied = auth.status === 'forbidden';
+  const denialMessage = auth.denialCode === 'ACCOUNT_SUSPENDED'
+    ? 'Tu cuenta está suspendida. Contacta a la administración de tu campus.'
+    : auth.denialCode === 'ACCOUNT_DEACTIVATED'
+      ? 'Tu cuenta está desactivada. Contacta a la administración de tu campus.'
+      : auth.denialCode === 'REGISTRATION_REQUIRED'
+        ? 'Falta completar tu registro institucional.'
+        : 'Tu cuenta no tiene acceso. Contacta a la administración de tu campus.';
   return <SafeAreaView style={styles.page}>
     <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -17,11 +25,11 @@ export function LoginScreen() {
         <Text style={styles.description}>Ingresa con el correo y la contraseña de tu cuenta.</Text>
         {loading ? <ActivityIndicator color="#74C69D" accessibilityLabel="Consultando tu cuenta" />
           : auth.session ? <>
-            <Text style={styles.description}>{auth.status === 'forbidden'
-              ? 'Tu cuenta no tiene acceso o falta completar tu registro.'
+            <Text accessibilityRole={denied ? 'alert' : undefined} style={styles.description}>{denied
+              ? denialMessage
               : 'No se pudo validar el acceso de tu cuenta.'}</Text>
-            <Pressable accessibilityRole="button" onPress={auth.refreshIdentity} style={styles.button}><Text style={styles.buttonText}>Reintentar consulta</Text></Pressable>
-            {auth.status === 'forbidden' && <Link href="/register" style={styles.link}>Completar registro institucional</Link>}
+            <Pressable accessibilityRole="button" onPress={auth.refreshIdentity} style={styles.button}><Text style={styles.buttonText}>Reintentar</Text></Pressable>
+            {denied && auth.denialCode === 'REGISTRATION_REQUIRED' && <Link href="/register" style={styles.link}>Completar registro institucional</Link>}
             <Pressable accessibilityRole="button" disabled={busy} onPress={async () => {
               if (busy) return; setBusy(true); await auth.signOut(); setBusy(false);
             }}><Text style={styles.link}>Cerrar sesión</Text></Pressable>
