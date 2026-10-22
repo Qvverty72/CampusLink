@@ -49,16 +49,16 @@ export function ProfileScreen() {
               <Text style={styles.moduleLinkText}>Administrar cuentas y accesos</Text>
             </Pressable>
           </Link>}
-          {identity?.capabilities.reports && <Link href={'/reports'} asChild>
+          {canManageAccess(identity?.roles ?? []) && <Link href={'/reports'} asChild>
             <Pressable
               accessibilityRole={'button'}
-              accessibilityLabel={'Ir a Reportes'}
+              accessibilityLabel={'Revisar denuncias de contenido'}
               style={({ pressed }) => [
                 styles.moduleLink,
                 pressed && styles.moduleLinkPressed,
               ]}
             >
-              <Text style={styles.moduleLinkText}>Reportes</Text>
+              <Text style={styles.moduleLinkText}>Denuncias de contenido</Text>
               <Text style={styles.moduleLinkArrow}>→</Text>
             </Pressable>
           </Link>}

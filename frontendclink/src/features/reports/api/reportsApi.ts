@@ -2,6 +2,20 @@ import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
 import type { ActivityReportInput, ActivityReportReceipt } from '../types/activityReport';
 import type { ContentReportInput, ContentReportTarget, PhysicalgoodsReportReceipt } from '../types/contentReport';
+import { authenticatedRequest, authenticatedResponseRequest } from '@/lib/api/authenticated-request';
+import type { ReportReviewDetail, ReportReviewSummary, ReviewPage } from '../types/review';
+
+const reviewPath = (campusId: string) => '/api/v1/reports/campuses/' + encodeURIComponent(campusId);
+export const loadReportReviews = (campusId: string, page: number, signal: AbortSignal): Promise<ReviewPage> =>
+  authenticatedEnvelopeRequest<ReportReviewSummary[], ReviewPage['meta']>(reviewPath(campusId), { signal },
+    new URLSearchParams({ page: String(page), limit: '20' }));
+export const loadReportReview = (campusId: string, id: string, signal: AbortSignal) =>
+  authenticatedRequest<ReportReviewDetail>(reviewPath(campusId) + '/' + encodeURIComponent(id), { signal });
+export async function downloadReportedFile(campusId: string, id: string, fileId: string, signal: AbortSignal) {
+  const response = await authenticatedResponseRequest(reviewPath(campusId) + '/' + encodeURIComponent(id) + '/files/' + encodeURIComponent(fileId), { signal });
+  if (response.headers.get('content-type')?.split(';')[0] !== 'application/octet-stream') throw new Error('Respuesta de archivo inesperada.');
+  return response.blob();
+}
 
 /** Envía una denuncia y valida que el recibo corresponda al campus y actividad solicitados. */
 export async function submitActivityReport(campusId: string, activityId: string, input: ActivityReportInput,

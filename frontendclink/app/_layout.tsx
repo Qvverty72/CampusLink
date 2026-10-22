@@ -4,6 +4,7 @@ import { StatusBar } from 'react-native';
 import { AuthProvider } from '@/features/auth/components/AuthProvider';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { canAccessAnalytics } from '@/features/analytics/types/access';
+import { canManageAccess } from '@/features/users/types/access';
 
 /** Instala el proveedor de autenticación antes de montar las rutas de Expo Router. */
 export default function RootLayout() {
@@ -37,7 +38,7 @@ function AppNavigation() {
         <Stack.Protected guard={ready && canAccessAnalytics(auth.identity)}>
           <Stack.Screen name={'(analytics)'} options={{ animation: 'fade' }} />
         </Stack.Protected>
-        <Stack.Protected guard={Boolean(capabilities?.reports)}>
+        <Stack.Protected guard={ready && canManageAccess(auth.identity?.roles ?? [])}>
           <Stack.Screen name={'(reports)'} options={{ animation: 'fade' }} />
         </Stack.Protected>
       </Stack>
