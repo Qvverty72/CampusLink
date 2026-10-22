@@ -34,15 +34,16 @@ function AcademicChoices({ label, options, previous = [], selected, onChange, di
   label: string; options: DigitalAcademicOption[]; previous?: DigitalAcademicOption[];
   selected: string[]; onChange: (ids: string[]) => void; disabled: boolean;
 }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(''), [limit, setLimit] = useState(20);
   const unavailable = previous.filter(row => selected.includes(row.id) && !options.some(option => option.id === row.id));
   const needle = search.trim().toLocaleLowerCase();
-  const visible = options.filter(row => selected.includes(row.id) || `${row.name} ${row.code ?? ''}`.toLocaleLowerCase().includes(needle));
+  const matches = options.filter(row => !selected.includes(row.id) && `${row.name} ${row.code ?? ''}`.toLocaleLowerCase().includes(needle));
+  const visible = [...options.filter(row => selected.includes(row.id)), ...matches.slice(0, limit)];
   function toggle(id: string) { onChange(selected.includes(id) ? selected.filter(value => value !== id) : [...selected, id]); }
   return <View style={styles.section}>
     <Text style={styles.label}>{label} · {selected.length} seleccionada{selected.length === 1 ? '' : 's'}</Text>
     {options.length > 8 && <TextInput accessibilityLabel={`Buscar ${label.toLowerCase()}`} placeholder={`Buscar ${label.toLowerCase()} por nombre o código`}
-      value={search} onChangeText={setSearch} editable={!disabled} style={styles.search} />}
+      value={search} onChangeText={value => { setSearch(value); setLimit(20); }} editable={!disabled} style={styles.search} />}
     {!options.length && <Text style={styles.helper}>Aún no hay {label.toLowerCase()} disponibles en el catálogo de tu institución.</Text>}
     {[...unavailable, ...visible].map(row => {
       const checked = selected.includes(row.id), missing = unavailable.some(value => value.id === row.id);
@@ -56,6 +57,10 @@ function AcademicChoices({ label, options, previous = [], selected, onChange, di
         </View>
       </Pressable>;
     })}
+    {matches.length > limit && <Pressable accessibilityRole="button" accessibilityLabel={`Mostrar más ${label.toLowerCase()}`}
+      disabled={disabled} onPress={() => setLimit(value => value + 20)} style={styles.action}>
+      <Text style={styles.link}>Mostrar más ({Math.min(limit, matches.length)} de {matches.length})</Text>
+    </Pressable>}
     {options.length > 0 && !visible.length && <Text style={styles.helper}>No hay coincidencias.</Text>}
   </View>;
 }

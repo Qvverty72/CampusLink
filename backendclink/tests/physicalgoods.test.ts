@@ -142,6 +142,10 @@ before(async () => {
   }
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_05_edicion_fisica.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_4_06_mensajes_solicitud.sql','utf8'));
+  // Restricción presente en la base real: una cancelación necesita motivo, actor y fecha.
+  await db.exec(`ALTER TABLE public.transaccion_recurso ADD CONSTRAINT transaccion_cancelacion_chk CHECK (
+    (estado_transaccion='CANCELADA' AND cancelada_por_id IS NOT NULL AND cancelada_en IS NOT NULL AND motivo_cancelacion IS NOT NULL)
+    OR (estado_transaccion<>'CANCELADA' AND cancelada_por_id IS NULL AND cancelada_en IS NULL AND motivo_cancelacion IS NULL AND detalle_cancelacion IS NULL))`);
   await db.exec(await readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql','utf8'));
   await db.exec('ALTER TABLE public.valoracion ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON public.valoracion TO service_role;');
   await db.exec('ALTER TABLE public.reporte_contenido ENABLE ROW LEVEL SECURITY; GRANT SELECT,INSERT,UPDATE,DELETE ON public.reporte_contenido TO service_role;');
@@ -967,6 +971,7 @@ test('cancelled agreement releases the resource, records actor/time, keeps other
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CONFIRMAR');
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
   const cancelled=(await transactionRows(saved.id)).rows[0];assert.equal(cancelled.estado_transaccion,'CANCELADA');assert.equal(cancelled.cancelada_por_id,first.userId);assert.ok(cancelled.cancelada_en);assert.equal(cancelled.completada_en,null);
+  assert.equal(cancelled.motivo_cancelacion,'USUARIO_DESISTE');assert.equal(cancelled.detalle_cancelacion,null);
   assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'DISPONIBLE');assert.equal((await requestsService.getPhysicalgoodsRequestOptions(first,saved.id)).canRequest,true);
   assert.equal((await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest?.status,'PENDIENTE');
   await resolveRequest(saved.id,b.id);assert.equal((await transactionRows(saved.id)).rows.length,2);

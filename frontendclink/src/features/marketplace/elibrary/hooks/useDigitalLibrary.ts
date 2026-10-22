@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { attachDigitalFile, downloadDigitalFile, loadDigitalAcademicCatalog, loadDigitalPublication, searchDigitalPublications, publishDigitalPublication, updateDigitalAcademics } from '../api/elibraryApi';
-import { pickDigitalFiles, releaseDigitalFile } from '../api/documentPicker';
+import { mergeUniqueDigitalFiles, pickDigitalFiles, releaseDigitalFile } from '../api/documentPicker';
 import { saveDigitalFile } from '../api/saveDigitalFile';
 import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalFilters, DigitalInput, DigitalPublication } from '../types/publication';
 
@@ -62,8 +62,12 @@ export function useDigitalLibrary() {
     picking.current = true; setPickingFile(true); setError(null);
     try {
       const chosen = await pickDigitalFiles();
-      if (mounted.current) setFiles(previous => [...previous, ...chosen]);
-      else chosen.forEach(releaseDigitalFile);
+      if (!mounted.current) { chosen.forEach(releaseDigitalFile); return; }
+      const previous = localFiles.current, selection = await mergeUniqueDigitalFiles(previous, chosen);
+      if (mounted.current) {
+        setFiles(selection.files);
+        if (selection.duplicates.length) setError(`No se agregó «${selection.duplicates[0]}»: ese mismo contenido ya está seleccionado. Cada archivo puede adjuntarse una sola vez por publicación.`);
+      } else selection.files.filter(file => !previous.includes(file)).forEach(releaseDigitalFile);
     }
     catch (reason) { if (mounted.current) showError(reason); }
     finally { picking.current = false; if (mounted.current) setPickingFile(false); }

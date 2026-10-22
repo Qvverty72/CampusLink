@@ -1,4 +1,4 @@
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFStream } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFObject, PDFStream, PDFString } from 'pdf-lib';
 import { ApiError } from '../../../services/api-response.js';
 import type { DigitalAcademicCatalog, DigitalInput, DigitalUpload } from './elibrary.types.js';
 
@@ -66,38 +66,103 @@ export function validateDigitalAcademics(input: Pick<DigitalInput, 'careerIds' |
   }
 }
 
-/** Política PDF confirmada para F2.5-02: sin cifrado, acciones ni adjuntos embebidos. */
-export async function validateDigitalFile(file: DigitalUpload | undefined): Promise<DigitalUpload> {
-  if (!file || !Buffer.isBuffer(file.bytes) || !file.bytes.length) return invalidDigital('file', 'Selecciona un archivo PDF.');
-  if (file.bytes.length > DIGITAL_MAX_BYTES) throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'El archivo debe pesar como máximo 25 MB.');
-  const name = text(file.name, 'file', 255);
-  if (/[\\/\u0000-\u001f\u007f]/.test(name) || !/\.pdf$/i.test(name) || file.mimeType !== 'application/pdf') {
-    return invalidDigital('file', 'Por ahora se admiten archivos PDF sin contraseña, acciones ni adjuntos.');
+const pdfActions = new Set(['GoTo', 'GoToR', 'GoToE', 'Launch', 'Thread', 'URI', 'Sound', 'Movie', 'Hide', 'Named',
+  'SubmitForm', 'ResetForm', 'ImportData', 'JavaScript', 'SetOCGState', 'Rendition', 'Trans', 'GoTo3DView', 'RichMediaExecute']);
+
+/** Valida destinos sin abrirlos ni enviarlos a servicios externos. */
+function validatePdfLink(value: PDFObject | undefined): void {
+  if (!(value instanceof PDFString || value instanceof PDFHexString)) {
+    invalidDigital('file', 'El PDF contiene un enlace inválido. Corrígelo y vuelve a exportar el documento.');
   }
+  const uri = value.decodeText();
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(uri)?.[1].toLowerCase();
+  if (scheme === 'http') invalidDigital('file', 'El PDF contiene un enlace HTTP. Cámbialo a HTTPS y vuelve a exportar el documento.');
+  if (!scheme || !['https', 'mailto', 'tel'].includes(scheme)) {
+    invalidDigital('file', 'El PDF contiene un enlace no permitido. Solo se admiten enlaces HTTPS, correo y teléfono.');
+  }
+  try {
+    if (/[\s\\\u0000-\u001f\u007f]/.test(uri)) throw new Error();
+    const url = new URL(uri), destination = decodeURIComponent(url.pathname);
+    if (/[\u0000-\u001f\u007f]/.test(destination)) throw new Error();
+    if (scheme === 'https' && (!/^https:\/\//i.test(uri) || !url.hostname)) throw new Error();
+    if (scheme === 'mailto' && !destination.split(',').every(address => /^[^@\s]+@[^@\s]+$/.test(address))) throw new Error();
+    if (scheme === 'tel' && (!/\d/.test(destination) || !/^\+?[\d(). -]+(?:;[a-z\d-]+=[a-z\d.+-]+)*$/i.test(destination))) throw new Error();
+  } catch {
+    invalidDigital('file', 'El PDF contiene un enlace inválido. Corrígelo y vuelve a exportar el documento.');
+  }
+}
+
+/** Recorre objetos directos/indirectos, incluidos streams comprimidos, sin confundir /A de estructura con acciones. */
+function inspectDigitalPdf(pdf: PDFDocument): void {
+  const resolve = (value: PDFObject | undefined) => pdf.context.lookup(value);
+  const name = (dict: PDFDict, key: string) => {
+    const value = resolve(dict.get(PDFName.of(key)));
+    return value instanceof PDFName ? value.decodeText() : undefined;
+  };
+  const inspectAction = (value: PDFObject | undefined) => {
+    if (!(value instanceof PDFDict)) invalidDigital('file', 'El PDF contiene una acción inválida. Vuelve a exportarlo sin acciones interactivas.');
+    const kind = name(value, 'S');
+    if (kind === 'JavaScript') invalidDigital('file', 'El PDF contiene JavaScript. Exporta una copia sin scripts.');
+    if (kind !== 'URI') invalidDigital('file', 'El PDF contiene una acción no permitida. Solo se admiten enlaces HTTPS, correo y teléfono.');
+    if (value.has(PDFName.of('Next'))) invalidDigital('file', 'El PDF contiene acciones encadenadas. Exporta una copia sin esas acciones.');
+    validatePdfLink(resolve(value.get(PDFName.of('URI'))));
+  };
+  const pending: PDFObject[] = pdf.context.enumerateIndirectObjects().map(([, object]) => object);
+  const visited = new Set<PDFObject>();
+  while (pending.length) {
+    const object = resolve(pending.pop());
+    if (!object || visited.has(object)) continue;
+    visited.add(object);
+    if (object instanceof PDFArray) { for (const value of object.asArray()) pending.push(value); continue; }
+    const dict = object instanceof PDFStream ? object.dict : object;
+    if (!(dict instanceof PDFDict)) continue;
+    const has = (key: string) => dict.has(PDFName.of(key));
+    const type = name(dict, 'Type'), subtype = name(dict, 'Subtype'), action = name(dict, 'S');
+    if (has('JS') || has('JavaScript')) invalidDigital('file', 'El PDF contiene JavaScript. Exporta una copia sin scripts.');
+    if (has('EmbeddedFiles') || has('EF') || type === 'EmbeddedFile' || subtype === 'FileAttachment') {
+      invalidDigital('file', 'El PDF contiene archivos adjuntos incrustados. Exporta una copia sin adjuntos.');
+    }
+    if (has('OpenAction') || has('AA')) invalidDigital('file', 'El PDF contiene acciones automáticas. Exporta una copia sin acciones al abrirlo o interactuar con él.');
+    if (has('XFA')) invalidDigital('file', 'El PDF contiene un formulario XFA no admitido. Exporta una copia PDF estática.');
+    if (has('RichMediaContent') || has('RichMediaSettings') || ['RichMedia', '3D', 'Movie', 'Sound', 'Screen'].includes(subtype ?? '')) {
+      invalidDigital('file', 'El PDF contiene contenido multimedia no admitido. Exporta una copia sin multimedia.');
+    }
+    if (type === 'Action' || (action && pdfActions.has(action))) inspectAction(dict);
+    if (has('A')) {
+      const value = resolve(dict.get(PDFName.of('A')));
+      // /A también contiene atributos de listas/layout y nombres de glifos. Solo los slots
+      // de anotación/marcador o los diccionarios de acción se interpretan como acciones.
+      const actionSlot = type === 'Annot' || ['Link', 'Widget'].includes(subtype ?? '') || (has('Title') && has('Parent'));
+      if (actionSlot || (value instanceof PDFDict && (name(value, 'S') || name(value, 'Type') === 'Action'))) inspectAction(value);
+    }
+    for (const [, value] of dict.entries()) pending.push(value);
+  }
+}
+
+/** Política aprobada en QA-02: PDF sin cifrado/adjuntos/scripts; enlaces HTTPS, correo y teléfono. */
+export async function validateDigitalFile(file: DigitalUpload | undefined): Promise<DigitalUpload> {
+  if (!file || !Buffer.isBuffer(file.bytes)) return invalidDigital('file', 'Selecciona un archivo PDF.');
+  if (!file.bytes.length) return invalidDigital('file', 'El archivo está vacío. Selecciona un PDF con contenido.');
+  if (file.bytes.length > DIGITAL_MAX_BYTES) throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'El archivo debe pesar como máximo 25 MB.');
+  if (typeof file.name !== 'string' || !file.name.trim()) return invalidDigital('file', 'El archivo no tiene un nombre válido. Renómbralo y vuelve a seleccionarlo.');
+  const name = file.name.trim();
+  if (name.length > 255) return invalidDigital('file', 'El nombre del archivo supera los 255 caracteres. Acórtalo y vuelve a seleccionarlo.');
+  if (/[\\/\u0000-\u001f\u007f]/.test(name)) return invalidDigital('file', 'El nombre del archivo contiene una ruta o caracteres no admitidos. Renómbralo y vuelve a seleccionarlo.');
+  if (!/\.pdf$/i.test(name)) return invalidDigital('file', 'Solo se admiten archivos PDF con extensión .pdf.');
+  if (file.mimeType !== 'application/pdf') return invalidDigital('file', 'El tipo del archivo no corresponde a un PDF. Selecciona un documento PDF.');
   if (!/^%PDF-(?:1\.[0-7]|2\.0)[\r\n]/.test(file.bytes.toString('latin1', 0, 10)) ||
     !/%%EOF[\s]*$/.test(file.bytes.subarray(-1024).toString('latin1'))) {
     return invalidDigital('file', 'El contenido no corresponde a un PDF completo.');
   }
   try {
-    const pdf = await PDFDocument.load(file.bytes, { throwOnInvalidObject: true, updateMetadata: false, capNumbers: true });
-    if (pdf.isEncrypted || pdf.getPageCount() < 1) throw new Error('Invalid PDF');
-    const forbidden = new Set(['A', 'AA', 'OpenAction', 'JS', 'JavaScript', 'EmbeddedFiles', 'EF', 'XFA', 'RichMediaContent']);
-    const inspect = (object: unknown): void => {
-      if (object instanceof PDFArray) { for (let i = 0; i < object.size(); i++) inspect(object.get(i)); return; }
-      const dictionary = object instanceof PDFStream ? object.dict : object;
-      if (!(dictionary instanceof PDFDict)) return;
-      for (const [key, value] of dictionary.entries()) {
-        if (forbidden.has(key.decodeText()) || (value instanceof PDFName &&
-          ['JavaScript', 'Launch', 'EmbeddedFile', 'RichMedia', 'SubmitForm', 'ImportData', 'GoToR'].includes(value.decodeText()))) {
-          throw new Error('Active PDF');
-        }
-        // Incluye diccionarios directos, no solo objetos indirectos del documento.
-        inspect(value);
-      }
-    };
-    for (const [, object] of pdf.context.enumerateIndirectObjects()) inspect(object);
+    // Carga el catálogo para identificar cifrado y rechazarlo antes de leer páginas u objetos.
+    const pdf = await PDFDocument.load(file.bytes, { ignoreEncryption: true, throwOnInvalidObject: true, updateMetadata: false, capNumbers: true });
+    if (pdf.isEncrypted) invalidDigital('file', 'El PDF está cifrado o protegido con contraseña. Exporta una copia sin protección.');
+    if (pdf.getPageCount() < 1) invalidDigital('file', 'El PDF no tiene páginas. Selecciona un documento con al menos una página.');
+    inspectDigitalPdf(pdf);
     return { name, mimeType: 'application/pdf', bytes: file.bytes };
-  } catch {
-    return invalidDigital('file', 'El PDF es inválido, está protegido o contiene acciones o adjuntos. Exporta una copia simple e inténtalo nuevamente.');
+  } catch (reason) {
+    if (reason instanceof ApiError) throw reason;
+    return invalidDigital('file', 'No se pudo leer el PDF: está dañado o su estructura no es válida. Vuelve a exportarlo e inténtalo nuevamente.');
   }
 }

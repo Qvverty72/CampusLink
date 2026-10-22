@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../services/api-response.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
@@ -6,7 +6,7 @@ import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { requireResourceOwner } from '../../auth/auth.authorization.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
 import { DIGITAL_MAX_BYTES, digitalId, validateDigitalFile } from './elibrary.validation.js';
-import { DIGITAL_BUCKET, digitalFileHasReference, downloadDigitalOriginal, findDigitalFile, findDigitalResource,
+import { DIGITAL_BUCKET, digitalFileHasReference, downloadDigitalOriginal, findDigitalFile, findDigitalFileCandidates, findDigitalResource,
   hasDigitalAcquisition, insertDigitalAttachment, lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from './elibrary.repository.js';
 import type { DigitalAttachment, DigitalResourceRow, DigitalStoredFile, DigitalUpload } from './elibrary.types.js';
 
@@ -23,6 +23,8 @@ function requireWritable(auth: VerifiedAuthConnection, resource: DigitalResource
   requireResourceOwner(auth, resource.propietario_id);
   if (resource.deleted_at || resource.estado_publicacion !== 'DISPONIBLE') throw new ApiError(409, 'CONFLICT', 'Solo puedes adjuntar archivos a una publicación disponible.');
 }
+const fileVersion = (file: DigitalStoredFile) => JSON.stringify([file.id, file.bucket_id, file.storage_path, file.mime_type, file.tamano_bytes]);
+const fingerprint = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 export async function addDigitalAttachment(auth: VerifiedAuthConnection, publicationId: unknown, upload?: DigitalUpload): Promise<DigitalAttachment> {
   authorizeDigitalAccess(auth); const id = digitalId(publicationId);
   let resource: DigitalResourceRow;
@@ -33,21 +35,45 @@ export async function addDigitalAttachment(auth: VerifiedAuthConnection, publica
   } catch (error) { if (error instanceof ApiError) throw error; throw unavailable(); }
   const file = await validateDigitalFile(upload), fileId = randomUUID();
   const path = `${resource.campus_id}/${resource.propietario_id}/${id}/${fileId}.pdf`;
-  let persistenceAttempted = false, saved: DigitalAttachment | undefined;
+  let uploadAttempted = false, uploaded = false, persistenceAttempted = false, saved: DigitalAttachment | undefined;
+  const incomingHash = fingerprint(file.bytes), compared = new Map<string, string>();
   try {
-    await uploadDigitalFile(path, file); persistenceAttempted = true;
-    return await withPostgresTransaction(async client => {
-      const context = await contextForFile(client, auth, id, true); requireWritable(context.current, context.resource);
-      const result = await insertDigitalAttachment(client, id, fileId, path, file);
-      if (!result) throw new ApiError(409, 'CONFLICT', 'La publicación alcanzó el límite de orden de archivos admitido por el sistema.');
-      saved = result; return result;
-    });
+    // Un snapshot que cambia durante Storage se vuelve a comprobar. Nunca se mantiene
+    // un lock SQL mientras se descargan originales o se sube el archivo nuevo.
+    while (true) {
+      const snapshot = await withPostgresTransaction(async client => {
+        const context = await contextForFile(client, auth, id, true); requireWritable(context.current, context.resource);
+        return { resource: context.resource, files: await findDigitalFileCandidates(client, id, file.bytes.length) };
+      });
+      let duplicate = false;
+      for (const candidate of snapshot.files) {
+        assertStoredDigitalFile(snapshot.resource, candidate);
+        const version = fileVersion(candidate);
+        if (!compared.has(version)) compared.set(version, fingerprint(await downloadDigitalOriginal(candidate)));
+        if (compared.get(version) === incomingHash) { duplicate = true; break; }
+      }
+      if (!duplicate && !uploaded) {
+        uploadAttempted = true; await uploadDigitalFile(path, file); uploaded = true; persistenceAttempted = true;
+      }
+      const result = await withPostgresTransaction(async client => {
+        const context = await contextForFile(client, auth, id, true); requireWritable(context.current, context.resource);
+        const current = await findDigitalFileCandidates(client, id, file.bytes.length);
+        if (JSON.stringify(current.map(fileVersion)) !== JSON.stringify(snapshot.files.map(fileVersion))) return null;
+        if (duplicate) throw new ApiError(409, 'CONFLICT', 'Este archivo ya está adjunto a esta publicación. No se puede agregar el mismo contenido dos veces, aunque tenga otro nombre.');
+        const attachment = await insertDigitalAttachment(client, id, fileId, path, file);
+        if (!attachment) throw new ApiError(409, 'CONFLICT', 'La publicación alcanzó el límite de orden de archivos admitido por el sistema.');
+        saved = attachment; return attachment;
+      });
+      if (result) return result;
+    }
   } catch (error) {
-    try {
-      const referenced = persistenceAttempted && await digitalFileHasReference(id, path);
-      if (referenced && saved) return saved;
-      if (!referenced) await removeDigitalFile(path);
-    } catch { console.error('Digital attachment reconciliation required', { publicationId: id, fileId }); }
+    if (uploadAttempted) {
+      try {
+        const referenced = persistenceAttempted && await digitalFileHasReference(id, path);
+        if (referenced && saved) return saved;
+        if (!referenced) await removeDigitalFile(path);
+      } catch { console.error('Digital attachment reconciliation required', { publicationId: id, fileId }); }
+    }
     if (error instanceof ApiError) throw error; throw unavailable();
   }
 }

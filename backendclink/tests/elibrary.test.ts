@@ -143,6 +143,10 @@ beforeEach(async () => {
 after(async () => { globalThis.fetch = originalFetch; await new Promise<void>(resolve => server.close(() => resolve())); await closePostgres(); mock.restoreAll(); await db.close(); });
 const input = (overrides: Record<string, unknown> = {}) => ({ title: ' Apuntes ', description: ' Material académico ', modality: 'VENTA', price: 2500, ...overrides });
 const file = (bytes = pdf) => ({ name: 'apuntes.pdf', mimeType: 'application/pdf', bytes });
+async function distinctFile(title = randomUUID()) {
+  const document = await PDFDocument.load(pdf); document.setTitle(title);
+  return file(Buffer.from(await document.save({ useObjectStreams: false })));
+}
 async function noPublication() {
   assert.equal((await db.query('select id from publicacion_recurso where propietario_id=$1', [auth.userId])).rows.length, 0);
 }
@@ -206,6 +210,29 @@ test('rejects spoofed, truncated, empty-page, encrypted-marker and active PDFs i
   for (const name of ['../apuntes.pdf', 'apuntes.exe', 'a\u0000.pdf']) await assert.rejects(validation.validateDigitalFile({ ...file(), name }), { status: 400 });
   await noPublication(); assert.equal(uploads.length, 0);
 });
+test('approved links work for initial publication and attachments; HTTP rejection reaches the API without storing bytes', async () => {
+  const linked = async (uri: string) => {
+    const document = await PDFDocument.create(), page = document.addPage();
+    const action = document.context.register(document.context.obj({ S: 'URI', URI: PDFString.of(uri) }));
+    page.node.set(PDFName.of('Annots'), document.context.obj([{ Type: 'Annot', Subtype: 'Link', A: action, Rect: [0, 0, 100, 20] }]));
+    return Buffer.from(await document.save());
+  };
+  const original = await linked('https://example.test/material'), created = await post(input(), original);
+  assert.equal(created.status, 201); const { data } = await created.json(); assert.deepEqual(objects.get(uploads[0]), original);
+  for (const uri of ['mailto:alumno@example.test', 'tel:+56912345678']) {
+    const bytes = await linked(uri), response = await attach(data.id, bytes);
+    assert.equal(response.status, 201); assert.deepEqual(objects.get(uploads.at(-1)!), bytes);
+  }
+  const stored = uploads.length, denied = await linked('http://example.test/material');
+  for (const response of [await post(input(), denied), await attach(data.id, denied)]) {
+    assert.equal(response.status, 400); assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+    const body = await response.json(); assert.equal(body.error.code, 'VALIDATION_ERROR');
+    assert.match(body.error.message, /HTTP.*HTTPS/); assert.equal(body.error.details[0].field, 'file');
+    assert.doesNotMatch(JSON.stringify(body), /storage_path|bucket_id|example\.test/);
+  }
+  assert.equal(uploads.length, stored);
+});
+
 test('inconsistent prices and modalities rejected', async () => {
   for (const patch of [{ modality: 'AMBAS' }, { modality: 'DONACION', price: 1 }, { modality: 'DONACION', price: 0 },
     { price: 0 }, { price: -1 }, { price: '2500' }, { price: null }, { price: Number.MAX_SAFE_INTEGER + 1 }]) {
@@ -533,7 +560,7 @@ test('optimistic version prevents concurrent overwrite and unchanged sets create
 });
 test('attachment changes invalidate academic version and removed resources reject academic edit', async () => {
   const c = await academicCatalog(), saved = await service.createDigitalPublication(auth, input(), file());
-  await filesService.addDigitalAttachment(auth, saved.id, file());
+  await filesService.addDigitalAttachment(auth, saved.id, await distinctFile());
   assert.equal((await patchAcademics(saved.id, selection(saved, [c.careerA]))).status, 409);
   for (const sql of ["deleted_at=now()", "estado_publicacion='OCULTO'"]) {
     await db.query(`UPDATE publicacion_recurso SET ${sql} WHERE id=$1`, [saved.id]);
@@ -819,7 +846,7 @@ test('digital reports reject privileged/invalid fields, fail atomically and expo
 
 test('owner attaches many PDFs with ordered unique references; concurrent appends preserve every original', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());
-  const results = await Promise.all(Array.from({ length: 8 }, (_, index) => filesService.addDigitalAttachment(auth, saved.id, { ...file(), name: `archivo${index}.pdf` })));
+  const results = await Promise.all(Array.from({ length: 8 }, async (_, index) => filesService.addDigitalAttachment(auth, saved.id, { ...await distinctFile(`archivo-${index}`), name: `archivo${index}.pdf` })));
   const publication = (await service.getDigitalPublications(auth, saved.id))[0]; assert.equal(publication.files.length, 9);
   assert.equal(new Set(publication.files.map(row => row.id)).size, 9); assert.equal(objects.size, 9);
   const rows = (await db.query('select orden,storage_path from archivo_publicacion where publicacion_id=$1 order by orden', [saved.id])).rows;
@@ -828,7 +855,7 @@ test('owner attaches many PDFs with ordered unique references; concurrent append
 });
 test('multipart append accepts file only; missing/invalid/oversized/privileged fields do not alter registered files', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());
-  const response = await attach(saved.id); assert.equal(response.status, 201); assert.match((await response.json()).data.id, /^[0-9a-f-]{36}$/i);
+  const response = await attach(saved.id, (await distinctFile()).bytes); assert.equal(response.status, 201); assert.match((await response.json()).data.id, /^[0-9a-f-]{36}$/i);
   for (const [bytes, extra] of [[null, false], [Buffer.from('fake'), false], [pdf, true]] as const) assert.equal((await attach(saved.id, bytes, extra)).status, 400);
   assert.equal((await attach(saved.id, Buffer.alloc(validation.DIGITAL_MAX_BYTES + 1))).status, 413);
   assert.equal((await service.getDigitalPublications(auth, saved.id))[0].files.length, 2); assert.equal(objects.size, 2);
@@ -838,24 +865,73 @@ test('only owner may append, institution remains authoritative and original camp
   await assert.rejects(filesService.addDigitalAttachment(receiver, saved.id, file()), { status: 403 });
   const outsider = await peer(foreignCampus, foreignInstitution);
   await assert.rejects(filesService.addDigitalAttachment(outsider, saved.id, file()), { status: 404 });
-  await switchCampus(sibling); assert.equal((await attach(saved.id)).status, 201); assert.ok(uploads[1].startsWith(`${campus}/${auth.userId}/${saved.id}/`));
+  await switchCampus(sibling); assert.equal((await attach(saved.id, (await distinctFile()).bytes)).status, 201); assert.ok(uploads[1].startsWith(`${campus}/${auth.userId}/${saved.id}/`));
   await db.query("update publicacion_recurso set estado_publicacion='OCULTO' where id=$1", [saved.id]);
-  assert.equal((await attach(saved.id)).status, 409); assert.equal(objects.size, 2);
+  assert.equal((await attach(saved.id, pdf)).status, 409); assert.equal(objects.size, 2);
 });
 test('owner authorization and availability are rechecked after upload; rollback compensates only new file', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());
   onUpload = () => db.query("update publicacion_recurso set deleted_at=now() where id=$1", [saved.id]).then(() => {});
-  await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 409 });
+  await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, await distinctFile()), { status: 409 });
   assert.equal(objects.size, 1); assert.equal(removals.length, 1);
   assert.equal((await db.query('select id from archivo_publicacion where publicacion_id=$1', [saved.id])).rows.length, 1);
 });
 test('append Storage/SQL failures and uncertain COMMIT preserve existing files and recover persisted receipt', async () => {
   const saved = await service.createDigitalPublication(auth, input(), file());
-  failUpload = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 503 }); assert.equal(objects.size, 1);
-  failUpload = false; failInsert = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 503 }); assert.equal(objects.size, 1);
+  const fresh = await distinctFile();
+  failUpload = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, fresh), { status: 503 }); assert.equal(objects.size, 1);
+  failUpload = false; failInsert = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, fresh), { status: 503 }); assert.equal(objects.size, 1);
   failInsert = false; onUpload = async () => { lostCommit = true; };
-  const result = await filesService.addDigitalAttachment(auth, saved.id, file()); assert.ok(result.id);
+  const result = await filesService.addDigitalAttachment(auth, saved.id, fresh); assert.ok(result.id);
   assert.equal(objects.size, 2); assert.equal((await service.getDigitalPublications(auth, saved.id))[0].files.length, 2);
+});
+
+test('duplicate content is rejected on the same publication even with another filename, without another upload', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, { ...file(), name: 'renombrado.pdf' }), { status: 409, message: /mismo contenido/ });
+  const response = await attach(saved.id, pdf); assert.equal(response.status, 409);
+  const body = await response.json(); assert.match(body.error.message, /ya está adjunto/); assert.equal(body.error.code, 'CONFLICT');
+  assert.equal(response.headers.get('cache-control'), 'no-store'); assert.doesNotMatch(JSON.stringify(body), /storage_path|bucket_id|sha256|digital-resources/);
+  assert.equal(uploads.length, 1); assert.equal(objects.size, 1); assert.equal(removals.length, 0);
+  assert.equal((await service.getDigitalPublications(auth, saved.id))[0].files.length, 1);
+});
+
+test('different bytes with identical filename and size are accepted; identical bytes may belong to another publication', async () => {
+  const first = await distinctFile('content-A'), second = await distinctFile('content-B');
+  assert.equal(first.bytes.length, second.bytes.length); assert.notDeepEqual(first.bytes, second.bytes);
+  const saved = await service.createDigitalPublication(auth, input(), first);
+  await filesService.addDigitalAttachment(auth, saved.id, second);
+  const other = await service.createDigitalPublication(auth, input(), first);
+  await filesService.addDigitalAttachment(auth, other.id, second);
+  assert.equal((await service.getDigitalPublications(auth, saved.id))[0].files.length, 2);
+  assert.equal((await service.getDigitalPublications(auth, other.id))[0].files.length, 2);
+  assert.equal(objects.size, 4);
+});
+
+test('simultaneous uploads of the same new content persist one copy and compensate only the losing upload', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file()), fresh = await distinctFile();
+  let arrived = 0, release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  onUpload = async () => { if (++arrived === 2) release(); await gate; };
+  const results = await Promise.allSettled(['uno.pdf', 'otro.pdf'].map(name => filesService.addDigitalAttachment(auth, saved.id, { ...fresh, name })));
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const rejected = results.find(result => result.status === 'rejected'); assert.ok(rejected?.status === 'rejected');
+  assert.equal(rejected.reason.status, 409); assert.match(rejected.reason.message, /mismo contenido/);
+  assert.equal(objects.size, 2); assert.equal(removals.length, 1);
+  assert.equal((await service.getDigitalPublications(auth, saved.id))[0].files.length, 2);
+});
+
+test('comparison fails closed if a stored original cannot be read; no upload or existing-file deletion occurs', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  failDownload = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 503 });
+  failDownload = false; corruptDownload = true; await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 503 });
+  assert.equal(uploads.length, 1); assert.equal(removals.length, 0); assert.equal(objects.size, 1);
+});
+
+test('authorization is rechecked after comparing an existing original, before returning duplicate or inserting', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  onDownload = () => db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1", [auth.userId]).then(() => {});
+  await assert.rejects(filesService.addDigitalAttachment(auth, saved.id, file()), { status: 403 });
+  assert.equal(objects.size, 1); assert.equal(uploads.length, 1); assert.equal(removals.length, 0);
 });
 test('owner download returns bytes only with attachment/no-store/nosniff headers; mismatched IDs and other readers denied', async () => {
   const saved = await service.createDigitalPublication(auth, input(), { ...file(), name: "apuntes académicos's.pdf" });

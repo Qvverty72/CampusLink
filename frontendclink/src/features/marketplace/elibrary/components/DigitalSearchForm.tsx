@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
-import type { DigitalAcademicCatalog, DigitalFilters } from '../types/publication';
+import type { DigitalAcademicCatalog, DigitalAcademicOption, DigitalFilters } from '../types/publication';
 export const emptyDigitalFilters: DigitalFilters = { q: '', careerId: '', subjectId: '', modality: '' };
 export function DigitalSearchForm({ catalog, onSearch, loading }: { catalog: DigitalAcademicCatalog | null; onSearch: (filters: DigitalFilters) => void; loading: boolean }) {
   const [draft, setDraft] = useState<DigitalFilters>(emptyDigitalFilters), [expanded, setExpanded] = useState(false);
@@ -16,17 +16,31 @@ export function DigitalSearchForm({ catalog, onSearch, loading }: { catalog: Dig
         style={[styles.option, draft.modality === value && styles.selected]}><Text style={styles.link}>{value === 'VENTA' ? 'Venta' : value === 'DONACION' ? 'Donación' : 'Todas'}</Text></Pressable>)}</View>
       {(['careerId','subjectId'] as const).map(field => <View key={field} style={styles.group}>
         <Text style={styles.label}>{field === 'careerId' ? 'Carrera' : 'Asignatura'}</Text>
-        <View style={styles.row}>{[{ id: '', name: 'Todas', code: null }, ...(field === 'careerId' ? catalog?.careers ?? [] : catalog?.subjects ?? [])].map(option =>
-          <Pressable key={option.id} accessibilityRole="radio" accessibilityLabel={`Filtrar ${field === 'careerId' ? 'carrera' : 'asignatura'}: ${option.name}`}
-            aria-checked={draft[field] === option.id} accessibilityState={{ checked: draft[field] === option.id }}
-            onPress={() => setDraft(previous => ({ ...previous, [field]: option.id }))} style={[styles.option, draft[field] === option.id && styles.selected]}>
-            <Text style={styles.link}>{option.name}{option.code ? ` (${option.code})` : ''}</Text>
-          </Pressable>)}</View>
+        <AcademicFilter label={field === 'careerId' ? 'carrera' : 'asignatura'} options={field === 'careerId' ? catalog?.careers ?? [] : catalog?.subjects ?? []}
+          selected={draft[field]} onChange={id => setDraft(previous => ({ ...previous, [field]: id }))} />
         {!catalog && <Text style={styles.helper}>El catálogo académico todavía no está disponible.</Text>}
       </View>)}
     </>}
     <View style={styles.row}><Pressable accessibilityRole="button" disabled={loading} onPress={() => onSearch(draft)} style={styles.button}><Text style={styles.link}>Buscar</Text></Pressable>
       <Pressable accessibilityRole="button" disabled={loading} onPress={() => { setDraft(emptyDigitalFilters); onSearch(emptyDigitalFilters); }} style={styles.button}><Text style={styles.link}>Limpiar filtros</Text></Pressable></View>
+  </View>;
+}
+function AcademicFilter({ label, options, selected, onChange }: { label: string; options: DigitalAcademicOption[]; selected: string; onChange: (id: string) => void }) {
+  const [search, setSearch] = useState(''), [limit, setLimit] = useState(20);
+  const needle = search.trim().toLocaleLowerCase();
+  const matches = options.filter(option => option.id !== selected && `${option.name} ${option.code ?? ''}`.toLocaleLowerCase().includes(needle));
+  const visible = [{ id: '', name: 'Todas', code: null }, ...options.filter(option => option.id === selected), ...matches.slice(0, limit)];
+  return <View style={styles.group}>
+    {options.length > 8 && <TextInput accessibilityLabel={`Buscar ${label} para filtrar`} placeholder="Nombre o código"
+      value={search} onChangeText={value => { setSearch(value); setLimit(20); }} style={styles.input} />}
+    <View style={styles.row}>{visible.map(option => <Pressable key={option.id} accessibilityRole="radio" accessibilityLabel={`Filtrar ${label}: ${option.name}`}
+      aria-checked={selected === option.id} accessibilityState={{ checked: selected === option.id }}
+      onPress={() => onChange(option.id)} style={[styles.option, selected === option.id && styles.selected]}>
+      <Text style={styles.link}>{option.name}{option.code ? ` (${option.code})` : ''}</Text>
+    </Pressable>)}</View>
+    {matches.length > limit && <Pressable accessibilityRole="button" accessibilityLabel={`Mostrar más opciones de ${label}`}
+      onPress={() => setLimit(value => value + 20)} style={styles.button}><Text style={styles.link}>Mostrar más ({Math.min(limit, matches.length)} de {matches.length})</Text></Pressable>}
+    {options.length > 0 && !matches.length && !options.some(option => option.id === selected) && <Text style={styles.helper}>No hay coincidencias.</Text>}
   </View>;
 }
 const styles = StyleSheet.create({

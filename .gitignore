@@ -16,8 +16,19 @@ AGENTS.md
 
 Contexto técnico de tareas
 context/
+/context.zip
 **/.context/
 **/context/tasks/
 
 /backend/docs/
 /backendclink/docs/
+/backendclink/qa/local/
+
+# Archivos de trabajo e importaciones puntuales ya aplicadas
+*.xlsx
+*.xls
+*.xlsm
+__pycache__/
+*.py[cod]
+/backendclink/data/duoc/
+/backendclink/scripts/duoc/

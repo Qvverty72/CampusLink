@@ -88,5 +88,6 @@ export async function updatePhysicalgoodsTransactionStatus(client: PoolClient, t
   await client.query(`UPDATE public.transaccion_recurso SET estado_transaccion=$2,
     completada_en=CASE WHEN $2='COMPLETADA' THEN clock_timestamp() ELSE completada_en END,
     cancelada_en=CASE WHEN $2='CANCELADA' THEN clock_timestamp() ELSE cancelada_en END,
-    cancelada_por_id=CASE WHEN $2='CANCELADA' THEN $3::uuid ELSE cancelada_por_id END WHERE id=$1`,[transactionId,status,actorId]);
+    cancelada_por_id=CASE WHEN $2='CANCELADA' THEN $3::uuid ELSE cancelada_por_id END,
+    motivo_cancelacion=CASE WHEN $2='CANCELADA' THEN 'USUARIO_DESISTE' ELSE motivo_cancelacion END WHERE id=$1`,[transactionId,status,actorId]);
 }

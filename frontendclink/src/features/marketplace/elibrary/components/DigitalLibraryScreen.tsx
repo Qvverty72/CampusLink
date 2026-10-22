@@ -61,7 +61,7 @@ function Library() {
           disabled={disabled || Boolean(library.target)} />
         </>}
         <Text style={styles.label}>Archivos académicos</Text>
-        <Text style={styles.helper}>Uno o varios PDF de hasta 25 MB cada uno, sin contraseña, acciones ni archivos adjuntos.</Text>
+        <Text style={styles.helper}>Uno o varios PDF de hasta 25 MB cada uno. Se aceptan enlaces HTTPS, correos y teléfonos. Sin contraseña, JavaScript ni archivos adjuntos.</Text>
         <Pressable accessibilityRole="button" disabled={disabled} onPress={library.chooseFile} style={[styles.fileButton, disabled && styles.disabled]}>
           <FileText size={22} color={APP_COLORS.PRIMARY} /><Text style={styles.fileText}>{library.pickingFile ? 'Abriendo selector…' : 'Seleccionar archivos PDF'}</Text>
         </Pressable>
@@ -69,7 +69,7 @@ function Library() {
           <View style={styles.fileInfo}><Text style={styles.fileText}>{file.name}</Text><Text style={styles.helper}>{(file.sizeBytes / 1024 / 1024).toFixed(2)} MB</Text></View>
           <Pressable accessibilityRole="button" accessibilityLabel={`Quitar ${file.name}`} disabled={disabled} onPress={() => library.removeFile(index)} style={styles.smallButton}><Text style={styles.link}>Quitar</Text></Pressable>
         </View>)}
-        {library.progress && <Text style={styles.helper} accessibilityLiveRegion="polite">{library.progress}</Text>}
+        {Boolean(library.progress) && <Text style={styles.helper} accessibilityLiveRegion="polite">{library.progress}</Text>}
         <Text style={styles.helper}>La publicación mostrará los datos del recurso. El archivo original se mantiene privado.</Text>
         <Pressable accessibilityRole="button" disabled={disabled} onPress={library.publish} style={[styles.primary, disabled && styles.disabled]}>
           {library.busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{library.target ? 'Adjuntar archivos pendientes' : 'Publicar recurso'}</Text>}

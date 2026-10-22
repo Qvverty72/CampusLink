@@ -118,6 +118,12 @@ export async function findDigitalFile(client: PoolClient, publicationId: string,
     `SELECT id,bucket_id,storage_path,nombre_original,mime_type,tamano_bytes FROM public.archivo_publicacion
      WHERE id=$1 AND publicacion_id=$2 AND tipo_archivo='RECURSO' AND deleted_at IS NULL FOR SHARE`, [fileId, publicationId])).rows[0] ?? null;
 }
+/** Solo candidatos del mismo recurso/tamaño; los bytes originales se comparan fuera de locks SQL. */
+export async function findDigitalFileCandidates(client: PoolClient, publicationId: string, size: number): Promise<DigitalStoredFile[]> {
+  return (await client.query<DigitalStoredFile>(
+    `SELECT id,bucket_id,storage_path,nombre_original,mime_type,tamano_bytes FROM public.archivo_publicacion
+     WHERE publicacion_id=$1 AND tipo_archivo='RECURSO' AND tamano_bytes=$2 ORDER BY id`, [publicationId, size])).rows;
+}
 /** Solo comprueba derechos existentes; no crea solicitudes, transacciones ni adquisiciones. */
 export async function hasDigitalAcquisition(client: PoolClient, publicationId: string, ownerId: string, receiverId: string) {
   return (await client.query<{ granted: boolean }>(
