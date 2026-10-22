@@ -7,11 +7,18 @@ import type { AuthLocals } from '../auth/auth.types.js';
 import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
 import { reportPhysicalgoods } from './reports.physicalgoods.service.js';
 import { reportDigitalResource } from './reports.elibrary.service.js';
-import { getReportedOriginal, getReportReview, listReportReviews } from './reports.review.service.js';
+import { getReportedOriginal, getReportReview, listReportReviews, listReportResolutions, getReportResolution } from './reports.review.service.js';
 import { sendSuccess as sendEnvelope } from '../../services/apiResponse.js';
 import { resolveReport } from './reports.resolution.service.js';
 
 type ReviewHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const listReportResolutionsController: ReviewHandler = async (request, response) => {
+  const result = await listReportResolutions(response.locals.auth, request.params.campusId, request.query);
+  sendEnvelope(response, result.data, { meta: result.meta });
+};
+export const getReportResolutionController: ReviewHandler = async (request, response) => {
+  sendSuccess(response, await getReportResolution(response.locals.auth, request.params.campusId, request.params.reportId));
+};
 export const resolveReportController: ReviewHandler = async (request, response) => {
   sendSuccess(response, await resolveReport(response.locals.auth, request.params.campusId, request.params.reportId, request.body));
 };

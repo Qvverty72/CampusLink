@@ -20,7 +20,7 @@ function load(path, dependencies) {
 }
 
 function harness() {
-  const calls = { catalog: [], lists: [], details: [], files: [], resolutions: [], saved: [] }, slots = [];
+  const calls = { catalog: [], lists: [], details: [], historyLists: [], historyDetails: [], files: [], resolutions: [], saved: [] }, slots = [];
   let cursor = 0, effects = [], refreshes = 0;
   const auth = { status: 'ready', identity: { userId: 'admin-a', campusId: 'campus-a', profile: { estado_cuenta: 'ACTIVA' },
     roles: [{ name: 'ADMINISTRADOR', campusId: 'campus-a' }] }, refreshIdentity() { refreshes++; } };
@@ -42,6 +42,8 @@ function harness() {
     '../api/reportsApi': {
       loadReportReviews: (campusId, page, signal) => request(calls.lists, { campusId, page, signal }),
       loadReportReview: (campusId, id, signal) => request(calls.details, { campusId, id, signal }),
+      loadReportResolutions: (campusId, page, signal) => request(calls.historyLists, { campusId, page, signal }),
+      loadReportResolution: (campusId, id, signal) => request(calls.historyDetails, { campusId, id, signal }),
       downloadReportedFile: (campusId, id, fileId, signal) => request(calls.files, { campusId, id, fileId, signal }),
       submitReportResolution: (campusId, id, input, signal) => request(calls.resolutions, { campusId, id, input, signal }),
     },
@@ -69,6 +71,73 @@ async function openPending(h, detail = { id: 'report-a', status: 'PENDIENTE', re
   const state = await ready(h); state.open('report-a'); h.render(); h.calls.details[0].resolve(detail);
   await setImmediate(); return h.render();
 }
+
+test('history changes endpoint and resets pagination, aborts review details and only opens recorded resolutions', async () => {
+  const h = harness(); let state = await ready(h);
+  state.changePage(3); h.render(); h.calls.lists.at(-1).resolve(page([{ id: 'old' }])); await setImmediate();
+  state = h.render(); state.open('old'); h.render(); const oldDetail = h.calls.details.at(-1);
+  state = h.render(); state.showHistory(true); state = h.render();
+  assert.equal(state.page, 1); assert.equal(state.detail, null); assert.equal(state.entries.length, 0); assert.equal(oldDetail.signal.aborted, true);
+  assert.equal(h.calls.historyLists.length, 1); assert.equal(h.calls.historyLists[0].campusId, 'campus-a');
+  oldDetail.resolve({ id: 'old', reason: 'Old private content' }); await setImmediate(); assert.equal(h.render().detail, null);
+  h.calls.historyLists[0].resolve(page([{ id: 'resolved' }])); await setImmediate(); state = h.render();
+  state.open('resolved'); h.render(); assert.equal(h.calls.historyDetails.length, 1);
+  h.calls.historyDetails[0].resolve({ id: 'resolved', status: 'DESESTIMADO', resolution: { measure: 'NINGUNA', justification: 'Decisión original' } });
+  await setImmediate(); state = h.render(); assert.equal(state.detail.resolution.justification, 'Decisión original'); assert.equal(state.canResolve, false);
+  state.requestResolution(); await state.confirmResolution(); await state.download('file', 'original.pdf');
+  assert.equal(h.calls.resolutions.length, 0); assert.equal(h.calls.files.length, 0);
+  state.changePage(2); h.render(); assert.equal(h.calls.historyLists.at(-1).page, 2);
+  state = h.render(); state.showHistory(false); state = h.render(); assert.equal(state.page, 1); assert.equal(state.detail, null);
+});
+
+test('history campus and identity changes discard late responses; permission denial clears history and refreshes access', async () => {
+  const h = harness(); let state = await ready(h); state.showHistory(true); h.render();
+  const previousList = h.calls.historyLists[0]; state = h.render(); state.chooseCampus('campus-b'); state = h.render();
+  assert.equal(previousList.signal.aborted, true); previousList.resolve(page([{ id: 'wrong-campus' }])); await setImmediate();
+  assert.equal(h.render().entries.length, 0);
+  h.calls.historyLists.at(-1).resolve(page([{ id: 'case-b' }])); await setImmediate(); state = h.render(); state.open('case-b'); h.render();
+  h.calls.historyDetails.at(-1).reject(new AuthApiError(403, 'Permiso de campus revocado')); await setImmediate(); state = h.render();
+  assert.equal(state.detail, null); assert.equal(state.entries.length, 0); assert.equal(state.error, 'Permiso de campus revocado'); assert.equal(h.refreshes, 1);
+  h.auth.identity.userId = 'another-reader'; state = h.render(); assert.equal(state.entries.length, 0); assert.equal(state.campuses.length, 0);
+});
+
+test('history API uses authenticated read-only routes and forwards pagination and cancellation', async () => {
+  const calls = [], signal = new AbortController().signal;
+  const request = (...args) => { calls.push(args); return Promise.resolve({ data: [] }); };
+  const api = load('../src/features/reports/api/reportsApi.ts', {
+    '@/lib/api/authenticated-request': { authenticatedEnvelopeRequest: request, authenticatedRequest: request, authenticatedResponseRequest: request },
+  });
+  await api.loadReportResolutions('campus/id', 2, signal); await api.loadReportResolution('campus/id', 'case/id', signal);
+  assert.equal(calls[0][0], '/api/v1/reports/campuses/campus%2Fid/resolutions');
+  assert.equal(calls[0][2].toString(), 'page=2&limit=20'); assert.equal(calls[0][1].signal, signal);
+  assert.equal(calls[1][0], '/api/v1/reports/campuses/campus%2Fid/resolutions/case%2Fid');
+  assert.equal(calls[1][1].signal, signal); assert.equal(calls[1][1].method, undefined);
+});
+
+test('history renders recorded result, measure, reason, original content and responsible ID without live state or resolution controls', () => {
+  const require = createRequire(import.meta.url), labels = load('../src/features/reports/types/review.ts', {});
+  const view = ({ children }) => React.createElement('div', null, children);
+  const resolution = { measure: 'OCULTAR', justification: 'Justificación guardada', resolvedById: 'admin-original', resolvedAt: '2026-10-22T12:00:00Z' };
+  const state = { allowed: true, history: true, campuses: [], entries: [{ id: 'case', title: 'Original', entityId: 'contenido-original', entityType: 'ACTIVIDAD', status: 'RESUELTO', resolution }],
+    selectedId: null, detail: null, canResolve: false };
+  const { ReportReviews } = load('../src/features/reports/components/ReportReviews.tsx', {
+    'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-native': { ActivityIndicator: view, Pressable: view, ScrollView: view, Text: view, View: view, StyleSheet: { create: value => value } },
+    '@/components/navigation/BottomNavigationBar': { BottomNavigationBar: () => null }, '../types/review': labels,
+    '../hooks/useReportReviews': { useReportReviews: () => state },
+  });
+  let markup = renderToStaticMarkup(React.createElement(ReportReviews));
+  for (const text of ['Historial de resoluciones', 'Consultar resolución', 'contenido-original', 'Resuelto', 'admin-original', 'Fecha de decisión']) assert.ok(markup.includes(text), text);
+  state.selectedId = 'case'; state.detail = { entityId: 'contenido-original', status: 'RESUELTO', reportedAt: '2026-10-20T12:00:00Z', reporter: { id: 'reporter' }, reason: 'Motivo original', resolution,
+    snapshot: { publication: { titulo: 'Título conservado', files: [{ id: 'file', name: 'private.pdf' }] } },
+    currentPublication: { title: 'Estado vivo que no corresponde' } };
+  markup = renderToStaticMarkup(React.createElement(ReportReviews));
+  for (const text of ['Motivo original', 'Justificación guardada', 'Ocultar el contenido', 'Título conservado', 'admin-original']) assert.ok(markup.includes(text), text);
+  for (const text of ['Estado vivo que no corresponde', 'Descargar', 'Resolver denuncia', 'Confirmar resolución']) assert.ok(!markup.includes(text), text);
+  state.detail.resolution = { measure: null, justification: null, resolvedById: null, resolvedAt: null };
+  markup = renderToStaticMarkup(React.createElement(ReportReviews));
+  assert.ok(markup.includes('Sin fecha registrada')); assert.ok(markup.includes('Sin medida registrada')); assert.ok(!markup.includes('1970'));
+});
 
 test('resolution requires justification and confirmation, prevents double submit and updates detail/list from server response', async () => {
   const h = harness(); let state = await openPending(h);

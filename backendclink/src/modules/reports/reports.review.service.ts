@@ -9,7 +9,7 @@ import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
 import { assertStoredDigitalFile } from '../marketplace/elibrary/elibrary.files.service.js';
 import { downloadDigitalOriginal, findDigitalResource } from '../marketplace/elibrary/elibrary.repository.js';
-import { findReportedDigitalFile, findReportReview, readReportBackground, readReportReviews } from './reports.review.repository.js';
+import { findReportedDigitalFile, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution } from './reports.review.repository.js';
 
 const missing = () => new ApiError(404, 'NOT_FOUND', 'La denuncia o el archivo no está disponible en este campus.');
 
@@ -31,15 +31,37 @@ export async function authorizedReview<T>(auth: VerifiedAuthConnection, campusId
   }
 }
 
-export async function listReportReviews(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown,
-  transaction = withPostgresTransaction) {
+function reviewListQuery(rawCampusId: unknown, query: unknown) {
   const campusId = digitalId(rawCampusId, 'campusId');
   const parsed = parsePaginationQuery(query);
   if (!parsed.success || !query || typeof query !== 'object' || Object.keys(query).some(key => !['page', 'limit'].includes(key))) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa la página y el tamaño del listado.');
   }
+  return { campusId, pagination: parsed.data };
+}
+
+export async function listReportReviews(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown,
+  transaction = withPostgresTransaction) {
+  const { campusId, pagination } = reviewListQuery(rawCampusId, query);
   return authorizedReview(auth, campusId, async client =>
-    createPaginatedResult(await readReportReviews(client, campusId, parsed.data), parsed.data), transaction);
+    createPaginatedResult(await readReportReviews(client, campusId, pagination), pagination), transaction);
+}
+
+export async function listReportResolutions(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown,
+  transaction = withPostgresTransaction) {
+  const { campusId, pagination } = reviewListQuery(rawCampusId, query);
+  return authorizedReview(auth, campusId, async client =>
+    createPaginatedResult(await readReportResolutions(client, campusId, pagination), pagination), transaction);
+}
+
+export async function getReportResolution(auth: VerifiedAuthConnection, rawCampusId: unknown, rawId: unknown,
+  transaction = withPostgresTransaction) {
+  const campusId = digitalId(rawCampusId, 'campusId'), id = digitalId(rawId, 'reportId');
+  return authorizedReview(auth, campusId, async client => {
+    const report = await findReportResolution(client, campusId, id);
+    if (!report) throw missing();
+    return report;
+  }, transaction);
 }
 
 export async function getReportReview(auth: VerifiedAuthConnection, rawCampusId: unknown, rawId: unknown,

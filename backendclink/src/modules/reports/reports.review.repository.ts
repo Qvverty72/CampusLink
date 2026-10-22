@@ -1,12 +1,35 @@
 import type { PoolClient } from 'pg';
 import type { PaginationParams } from '../../types/api.js';
 import type { DigitalStoredFile } from '../marketplace/elibrary/elibrary.types.js';
-import type { ReportReviewDetail, ReportReviewSummary } from './reports.types.js';
+import type { ReportResolutionDetail, ReportResolutionSummary, ReportReviewDetail, ReportReviewSummary } from './reports.types.js';
 
 const summaryProjection = `r.id,r.campus_id AS "campusId",r.entidad_tipo AS "entityType",r.entidad_id AS "entityId",
   COALESCE(r.contenido_reportado_json->'publication'->>'titulo',r.contenido_reportado_json->>'title') AS title,
   r.motivo AS reason,r.estado_reporte AS status,
   to_char(r.reportado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "reportedAt"`;
+
+const resolutionProjection = `jsonb_build_object('justification',r.fundamento_resolucion,
+  'measure',r.medida_aplicada,'resolvedById',r.resuelto_por_id,
+  'resolvedAt',to_char(r.resuelto_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) AS resolution`;
+const finalResolution = `r.estado_reporte IN ('RESUELTO','DESESTIMADO')`;
+
+/** Solo decisiones definitivas: EN_REVISION puede tener una medida todavía sin completar. */
+export async function readReportResolutions(client: PoolClient, campusId: string, pagination: PaginationParams) {
+  return (await client.query<ReportResolutionSummary>(`SELECT ${summaryProjection},${resolutionProjection}
+    FROM public.reporte_contenido r WHERE r.campus_id=$1 AND ${finalResolution}
+    ORDER BY r.resuelto_en DESC NULLS LAST,r.id DESC LIMIT $2 OFFSET $3`,
+    [campusId, pagination.limit + 1, pagination.offset])).rows;
+}
+
+/** Historia independiente del estado y la existencia operacional del contenido o de sus cuentas. */
+export async function findReportResolution(client: PoolClient, campusId: string, id: string) {
+  return (await client.query<ReportResolutionDetail>(`SELECT ${summaryProjection},${resolutionProjection},
+    r.descripcion AS description,r.contenido_reportado_json AS snapshot,
+    jsonb_build_object('id',r.reportante_id,'name',NULL) AS reporter,
+    NULL AS "currentPublication",NULL AS "currentTransaction"
+    FROM public.reporte_contenido r WHERE r.campus_id=$1 AND r.id=$2 AND ${finalResolution}`,
+    [campusId, id])).rows[0] ?? null;
+}
 
 /** El campus se aplica en SQL antes de paginar o buscar un identificador. */
 export async function readReportReviews(client: PoolClient, campusId: string, pagination: PaginationParams) {

@@ -44,14 +44,20 @@ export function ReportReviews() {
   const review = useReportReviews();
   const detail = review.detail;
   const publication = detail?.snapshot?.publication;
-  const files = publication && typeof publication === 'object' && 'files' in publication && Array.isArray(publication.files)
+  const files = !review.history && publication && typeof publication === 'object' && 'files' in publication && Array.isArray(publication.files)
     ? publication.files.filter((file): file is { id: string; name: string } => file && typeof file.id === 'string' && typeof file.name === 'string') : [];
   return <View style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>ADMINISTRACIÓN</Text>
-      <Text style={styles.title}>Denuncias de contenido</Text>
-      <Text style={styles.text}>Revisa los casos y sus antecedentes en los campus a tu cargo.</Text>
+      <Text style={styles.title}>{review.history ? 'Historial de resoluciones' : 'Denuncias de contenido'}</Text>
+      <Text style={styles.text}>{review.history ? 'Consulta las decisiones registradas en los campus a tu cargo.' : 'Revisa los casos y sus antecedentes en los campus a tu cargo.'}</Text>
       {!review.allowed && <Text style={styles.text}>Se requiere acceso administrativo.</Text>}
+      {review.allowed && <View style={styles.choices}>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: !review.history }} style={[styles.button, !review.history && styles.active]}
+          onPress={() => review.showHistory(false)}><Text style={styles.buttonText}>Revisar denuncias</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: !!review.history }} style={[styles.button, review.history && styles.active]}
+          onPress={() => review.showHistory(true)}><Text style={styles.buttonText}>Historial de resoluciones</Text></Pressable>
+      </View>}
       <View style={styles.choices}>{review.campuses.map(campus => <Pressable key={campus.id} accessibilityRole="button"
         accessibilityState={{ selected: campus.id === review.campusId }} style={[styles.button, campus.id === review.campusId && styles.active]}
         onPress={() => review.chooseCampus(campus.id)}><Text style={styles.buttonText}>{campus.name}</Text></Pressable>)}</View>
@@ -59,13 +65,17 @@ export function ReportReviews() {
       {!!review.error && <><Text accessibilityRole="alert" style={styles.error}>{review.error}</Text>
         <Pressable accessibilityRole="button" style={styles.button} onPress={review.retry}><Text style={styles.buttonText}>Reintentar</Text></Pressable></>}
       {review.allowed && !review.selectedId && <>
-        {!review.loading && !review.error && !review.entries.length && <Text style={styles.text}>No hay denuncias en este campus.</Text>}
+        {!review.loading && !review.error && !review.entries.length && <Text style={styles.text}>{review.history ? 'No hay resoluciones en este campus.' : 'No hay denuncias en este campus.'}</Text>}
         {review.entries.map(entry => <Pressable key={entry.id} accessibilityRole="button" style={styles.card} onPress={() => review.open(entry.id)}>
           <Text style={styles.heading}>{entry.title ?? reviewLabels[entry.entityType] ?? 'Contenido denunciado'}</Text>
           <Text style={styles.text}>{reviewLabels[entry.entityType] ?? entry.entityType} · {reviewLabels[entry.status] ?? entry.status}</Text>
+          <Text selectable style={styles.text}>Referencia del contenido: {entry.entityId}</Text>
           <Text style={styles.text}>{entry.reason}</Text>
-          <Text style={styles.text}>{new Date(entry.reportedAt).toLocaleString('es-CL')}</Text>
-          <Text style={styles.link}>Revisar denuncia</Text>
+          {review.history && 'resolution' in entry ? <>
+            <Text style={styles.text}>Fecha de decisión: {entry.resolution.resolvedAt ? new Date(entry.resolution.resolvedAt).toLocaleString('es-CL') : 'Sin fecha registrada'}</Text>
+            <Text selectable style={styles.text}>Administrador responsable: {entry.resolution.resolvedById ?? 'Sin responsable registrado'}</Text>
+          </> : <Text style={styles.text}>{new Date(entry.reportedAt).toLocaleString('es-CL')}</Text>}
+          <Text style={styles.link}>{review.history ? 'Consultar resolución' : 'Revisar denuncia'}</Text>
         </Pressable>)}
         <View style={styles.choices}>
           <Pressable accessibilityRole="button" disabled={review.loading || review.page === 1} style={[styles.button, review.page === 1 && styles.disabled]} onPress={() => review.changePage(review.page - 1)}><Text style={styles.buttonText}>Anterior</Text></Pressable>
@@ -77,6 +87,7 @@ export function ReportReviews() {
         <Pressable accessibilityRole="button" style={styles.button} onPress={review.close}><Text style={styles.buttonText}>Volver al listado</Text></Pressable>
         {detail && <View style={styles.card}>
           <Text style={styles.heading}>{detail.title ?? 'Contenido denunciado'}</Text>
+          <Text selectable style={styles.text}>Referencia del contenido: {detail.entityId}</Text>
           <Text style={styles.text}>Estado: {reviewLabels[detail.status] ?? detail.status}</Text>
           <Text style={styles.text}>Fecha: {new Date(detail.reportedAt).toLocaleString('es-CL')}</Text>
           <Text selectable style={styles.text}>Denunciante: {detail.reporter.name ?? detail.reporter.id}</Text>
@@ -84,17 +95,18 @@ export function ReportReviews() {
           {!!detail.description && <Text selectable style={styles.text}>{detail.description}</Text>}
           <Text style={styles.heading}>Contenido al momento de la denuncia</Text>
           <Evidence value={detail.snapshot} />
-          {!!detail.currentPublication && <><Text style={styles.heading}>Publicación actual</Text><Evidence value={detail.currentPublication} /></>}
-          {!!detail.currentTransaction && <><Text style={styles.heading}>Antecedentes actuales del acuerdo</Text><Evidence value={detail.currentTransaction} /></>}
+          {!review.history && !!detail.currentPublication && <><Text style={styles.heading}>Publicación actual</Text><Evidence value={detail.currentPublication} /></>}
+          {!review.history && !!detail.currentTransaction && <><Text style={styles.heading}>Antecedentes actuales del acuerdo</Text><Evidence value={detail.currentTransaction} /></>}
           {!!files.length && <><Text style={styles.heading}>Archivos denunciados</Text><Text style={styles.text}>Acceso reservado a la administración de este campus.</Text></>}
           {files.map(file => <Pressable key={file.id} accessibilityRole="button" disabled={Boolean(review.downloading)} style={styles.button}
             onPress={() => void review.download(file.id, file.name)}><Text style={styles.buttonText}>{review.downloading ? 'Descargando…' : `Descargar ${file.name}`}</Text></Pressable>)}
           {detail.resolution && <View style={styles.fields}>
             <Text style={styles.heading}>{detail.status === 'EN_REVISION' ? 'Decisión en curso' : 'Resolución registrada'}</Text>
-            <Text style={styles.text}>{detail.resolution.measure === 'OCULTAR' ? 'Acoger y ocultar el contenido' : 'Desestimar sin modificar el contenido'}</Text>
-            <Text selectable style={styles.text}>{detail.resolution.justification}</Text>
-            <Text selectable style={styles.text}>Administrador responsable: {detail.resolution.resolvedById}</Text>
-            <Text style={styles.text}>Fecha de decisión: {new Date(detail.resolution.resolvedAt).toLocaleString('es-CL')}</Text>
+            <Text style={styles.text}>Resultado: {reviewLabels[detail.status] ?? detail.status}</Text>
+            <Text style={styles.text}>Medida aplicada: {detail.resolution.measure === 'OCULTAR' ? 'Ocultar el contenido' : detail.resolution.measure === 'NINGUNA' ? 'Ninguna' : detail.resolution.measure ?? 'Sin medida registrada'}</Text>
+            <Text selectable style={styles.text}>Justificación: {detail.resolution.justification ?? 'Sin justificación registrada'}</Text>
+            <Text selectable style={styles.text}>Administrador responsable: {detail.resolution.resolvedById ?? 'Sin responsable registrado'}</Text>
+            <Text style={styles.text}>Fecha de decisión: {detail.resolution.resolvedAt ? new Date(detail.resolution.resolvedAt).toLocaleString('es-CL') : 'Sin fecha registrada'}</Text>
           </View>}
           {review.canResolve && <View style={styles.fields}>
             <Text style={styles.heading}>Resolver denuncia</Text>

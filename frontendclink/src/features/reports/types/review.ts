@@ -10,7 +10,13 @@ export interface ReportReviewDetail extends ReportReviewSummary {
   currentTransaction: Record<string, unknown> | null;
 }
 export interface ReportResolutionInput { decision: 'DESESTIMAR' | 'ACOGER'; justification: string }
-export interface ReviewPage { data: ReportReviewSummary[]; meta: { page: number; limit: number; hasMore: boolean } }
+export interface ReportResolutionSummary extends ReportReviewSummary {
+  resolution: { justification: string | null; measure: string | null; resolvedById: string | null; resolvedAt: string | null };
+}
+export interface ReportResolutionDetail extends Omit<ReportReviewDetail, 'resolution'> {
+  resolution: ReportResolutionSummary['resolution'];
+}
+export interface ReviewPage { data: (ReportReviewSummary | ReportResolutionSummary)[]; meta: { page: number; limit: number; hasMore: boolean } }
 export const reviewLabels: Record<string, string> = {
   PUBLICACION_FISICA: 'Publicación física', PUBLICACION_DIGITAL: 'Publicación digital', TRANSACCION: 'Transacción', ACTIVIDAD: 'Actividad',
   PENDIENTE: 'Pendiente', EN_REVISION: 'En revisión', RESUELTO: 'Resuelto', DESESTIMADO: 'Desestimado',

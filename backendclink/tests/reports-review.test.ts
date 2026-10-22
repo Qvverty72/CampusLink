@@ -119,6 +119,105 @@ const dismiss = { decision: 'DESESTIMAR', justification: 'Los antecedentes no ac
 const resolveCase = (id: string, input: unknown = decision, at = campus) => resolutions.resolveReport(auth, at, id, input, transaction);
 const audits = async () => (await db.query<any>('SELECT * FROM auditoria')).rows;
 
+test('resolution history includes only final cases and paginates by original decision date then UUID within the campus', async () => {
+  const first = await report(), second = await report(), pending = await report(), staged = await report(), outside = await report('ACTIVIDAD', other);
+  for (const [id, status, at] of [[first, 'DESESTIMADO', '2026-10-21T12:00:00.123456Z'],
+    [second, 'RESUELTO', '2026-10-22T12:00:00.123456Z'], [outside, 'RESUELTO', '2026-10-23T12:00:00Z'],
+    [staged, 'EN_REVISION', '2026-10-24T12:00:00Z']]) {
+    await db.query(`UPDATE reporte_contenido SET estado_reporte=$2,resuelto_en=$3,resuelto_por_id=$4,
+      fundamento_resolucion='Decisión original',medida_aplicada='OCULTAR' WHERE id=$1`, [id, status, at, auth.userId]);
+  }
+  // Older report can have the newer resolution; reportedAt must not determine order.
+  await db.query("UPDATE reporte_contenido SET reportado_en='2020-01-01Z' WHERE id=$1", [second]);
+  let result = await reviews.listReportResolutions(auth, campus, { limit: '1' }, transaction);
+  assert.deepEqual(result.data.map(row => row.id), [second]); assert.equal(result.meta.hasMore, true);
+  result = await reviews.listReportResolutions(auth, campus, { limit: '1', page: '2' }, transaction);
+  assert.deepEqual(result.data.map(row => row.id), [first]); assert.equal(result.meta.hasMore, false);
+  for (const id of [pending, staged, outside, randomUUID()]) await assert.rejects(reviews.getReportResolution(auth, campus, id, transaction), { status: 404 });
+  await db.query('UPDATE reporte_contenido SET resuelto_en=$1 WHERE id=ANY($2::uuid[])', ['2026-10-22T12:00:00.123456Z', [first, second]]);
+  result = await reviews.listReportResolutions(auth, campus, {}, transaction);
+  assert.deepEqual(result.data.map(row => row.id), [first, second].sort().reverse());
+  assert.equal((await audits()).length, 0); assert.equal(mongoWrites, 0); assert.equal(storageCalls, 0);
+});
+
+test('history preserves the complete original decision after edits, logical removal, actor suspension and reporter relocation', async () => {
+  const fixture = await digitalCase(), original = await resolveCase(fixture.id);
+  const before = await reviews.getReportResolution(auth, campus, fixture.id, transaction);
+  const reader = randomUUID();
+  await db.query('INSERT INTO auth.users VALUES($1)', [reader]);
+  await db.query(`INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en)
+    VALUES($1,$2,$3,'Nuevo lector',now())`, [reader, institution, campus]);
+  await db.query("INSERT INTO usuario_rol(perfil_usuario_id,rol_id,campus_id) SELECT $1,id,$2 FROM rol WHERE nombre='ADMINISTRADOR'", [reader, campus]);
+  await db.query("UPDATE publicacion_recurso SET titulo='Reemplazo actual',estado_publicacion='CANCELADO',deleted_at=now() WHERE id=$1", [fixture.publicationId]);
+  await db.query("UPDATE perfil_usuario SET nombre_completo='Nombre cambiado',estado_cuenta='DESACTIVADA',deleted_at=now(),campus_id=$2 WHERE id=$1", [auth.userId, other]);
+  const nextReader = { ...auth, userId: reader };
+  const after = await reviews.getReportResolution(nextReader, campus, fixture.id, transaction);
+  assert.deepEqual(after, before); assert.deepEqual(after.resolution, original.resolution);
+  assert.deepEqual(after.snapshot, fixture.snapshot); assert.equal(after.title, 'Título original');
+  assert.equal(after.reason, 'Motivo privado'); assert.equal(after.currentPublication, null); assert.equal(after.currentTransaction, null);
+  assert.equal(after.reporter.name, null); assert.equal(after.resolution!.resolvedById, auth.userId);
+  assert.equal((await reviews.listReportResolutions(nextReader, campus, {}, transaction)).data[0].id, fixture.id);
+  assert.equal((await audits()).length, 1); assert.equal(storageCalls, 0);
+});
+
+test('history supports dismissed missing targets, activities and transactions without consulting their live state', async () => {
+  for (const type of ['PUBLICACION_FISICA', 'TRANSACCION', 'ACTIVIDAD', 'COMPORTAMIENTO']) {
+    const id = await report(type); const result = await resolveCase(id, dismiss);
+    const detail = await reviews.getReportResolution(auth, campus, id, transaction);
+    assert.equal(detail.entityType, type); assert.deepEqual(detail.resolution, result.resolution);
+    assert.equal(detail.status, 'DESESTIMADO'); assert.equal(detail.currentPublication, null); assert.equal(detail.currentTransaction, null);
+  }
+  assert.equal((await reviews.listReportResolutions(auth, campus, {}, transaction)).data.length, 4);
+});
+
+test('legacy final rows expose only registered values without inventing a date, administrator, justification or measure', async () => {
+  const id = await report(); await db.query("UPDATE reporte_contenido SET estado_reporte='RESUELTO' WHERE id=$1", [id]);
+  const detail = await reviews.getReportResolution(auth, campus, id, transaction);
+  assert.deepEqual(detail.resolution, { justification: null, measure: null, resolvedAt: null, resolvedById: null });
+});
+
+test('history enforces fresh campus roles and account state on both list and detail, including explicit second-campus assignments', async () => {
+  const id = await report('ACTIVIDAD', other);
+  await db.query("UPDATE reporte_contenido SET estado_reporte='DESESTIMADO' WHERE id=$1", [id]);
+  await assert.rejects(reviews.listReportResolutions(auth, other, {}, transaction), { status: 403 });
+  await assert.rejects(reviews.getReportResolution(auth, other, id, transaction), { status: 403 });
+  await db.query("INSERT INTO usuario_rol(perfil_usuario_id,rol_id,campus_id) SELECT $1,id,$2 FROM rol WHERE nombre='ADMINISTRADOR'", [auth.userId, other]);
+  assert.equal((await reviews.getReportResolution(auth, other, id, transaction)).id, id);
+  assert.equal((await reviews.listReportResolutions(auth, other, {}, transaction)).data.length, 1);
+  assert.equal((await reviews.listReportResolutions(auth, campus, {}, transaction)).data.length, 0);
+  await assert.rejects(reviews.getReportResolution(auth, campus, id, transaction), { status: 404 });
+  await assert.rejects(reviews.listReportResolutions(auth, foreign, {}, transaction), { status: 403 });
+  await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE perfil_usuario_id=$1', [auth.userId]);
+  auth.permissions = [{ id: randomUUID(), name: 'ACCEDER_REPORTERIA', campusId: other }];
+  await assert.rejects(reviews.listReportResolutions(auth, other, {}, transaction), { status: 403 });
+  await assert.rejects(reviews.getReportResolution(auth, other, id, transaction), { status: 403 });
+  await db.query('UPDATE usuario_rol SET revocado_en=NULL WHERE perfil_usuario_id=$1', [auth.userId]);
+  for (const status of ['SUSPENDIDA', 'DESACTIVADA']) {
+    await db.query('UPDATE perfil_usuario SET estado_cuenta=$2 WHERE id=$1', [auth.userId, status]);
+    await assert.rejects(reviews.listReportResolutions(auth, other, {}, transaction), { status: 403 });
+    await assert.rejects(reviews.getReportResolution(auth, other, id, transaction), { status: 403 });
+  }
+});
+
+test('history HTTP uses private no-store envelopes, validates parameters and sanitizes errors', async () => {
+  const id = await report(); await resolveCase(id, dismiss);
+  const path = campus + '/resolutions';
+  assert.equal((await http(path, false)).status, 401);
+  const list = await http(path + '?limit=1'); assert.equal(list.status, 200); assert.match(list.headers.get('cache-control') ?? '', /no-store/);
+  const body = await list.json(); assert.equal(body.data[0].id, id); assert.equal(body.data[0].resolution.measure, 'NINGUNA');
+  assert.equal(body.data[0].resolution.resolvedById, auth.userId); assert.equal(body.meta.hasMore, false);
+  const detail = await http(path + '/' + id); assert.equal(detail.status, 200); assert.equal((await detail.json()).data.reason, 'Motivo privado');
+  for (const query of ['campusId=' + other, 'status=PENDIENTE', 'limit=101', 'page=0', 'page=1&page=2']) assert.equal((await http(path + '?' + query)).status, 400);
+  assert.equal((await http(path + '/' + id + '?page=1')).status, 400);
+  assert.equal((await http(path + '/invalid')).status, 400);
+  assert.equal((await http('invalid/resolutions')).status, 400);
+  assert.equal((await http(path + '/' + randomUUID())).status, 404);
+  failSql = true;
+  for (const target of [path, path + '/' + id]) {
+    const failed = await http(target); assert.equal(failed.status, 503); assert.ok(!/password|SELECT|reporte_contenido/.test(await failed.text()));
+  }
+});
+
 test('dismissal persists original case and final decision with responsible admin, campus, timestamp and immutable audit', async () => {
   const fixture = await digitalCase();
   const result = await resolveCase(fixture.id, { ...dismiss, justification: '  No corresponde.  ' });

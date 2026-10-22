@@ -771,7 +771,18 @@ y el manifiesto permanecen en `qa/local/` ignorado por Git y Docker.
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
 - Reutilizar filtros y agrupaciones del tablero para F2.7-05/06; el health no demuestra cobertura analítica.
-- La consulta especializada del historial de resoluciones corresponde a F2.8-04; los casos resueltos ya conservan su decisión y pueden consultarse en el detalle administrativo.
+- Ejecutar QA real del historial de resoluciones F2.8-04 cuando el equipo integre la rama.
+
+## Historial de resoluciones de moderación (F2.8-04)
+
+Desde Mi perfil → Denuncias de contenido → Historial de resoluciones. Reutiliza la pantalla, hook, cliente autenticado y módulo reports existentes. Router/controller → servicio de revisión (validación y autorización) → repositorio SQL parametrizado. No añade objetos de base de datos, migraciones, dependencias ni escrituras.
+
+- `GET /api/v1/reports/campuses/:campusId/resolutions?page=1&limit=20`: devuelve `{data:ReportResolutionSummary[],meta:{page,limit,hasMore}}`, máximo100. Solo admite page/limit. Filtra campus y estados finales RESUELTO/DESESTIMADO antes de paginar. EN_REVISION queda fuera aunque tenga decisión durable pendiente de completar. Orden `resuelto_en DESC NULLS LAST,id DESC`; fecha UTC con seis decimales.
+- `GET /api/v1/reports/campuses/:campusId/resolutions/:reportId`: sin query; devuelve `{data:ReportResolutionDetail}`. Pendiente, en revisión, ajeno o inexistente devuelve404 dentro de un campus autorizado.
+
+Listado conserva identificador/tipo/título original del contenido, motivo, estado y fecha de denuncia, y `resolution:{justification,measure,resolvedById,resolvedAt}`. Detalle añade descripción, snapshot original y referencia del denunciante (`reporter:{id,name:null}`); currentPublication/currentTransaction son null. Solo lee reporte_contenido: no rehidrata publicaciones, actividades, transacciones ni nombres de cuentas desde su estado actual. Responsable identificado por UUID original; su desactivación o traslado no modifica la decisión histórica. Campos ausentes en registros legados se conservan null y se presentan como no registrados; no se inventa una decisión ni se reconstruyen antecedentes ausentes.
+
+Ambos GET exigen Bearer y no-store. La API vuelve a leer cuenta activa, roles por campus y campus activo mediante authorizedReview; admite sedes delegadas explícitamente. Reportería por sí sola no habilita moderación. 400 por UUID/paginación/query inválida,401 por sesión,403 por cuenta/campus/permisos,404 por caso no final o ajeno,503 sanitizado por dependencia. Historial sin formulario de resolución ni descarga de archivos; el flujo administrativo de revisión conserva esas operaciones. Cambiar vista/campus/identidad cancela solicitudes, limpia selección y descarta respuestas tardías; cambiar vista vuelve a página1. Sin SQL pendiente.
 
 ## Referencias técnicas
 

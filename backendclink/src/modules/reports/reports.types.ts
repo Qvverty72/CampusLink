@@ -20,6 +20,13 @@ export interface ReportReviewDetail extends ReportReviewSummary {
   currentTransaction: Record<string, unknown> | null;
 }
 
+export interface ReportResolutionSummary extends ReportReviewSummary {
+  resolution: { justification: string | null; measure: string | null; resolvedById: string | null; resolvedAt: string | null };
+}
+export interface ReportResolutionDetail extends Omit<ReportReviewDetail, 'resolution'> {
+  resolution: ReportResolutionSummary['resolution'];
+}
+
 export interface ReportResolutionInput { decision: 'DESESTIMAR' | 'ACOGER'; justification: string }
 
 export interface ContentReportInput { reason: string; description?: string }
