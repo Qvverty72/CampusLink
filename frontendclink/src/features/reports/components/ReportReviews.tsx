@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { useReportReviews } from '../hooks/useReportReviews';
 import { reviewLabels } from '../types/review';
@@ -39,7 +39,7 @@ function Evidence({ value }: { value: unknown }) {
   return <Text selectable style={styles.text}>{values[String(value)] ?? String(value)}</Text>;
 }
 
-/** Bandeja y revisión privada del caso. La resolución pertenece a F2.8-03. */
+/** Revisión y resolución privada del caso con confirmación explícita de la medida. */
 export function ReportReviews() {
   const review = useReportReviews();
   const detail = review.detail;
@@ -89,6 +89,37 @@ export function ReportReviews() {
           {!!files.length && <><Text style={styles.heading}>Archivos denunciados</Text><Text style={styles.text}>Acceso reservado a la administración de este campus.</Text></>}
           {files.map(file => <Pressable key={file.id} accessibilityRole="button" disabled={Boolean(review.downloading)} style={styles.button}
             onPress={() => void review.download(file.id, file.name)}><Text style={styles.buttonText}>{review.downloading ? 'Descargando…' : `Descargar ${file.name}`}</Text></Pressable>)}
+          {detail.resolution && <View style={styles.fields}>
+            <Text style={styles.heading}>{detail.status === 'EN_REVISION' ? 'Decisión en curso' : 'Resolución registrada'}</Text>
+            <Text style={styles.text}>{detail.resolution.measure === 'OCULTAR' ? 'Acoger y ocultar el contenido' : 'Desestimar sin modificar el contenido'}</Text>
+            <Text selectable style={styles.text}>{detail.resolution.justification}</Text>
+            <Text selectable style={styles.text}>Administrador responsable: {detail.resolution.resolvedById}</Text>
+            <Text style={styles.text}>Fecha de decisión: {new Date(detail.resolution.resolvedAt).toLocaleString('es-CL')}</Text>
+          </View>}
+          {review.canResolve && <View style={styles.fields}>
+            <Text style={styles.heading}>Resolver denuncia</Text>
+            {review.resolutionInProgress ? <Text style={styles.text}>La decisión ya está registrada. Completa el ocultamiento para cerrar el caso.</Text> : <>
+              <View style={styles.choices}>{(['DESESTIMAR', 'ACOGER'] as const).map(decision => <Pressable key={decision} accessibilityRole="button"
+                accessibilityState={{ selected: review.resolutionInput.decision === decision }} disabled={review.resolving || review.resolutionNeedsReload}
+                style={[styles.button, review.resolutionInput.decision === decision && styles.active]}
+                onPress={() => review.editResolution({ decision })}><Text style={styles.buttonText}>{decision === 'DESESTIMAR' ? 'Desestimar' : 'Acoger y ocultar'}</Text></Pressable>)}</View>
+              <Text style={styles.label}>Justificación obligatoria</Text>
+              <TextInput accessibilityLabel="Justificación de la resolución" multiline maxLength={2000} style={styles.input}
+                editable={!review.resolving && !review.resolutionNeedsReload} value={review.resolutionInput.justification}
+                onChangeText={justification => review.editResolution({ justification })} placeholder="Explica la decisión" placeholderTextColor="#A0B9C7" />
+            </>}
+            {!!review.resolutionError && <Text accessibilityRole="alert" style={styles.error}>{review.resolutionError}</Text>}
+            {review.resolutionNeedsReload ? <Pressable accessibilityRole="button" style={styles.button} onPress={review.retry}><Text style={styles.buttonText}>Actualizar caso</Text></Pressable>
+              : review.confirmingResolution ? <>
+                <Text style={styles.text}>{review.resolutionInput.decision === 'ACOGER'
+                  ? 'El contenido dejará de mostrarse públicamente. Se conservarán solicitudes, transacciones, inscripciones y accesos adquiridos.'
+                  : 'La denuncia quedará desestimada y el contenido conservará su estado.'} La resolución será definitiva.</Text>
+                <View style={styles.choices}>
+                  <Pressable accessibilityRole="button" disabled={review.resolving} style={styles.button} onPress={() => void review.confirmResolution()}><Text style={styles.buttonText}>{review.resolving ? 'Registrando…' : 'Confirmar resolución'}</Text></Pressable>
+                  <Pressable accessibilityRole="button" disabled={review.resolving} style={styles.button} onPress={review.cancelResolution}><Text style={styles.buttonText}>Cancelar</Text></Pressable>
+                </View>
+              </> : <Pressable accessibilityRole="button" style={styles.button} onPress={review.requestResolution}><Text style={styles.buttonText}>{review.resolutionInProgress ? 'Completar resolución' : 'Revisar decisión'}</Text></Pressable>}
+          </View>}
         </View>}
       </>}
     </ScrollView>
@@ -108,4 +139,5 @@ const styles = StyleSheet.create({
   button: { padding: 12, backgroundColor: '#234459', borderRadius: 10 }, active: { backgroundColor: '#237660' },
   buttonText: { color: '#FFF', fontWeight: '600', flexShrink: 1 }, link: { color: '#74C69D', fontWeight: '700' },
   disabled: { opacity: 0.4 }, error: { color: '#FFB8B8', fontSize: 15 },
+  input: { color: '#FFF', backgroundColor: '#071A2B', borderWidth: 1, borderColor: '#365166', borderRadius: 10, padding: 12, minHeight: 100, textAlignVertical: 'top' },
 });

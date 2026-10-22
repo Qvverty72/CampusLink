@@ -530,6 +530,18 @@ Desde Mi perfil → Denuncias de contenido, un ADMINISTRADOR elige entre sus cam
 
 Validación local:381/381 tests backend con Node22.23.3 (113 físicos,9 nuevos), TypeScript/build backend, TypeScript frontend y export web/Android/iOS --no-bytecode. QA Edge390×844/1280×900 como propietario/receptor: publicación/acuerdos en todos sus estados, motivo/descripción, doble clic, error/reintento, recibo,404, respuesta incierta/recibo incorrecto, campus anterior, respuesta tardía descartada y regresión del envío de actividades desde notificaciones. Regresiones de fotografías/contenido/retirada, transacciones/coordinación, valoraciones, historial y recordatorios aprobadas. QA con datos/dispositivos reales y contención remota multiconexión quedan para cierre de fase.
 
+### Resolver denuncias (F2.8-03)
+
+`POST /api/v1/reports/campuses/:campusId/:reportId/resolution`, Bearer y sin query, recibe únicamente `{decision:'DESESTIMAR'|'ACOGER', justification:string}`. Justificación obligatoria, normalizada y limitada a 2000 caracteres; NUL y campos adicionales rechazados. Las dos decisiones fueron aprobadas por el usuario el 2026-10-22: desestimar sin modificar contenido o acoger y ocultar la publicación/ocurrencia vinculada. La API deriva medida, responsable, campus y fecha, revalida cuenta/administración por sede bajo bloqueo e impide procesar casos finales de nuevo (409).
+
+Respuesta200 `no-store` con detalle del caso y `resolution:{justification,measure:'NINGUNA'|'OCULTAR',resolvedById,resolvedAt}`; GET de detalle también incorpora `resolution` (null sin decisión). DESESTIMAR termina en DESESTIMADO; ACOGER termina en RESUELTO. Denuncia y evidencia original no se reemplazan. Auditoría F2.3-08 conserva decisión/justificación/actor/campus/fecha y snapshots antes/después, con enlace al caso y objetivo original. Estados finales no tienen API de edición o reapertura.
+
+Publicación: se bloquea la fila del campus y se cambia a OCULTO, conservando retirada lógica previa y todos sus antecedentes; para transacciones se obtiene el vínculo de SQL, sin confiar en el snapshot. Publicación, decisión y auditoría comparten transacción. No se borran ni cancelan solicitudes, transacciones, confirmaciones, derechos o archivos; una adquisición completada sigue habilitando descarga.
+
+Actividad: como MongoDB y PostgreSQL son motores distintos, primero se conserva la decisión en los campos existentes del caso en EN_REVISION; luego se revalida autorización y se oculta únicamente la ocurrencia (`visibility:HIDDEN`, incremento de revisión), sin borrar datos/inscripciones/historial ni cambiar su estado temporal. Tras confirmar Mongo se cierra RESUELTO y se audita en la misma transacción SQL. Un fallo puede dejar EN_REVISION con contenido ya oculto; la UI exige recargar y ofrece completar la misma decisión, preservando justificación, administrador y fecha originales. No permite sustituirla por otra; el ocultamiento repetido no vuelve a incrementar revisión. No hay atomicidad distribuida ni worker de reintentos; el cierre se recupera explícitamente desde el caso. No se informa éxito antes del cierre SQL.
+
+400 entrada inválida;401 identidad;403 cuenta/administración/sede;404 caso fuera del campus;409 caso final, decisión en curso diferente o vínculo incompatible;503 dependencia/acuse incierto, sin detalles privados y con recarga del caso. La pantalla incluye justificación, confirmación explícita, estado de envío, consulta del resultado y protección contra respuestas tardías al cambiar identidad/campus/caso. Sin tablas, columnas, funciones SQL, triggers, migraciones, dependencias o variables nuevas.
+
 ## Publicación digital (F2.5-01)
 
 Biblioteca Digital utiliza las tablas existentes y el bucket privado `digital-resources` (25 MiB). No se crean tablas, columnas ni buckets. El servidor comprueba la configuración del bucket antes de cargar. La creación requiere un PDF válido; F2.5-02 amplía la gestión a varios PDF. La política ajustada en QA manual permite enlaces HTTPS, correo (`mailto:`) y teléfono (`tel:`); excluye HTTP y otros esquemas, cifrado, JavaScript, acciones automáticas/encadenadas/no admitidas y adjuntos internos. Los atributos de estructura/formato/accesibilidad se inspeccionan en su contexto, sin tratar toda clave `/A` como acción. Los bytes originales se conservan y los rechazos explican el motivo concreto (tamaño, formato/estructura, cifrado, scripts, adjuntos o enlace/acción no admitidos).
@@ -759,7 +771,7 @@ y el manifiesto permanecen en `qa/local/` ignorado por Git y Docker.
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
 - Reutilizar filtros y agrupaciones del tablero para F2.7-05/06; el health no demuestra cobertura analítica.
-- Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
+- La consulta especializada del historial de resoluciones corresponde a F2.8-04; los casos resueltos ya conservan su decisión y pueden consultarse en el detalle administrativo.
 
 ## Referencias técnicas
 

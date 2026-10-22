@@ -14,7 +14,7 @@ import { findReportedDigitalFile, findReportReview, readReportBackground, readRe
 const missing = () => new ApiError(404, 'NOT_FOUND', 'La denuncia o el archivo no está disponible en este campus.');
 
 /** Reutiliza el bloqueo de cuenta y roles: una sesión previa no sobrevive a una revocación. */
-async function authorizedReview<T>(auth: VerifiedAuthConnection, campusId: string,
+export async function authorizedReview<T>(auth: VerifiedAuthConnection, campusId: string,
   operation: (client: PoolClient, institutionId: string) => Promise<T>, transaction = withPostgresTransaction): Promise<T> {
   try {
     return await transaction(async client => {
@@ -27,7 +27,7 @@ async function authorizedReview<T>(auth: VerifiedAuthConnection, campusId: strin
     });
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo consultar la denuncia. Inténtalo nuevamente.');
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo confirmar la operación. Recarga la denuncia para consultar su estado.');
   }
 }
 

@@ -9,6 +9,7 @@ export interface ReportReviewSummary {
   title: string | null; reason: string; status: string; reportedAt: string;
 }
 export interface ReportReviewDetail extends ReportReviewSummary {
+  resolution: { justification: string; measure: string; resolvedById: string; resolvedAt: string } | null;
   description: string | null;
   reporter: { id: string; name: string | null };
   snapshot: (Record<string, unknown> & {
@@ -18,6 +19,8 @@ export interface ReportReviewDetail extends ReportReviewSummary {
   currentPublication: { id: string; title: string; status: string; deletedAt: string | null } | null;
   currentTransaction: Record<string, unknown> | null;
 }
+
+export interface ReportResolutionInput { decision: 'DESESTIMAR' | 'ACOGER'; justification: string }
 
 export interface ContentReportInput { reason: string; description?: string }
 export type ReportActivityInput = ContentReportInput;

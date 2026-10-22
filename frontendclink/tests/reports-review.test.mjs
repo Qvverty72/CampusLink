@@ -20,7 +20,7 @@ function load(path, dependencies) {
 }
 
 function harness() {
-  const calls = { catalog: [], lists: [], details: [], files: [], saved: [] }, slots = [];
+  const calls = { catalog: [], lists: [], details: [], files: [], resolutions: [], saved: [] }, slots = [];
   let cursor = 0, effects = [], refreshes = 0;
   const auth = { status: 'ready', identity: { userId: 'admin-a', campusId: 'campus-a', profile: { estado_cuenta: 'ACTIVA' },
     roles: [{ name: 'ADMINISTRADOR', campusId: 'campus-a' }] }, refreshIdentity() { refreshes++; } };
@@ -43,6 +43,7 @@ function harness() {
       loadReportReviews: (campusId, page, signal) => request(calls.lists, { campusId, page, signal }),
       loadReportReview: (campusId, id, signal) => request(calls.details, { campusId, id, signal }),
       downloadReportedFile: (campusId, id, fileId, signal) => request(calls.files, { campusId, id, fileId, signal }),
+      submitReportResolution: (campusId, id, input, signal) => request(calls.resolutions, { campusId, id, input, signal }),
     },
   });
   return { auth, calls, get refreshes() { return refreshes; }, render() { cursor = 0; const result = useReportReviews(); const work = effects; effects = []; work.forEach(effect => effect()); return result; } };
@@ -62,6 +63,51 @@ test('switching campus aborts old detail and clears evidence before the next res
   previous.resolve({ id: 'report-a', description: 'Private old evidence' }); await setImmediate();
   state = h.render(); assert.equal(state.detail, null);
   assert.equal(h.calls.lists.at(-1).campusId, 'campus-b'); assert.equal(h.calls.lists.at(-1).page, 1);
+});
+
+async function openPending(h, detail = { id: 'report-a', status: 'PENDIENTE', resolution: null }) {
+  const state = await ready(h); state.open('report-a'); h.render(); h.calls.details[0].resolve(detail);
+  await setImmediate(); return h.render();
+}
+
+test('resolution requires justification and confirmation, prevents double submit and updates detail/list from server response', async () => {
+  const h = harness(); let state = await openPending(h);
+  state.requestResolution(); state = h.render(); assert.match(state.resolutionError, /justificación/); assert.equal(h.calls.resolutions.length, 0);
+  state.editResolution({ decision: 'ACOGER', justification: 'Medida necesaria tras revisión.' }); state = h.render();
+  state.requestResolution(); state = h.render(); assert.equal(state.confirmingResolution, true); assert.equal(h.calls.resolutions.length, 0);
+  const pending = state.confirmResolution(); void state.confirmResolution(); assert.equal(h.calls.resolutions.length, 1);
+  const request = h.calls.resolutions[0]; assert.equal(request.campusId, 'campus-a'); assert.equal(request.id, 'report-a'); assert.equal(request.input.decision, 'ACOGER');
+  request.resolve({ id: 'report-a', status: 'RESUELTO', resolution: { justification: request.input.justification, measure: 'OCULTAR' } });
+  await pending; state = h.render(); assert.equal(state.detail.status, 'RESUELTO'); assert.equal(state.entries[0].status, 'RESUELTO'); assert.equal(state.canResolve, false);
+  assert.equal(state.confirmingResolution, false); assert.equal(state.resolving, false);
+});
+
+test('failed resolution preserves draft and requires case refresh before another submission; stored activity decision is read-only', async () => {
+  const h = harness(); let state = await openPending(h);
+  state.editResolution({ decision: 'ACOGER', justification: 'Decisión original' }); state = h.render(); state.requestResolution(); state = h.render();
+  const pending = state.confirmResolution(); h.calls.resolutions[0].reject(new AuthApiError(503, 'Recarga la denuncia para confirmar su estado.'));
+  await pending; state = h.render(); assert.equal(state.resolutionNeedsReload, true); assert.equal(state.resolutionInput.justification, 'Decisión original');
+  state.requestResolution(); state = h.render(); await state.confirmResolution(); assert.equal(h.calls.resolutions.length, 1);
+  state.retry(); h.render(); h.calls.details.at(-1).resolve({ id: 'report-a', status: 'EN_REVISION', resolution: { measure: 'OCULTAR', justification: 'Decisión original' } });
+  await setImmediate(); state = h.render(); assert.equal(state.resolutionInProgress, true); assert.equal(state.resolutionNeedsReload, false);
+  state.editResolution({ decision: 'DESESTIMAR', justification: 'Otra' }); state = h.render();
+  assert.equal(state.resolutionInput.decision, 'ACOGER'); assert.equal(state.resolutionInput.justification, 'Decisión original');
+});
+
+test('changing campus cancels resolution response and cannot display a late result from another case', async () => {
+  const h = harness(); let state = await openPending(h);
+  state.editResolution({ justification: 'Sin mérito' }); state = h.render(); state.requestResolution(); state = h.render();
+  const pending = state.confirmResolution(); const request = h.calls.resolutions[0];
+  state.chooseCampus('campus-b'); state = h.render(); assert.equal(request.signal.aborted, true); assert.equal(state.detail, null);
+  request.resolve({ id: 'report-a', status: 'DESESTIMADO', resolution: { justification: 'Privado' } }); await pending;
+  state = h.render(); assert.equal(state.detail, null); assert.equal(state.canResolve, false); assert.equal(state.resolutionInput.justification, '');
+});
+
+test('permission revocation during resolution removes evidence and presents the server denial', async () => {
+  const h = harness(); let state = await openPending(h);
+  state.editResolution({ justification: 'Sin mérito' }); state = h.render(); state.requestResolution(); state = h.render();
+  const pending = state.confirmResolution(); h.calls.resolutions[0].reject(new AuthApiError(403, 'Permiso revocado'));
+  await pending; state = h.render(); assert.equal(state.detail, null); assert.equal(state.canResolve, false); assert.equal(state.error, 'Permiso revocado'); assert.equal(h.refreshes, 1);
 });
 test('pagination reloads list and changing identity hides private evidence synchronously', async () => {
   const h = harness(); let state = await ready(h);
@@ -110,4 +156,25 @@ test('review screen presents snapshot and current agreement separately with priv
   const markup = renderToStaticMarkup(React.createElement(ReportReviews));
   for (const text of ['Original preservado', 'Título editado', 'Denunciante privado', 'Contenido al momento', 'Antecedentes actuales', 'Receptor', 'Descargar evidencia.pdf']) assert.ok(markup.includes(text), text);
   assert.ok(!markup.includes('estado_transaccion')); assert.ok(!markup.includes('storage_path'));
+});
+
+test('real resolution screen shows mandatory justification and confirmation, and replaces controls with the recorded decision after completion', () => {
+  const require = createRequire(import.meta.url), labels = load('../src/features/reports/types/review.ts', {});
+  const view = ({ children }) => React.createElement('div', null, children);
+  const state = { allowed: true, campuses: [], entries: [], selectedId: 'case', canResolve: true,
+    confirmingResolution: true, resolutionInput: { decision: 'ACOGER', justification: 'Uso indebido comprobado' },
+    detail: { id: 'case', status: 'PENDIENTE', title: 'Contenido', reporter: { name: 'Privado' }, reportedAt: '2026-10-22T12:00:00Z' } };
+  const { ReportReviews } = load('../src/features/reports/components/ReportReviews.tsx', {
+    'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-native': { ActivityIndicator: view, Pressable: view, ScrollView: view, Text: view, TextInput: () => React.createElement('textarea'), View: view, StyleSheet: { create: value => value } },
+    '@/components/navigation/BottomNavigationBar': { BottomNavigationBar: () => null }, '../types/review': labels,
+    '../hooks/useReportReviews': { useReportReviews: () => state },
+  });
+  let markup = renderToStaticMarkup(React.createElement(ReportReviews));
+  for (const text of ['Justificación obligatoria', 'Confirmar resolución', 'Cancelar', 'Se conservarán solicitudes', 'resolución será definitiva']) assert.ok(markup.includes(text), text);
+  state.canResolve = false; state.detail.status = 'RESUELTO';
+  state.detail.resolution = { measure: 'OCULTAR', justification: 'Uso indebido comprobado', resolvedById: 'admin-original', resolvedAt: '2026-10-22T12:00:00Z' };
+  markup = renderToStaticMarkup(React.createElement(ReportReviews));
+  for (const text of ['Resolución registrada', 'Uso indebido comprobado', 'admin-original']) assert.ok(markup.includes(text), text);
+  assert.ok(!markup.includes('Confirmar resolución')); assert.ok(!markup.includes('<textarea'));
 });

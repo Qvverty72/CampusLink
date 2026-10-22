@@ -15,12 +15,15 @@ export async function readReportReviews(client: PoolClient, campusId: string, pa
     [campusId, pagination.limit + 1, pagination.offset])).rows;
 }
 
-export async function findReportReview(client: PoolClient, campusId: string, id: string) {
+export async function findReportReview(client: PoolClient, campusId: string, id: string, lock = false) {
   return (await client.query<ReportReviewDetail>(`SELECT ${summaryProjection},r.descripcion AS description,
     jsonb_build_object('id',r.reportante_id,'name',u.nombre_completo) AS reporter,
-    r.contenido_reportado_json AS snapshot
+    r.contenido_reportado_json AS snapshot,
+    CASE WHEN r.resuelto_por_id IS NULL THEN NULL ELSE jsonb_build_object(
+      'justification',r.fundamento_resolucion,'measure',r.medida_aplicada,'resolvedById',r.resuelto_por_id,
+      'resolvedAt',to_char(r.resuelto_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) END AS resolution
     FROM public.reporte_contenido r LEFT JOIN public.perfil_usuario u ON u.id=r.reportante_id
-    WHERE r.id=$1 AND r.campus_id=$2`, [id, campusId])).rows[0] ?? null;
+    WHERE r.id=$1 AND r.campus_id=$2 ${lock ? 'FOR UPDATE OF r' : ''}`, [id, campusId])).rows[0] ?? null;
 }
 
 /** Antecedentes actuales complementan, sin sustituir, la evidencia del envío. Incluye retirada lógica. */

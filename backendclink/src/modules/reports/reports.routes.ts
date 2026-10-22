@@ -7,12 +7,15 @@ import { parseContentReport } from './reports.validation.js';
 import type { ReportsDependencies } from './reports.types.js';
 import { createDigitalReportController } from './reports.controller.js';
 import { downloadReportedOriginalController, getReportReviewController, listReportReviewsController } from './reports.controller.js';
+import { resolveReportController } from './reports.controller.js';
 
 /** Todas las denuncias de contenido se registran en reports, con autorización propia del elemento. */
 export function createReportsRouter(diagnosticsEnabled: boolean, dependencies: ReportsDependencies = {}): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getReportsHealthController);
   router.get('/campuses/:campusId', requireAuthentication, listReportReviewsController);
+  router.post('/campuses/:campusId/:reportId/resolution', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput }), resolveReportController);
   router.get('/campuses/:campusId/:reportId', requireAuthentication,
     validateRequest({ query: parseEmptyActivityInput }), getReportReviewController);
   router.get('/campuses/:campusId/:reportId/files/:fileId', requireAuthentication,

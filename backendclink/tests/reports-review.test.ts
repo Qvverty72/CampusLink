@@ -6,15 +6,24 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { Pool, type PoolClient } from 'pg';
 import { PGlite } from '@electric-sql/pglite';
+import { Db, ObjectId } from 'mongodb';
 import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), other = randomUUID(), foreign = randomUUID();
 let auth: VerifiedAuthConnection, server: Server, base: string;
 let reviews: typeof import('../src/modules/reports/reports.review.service.js');
+let resolutions: typeof import('../src/modules/reports/reports.resolution.service.js');
 let failSql = false;
+let failAudit = false, failMongo = false, mongoWrites = 0;
+let activity: Record<string, any> | null = null;
 let storageCalls = 0;
-const transaction = <T>(operation: (client: PoolClient) => Promise<T>) => db.transaction(client => operation(client as unknown as PoolClient));
+const transaction = <T>(operation: (client: PoolClient) => Promise<T>) => db.transaction(client => operation({
+  query: (sql: string, values: unknown[]) => {
+    if (failAudit && sql.includes('INSERT INTO public.auditoria')) throw new Error('private audit failure');
+    return client.query(sql, values);
+  },
+} as PoolClient));
 const bytes = Buffer.from('%PDF-test');
 
 before(async () => {
@@ -28,7 +37,7 @@ before(async () => {
   await db.exec('CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso',
-    'recurso_digital', 'archivo_publicacion', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'reporte_contenido']) {
+    'recurso_digital', 'archivo_publicacion', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'reporte_contenido', 'auditoria']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -50,12 +59,26 @@ before(async () => {
     return Response.json((kind === 'rol' ? auth.roles : auth.permissions).map(row => ({ campus_id: row.campusId, [kind]: { id: row.id, nombre: row.name } })));
   };
   reviews = await import('../src/modules/reports/reports.review.service.js');
+  resolutions = await import('../src/modules/reports/reports.resolution.service.js');
+  mock.method(Db.prototype, 'collection', ((name: string) => {
+    assert.equal(name, 'activities');
+    return {
+      async findOneAndUpdate(filter: any, update: any) {
+        if (failMongo) throw new Error('private Mongo credentials');
+        if (!activity || activity.campusId !== filter.campusId || activity._id.toHexString() !== filter._id.toHexString()
+          || activity.visibility !== filter.visibility || activity.deletedAt != null) return null;
+        mongoWrites++; Object.assign(activity, update.$set); activity.editRevision = (activity.editRevision ?? 0) + update.$inc.editRevision;
+        return activity;
+      },
+      async findOne(filter: any) { return activity?.campusId === filter.campusId && activity?._id.toHexString() === filter._id.toHexString() ? activity : null; },
+    };
+  }) as typeof Db.prototype.collection);
   const { createApp } = await import('../src/app.js'); server = createApp().listen(0, '127.0.0.1');
   await new Promise<void>(resolve => server.once('listening', resolve));
   base = 'http://127.0.0.1:' + (server.address() as AddressInfo).port + '/api/v1/reports/campuses/';
 });
 beforeEach(async () => {
-  failSql = false; storageCalls = 0;
+  failSql = false; failAudit = false; failMongo = false; mongoWrites = 0; activity = null; storageCalls = 0;
   const userId = randomUUID();
   await db.query('INSERT INTO auth.users VALUES($1)', [userId]);
   await db.query("INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) VALUES($1,$2,$3,'Administrador',now())", [userId, institution, campus]);
@@ -63,7 +86,7 @@ beforeEach(async () => {
   auth = { userId, campusId: campus, roles: [{ id: randomUUID(), name: 'ADMINISTRADOR', campusId: campus }], permissions: [], profile: {
     id: userId, institucion_id: institution, campus_id: campus, nombre_completo: 'Administrador', foto_path: null,
     verificado_en: '2026-10-22T12:00:00Z', estado_cuenta: 'ACTIVA', deleted_at: null } };
-  await db.exec('DELETE FROM reporte_contenido');
+  await db.exec('DELETE FROM auditoria; DELETE FROM reporte_contenido');
 });
 after(async () => {
   globalThis.fetch = originalFetch;
@@ -91,6 +114,183 @@ async function digitalCase() {
   return { id: await report('PUBLICACION_DIGITAL', campus, snapshot), publicationId, fileId, path, snapshot };
 }
 const http = (path: string, token = true) => originalFetch(base + path, { headers: token ? { Authorization: 'Bearer review.token' } : {} });
+const decision = { decision: 'ACOGER', justification: 'Contenido revisado y contrario al uso permitido.' };
+const dismiss = { decision: 'DESESTIMAR', justification: 'Los antecedentes no acreditan el motivo denunciado.' };
+const resolveCase = (id: string, input: unknown = decision, at = campus) => resolutions.resolveReport(auth, at, id, input, transaction);
+const audits = async () => (await db.query<any>('SELECT * FROM auditoria')).rows;
+
+test('dismissal persists original case and final decision with responsible admin, campus, timestamp and immutable audit', async () => {
+  const fixture = await digitalCase();
+  const result = await resolveCase(fixture.id, { ...dismiss, justification: '  No corresponde.  ' });
+  assert.equal(result.status, 'DESESTIMADO'); assert.equal(result.resolution?.justification, 'No corresponde.');
+  assert.equal(result.resolution?.measure, 'NINGUNA'); assert.equal(result.resolution?.resolvedById, auth.userId);
+  assert.ok(Number.isFinite(Date.parse(result.resolution!.resolvedAt))); assert.deepEqual(result.snapshot, fixture.snapshot);
+  assert.equal(result.currentPublication?.status, 'DISPONIBLE');
+  const [audit] = await audits(); assert.equal(audit.accion, 'DESESTIMAR_DENUNCIA'); assert.equal(audit.actor_usuario_id, auth.userId);
+  assert.equal(audit.campus_id, campus); assert.equal(audit.institucion_id, institution); assert.equal(audit.reporte_contenido_id, fixture.id);
+  assert.equal(audit.datos_antes.estado_reporte, 'PENDIENTE'); assert.equal(audit.datos_despues.fundamento_resolucion, 'No corresponde.');
+  await db.query("UPDATE publicacion_recurso SET titulo='Editado después',deleted_at=now() WHERE id=$1", [fixture.publicationId]);
+  assert.deepEqual((await reviews.getReportReview(auth, campus, fixture.id, transaction)).resolution, result.resolution);
+  for (const input of [decision, dismiss]) await assert.rejects(resolveCase(fixture.id, input), { status: 409 });
+  assert.equal((await audits()).length, 1);
+});
+
+test('upheld physical and digital publications are hidden, evidence and originals remain and dismissal needs no live target', async () => {
+  for (const type of ['PUBLICACION_DIGITAL', 'PUBLICACION_FISICA']) {
+    const fixture = await digitalCase();
+    if (type === 'PUBLICACION_FISICA') {
+      await db.query("UPDATE publicacion_recurso SET tipo_recurso='FISICO',estado_publicacion='RESERVADO' WHERE id=$1", [fixture.publicationId]);
+      await db.query("UPDATE reporte_contenido SET entidad_tipo='PUBLICACION_FISICA' WHERE id=$1", [fixture.id]);
+    }
+    const result = await resolveCase(fixture.id);
+    assert.equal(result.status, 'RESUELTO'); assert.equal(result.currentPublication?.status, 'OCULTO');
+    assert.equal(result.resolution?.measure, 'OCULTAR'); assert.equal(result.currentPublication?.deletedAt, null);
+    assert.deepEqual(result.snapshot, fixture.snapshot);
+    assert.equal((await db.query('SELECT * FROM archivo_publicacion WHERE id=$1', [fixture.fileId])).rows.length, 1);
+    await assert.rejects(resolveCase(fixture.id), { status: 409 });
+  }
+  assert.equal((await audits()).length, 2);
+  const noTarget = await report('PUBLICACION_FISICA');
+  assert.equal((await resolveCase(noTarget, dismiss)).status, 'DESESTIMADO');
+});
+
+test('retired or already hidden publications preserve logical deletion and terminal states while report closes', async () => {
+  for (const deleted of [true, false]) {
+    const fixture = await digitalCase();
+    await db.query(`UPDATE publicacion_recurso SET estado_publicacion=$2,deleted_at=CASE WHEN $3 THEN now() ELSE NULL END WHERE id=$1`, [fixture.publicationId, deleted ? 'CANCELADO' : 'OCULTO', deleted]);
+    const result = await resolveCase(fixture.id); assert.equal(result.status, 'RESUELTO');
+    assert.equal(result.currentPublication?.status, deleted ? 'CANCELADO' : 'OCULTO'); assert.equal(!!result.currentPublication?.deletedAt, deleted);
+  }
+});
+
+test('competing resolutions produce only one final decision and audit', async () => {
+  const fixture = await digitalCase();
+  const results = await Promise.allSettled([resolveCase(fixture.id), resolveCase(fixture.id, dismiss)]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(results.filter(result => result.status === 'rejected' && result.reason.status === 409).length, 1);
+  assert.equal((await audits()).length, 1);
+});
+
+test('transaction report uses the actual publication relationship, preserves requests, agreement, confirmations and acquired download', async () => {
+  const fixture = await digitalCase(), receiver = randomUUID(), requestId = randomUUID(), tradeId = randomUUID();
+  await db.query('INSERT INTO auth.users VALUES($1)', [receiver]);
+  await db.query("INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) VALUES($1,$2,$3,'Receptor',now())", [receiver, institution, campus]);
+  await db.exec("INSERT INTO mensaje_solicitud(codigo,descripcion) VALUES('QA_RESOLUTION','Me interesa') ON CONFLICT DO NOTHING");
+  await db.query("INSERT INTO solicitud_recurso(id,publicacion_id,solicitante_id,codigo_mensaje) VALUES($1,$2,$3,'QA_RESOLUTION')", [requestId, fixture.publicationId, receiver]);
+  await db.query(`INSERT INTO transaccion_recurso(id,publicacion_id,solicitud_id,propietario_id,receptor_id,modalidad_acordada,estado_transaccion)
+    VALUES($1,$2,$3,$4,$5,'DONACION','COMPLETADA')`, [tradeId, fixture.publicationId, requestId, auth.userId, receiver]);
+  await db.query("INSERT INTO confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) VALUES($1,$2,'PROPIETARIO'),($1,$3,'RECEPTOR')", [tradeId, auth.userId, receiver]);
+  await db.query('INSERT INTO acceso_recurso_digital(transaccion_id,publicacion_id,receptor_id) VALUES($1,$2,$3)', [tradeId, fixture.publicationId, receiver]);
+  await db.query("UPDATE reporte_contenido SET entidad_tipo='TRANSACCION',entidad_id=$2 WHERE id=$1", [fixture.id, tradeId]);
+  const tables = ['solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'archivo_publicacion'];
+  const original = await Promise.all(tables.map(table => db.query(`SELECT * FROM ${table} ORDER BY id`)));
+  const result = await resolveCase(fixture.id); assert.equal(result.currentPublication?.status, 'OCULTO');
+  for (let i = 0; i < tables.length; i++) assert.deepEqual((await db.query(`SELECT * FROM ${tables[i]} ORDER BY id`)).rows, original[i].rows, tables[i]);
+  const receiverAuth = { ...auth, userId: receiver, profile: { ...auth.profile, id: receiver } };
+  const { getDigitalOriginal } = await import('../src/modules/marketplace/elibrary/elibrary.files.service.js');
+  const file = await getDigitalOriginal(receiverAuth, fixture.publicationId, fixture.fileId);
+  assert.deepEqual(file.bytes, bytes);
+});
+
+test('strict API validation rejects privileged fields, unknown decisions, empty/oversize/NUL justification without mutation', async () => {
+  const id = await report();
+  for (const input of [null, [], {}, { ...decision, decision: 'SUSPENDER' }, { ...decision, measure: 'DELETE' },
+    { ...decision, resolvedById: randomUUID() }, { ...decision, campusId: other }, { ...decision, justification: ' ' },
+    { ...decision, justification: 42 }, { ...decision, justification: 'a'.repeat(2001) }, { ...decision, justification: 'No\u0000válido' }]) {
+    await assert.rejects(resolveCase(id, input), { status: 400 });
+  }
+  assert.equal((await reviews.getReportReview(auth, campus, id, transaction)).status, 'PENDIENTE');
+  assert.equal((await audits()).length, 0); assert.equal(mongoWrites, 0);
+});
+
+test('resolution rechecks current account/roles and scopes identifiers to active campus, including explicitly delegated campus', async () => {
+  const id = await report('ACTIVIDAD', other);
+  await assert.rejects(resolveCase(id, dismiss), { status: 404 });
+  await assert.rejects(resolveCase(id, dismiss, other), { status: 403 });
+  await db.query("INSERT INTO usuario_rol(perfil_usuario_id,rol_id,campus_id) SELECT $1,id,$2 FROM rol WHERE nombre='ADMINISTRADOR'", [auth.userId, other]);
+  assert.equal((await resolveCase(id, dismiss, other)).campusId, other);
+  const localId = await report();
+  await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE perfil_usuario_id=$1', [auth.userId]);
+  await assert.rejects(resolveCase(localId, dismiss), { status: 403 });
+  await db.query('UPDATE usuario_rol SET revocado_en=NULL WHERE perfil_usuario_id=$1', [auth.userId]);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1", [auth.userId]);
+  await assert.rejects(resolveCase(localId, dismiss), { status: 403 });
+});
+
+test('publication resolution and visibility roll back together if audit fails; commit acknowledgement loss cannot resolve twice', async () => {
+  const fixture = await digitalCase(); failAudit = true;
+  await assert.rejects(resolveCase(fixture.id), error => (error as any).status === 503 && !/private/.test(String(error)));
+  failAudit = false;
+  const pending = await reviews.getReportReview(auth, campus, fixture.id, transaction);
+  assert.equal(pending.status, 'PENDIENTE'); assert.equal(pending.resolution, null); assert.equal(pending.currentPublication?.status, 'DISPONIBLE');
+  const uncertain: typeof transaction = async operation => { await transaction(operation); throw new Error('COMMIT acknowledgement lost'); };
+  await assert.rejects(resolutions.resolveReport(auth, campus, fixture.id, decision, uncertain), { status: 503 });
+  assert.equal((await reviews.getReportReview(auth, campus, fixture.id, transaction)).status, 'RESUELTO');
+  await assert.rejects(resolveCase(fixture.id), { status: 409 }); assert.equal((await audits()).length, 1);
+});
+
+function reportedActivity() {
+  activity = { _id: new ObjectId('123456789012345678901234'), campusId: campus, visibility: 'PUBLIC', status: 'ACTIVE',
+    title: 'Actual editada', participantCount: 7, editRevision: 4, changeHistory: [{ title: 'Cambio previo' }], deletedAt: null };
+}
+
+test('activity resolution hides exactly its occurrence, preserving lifecycle, participation counters and history; repeat is rejected', async () => {
+  const id = await report(); reportedActivity();
+  const result = await resolveCase(id);
+  assert.equal(result.status, 'RESUELTO'); assert.equal(result.resolution?.measure, 'OCULTAR'); assert.equal(mongoWrites, 1);
+  assert.equal(activity?.visibility, 'HIDDEN'); assert.equal(activity?.status, 'ACTIVE'); assert.equal(activity?.participantCount, 7);
+  assert.equal(activity?.editRevision, 5); assert.deepEqual(activity?.changeHistory, [{ title: 'Cambio previo' }]);
+  assert.equal(result.snapshot?.title, 'Actividad original'); assert.equal((await audits()).length, 1);
+  await assert.rejects(resolveCase(id), { status: 409 }); assert.equal(mongoWrites, 1);
+});
+
+test('Mongo failure leaves durable decision, forbids changing it and allows a competent retry to finish with one audit', async () => {
+  const id = await report(); reportedActivity(); failMongo = true;
+  await assert.rejects(resolveCase(id), error => (error as any).status === 503 && !/credentials|Mongo/.test(String(error)));
+  const pending = await reviews.getReportReview(auth, campus, id, transaction);
+  assert.equal(pending.status, 'EN_REVISION'); assert.equal(pending.resolution?.justification, decision.justification);
+  assert.equal(activity?.visibility, 'PUBLIC'); assert.equal((await audits()).length, 0);
+  for (const input of [dismiss, { ...decision, justification: 'Otra decisión' }]) await assert.rejects(resolveCase(id, input), { status: 409 });
+  failMongo = false;
+  const finished = await resolveCase(id); assert.equal(finished.status, 'RESUELTO'); assert.deepEqual(finished.resolution, pending.resolution);
+  assert.equal(mongoWrites, 1); assert.equal((await audits()).length, 1);
+});
+
+test('SQL audit failure after Mongo hide is recoverable without undoing moderation, incrementing revision again or replacing responsible admin', async () => {
+  const id = await report(); reportedActivity(); failAudit = true;
+  await assert.rejects(resolveCase(id), { status: 503 }); failAudit = false;
+  const pending = await reviews.getReportReview(auth, campus, id, transaction);
+  assert.equal(pending.status, 'EN_REVISION'); assert.equal(activity?.visibility, 'HIDDEN'); assert.equal(mongoWrites, 1);
+  assert.equal((await audits()).length, 0);
+  const finished = await resolveCase(id); assert.equal(finished.status, 'RESUELTO'); assert.deepEqual(finished.resolution, pending.resolution);
+  assert.equal(mongoWrites, 1); assert.equal(activity?.editRevision, 5); assert.equal((await audits()).length, 1);
+});
+
+test('logical deletion counts as already hidden; wrong-campus activity cannot be modified and permissions are rechecked before Mongo', async () => {
+  const id = await report(); reportedActivity(); activity!.deletedAt = new Date();
+  assert.equal((await resolveCase(id)).status, 'RESUELTO'); assert.equal(mongoWrites, 0);
+  const wrong = await report(); reportedActivity(); activity!.campusId = other;
+  await assert.rejects(resolveCase(wrong), { status: 409 }); assert.equal(mongoWrites, 0);
+  const revoked = await report(); let calls = 0;
+  const revokeBetween: typeof transaction = async operation => {
+    const result = await transaction(operation);
+    if (++calls === 1) await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE perfil_usuario_id=$1', [auth.userId]);
+    return result;
+  };
+  await assert.rejects(resolutions.resolveReport(auth, campus, revoked, decision, revokeBetween), { status: 403 }); assert.equal(mongoWrites, 0);
+});
+
+test('HTTP resolution requires authentication, rejects query/body tampering, returns no-store final decision and duplicate409', async () => {
+  const fixture = await digitalCase();
+  const post = (suffix = '', input: unknown = decision, token = true) => originalFetch(base + campus + '/' + fixture.id + '/resolution' + suffix,
+    { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer review.token' } : {}) }, body: JSON.stringify(input) });
+  assert.equal((await post('', decision, false)).status, 401);
+  assert.equal((await post('?campusId=' + other)).status, 400);
+  assert.equal((await post('', { ...decision, actorId: randomUUID() })).status, 400);
+  const response = await post(); assert.equal(response.status, 200); assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+  const body = await response.json(); assert.equal(body.data.status, 'RESUELTO'); assert.equal(body.data.resolution.resolvedById, auth.userId);
+  assert.equal((await post()).status, 409); assert.equal((await audits()).length, 1);
+});
 
 test('listing filters campus before stable pagination, exposes minimal content/reason/date/status without reporter or snapshot', async () => {
   const ids = [await report(), await report(), await report()]; await report('ACTIVIDAD', other);

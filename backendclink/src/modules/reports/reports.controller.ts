@@ -9,8 +9,12 @@ import { reportPhysicalgoods } from './reports.physicalgoods.service.js';
 import { reportDigitalResource } from './reports.elibrary.service.js';
 import { getReportedOriginal, getReportReview, listReportReviews } from './reports.review.service.js';
 import { sendSuccess as sendEnvelope } from '../../services/apiResponse.js';
+import { resolveReport } from './reports.resolution.service.js';
 
 type ReviewHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const resolveReportController: ReviewHandler = async (request, response) => {
+  sendSuccess(response, await resolveReport(response.locals.auth, request.params.campusId, request.params.reportId, request.body));
+};
 export const listReportReviewsController: ReviewHandler = async (request, response) => {
   const result = await listReportReviews(response.locals.auth, request.params.campusId, request.query);
   sendEnvelope(response, result.data, { meta: result.meta });

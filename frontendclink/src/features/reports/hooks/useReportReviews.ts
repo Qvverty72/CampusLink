@@ -4,8 +4,8 @@ import { canManageAccess } from '@/features/users/types/access';
 import { loadAccessCampuses } from '@/features/users/api/accessApi';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { saveFile } from '@/lib/files/saveFile';
-import { downloadReportedFile, loadReportReview, loadReportReviews } from '../api/reportsApi';
-import type { ReportReviewDetail, ReviewPage } from '../types/review';
+import { downloadReportedFile, loadReportReview, loadReportReviews, submitReportResolution } from '../api/reportsApi';
+import type { ReportResolutionInput, ReportReviewDetail, ReviewPage } from '../types/review';
 
 /** Mantiene evidencia solo en memoria y descarta respuestas al cambiar cuenta, sede o caso. */
 export function useReportReviews() {
@@ -20,6 +20,9 @@ export function useReportReviews() {
   const [fileState, setFileState] = useState<{ key: string; busy: boolean; error: string } | null>(null);
   const [accessError, setAccessError] = useState<{ key: string; message: string } | null>(null);
   const fileRequest = useRef<AbortController | null>(null);
+  const resolutionRequest = useRef<AbortController | null>(null);
+  const [draft, setDraft] = useState<{ key: string; input: ReportResolutionInput; confirming: boolean } | null>(null);
+  const [resolutionState, setResolutionState] = useState<{ key: string; busy: boolean; error: string; needsReload: boolean } | null>(null);
   const [reload, setReload] = useState(0);
   const campuses = allowed && catalog?.key === identityKey ? catalog.rows : [];
   const currentQuery = query?.identity === identityKey ? query : null;
@@ -64,18 +67,60 @@ export function useReportReviews() {
 
   useEffect(() => {
     fileRequest.current?.abort(); setFileState(null);
+    resolutionRequest.current?.abort(); resolutionRequest.current = null; setResolutionState(null); setDraft(null);
     return () => fileRequest.current?.abort();
   }, [detailKey]);
+
+  useEffect(() => () => resolutionRequest.current?.abort(), []);
 
   const result = allowed && listing?.key === listKey ? listing : null;
   const currentDetail = allowed && detail?.key === detailKey ? detail : null;
   const deniedMessage = accessError?.key === identityKey ? accessError.message : '';
+  const inProgress = currentDetail?.value?.status === 'EN_REVISION' && !!currentDetail.value.resolution;
+  const input: ReportResolutionInput = inProgress ? { decision: 'ACOGER', justification: currentDetail!.value!.resolution!.justification }
+    : draft?.key === detailKey ? draft.input : { decision: 'DESESTIMAR', justification: '' };
+  const action = resolutionState?.key === detailKey ? resolutionState : null;
+  const canResolve = !!currentDetail?.value && ['PENDIENTE', 'EN_REVISION'].includes(currentDetail.value.status);
   return {
     allowed, campuses, campusId, page, selectedId: selected?.id, detail: currentDetail?.value ?? null,
     entries: result?.result?.data ?? [], hasMore: result?.result?.meta.hasMore ?? false,
     error: deniedMessage || (catalog?.key === identityKey ? catalog.error : '') || result?.error || currentDetail?.error || (fileState?.key === detailKey ? fileState.error : ''),
     loading: allowed && !deniedMessage && (!catalog || Boolean(campusId && !result) || Boolean(selected && !currentDetail)),
     downloading: fileState?.key === detailKey && fileState.busy,
+    canResolve, resolutionInput: input, resolutionInProgress: inProgress, resolving: !!action?.busy,
+    resolutionError: action?.error ?? '', resolutionNeedsReload: !!action?.needsReload,
+    confirmingResolution: draft?.key === detailKey && draft.confirming,
+    editResolution(change: Partial<ReportResolutionInput>) {
+      if (inProgress || resolutionRequest.current || action?.needsReload) return;
+      setDraft({ key: detailKey, input: { ...input, ...change }, confirming: false });
+    },
+    requestResolution() {
+      if (!canResolve || resolutionRequest.current || action?.needsReload) return;
+      if (!input.justification.trim() || input.justification.trim().length > 2000 || input.justification.includes('\u0000')) {
+        setResolutionState({ key: detailKey, busy: false, needsReload: false, error: 'Escribe una justificación válida de entre 1 y 2000 caracteres.' }); return;
+      }
+      setResolutionState(null); setDraft({ key: detailKey, input, confirming: true });
+    },
+    cancelResolution() { if (!resolutionRequest.current) setDraft({ key: detailKey, input, confirming: false }); },
+    async confirmResolution() {
+      if (!canResolve || !selected || resolutionRequest.current || draft?.key !== detailKey || !draft.confirming) return;
+      const controller = new AbortController(); resolutionRequest.current = controller;
+      setResolutionState({ key: detailKey, busy: true, error: '', needsReload: false });
+      try {
+        const value = await submitReportResolution(campusId, selected.id, draft.input, controller.signal);
+        if (!controller.signal.aborted) {
+          setDetail({ key: detailKey, value, error: '' });
+          setListing(current => current?.key === listKey && current.result ? { ...current, result: { ...current.result,
+            data: current.result.data.map(row => row.id === value.id ? { ...row, status: value.status } : row) } } : current);
+          setDraft(null); setResolutionState(null);
+        }
+      } catch (reason) {
+        if (!controller.signal.aborted) {
+          setDraft({ key: detailKey, input: draft.input, confirming: false });
+          setResolutionState({ key: detailKey, busy: false, error: fail(reason), needsReload: true });
+        }
+      } finally { if (resolutionRequest.current === controller) resolutionRequest.current = null; }
+    },
     chooseCampus(id: string) { setQuery({ identity: identityKey, campusId: id, page: 1, revision: 0 }); setSelection(null); },
     changePage(next: number) { setQuery({ identity: identityKey, campusId, page: next, revision: 0 }); setSelection(null); },
     open(id: string) { setSelection({ key: listKey, id, revision: (selected?.revision ?? 0) + 1 }); },
