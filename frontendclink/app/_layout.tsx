@@ -33,7 +33,7 @@ function AppNavigation() {
           <Stack.Screen name={'(map)'} options={{ animation: 'fade' }} />
           <Stack.Screen name={'(marketplace)'} options={{ animation: 'fade' }} />
         </Stack.Protected>
-        <Stack.Protected guard={Boolean(capabilities?.analytics)}>
+        <Stack.Protected guard={Boolean(capabilities?.reports)}>
           <Stack.Screen name={'(analytics)'} options={{ animation: 'fade' }} />
         </Stack.Protected>
         <Stack.Protected guard={Boolean(capabilities?.reports)}>

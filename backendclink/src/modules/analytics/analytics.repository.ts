@@ -3,7 +3,7 @@ import { probeSupabaseTables } from '../../database/supabase/health.js';
 import { probeMongoCollections } from '../../database/mongodb/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
 import type { PoolClient } from 'pg';
-import type { ResourceAnalyticsEvent } from './analytics.types.js';
+import type { DashboardScope, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
 
 export function probeAnalyticsDependencies(): Promise<DependencyChecks> {
   return inspectDependencies({
@@ -94,4 +94,58 @@ export async function countActivityInteractions(campusId: string, from: Date, un
   return { viewed: counts.find(row => row._id === 'VIEWED')?.count ?? 0,
     joined: counts.find(row => row._id === 'JOINED')?.count ?? 0, left: counts.find(row => row._id === 'LEFT')?.count ?? 0,
     legacyEvents: counts.reduce((total, row) => total + row.legacy, 0) };
+}
+
+/** Agrega hechos existentes; no excluye contenido retirado ni actores desactivados. */
+export async function readDashboardMetrics(client: PoolClient, campusId: string, institutionId: string, from: Date, until: Date) {
+  const scope = (await client.query<DashboardScope>(
+    `SELECT c.id AS "campusId", c.nombre AS "campusName", i.id AS "institutionId", i.nombre AS "institutionName"
+     FROM public.campus c JOIN public.institucion i ON i.id=c.institucion_id
+     WHERE c.id=$1 AND i.id=$2 AND c.activo`, [campusId, institutionId])).rows[0];
+  if (!scope) return null;
+
+  // El estado es global: una transición posterior en otro campus también permite deshacer el presente.
+  // Conserva la precisión SQL y el corte exclusivo; no cuenta cuentas creadas después del corte.
+  const active = await client.query<{ count: string }>(
+    `WITH changes AS (
+       SELECT entidad_id, datos_antes->>'estado_cuenta' AS before, datos_despues->>'estado_cuenta' AS after, created_at, id
+       FROM public.auditoria WHERE institucion_id=$2 AND entidad_tipo='perfil_usuario'
+         AND accion IN ('SUSPENDER_CUENTA','DESACTIVAR_CUENTA','REACTIVAR_CUENTA')
+     ), previous AS (
+       SELECT DISTINCT ON (entidad_id) entidad_id, after FROM changes WHERE created_at<$3::timestamptz
+       ORDER BY entidad_id,created_at DESC,id DESC
+     ), following AS (
+       SELECT DISTINCT ON (entidad_id) entidad_id, before FROM changes WHERE created_at>=$3::timestamptz
+       ORDER BY entidad_id,created_at,id
+     )
+     SELECT count(*)::text AS count FROM public.perfil_usuario p
+     LEFT JOIN following f ON f.entidad_id=p.id::text LEFT JOIN previous v ON v.entidad_id=p.id::text
+     WHERE p.campus_id=$1 AND p.institucion_id=$2 AND p.created_at<$3::timestamptz
+       AND (p.deleted_at IS NULL OR p.deleted_at>=$3::timestamptz)
+       AND coalesce(f.before,v.after,p.estado_cuenta)='ACTIVA'`, [campusId, institutionId, until]);
+
+  // Primero agrupa por publicación; asociar varias asignaturas no multiplica el total de recursos.
+  const demand = (await client.query<{ views: string; requests: string; subjects: SubjectDemand[] }>(
+    `WITH facts AS (
+       SELECT p.id, count(*) AS views, 0::bigint AS requests
+       FROM public.interaccion_recurso v JOIN public.publicacion_recurso p ON p.id=v.publicacion_id
+       WHERE p.campus_id=$1 AND v.tipo_interaccion='VISTA' AND v.created_at>=$2::timestamptz AND v.created_at<$3::timestamptz
+       GROUP BY p.id
+       UNION ALL
+       SELECT p.id, 0::bigint, count(*) FROM public.solicitud_recurso r
+       JOIN public.publicacion_recurso p ON p.id=r.publicacion_id
+       WHERE p.campus_id=$1 AND r.solicitada_en>=$2::timestamptz AND r.solicitada_en<$3::timestamptz
+       GROUP BY p.id
+     ), publications AS (
+       SELECT id, sum(views) AS views, sum(requests) AS requests FROM facts GROUP BY id
+     ), subjects AS (
+       SELECT a.id AS "subjectId", a.nombre AS "subjectName", sum(p.views) AS views, sum(p.requests) AS requests
+       FROM publications p JOIN public.publicacion_asignatura pa ON pa.publicacion_id=p.id
+       JOIN public.asignatura a ON a.id=pa.asignatura_id GROUP BY a.id,a.nombre
+     )
+     SELECT coalesce(sum(views),0)::text AS views, coalesce(sum(requests),0)::text AS requests,
+       (SELECT coalesce(jsonb_agg(s ORDER BY s."subjectName",s."subjectId"),'[]'::jsonb) FROM subjects s) AS subjects
+     FROM publications`, [campusId, from, until])).rows[0];
+  return { scope, activeUsers: Number(active.rows[0].count),
+    resourceDemand: { views: Number(demand.views), requests: Number(demand.requests) }, subjectDemand: demand.subjects };
 }

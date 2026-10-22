@@ -1,16 +1,71 @@
 import { createModuleHealthCheck } from '../../services/module-health.js';
 import { probeAnalyticsDependencies } from './analytics.repository.js';
-import type { AnalyticsHealth } from './analytics.types.js';
+import type { AnalyticsHealth, DashboardData, DashboardQuery, DemandCount } from './analytics.types.js';
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../services/api-response.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { findAnalyticsResource, insertResourceView } from './analytics.repository.js';
+import { countActivityInteractions, findAnalyticsResource, insertResourceView, readDashboardMetrics } from './analytics.repository.js';
 
 export const getAnalyticsHealth: () => Promise<AnalyticsHealth> =
   createModuleHealthCheck('analytics', probeAnalyticsDependencies);
+
+function dashboardDate(value: unknown): string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000')) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Indica fechas válidas en formato AAAA-MM-DD.');
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Indica fechas válidas en formato AAAA-MM-DD.');
+  }
+  return value;
+}
+
+/** Fechas civiles UTC inclusivas en la API, convertidas a [from,until) para ambos motores. */
+export function parseDashboardQuery(raw: unknown, defaultCampusId: string): DashboardQuery {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros del tablero.');
+  const query = raw as Record<string, unknown>;
+  if (Object.keys(query).some(key => !['campusId', 'from', 'to'].includes(key))) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros del tablero.');
+  }
+  const campusId = query.campusId ?? defaultCampusId;
+  if (typeof campusId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campusId)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Campus inválido.');
+  }
+  const from = dashboardDate(query.from), to = dashboardDate(query.to);
+  if (from > to) throw new ApiError(400, 'VALIDATION_ERROR', 'La fecha inicial debe ser anterior o igual a la final.');
+  return { campusId: campusId.toLowerCase(), from, to };
+}
+
+export async function getDashboard(auth: VerifiedAuthConnection, rawQuery: unknown): Promise<DashboardData> {
+  const query = parseDashboardQuery(rawQuery, auth.campusId);
+  requireCampusCapability(auth, query.campusId, 'reports');
+  const from = new Date(`${query.from}T00:00:00.000Z`);
+  const until = new Date(new Date(`${query.to}T00:00:00.000Z`).getTime() + 86_400_000);
+  try {
+    const sql = await withPostgresTransaction(client => readDashboardMetrics(client, query.campusId, auth.profile.institucion_id, from, until));
+    if (!sql) throw new ApiError(403, 'FORBIDDEN', 'No tienes autorización para este campus.');
+    const activities = await countActivityInteractions(query.campusId, from, until);
+    const period = { from: query.from, to: query.to, timeZone: 'UTC' as const, cutoff: until.toISOString() };
+    const metric = (value: number) => ({ value, period, scope: sql.scope });
+    const subjects = sql.subjectDemand.reduce<DemandCount>((total, row) =>
+      ({ views: total.views + row.views, requests: total.requests + row.requests }), { views: 0, requests: 0 });
+    return { period, scope: sql.scope, generatedAt: new Date().toISOString(),
+      activeUsers: metric(sql.activeUsers),
+      resourceDemand: { ...metric(sql.resourceDemand.views + sql.resourceDemand.requests), ...sql.resourceDemand },
+      subjectDemand: { ...metric(subjects.views + subjects.requests), ...subjects, subjects: sql.subjectDemand },
+      activityParticipation: { ...metric(activities.joined), label: 'Inscripciones registradas', legacyEvents: activities.legacyEvents },
+      notes: [
+        'Las cifras corresponden a registros disponibles; las vistas antiguas y las inscripciones importadas pueden tener cobertura parcial.',
+        'Usuarios: estado reconstruido al corte con auditoría; la pertenencia a campus y las asociaciones de asignaturas son las disponibles al consultar.',
+      ] };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo consultar el tablero. Inténtalo nuevamente.');
+  }
+}
 
 /** Identidad de operación suministrada por el cliente; nunca identidad del actor o campus. */
 export function parseResourceOperationId(raw: unknown): string | undefined {

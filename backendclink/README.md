@@ -593,7 +593,20 @@ Expo registra una vista al abrir correctamente la ficha, sin señales por tarjet
 
 Las rutas existentes `POST /marketplace/physicalgoods/:id/requests` y `POST /marketplace/elibrary/:id/requests` aceptan `Idempotency-Key: UUIDv4`. El cliente debe conservarla ante resultados inciertos. La PK de la solicitud deriva de esa clave y del actor; un replay devuelve la solicitud original incluso si fue resuelta, sin crear otro evento. Reutilizarla con distinto recurso o mensaje devuelve409. La cabecera es opcional por compatibilidad; clientes anteriores sin clave conservan únicamente la protección contra solicitudes activas duplicadas. Los clientes Expo actualizados la envían y la conservan al reintentar. Las confirmaciones y los cierres conservan sus protecciones idempotentes previas; nuevas fechas usan `clock_timestamp()` para registrar el instante de escritura después de adquirir los locks.
 
-Actividades reutilizan `activity_interactions` VIEWED/JOINED/LEFT y su cobertura LEGACY_STATE. Cuentas reutilizan la auditoría atómica anterior/nueva: `readAccountStateAnalyticsEvents` conserva cambios de estado aunque el perfil se desactive o cambie de sede. Los futuros KPI deben reconstruir el estado al corte con esos cambios, sin contar únicamente el estado actual. Consultas de eventos son internas; quien implemente F2.7-02/03 debe autorizar el campus y período en servicio/controlador antes de invocarlas. No hay API pública de lectura de métricas, tablero, eventos de búsqueda ni índices, tablas, columnas, funciones SQL o triggers nuevos.
+Actividades reutilizan `activity_interactions` VIEWED/JOINED/LEFT y su cobertura LEGACY_STATE. Cuentas reutilizan la auditoría atómica anterior/nueva: `readAccountStateAnalyticsEvents` conserva cambios de estado aunque el perfil se desactive o cambie de sede. Las proyecciones de eventos son internas; los consumidores deben autorizar campus y período antes de invocarlas. F2.7-02 añade la consulta autenticada del tablero descrita a continuación. Sin eventos de búsqueda ni índices, tablas, columnas, funciones SQL o triggers nuevos.
+
+## Tablero de cuatro KPI esenciales (F2.7-02)
+
+`GET /api/v1/analytics/dashboard?from=2026-10-01&to=2026-10-21&campusId=<uuid>` requiere Bearer y cuenta activa. `from` y `to` son fechas civiles UTC válidas e inclusivas; `campusId` es opcional y toma el campus vigente del perfil. El servicio exige `reports`: ADMINISTRADOR o USUARIO_AUTORIZADO con ACCEDER_REPORTERIA en la sede consultada. ACCEDER_ANALITICA por sí solo no concede el tablero. El campus debe estar activo y pertenecer a la institución del perfil, aunque el usuario envíe otro UUID o tenga asignaciones inconsistentes. El cliente Expo muestra el campus de su sesión; múltiples campus/carrera y agrupaciones pertenecen a F2.7-03/04.
+
+Respuesta `{data:{scope,period,generatedAt,activeUsers,resourceDemand,subjectDemand,activityParticipation,notes}}`. Cada KPI contiene `value`, `period` y `scope` (IDs/nombres de institución/campus). `period` incluye `from`, `to`, `timeZone:'UTC'` y `cutoff` exclusivo al inicio del día siguiente. Ambos motores consultan `[from,cutoff)`, sin truncar los microsegundos SQL. 400 filtros/fechas inválidos;401 sesión;403 ámbito/permiso;503 dependencia. Todas las respuestas son no-store; un fallo SQL o MongoDB no se convierte en cuatro ceros ni devuelve KPI parciales.
+
+- `activeUsers`: cuentas creadas antes del corte y no eliminadas antes de él, con estado ACTIVA reconstruido usando estados antes/después de auditoría. Incluye perfiles hoy suspendidos/desactivados cuando eran activos al corte y perfiles sin evento de creación. No equivale a inicios de sesión. La pertenencia al campus es la del perfil al consultar: el esquema actual no tiene historial de cambios de campus.
+- `resourceDemand`: `views` y `requests` separados, `value=views+requests`. Cuenta VISTA de interaccion_recurso y cada solicitud por solicitada_en, incluso cancelada/resuelta y con publicaciones/actores retirados. Un recurso sin asignatura sigue contando.
+- `subjectDemand`: `subjects:[{subjectId,subjectName,views,requests}]`, totales separados y `value=views+requests` de esas asociaciones. Usa publicacion_asignatura vigente, incluso asignaturas deshabilitadas; cada hecho cuenta una vez por asignatura. Un recurso con varias asignaturas contribuye a cada una, por lo que este total no representa interacciones exclusivas.
+- `activityParticipation`: JOINED históricos en activity_interactions (incluido creador/reinscripciones), sin restar LEFT ni consultar visibilidad actual de la actividad. `label:'Inscripciones registradas'` y `legacyEvents` explican la cobertura parcial importada. No representa asistencia presencial ni participantes actuales.
+
+Las notas visibles explican cobertura parcial anterior, asociaciones actuales y estado auditado. La API no recupera vistas que antes se agruparon por24h ni transiciones nunca registradas. No se guarda ninguna instantánea ni se altera el esquema. Arquitectura: router → controller → analytics.service (validación/autorización/DTO) → analytics.repository (agregaciones SQL/MongoDB). Frontend separa pantalla, hook de carga cancelable, API y tipos; borra métricas ante cambios de identidad/alcance y refresca identidad ante401/403.
 
 ## Valoración digital (F2.5-11)
 
@@ -611,7 +624,7 @@ y el manifiesto permanecen en `qa/local/` ignorado por Git y Docker.
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
-- Implementar tablero y agregaciones de KPI sobre las fuentes históricas de F2.7-01, con autorización de reportería. El health no demuestra cobertura analítica.
+- Ampliar los filtros institucionales y agrupaciones del tablero en F2.7-03/04; el health no demuestra cobertura analítica.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
 
 ## Referencias técnicas
