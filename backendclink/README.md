@@ -168,7 +168,7 @@ Flujo: routes → controller → service → repository → cliente compartido. 
 | marketplace/physicalgoods | Supabase: publicacion_recurso filtrada FISICO y recurso_fisico |
 | marketplace/elibrary | Supabase: publicacion_recurso filtrada DIGITAL y recurso_digital |
 | reports | Supabase: reporte_contenido; denuncias de contenido |
-| analytics | Supabase: interaccion_recurso y reporte; MongoDB: activities y activity_interactions |
+| analytics | Supabase: interaccion_recurso, solicitud_recurso, transaccion_recurso, confirmacion_transaccion y auditoria; MongoDB: activities y activity_interactions |
 
 La carpeta auth contiene la integración de identidad. Login será un caso de uso de auth, junto con recuperación/renovación/cierre de sesión; no hay un segundo módulo login. users será responsable del perfil académico. reports gestiona denuncias; los informes analíticos y sus instantáneas pertenecen a analytics.
 
@@ -581,7 +581,19 @@ DTO de búsqueda/detalle añade `acquired` calculado solo para la identidad serv
 
 ## Recomendaciones digitales (F2.5-10)
 
-`GET /elibrary/recommendations` admite page/limit y devuelve publicaciones institucionales activas con `{recommendation:{score,reasons}}`; excluye propios/adquiridos mediante el predicado de derecho de descarga. Pesos revisables en DIGITAL_RECOMMENDATION_WEIGHTS:30 por carrera,20 por asignatura relacionada (máximo3 cada una),5 por vista propia,10 por solicitud propia activa y1 por actividad agregada (máximo5). Desempata por fecha/id; nuevos usan perfil y sin perfil actividad/recientes. No ML ni proveedores externos; explicaciones no revelan identidades ni conversaciones. Detalle registra VISTA propia como máximo una vez por recurso/24h; fallo de señal no impide leer metadatos. Orden/paginación SQL y proyección en bloque, no N+1.
+`GET /elibrary/recommendations` admite page/limit y devuelve publicaciones institucionales activas con `{recommendation:{score,reasons}}`; excluye propios/adquiridos mediante el predicado de derecho de descarga. Pesos revisables en DIGITAL_RECOMMENDATION_WEIGHTS:30 por carrera,20 por asignatura relacionada (máximo3 cada una),5 por vista propia,10 por solicitud propia activa y1 por actividad agregada (máximo5). Desempata por fecha/id; nuevos usan perfil y sin perfil actividad/recientes. No ML ni proveedores externos; explicaciones no revelan identidades ni conversaciones. Vistas explícitas de F2.7-01 alimentan la misma tabla de señales, sin registrar otra vista al consultar metadatos. Orden/paginación SQL y proyección en bloque, no N+1.
+
+## Registro de eventos para analítica (F2.7-01)
+
+Sin cambios de esquema ni migraciones. La API valida los datos y utiliza las tablas existentes. Las vistas se insertan en `interaccion_recurso`; cada fila de `solicitud_recurso` representa una solicitud. Reservas y transiciones proceden de `transaccion_recurso` y sus confirmaciones, guardadas en la misma transacción de negocio. `readResourceAnalyticsEvents` normaliza esos hechos en tipos VISTA, SOLICITUD_CREADA y TRANSACCION_RESERVADA/PENDIENTE_CONFIRMACION/COMPLETADA/CANCELADA, con claves estables, actor, recurso, campus de origen y fechas de seis decimales en UTC. Filtra por campus y rango `[from,until)` sin excluir contenido o cuentas por su estado o baja actual. El campus proviene de la publicación conservada; los cambios de campus del actor no trasladan la historia.
+
+`POST /api/v1/analytics/resources/:publicationId/views` exige Bearer y cuerpo exacto `{operationId:UUIDv4}`. No admite campus, usuario, fecha, tipo ni query. Revalida cuenta/roles/campus en transacción y comprueba visibilidad del recurso: física en campus propio; digital en la misma institución según acceso vigente de biblioteca. Devuelve `{publicationId,campusId,type:'VISTA',recorded:true}`. La API deriva un UUID estable para la PK existente usando actor/operación; repetirla conserva la fecha original, reutilizarla en otro recurso devuelve409. Fechas y datos de identidad nunca proceden del body. Errores400/401/403/404/409/503 y respuestas no-store.
+
+Expo registra una vista al abrir correctamente la ficha, sin señales por tarjetas, consultas GET, recargas o renovación de fotos. Reabrir genera una clave nueva. Una respuesta incierta se reintenta una vez con la misma clave; los fallos de telemetría no bloquean la ficha. Las vistas anteriores conservan su agrupación histórica de24h y no se inventan aperturas pasadas.
+
+Las rutas existentes `POST /marketplace/physicalgoods/:id/requests` y `POST /marketplace/elibrary/:id/requests` aceptan `Idempotency-Key: UUIDv4`. El cliente debe conservarla ante resultados inciertos. La PK de la solicitud deriva de esa clave y del actor; un replay devuelve la solicitud original incluso si fue resuelta, sin crear otro evento. Reutilizarla con distinto recurso o mensaje devuelve409. La cabecera es opcional por compatibilidad; clientes anteriores sin clave conservan únicamente la protección contra solicitudes activas duplicadas. Los clientes Expo actualizados la envían y la conservan al reintentar. Las confirmaciones y los cierres conservan sus protecciones idempotentes previas; nuevas fechas usan `clock_timestamp()` para registrar el instante de escritura después de adquirir los locks.
+
+Actividades reutilizan `activity_interactions` VIEWED/JOINED/LEFT y su cobertura LEGACY_STATE. Cuentas reutilizan la auditoría atómica anterior/nueva: `readAccountStateAnalyticsEvents` conserva cambios de estado aunque el perfil se desactive o cambie de sede. Los futuros KPI deben reconstruir el estado al corte con esos cambios, sin contar únicamente el estado actual. Consultas de eventos son internas; quien implemente F2.7-02/03 debe autorizar el campus y período en servicio/controlador antes de invocarlas. No hay API pública de lectura de métricas, tablero, eventos de búsqueda ni índices, tablas, columnas, funciones SQL o triggers nuevos.
 
 ## Valoración digital (F2.5-11)
 
@@ -599,7 +611,7 @@ y el manifiesto permanecen en `qa/local/` ignorado por Git y Docker.
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
-- Completar eventos de recursos/transacciones/cuentas y tableros para KPI; el log de actividades ya registra VIEWED/JOINED/LEFT. El health no demuestra cobertura analítica.
+- Implementar tablero y agregaciones de KPI sobre las fuentes históricas de F2.7-01, con autorización de reportería. El health no demuestra cobertura analítica.
 - Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
 
 ## Referencias técnicas

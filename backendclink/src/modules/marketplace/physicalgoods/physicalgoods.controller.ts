@@ -65,7 +65,7 @@ export const getPhysicalgoodsRequestOptionsController: PhysicalgoodsHandler = as
   sendSuccess(response,await getPhysicalgoodsRequestOptions(response.locals.auth,request.params.publicationId));
 };
 export const createPhysicalgoodsRequestController: PhysicalgoodsHandler = async (request,response) => {
-  sendSuccess(response,await createPhysicalgoodsRequest(response.locals.auth,request.params.publicationId,request.body),201);
+  sendSuccess(response,await createPhysicalgoodsRequest(response.locals.auth,request.params.publicationId,request.body,request.get('Idempotency-Key')),201);
 };
 export const updatePhysicalgoodsController: PhysicalgoodsHandler = async (request, response) => {
   sendSuccess(response, await updatePhysicalgoods(response.locals.auth, request.params.publicationId, request.body));

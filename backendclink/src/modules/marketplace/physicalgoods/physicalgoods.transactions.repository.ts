@@ -28,8 +28,8 @@ export async function findActivePhysicalgoodsTransaction(client:PoolClient,publi
 }
 export async function insertPhysicalgoodsTransaction(client: PoolClient, publicationId: string, requestId: string, requesterId: string) {
   return (await client.query<PhysicalgoodsTransactionRow>(`INSERT INTO public.transaccion_recurso
-    (solicitud_id,publicacion_id,propietario_id,receptor_id,modalidad_acordada,monto_acordado,moneda)
-    SELECT $2,p.id,p.propietario_id,$3,p.modalidad,CASE WHEN p.modalidad='VENTA' THEN p.precio ELSE NULL END,p.moneda
+    (solicitud_id,publicacion_id,propietario_id,receptor_id,modalidad_acordada,monto_acordado,moneda,iniciada_en)
+    SELECT $2,p.id,p.propietario_id,$3,p.modalidad,CASE WHEN p.modalidad='VENTA' THEN p.precio ELSE NULL END,p.moneda,clock_timestamp()
     FROM public.publicacion_recurso p WHERE p.id=$1 RETURNING *`,[publicationId,requestId,requesterId])).rows[0];
 }
 export async function setPhysicalgoodsPublicationStatus(client: PoolClient, publicationId: string, status: string) {
@@ -59,8 +59,8 @@ export async function physicalgoodsConfirmations(client: PoolClient, transaction
     `SELECT ${confirmationProjection} FROM public.confirmacion_transaccion WHERE transaccion_id=$1 ORDER BY confirmado_en,id`,[transactionId])).rows;
 }
 export async function insertPhysicalgoodsConfirmation(client: PoolClient, transactionId: string, userId: string, role: 'PROPIETARIO'|'RECEPTOR') {
-  return (await client.query<PhysicalgoodsConfirmationRow>(`INSERT INTO public.confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante)
-    VALUES($1,$2,$3) RETURNING ${confirmationProjection}`,[transactionId,userId,role])).rows[0];
+  return (await client.query<PhysicalgoodsConfirmationRow>(`INSERT INTO public.confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante,confirmado_en)
+    VALUES($1,$2,$3,clock_timestamp()) RETURNING ${confirmationProjection}`,[transactionId,userId,role])).rows[0];
 }
 export async function physicalgoodsTransactionDetail(client: PoolClient, transactionId: string) {
   return (await client.query<PhysicalgoodsTransactionDetailRow>(`SELECT t.*,p.titulo,p.estado_publicacion,p.deleted_at,p.campus_id,

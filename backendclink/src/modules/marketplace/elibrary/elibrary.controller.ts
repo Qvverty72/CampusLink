@@ -14,7 +14,7 @@ import { getDigitalPreview } from './elibrary.preview.service.js';
 import { createDigitalRequest, digitalAction, getDigitalRequestOptions, getDigitalRequests, getDigitalTrade, resolveDigitalRequest, transitionDigitalTrade } from './elibrary.trades.service.js';
 import { getAcquiredDigitalResources,getOwnedDigitalResources } from './elibrary.acquired.service.js';
 import { editDigitalPublication } from './elibrary.edit.service.js';
-import { getDigitalRecommendations,recordDigitalView } from './elibrary.recommendations.service.js';
+import { getDigitalRecommendations } from './elibrary.recommendations.service.js';
 import { rateDigitalOwner } from './elibrary.rating.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
@@ -33,7 +33,7 @@ export const digitalRequestOptionsController: DigitalHandler = async(request,res
   digitalAction(request.query);sendSuccess(response,await getDigitalRequestOptions(response.locals.auth,request.params.publicationId));
 };
 export const createDigitalRequestController: DigitalHandler = async(request,response)=>{
-  digitalAction(request.query);sendSuccess(response,await createDigitalRequest(response.locals.auth,request.params.publicationId,request.body),201);
+  digitalAction(request.query);sendSuccess(response,await createDigitalRequest(response.locals.auth,request.params.publicationId,request.body,request.get('Idempotency-Key')),201);
 };
 export const receivedDigitalRequestsController: DigitalHandler = async(request,response)=>{
   const result=await getDigitalRequests(response.locals.auth,request.query,true);sendEnvelope(response,result.data,{meta:result.meta});
@@ -86,7 +86,7 @@ export const listDigitalController: DigitalHandler = async (request, response) =
 };
 export const detailDigitalController: DigitalHandler = async (request, response) => {
   const publication=(await getDigitalPublications(response.locals.auth, request.params.publicationId))[0];
-  await recordDigitalView(response.locals.auth,publication.id);sendSuccess(response,publication);
+  sendSuccess(response,publication);
 };
 
 export const getElibraryHealthController: RequestHandler = async (_request, response) => {

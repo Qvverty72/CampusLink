@@ -33,8 +33,9 @@ const requestJoins = `FROM public.solicitud_recurso r JOIN public.publicacion_re
 export async function findDigitalRequest(client: PoolClient, id: string, requestId: string) {
   return (await client.query<DigitalRequestRow>(`SELECT ${requestProjection} ${requestJoins} WHERE r.publicacion_id=$1 AND r.id=$2 FOR UPDATE OF r`,[id,requestId])).rows[0] ?? null;
 }
-export async function insertDigitalRequest(client: PoolClient, id: string, userId: string, code: string) {
-  return (await client.query<{id:string}>(`INSERT INTO public.solicitud_recurso(publicacion_id,solicitante_id,codigo_mensaje) VALUES($1,$2,$3) RETURNING id`,[id,userId,code])).rows[0].id;
+export async function insertDigitalRequest(client: PoolClient, id: string, userId: string, code: string, operationId?: string) {
+  return (await client.query<{id:string}>(`INSERT INTO public.solicitud_recurso(publicacion_id,solicitante_id,codigo_mensaje,id,solicitada_en)
+    VALUES($1,$2,$3,COALESCE($4::uuid,gen_random_uuid()),clock_timestamp()) RETURNING id`,[id,userId,code,operationId??null])).rows[0].id;
 }
 export async function setDigitalRequestStatus(client: PoolClient, id: string, status: string) {
   await client.query('UPDATE public.solicitud_recurso SET estado_solicitud=$2,updated_at=clock_timestamp() WHERE id=$1',[id,status]);
@@ -45,8 +46,8 @@ export async function listDigitalRequests(client: PoolClient, institutionId: str
     ORDER BY r.solicitada_en DESC,r.id DESC LIMIT $4 OFFSET $5`,[institutionId,userId,received,page.limit+1,page.offset])).rows;
 }
 export async function insertDigitalTrade(client: PoolClient, id: string, requestId: string, receiverId: string) {
-  return (await client.query<{id:string}>(`INSERT INTO public.transaccion_recurso(solicitud_id,publicacion_id,propietario_id,receptor_id,modalidad_acordada,monto_acordado,moneda)
-    SELECT $2,p.id,p.propietario_id,$3,p.modalidad,p.precio,p.moneda FROM public.publicacion_recurso p WHERE p.id=$1 RETURNING id`,[id,requestId,receiverId])).rows[0].id;
+  return (await client.query<{id:string}>(`INSERT INTO public.transaccion_recurso(solicitud_id,publicacion_id,propietario_id,receptor_id,modalidad_acordada,monto_acordado,moneda,iniciada_en)
+    SELECT $2,p.id,p.propietario_id,$3,p.modalidad,p.precio,p.moneda,clock_timestamp() FROM public.publicacion_recurso p WHERE p.id=$1 RETURNING id`,[id,requestId,receiverId])).rows[0].id;
 }
 export async function findDigitalTrade(client: PoolClient, id: string, tradeId: string) {
   return (await client.query<DigitalTradeRow>('SELECT * FROM public.transaccion_recurso WHERE publicacion_id=$1 AND id=$2 FOR UPDATE',[id,tradeId])).rows[0] ?? null;
@@ -56,7 +57,7 @@ export async function digitalConfirmations(client: PoolClient, tradeId: string) 
     FROM public.confirmacion_transaccion WHERE transaccion_id=$1 ORDER BY confirmado_en,id`,[tradeId])).rows;
 }
 export async function confirmDigitalParticipant(client: PoolClient, tradeId: string, userId: string, role: string) {
-  await client.query('INSERT INTO public.confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[tradeId,userId,role]);
+  await client.query('INSERT INTO public.confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante,confirmado_en) VALUES($1,$2,$3,clock_timestamp()) ON CONFLICT DO NOTHING',[tradeId,userId,role]);
 }
 export async function setDigitalTradeStatus(client: PoolClient, row: DigitalTradeRow, status: string, actor: string) {
   await client.query(`UPDATE public.transaccion_recurso SET estado_transaccion=$2,completada_en=CASE WHEN $2='COMPLETADA' THEN clock_timestamp() ELSE NULL END,

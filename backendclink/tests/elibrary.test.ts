@@ -93,7 +93,7 @@ before(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion',
-    'publicacion_carrera', 'publicacion_asignatura', 'usuario_carrera', 'interaccion_recurso', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'valoracion', 'reporte_contenido', 'auditoria']) {
+    'publicacion_carrera', 'publicacion_asignatura', 'usuario_carrera', 'interaccion_recurso', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'valoracion', 'reporte_contenido', 'auditoria', 'categoria_recurso_fisico', 'recurso_fisico']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -789,9 +789,12 @@ test('digital recommendations use academic cold-start, exclude own/acquired/hidd
   await db.query("UPDATE publicacion_recurso SET estado_publicacion='OCULTO' WHERE id=$1",[generic.id]);assert.ok(!(await(await get('/recommendations?limit=100')).json()).data.some((row:{id:string})=>row.id===generic.id));
   current=await peer(foreignCampus,foreignInstitution);assert.deepEqual((await(await get('/recommendations')).json()).data,[]);
 });
-test('view/request signals affect recommendations, views coalesce and do not expose users or permit spoofed signals',async()=>{
+test('explicit views feed recommendations once per opening, GETs never record views and requests remain separate signals',async()=>{
   const saved=await service.createDigitalPublication(auth,input({title:'Interes '+randomUUID()}),file()),receiver=await peer();current=receiver;
   await get('/'+saved.id);await get('/'+saved.id);
+  assert.equal((await db.query('SELECT * FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
+  const view=await import('../src/modules/analytics/analytics.service.js'),operationId=randomUUID();
+  await view.recordResourceView(receiver,saved.id,{operationId});await view.recordResourceView(receiver,saved.id,{operationId});
   assert.equal((await db.query("SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2 AND tipo_interaccion='VISTA'",[receiver.userId,saved.id])).rows.length,1);
   await digitalJson('/'+saved.id+'/requests','POST',{messageCode:'LIB_QA_INTERES'});
   const result=await(await get('/recommendations?limit=100')).json(),row=result.data.find((item:{id:string})=>item.id===saved.id);assert.ok(row);assert.ok(row.recommendation.score>=15);
@@ -799,6 +802,70 @@ test('view/request signals affect recommendations, views coalesce and do not exp
   assert.equal((await get('/recommendations?userId='+auth.userId)).status,400);assert.equal((await get('/recommendations?page=0')).status,400);
   current=structuredClone(auth);await get('/'+saved.id);assert.equal((await db.query('SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2',[auth.userId,saved.id])).rows.length,0);
 });
+test('resource view HTTP validates scope and payload, deduplicates retries and preserves exact original campus/time',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),other=await service.createDigitalPublication(auth,input(),await distinctFile()),receiver=await peer();
+  const viewUrl=base.replace('/marketplace/elibrary','/analytics/resources')+'/'+saved.id+'/views',operationId=randomUUID();current=receiver;
+  const send=(body:unknown,url=viewUrl,authorized=true)=>originalFetch(url,{method:'POST',headers:{...(authorized?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},body:JSON.stringify(body)});
+  assert.equal((await send({operationId},viewUrl,false)).status,401);
+  for(const body of [{},{operationId:'bad'},{operationId,userId:auth.userId},{operationId,campusId:campus},{operationId,createdAt:'2000-01-01'},{operationId,type:'SOLICITUD'}])assert.equal((await send(body)).status,400);
+  assert.equal((await send({operationId})).status,200);
+  const original=(await db.query('SELECT id,created_at::text AS time FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows;
+  assert.equal((await send({operationId})).status,200);
+  assert.deepEqual((await db.query('SELECT id,created_at::text AS time FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows,original);
+  assert.equal((await send({operationId},viewUrl.replace(saved.id,other.id))).status,409);
+  assert.equal((await send({operationId:randomUUID()})).status,200);
+  assert.equal((await db.query('SELECT id FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,2);
+  const foreign=await peer(foreignCampus,foreignInstitution);current=foreign;assert.equal((await send({operationId:randomUUID()})).status,404);
+  current=receiver;await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1",[receiver.userId]);
+  assert.equal((await send({operationId:randomUUID()})).status,403);
+});
+
+test('request idempotency survives resolved requests and lost responses, without a second historical request',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const key=randomUUID(),body={messageCode:'LIB_QA_INTERES'};
+  lostCommit=true;await assert.rejects(trades.createDigitalRequest(receiver,saved.id,body,key),{status:503});
+  const first=await trades.createDigitalRequest(receiver,saved.id,body,key);
+  await trades.resolveDigitalRequest(auth,saved.id,first.id,{decision:'RECHAZAR'});
+  const replay=await trades.createDigitalRequest(receiver,saved.id,body,key);assert.equal(replay.id,first.id);assert.equal(replay.status,'RECHAZADA');
+  assert.equal((await db.query('SELECT id FROM solicitud_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,1);
+  await assert.rejects(trades.createDigitalRequest(receiver,saved.id,{messageCode:'changed'},key),{status:409});
+  await assert.rejects(trades.createDigitalRequest(receiver,saved.id,body,'not-a-uuid'),{status:400});
+  const other=await service.createDigitalPublication(auth,input(),await distinctFile());await assert.rejects(trades.createDigitalRequest(receiver,other.id,body,key),{status:409});
+  const fresh=await trades.createDigitalRequest(receiver,saved.id,body,randomUUID());assert.notEqual(fresh.id,first.id);
+});
+
+test('resource history separates views/requests/transitions and survives soft deletion and actor campus changes',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const analytics=await import('../src/modules/analytics/analytics.service.js'),repository=await import('../src/modules/analytics/analytics.repository.js');
+  await analytics.recordResourceView(receiver,saved.id,{operationId:randomUUID()});
+  const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},randomUUID());
+  const accepted=await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'}),tradeId=accepted.transactionId!;
+  await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');
+  const read=async()=> (await repository.readResourceAnalyticsEvents(db as never,campus,'2000-01-01','2100-01-01')).filter(row=>row.publicationId===saved.id);
+  const pending=await read();assert.deepEqual(pending.map(row=>row.type),['VISTA','SOLICITUD_CREADA','TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION']);
+  await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
+  const before=await read();assert.equal(before.length,5);assert.equal(before.at(-1)?.userId,receiver.userId);assert.ok(before.every(row=>row.campusId===campus&&/\.\d{6}Z$/.test(row.occurredAt)));
+  const cutoff=before.at(-1)!.occurredAt;assert.equal((await repository.readResourceAnalyticsEvents(db as never,campus,cutoff,cutoff)).length,0);
+  assert.deepEqual((await repository.readResourceAnalyticsEvents(db as never,campus,cutoff,'2100-01-01')).filter(row=>row.publicationId===saved.id).map(row=>row.type),['TRANSACCION_COMPLETADA']);
+  await db.query('UPDATE publicacion_recurso SET deleted_at=clock_timestamp() WHERE id=$1',[saved.id]);
+  await db.query("UPDATE perfil_usuario SET campus_id=$2,deleted_at=clock_timestamp(),estado_cuenta='DESACTIVADA' WHERE id=ANY($1::uuid[])",[[receiver.userId,auth.userId],sibling]);
+  assert.deepEqual(await read(),before);
+  assert.equal((await repository.readResourceAnalyticsEvents(db as never,sibling,'2000-01-01','2100-01-01')).filter(row=>row.publicationId===saved.id).length,0);
+});
+
+test('failed digital confirmation persists no transition and cancellation retains the confirmed intermediate event',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});
+  const accepted=await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'}),id=accepted.transactionId!;
+  await trades.transitionDigitalTrade(auth,saved.id,id,{},'CONFIRMAR');failDigitalAccess=true;
+  await assert.rejects(trades.transitionDigitalTrade(receiver,saved.id,id,{},'CONFIRMAR'),{status:503});failDigitalAccess=false;
+  const repository=await import('../src/modules/analytics/analytics.repository.js');
+  const read=async()=> (await repository.readResourceAnalyticsEvents(db as never,campus,'2000-01-01','2100-01-01')).filter(row=>row.transactionId===id);
+  assert.deepEqual((await read()).map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION']);
+  await trades.transitionDigitalTrade(receiver,saved.id,id,{},'CANCELAR');await trades.transitionDigitalTrade(receiver,saved.id,id,{},'CANCELAR');
+  const events=await read();assert.deepEqual(events.map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION','TRANSACCION_CANCELADA']);assert.equal(events.at(-1)?.userId,receiver.userId);
+});
+
 test('digital rating shares physical rules: completed receiver only, integer 1..5, one immutable row under concurrency',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
   const rating=await import('../src/modules/marketplace/elibrary/elibrary.rating.service.js');

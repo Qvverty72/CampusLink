@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
+import { recordResourceOpening } from '../../api/resourceInteractions';
 import { attachDigitalFile, downloadDigitalFile, loadDigitalAcademicCatalog, loadDigitalPublication, searchDigitalPublications, publishDigitalPublication, updateDigitalAcademics } from '../api/elibraryApi';
 import { mergeUniqueDigitalFiles, pickDigitalFiles, releaseDigitalFile } from '../api/documentPicker';
 import { saveDigitalFile } from '../api/saveDigitalFile';
@@ -124,7 +125,7 @@ export function useDigitalLibrary() {
     downloadRequest.current?.abort(); downloadRequest.current = null; setDownloading(null);
     detailRequest.current?.abort(); const abort = new AbortController(); detailRequest.current = abort;
     setError(null); setNotice(null); setDetail(null); setEditingAcademics(false); setAcademicConflict(false);
-    try { const result = await loadDigitalPublication(id, abort.signal); if (!abort.signal.aborted) setDetail(result); }
+    try { const result = await loadDigitalPublication(id, abort.signal); if (!abort.signal.aborted) { setDetail(result); void recordResourceOpening(id); } }
     catch (reason) { if (!abort.signal.aborted) showError(reason); }
   }
   async function openAcademicEditor() {

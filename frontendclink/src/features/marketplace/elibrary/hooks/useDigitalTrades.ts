@@ -1,14 +1,16 @@
 import { useEffect,useRef,useState } from 'react';
 import { AuthApiError } from '@/lib/api/authenticated-request';
+import { operationId } from '@/lib/api/operation-id';
 import { loadDigitalRequestOptions,loadDigitalRequests,loadDigitalTrade,requestDigitalResource,resolveDigitalRequest,transitionDigitalTrade,rateDigitalOwner } from '../api/digitalTradesApi';
 import type { DigitalRequest,DigitalRequestOptions,DigitalTrade } from '../types/trade';
 const message=(error:unknown)=>error instanceof AuthApiError?error.serverMessage??'No se pudo completar la operación.': 'No se pudo conectar. Revisa tu conexión. Si estabas guardando, actualiza el estado antes de reintentar.';
 export function useDigitalRequestAction(id:string) {
   const [options,setOptions]=useState<DigitalRequestOptions|null>(null),[code,setCode]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[revision,setRevision]=useState(0);
   const pending=useRef<AbortController|null>(null),saving=useRef(false);
+  const operation=useRef<{id:string;code:string;key:string}|null>(null);
   useEffect(()=>{const abort=new AbortController();setOptions(null);setCode('');void loadDigitalRequestOptions(id,abort.signal).then(value=>{if(!abort.signal.aborted)setOptions(value);}).catch(reason=>{if(!abort.signal.aborted)setError(message(reason));});return()=>{abort.abort();pending.current?.abort();};},[id,revision]);
   async function submit(){if(saving.current||!code)return;saving.current=true;setBusy(true);setError(null);const abort=new AbortController();pending.current=abort;
-    try{await requestDigitalResource(id,code,abort.signal);}catch(reason){if(!abort.signal.aborted)setError(message(reason));}
+    try{if(operation.current?.id!==id||operation.current.code!==code)operation.current={id,code,key:operationId()};await requestDigitalResource(id,code,abort.signal,operation.current.key);operation.current=null;}catch(reason){if(!abort.signal.aborted)setError(message(reason));}
     finally{saving.current=false;if(!abort.signal.aborted){setBusy(false);setRevision(value=>value+1);}}}
   return {options,code,setCode,busy,error,submit,reload:()=>{setError(null);setRevision(value=>value+1);}};
 }

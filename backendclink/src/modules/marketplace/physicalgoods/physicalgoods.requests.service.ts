@@ -12,6 +12,8 @@ import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setP
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
 import { createPaginatedResult } from '../../../services/pagination.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../analytics/analytics.service.js';
+import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
 
 /** Reutiliza el orden de bloqueos de edición: perfil primero, publicación después. */
@@ -47,15 +49,26 @@ export async function getPhysicalgoodsRequestOptions(auth: VerifiedAuthConnectio
   });
 }
 /** Comprueba disponibilidad y duplicados dentro del mismo lock antes de insertar; solicitar no reserva la unidad. */
-export async function createPhysicalgoodsRequest(auth: VerifiedAuthConnection, publicationId: unknown, body: unknown) {
+export async function createPhysicalgoodsRequest(auth: VerifiedAuthConnection, publicationId: unknown, body: unknown, rawOperationId?: unknown) {
   const id = physicalgoodsId(publicationId,'publicationId'), code = parsePhysicalgoodsRequest(body);
+  const operationId = parseResourceOperationId(rawOperationId);
+  const requestId = operationId ? resourceOperationKey('request',auth.userId,operationId) : undefined;
   return requestContext(auth,id,async (client,resource,current) => {
+    if (requestId) {
+      const previous = await findResourceRequestOperation(client,requestId);
+      if (previous) {
+        if (previous.publicacion_id !== id || previous.solicitante_id !== current.userId || previous.codigo_mensaje !== code) {
+          throw new ApiError(409,'CONFLICT','La clave de operación ya corresponde a otra solicitud.');
+        }
+        return receipt(previous,resource);
+      }
+    }
     if (resource.propietario_id === current.userId) throw new ApiError(403,'FORBIDDEN','No puedes solicitar tu propio recurso.');
     if (resource.estado_publicacion !== 'DISPONIBLE') throw new ApiError(409,'CONFLICT','El recurso ya no está disponible para recibir solicitudes.');
     if (await findActivePhysicalgoodsRequest(client,id,current.userId)) throw new ApiError(409,'CONFLICT','Ya tienes una solicitud activa para este recurso.');
     const message = await findPhysicalgoodsRequestMessage(client,code);
     if (!message?.activo) throw new ApiError(400,'VALIDATION_ERROR','Selecciona un mensaje predefinido disponible.');
-    return receipt(await insertPhysicalgoodsRequest(client,id,current.userId,code),resource);
+    return receipt(await insertPhysicalgoodsRequest(client,id,current.userId,code,requestId),resource);
   });
 }
 function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnection) {

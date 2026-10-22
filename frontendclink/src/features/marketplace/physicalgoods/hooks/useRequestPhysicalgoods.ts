@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
+import { operationId } from '@/lib/api/operation-id';
 import type { usePhysicalgoodsResources } from './usePhysicalgoodsResources';
 import { loadPhysicalgoodsRequestOptions, requestPhysicalgoods } from '../api/physicalgoodsApi';
 import type { PhysicalgoodsRequestOptions } from '../types/publication';
@@ -11,6 +12,7 @@ export function useRequestPhysicalgoods(r: ReturnType<typeof usePhysicalgoodsRes
   const [options,setOptions] = useState<PhysicalgoodsRequestOptions | null>(null), [messageCode,setMessageCode] = useState('');
   const [loading,setLoading] = useState(false), [busy,setBusy] = useState(false), [error,setError] = useState<string | null>(null), [revision,setRevision] = useState(0);
   const mutation = useRef<AbortController | null>(null), running = useRef(false);
+  const operation = useRef<{id:string;code:string;key:string} | null>(null);
   const eligible = !!r.gallery && !!auth.identity?.userId && r.gallery.owner.id !== auth.identity.userId;
   function report(reason: unknown) {
     if (reason instanceof AuthApiError && [401,403].includes(reason.status)) void auth.refreshIdentity();
@@ -37,7 +39,9 @@ export function useRequestPhysicalgoods(r: ReturnType<typeof usePhysicalgoodsRes
     if (running.current || !r.gallery || !options?.canRequest || !options.messages.some(row=>row.code===messageCode)) return;
     const id = r.gallery.id, abort = new AbortController(); mutation.current=abort; running.current=true; setBusy(true); setError(null);
     try {
-      const receipt = await requestPhysicalgoods(id,messageCode,abort.signal);
+      if (operation.current?.id !== id || operation.current.code !== messageCode) operation.current = {id,code:messageCode,key:operationId()};
+      const receipt = await requestPhysicalgoods(id,messageCode,abort.signal,operation.current.key);
+      operation.current = null;
       if (!abort.signal.aborted) setOptions({ canRequest:false,activeRequest:receipt,messages:[] });
     } catch (reason) {
       if (!abort.signal.aborted) { report(reason); if (reason instanceof AuthApiError && [404,409].includes(reason.status)) r.reloadGallery(); }

@@ -11,6 +11,8 @@ import { activeDigitalRequest, confirmDigitalParticipant, digitalConfirmations, 
   digitalTradeParticipants, findDigitalRequest, findDigitalTrade, insertDigitalRequest, insertDigitalTrade, listDigitalRequests,
   lockDigitalProfiles, setDigitalRequestStatus, setDigitalTradeStatus } from './elibrary.trades.repository.js';
 import { findDigitalRating } from './elibrary.rating.repository.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../analytics/analytics.service.js';
+import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
 
 export function digitalAction(raw: unknown, fields: string[] = []): Record<string,unknown> {
   if (!raw || typeof raw!=='object' || Array.isArray(raw) || Object.keys(raw).some(key=>!fields.includes(key))) return invalidDigital('body','La solicitud contiene campos no admitidos.');
@@ -63,14 +65,23 @@ export async function getDigitalRequestOptions(auth:VerifiedAuthConnection,id:un
     return {canRequest,acquired,activeRequestId:active?.id??null,messages:canRequest?await digitalRequestMessages(client):[]};
   });
 }
-export async function createDigitalRequest(auth:VerifiedAuthConnection,id:unknown,raw:unknown) {
+export async function createDigitalRequest(auth:VerifiedAuthConnection,id:unknown,raw:unknown,rawOperationId?:unknown) {
   const {messageCode}=digitalAction(raw,['messageCode']);if(typeof messageCode!=='string'||!messageCode.trim()||messageCode.length>200)invalidDigital('messageCode','Selecciona un mensaje disponible.');
+  const operationId=parseResourceOperationId(rawOperationId);
+  const operationRequestId=operationId?resourceOperationKey('request',auth.userId,operationId):undefined;
   return withDigitalTradeContext(auth,id,async(client,resource,current)=>{
+    if(operationRequestId){
+      const previous=await findResourceRequestOperation(client,operationRequestId);
+      if(previous){
+        if(previous.publicacion_id!==resource.id||previous.solicitante_id!==current.userId||previous.codigo_mensaje!==messageCode)throw conflict('La clave de operación ya corresponde a otra solicitud.');
+        return requestDto((await findDigitalRequest(client,resource.id,previous.id))!);
+      }
+    }
     await available(client,resource);if(current.userId===resource.propietario_id)throw new ApiError(403,'FORBIDDEN','No puedes solicitar tu propio recurso.');
     if(!await digitalMembersEnabled(client,[current.userId,resource.propietario_id],resource.institucion_id))throw conflict('Los participantes deben estar habilitados en la misma institución.');
     if(await activeDigitalRequest(client,resource.id,current.userId)||await hasDigitalAcquisition(client,resource.id,resource.propietario_id,current.userId))throw conflict('Ya tienes una solicitud activa o adquiriste este recurso.');
     if(!(await digitalRequestMessages(client)).some(row=>row.code===messageCode))invalidDigital('messageCode','Selecciona un mensaje disponible.');
-    const selected=await insertDigitalRequest(client,resource.id,current.userId,messageCode as string);
+    const selected=await insertDigitalRequest(client,resource.id,current.userId,messageCode as string,operationRequestId);
     return requestDto((await findDigitalRequest(client,resource.id,selected))!);
   });
 }

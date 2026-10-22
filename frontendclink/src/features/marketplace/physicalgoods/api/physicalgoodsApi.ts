@@ -49,8 +49,8 @@ export function loadPhysicalgoodsResources(filters: PhysicalgoodsSearchFilters, 
 /** Carga la galería y los permisos de edición calculados por el backend. */
 export const loadPhysicalgoodsGallery = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsGallery>(resourcePath(id) + '/images', { signal });
 export const loadPhysicalgoodsRequestOptions = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsRequestOptions>(resourcePath(id) + '/request-options',{ signal });
-export const requestPhysicalgoods = (id: string, messageCode: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsRequest>(resourcePath(id) + '/requests',{
-  method:'POST',signal,headers:{ 'Content-Type':'application/json' },body:JSON.stringify({ messageCode }),
+export const requestPhysicalgoods = (id: string, messageCode: string, signal: AbortSignal, key?:string) => authenticatedRequest<PhysicalgoodsRequest>(resourcePath(id) + '/requests',{
+  method:'POST',signal,headers:{ 'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{}) },body:JSON.stringify({ messageCode }),
 });
 export const loadPhysicalgoodsRequests = (page:number,received:boolean,signal:AbortSignal) => authenticatedEnvelopeRequest<PhysicalgoodsReceivedRequest[],PhysicalgoodsReceivedPage['meta']>(
   path+(received?'/received-requests':'/sent-requests'),{signal},new URLSearchParams({page:String(page),limit:'10'}));

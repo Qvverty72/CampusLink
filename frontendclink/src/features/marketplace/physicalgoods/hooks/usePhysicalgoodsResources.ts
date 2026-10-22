@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
+import { operationId } from '@/lib/api/operation-id';
+import { recordResourceOpening } from '../../api/resourceInteractions';
 import { addPhysicalgoodsPhoto, choosePhysicalgoodsPrincipal, loadPhysicalgoodsGallery, loadPhysicalgoodsResources, loadPublicationOptions, retirePhysicalgoodsPhoto, savePhysicalgoodsCategory } from '../api/physicalgoodsApi';
 import { pickPublicationPhotos } from '../api/photoPicker';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PublicationOptions, PublicationPhoto } from '../types/publication';
@@ -17,6 +19,7 @@ export function usePhysicalgoodsResources() {
   const [editCategory, setEditCategory] = useState(''), [busy, setBusy] = useState(false), [draftImages, setDraftImages] = useState<PublicationPhoto[]>([]);
   const mutation = useRef<AbortController | null>(null), running = useRef(false), mounted = useRef(true);
   const selectedRef = useRef(selectedId), savedCategory = useRef(''); selectedRef.current = selectedId;
+  const opening = useRef<{id:string;key:string;recorded:boolean} | null>(null);
   const galleryRef = useRef(gallery), draftImagesRef = useRef(draftImages), picking = useRef(false);
   galleryRef.current = gallery; draftImagesRef.current = draftImages;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; mutation.current?.abort(); }; }, []);
@@ -43,6 +46,10 @@ export function usePhysicalgoodsResources() {
     void loadPhysicalgoodsGallery(selectedId, abort.signal).then(result => {
       if (abort.signal.aborted) return;
       setGallery(result);
+      if (opening.current?.id === selectedId && !opening.current.recorded) {
+        opening.current.recorded = true;
+        void recordResourceOpening(selectedId, opening.current.key);
+      }
       if (savedCategory.current !== result.category.id) { setEditCategory(result.category.id); savedCategory.current = result.category.id; }
       timer = setTimeout(() => setGalleryRevision(value => value + 1), 50000);
     }).catch(reason => { if (!abort.signal.aborted) { setGallery(null); report(reason, setGalleryError); } })
@@ -106,7 +113,7 @@ export function usePhysicalgoodsResources() {
   function clearFilters() { setFilters({ ...emptyPhysicalgoodsFilters }); setApplied({ ...emptyPhysicalgoodsFilters }); setNumber(1); }
   return { options, page, filters, setFilter, search, clearFilters, number, loading, error, selectedId, gallery, galleryLoading, galleryError, editCategory, setEditCategory, busy, draftImages, change,
     remainingImageSlots: Math.max(0, PHYSICALGOODS_MAX_IMAGES - (gallery?.images.length ?? 0) - draftImages.length),
-    open: (id: string) => { if (running.current) return; savedCategory.current = ''; setGallery(null); setDraftImages([]); setGalleryError(null); setSelectedId(id); }, close,
+    open: (id: string) => { if (running.current) return; opening.current = {id,key:operationId(),recorded:false}; savedCategory.current = ''; setGallery(null); setDraftImages([]); setGalleryError(null); setSelectedId(id); }, close,
     setNumber,
     reload: () => setRevision(value => value + 1), reloadGallery: () => { setGalleryError(null); setGalleryRevision(value => value + 1); }, selectPhotos, upload,
     removeDraft: (index: number) => setDraftImages(previous => previous.filter((_, current) => current !== index)),

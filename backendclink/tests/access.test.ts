@@ -543,6 +543,14 @@ test('audit reads real suspension/deactivation snapshots even after physical pub
   const retired=await auditDetail(stored[1].id as string);
   assert.equal(retired.datos_antes.publicacion_recurso[0].id,publicationId);
   assert.equal(retired.datos_antes.publicacion_recurso[0].deleted_at,null);assert.ok(retired.datos_despues.publicacion_recurso[0].deleted_at);
+  const analytics=await import('../src/modules/analytics/analytics.repository.js');
+  const events=(await analytics.readAccountStateAnalyticsEvents(db as never,campus)).filter(row=>row.userId===user);
+  assert.deepEqual(events.map(row=>[row.before,row.after]),[['ACTIVA','SUSPENDIDA'],['SUSPENDIDA','DESACTIVADA']]);
+  assert.ok(events.every(row=>row.actorId===actor&&row.campusId===campus&&/\.\d{6}Z$/.test(row.occurredAt)));
+  // Un corte anterior a la primera suspensión conserva ACTIVA pese al estado actual DESACTIVADA.
+  const beforeFirstChange=events[0].before;assert.equal(beforeFirstChange,'ACTIVA');
+  await db.query('UPDATE perfil_usuario SET campus_id=$2,deleted_at=clock_timestamp() WHERE id=$1',[user,otherCampus]);
+  assert.deepEqual((await analytics.readAccountStateAnalyticsEvents(db as never,campus)).filter(row=>row.userId===user),events);
 });
 
 test('audit reads recorded moderation decisions without reconstructing current report or publication', async () => {

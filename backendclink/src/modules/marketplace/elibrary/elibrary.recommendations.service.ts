@@ -4,9 +4,8 @@ import { createPaginatedResult } from '../../../services/pagination.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { authorizeDigitalAccess,currentDigitalContext } from './elibrary.service.js';
 import { digitalHistoryPage } from './elibrary.trades.service.js';
-import { digitalId } from './elibrary.validation.js';
 import { findDigitalPublications } from './elibrary.repository.js';
-import { insertDigitalView,rankDigitalRecommendations } from './elibrary.recommendations.repository.js';
+import { rankDigitalRecommendations } from './elibrary.recommendations.repository.js';
 export const DIGITAL_RECOMMENDATION_WEIGHTS=Object.freeze({career:30,subject:20,view:5,request:10,activity:1});
 export async function getDigitalRecommendations(auth:VerifiedAuthConnection,raw:unknown) {
   authorizeDigitalAccess(auth);const page=digitalHistoryPage(raw);
@@ -21,10 +20,4 @@ export async function getDigitalRecommendations(auth:VerifiedAuthConnection,raw:
       ...(rank.ownView||rank.ownRequest?['Relacionado con tu interés reciente']:[]),...(rank.activity?['Actividad de tu institución']:[]),
       ...(!rank.score?['Recurso reciente de tu institución']:[])]}})),page);
   });}catch(error){if(error instanceof ApiError)throw error;throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudieron cargar las recomendaciones.');}
-}
-/** Señal accesoria: un fallo de analítica nunca impide consultar metadatos autorizados. */
-export async function recordDigitalView(auth:VerifiedAuthConnection,rawId:unknown) {
-  try{authorizeDigitalAccess(auth);const id=digitalId(rawId);await withPostgresTransaction(async client=>{
-    const {current,campus}=await currentDigitalContext(client,auth);await insertDigitalView(client,campus.institucion_id,current.userId,id);
-  });}catch{console.error('Digital view signal unavailable');}
 }

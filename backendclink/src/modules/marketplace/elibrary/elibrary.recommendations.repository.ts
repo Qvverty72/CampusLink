@@ -23,9 +23,3 @@ export async function rankDigitalRecommendations(client:PoolClient,institutionId
     FROM candidates ORDER BY score DESC,publicado_en DESC,id DESC LIMIT $8 OFFSET $9`,
     [institutionId,userId,weights.career,weights.subject,weights.view,weights.request,weights.activity,page.limit+1,page.offset])).rows;
 }
-export async function insertDigitalView(client:PoolClient,institutionId:string,userId:string,id:string) {
-  await client.query(`INSERT INTO public.interaccion_recurso(perfil_usuario_id,publicacion_id,tipo_interaccion)
-    SELECT $2,p.id,'VISTA' FROM public.publicacion_recurso p JOIN public.recurso_digital d ON d.publicacion_id=p.id JOIN public.campus c ON c.id=p.campus_id
-    WHERE p.id=$3 AND c.institucion_id=$1 AND p.tipo_recurso='DIGITAL' AND p.propietario_id<>$2 AND p.deleted_at IS NULL AND p.estado_publicacion='DISPONIBLE'
-    AND NOT EXISTS(SELECT 1 FROM public.interaccion_recurso v WHERE v.publicacion_id=p.id AND v.perfil_usuario_id=$2 AND v.tipo_interaccion='VISTA' AND v.created_at>=now()-interval '24 hours')`,[institutionId,userId,id]);
-}

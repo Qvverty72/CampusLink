@@ -136,7 +136,7 @@ before(async () => {
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
-    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria']) {
+    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria','interaccion_recurso','recurso_digital']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -898,6 +898,43 @@ async function requestedPair() {
 }
 const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',actor=auth)=>requestsService.resolvePhysicalgoodsRequest(actor,publicationId,requestId,{decision});
 const transactionRows=(publicationId:string)=>db.query('select * from transaccion_recurso where publicacion_id=$1 order by iniciada_en,id',[publicationId]);
+
+test('physical resource openings validate campus and keep one view per operation without gallery refresh signals',async()=>{
+  const saved=await create(auth,input()),viewer=await otherActor(),analytics=await import('../src/modules/analytics/analytics.service.js');
+  await imagesService.getPhysicalgoodsGallery(viewer,saved.id);await imagesService.getPhysicalgoodsGallery(viewer,saved.id);
+  assert.equal((await db.query('SELECT id FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
+  const operationId=randomUUID();await Promise.all([analytics.recordResourceView(viewer,saved.id,{operationId}),analytics.recordResourceView(viewer,saved.id,{operationId})]);
+  assert.equal((await db.query('SELECT id FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,1);
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1',[viewer.userId,otherCampus]);
+  await assert.rejects(analytics.recordResourceView({...viewer,campusId:otherCampus,profile:{...viewer.profile,campus_id:otherCampus}},saved.id,{operationId:randomUUID()}),{status:404});
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1',[viewer.userId,campus]);
+  lostCommit=true;await assert.rejects(analytics.recordResourceView(viewer,saved.id,{operationId:randomUUID()}),{status:503});
+  assert.equal((await db.query('SELECT id FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,2);
+});
+
+test('physical request key returns the same resolved request, rejects changed payload and records failed writes zero times',async()=>{
+  const saved=await create(auth,input()),viewer=await otherActor(),key=randomUUID(),body={messageCode:'ME_INTERESA'};
+  failRequestInsert=true;await assert.rejects(requestsService.createPhysicalgoodsRequest(viewer,saved.id,body,key),{status:503});failRequestInsert=false;
+  assert.equal((await db.query('SELECT id FROM solicitud_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
+  const first=await requestsService.createPhysicalgoodsRequest(viewer,saved.id,body,key);
+  await resolveRequest(saved.id,first.id,'RECHAZAR');
+  const replay=await requestsService.createPhysicalgoodsRequest(viewer,saved.id,body,key);assert.equal(replay.id,first.id);assert.equal(replay.status,'RECHAZADA');
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(viewer,saved.id,{messageCode:'PARA_MIS_ESTUDIOS'},key),{status:409});
+  assert.equal((await db.query('SELECT id FROM solicitud_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,1);
+});
+
+test('physical transaction analytics retains reservation, first confirmation and cancellation exactly once after withdrawal',async()=>{
+  const {saved,first,a}=await requestedPair(),accepted=await resolveRequest(saved.id,a.id),id=accepted.transaction!.id;
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  const repository=await import('../src/modules/analytics/analytics.repository.js');
+  const read=async()=> (await repository.readResourceAnalyticsEvents(db as never,campus,'2000-01-01','2100-01-01')).filter(row=>row.transactionId===id);
+  const events=await read();assert.deepEqual(events.map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION','TRANSACCION_CANCELADA']);
+  assert.deepEqual(events.map(row=>row.userId),[auth.userId,auth.userId,first.userId]);
+  await db.query('UPDATE publicacion_recurso SET deleted_at=clock_timestamp() WHERE id=$1',[saved.id]);assert.deepEqual(await read(),events);
+});
 
 test('acceptance snapshots agreed terms and reserves exactly one unit while other requests stay pending and visible',async()=>{
   const {saved,first,second,a,b}=await requestedPair(),before=await imagesService.getPhysicalgoodsGallery(auth,saved.id);

@@ -16,9 +16,9 @@ export async function physicalgoodsRequestMessages(client: PoolClient) {
 export async function findPhysicalgoodsRequestMessage(client: PoolClient, code: string) {
   return (await client.query<{ activo:boolean }>('SELECT activo FROM public.mensaje_solicitud WHERE codigo=$1 FOR SHARE',[code])).rows[0] ?? null;
 }
-export async function insertPhysicalgoodsRequest(client: PoolClient, publicationId: string, userId: string, code: string) {
-  return (await client.query<PhysicalgoodsRequestRow>(`INSERT INTO public.solicitud_recurso(publicacion_id,solicitante_id,codigo_mensaje)
-    VALUES($1,$2,$3) RETURNING ${projection}`, [publicationId,userId,code])).rows[0];
+export async function insertPhysicalgoodsRequest(client: PoolClient, publicationId: string, userId: string, code: string, operationId?: string) {
+  return (await client.query<PhysicalgoodsRequestRow>(`INSERT INTO public.solicitud_recurso(publicacion_id,solicitante_id,codigo_mensaje,id,solicitada_en)
+    VALUES($1,$2,$3,COALESCE($4::uuid,gen_random_uuid()),clock_timestamp()) RETURNING ${projection}`, [publicationId,userId,code,operationId??null])).rows[0];
 }
 export async function findPhysicalgoodsRequest(client: PoolClient, publicationId: string, requestId: string) {
   return (await client.query<PhysicalgoodsRequestRow>(`SELECT ${projection} FROM public.solicitud_recurso
