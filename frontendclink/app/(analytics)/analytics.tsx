@@ -101,7 +101,8 @@ export default function AnalyticsScreen() {
       {Boolean(error) && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {!loading && dashboard && <>
         {report && <View style={styles.card}>
-          <Text accessibilityRole="header" style={styles.cardTitle}>Reporte analítico</Text>
+          <Text accessibilityRole="header" style={styles.cardTitle}>Reporte analítico guardado</Text>
+          <Text style={styles.detail}>Identificador: {report.id}</Text>
           <Text style={styles.detail}>Institución: {report.scope.institutionName}</Text>
           <Text style={styles.detail}>Campus: {report.scope.campuses.map(row => row.name).join(', ')}</Text>
           <Text style={styles.detail}>Carrera: {report.scope.career?.name ?? 'Sin filtro de carrera'}</Text>
@@ -109,6 +110,7 @@ export default function AnalyticsScreen() {
           <Text style={styles.detail}>Agrupación: {report.grouping === 'week' ? 'Semanal (lunes a domingo)' : 'Mensual'}</Text>
           <Text style={styles.detail}>Generado el {new Intl.DateTimeFormat('es-CL', { timeZone: report.period.timeZone, dateStyle: 'long', timeStyle: 'long', hourCycle: 'h23' }).format(new Date(report.generatedAt))} · {report.period.timeZone}</Text>
           <Text style={styles.detail}>Responsable: {report.generatedBy.name}</Text>
+          <Text style={styles.note}>Esta instantánea conserva sus cifras. Para obtener resultados actualizados, genera un nuevo reporte.</Text>
         </View>}
         <Text style={styles.scope}>{dashboard.scope.institutionName} · {dashboard.scope.campusName}</Text>
         <KpiCard title="Usuarios activos al corte" metric={dashboard.activeUsers}>

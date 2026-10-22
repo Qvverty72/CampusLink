@@ -13,11 +13,14 @@ const institution = randomUUID(), campus = randomUUID(), otherCampus = randomUUI
 const reader = randomUUID(), token = 'analytics.test.token';
 const tables = ['institucion','campus','carrera','campus_carrera','perfil_usuario','usuario_carrera','rol','permiso','usuario_rol','usuario_permiso',
   'publicacion_recurso','asignatura','carrera_asignatura','publicacion_carrera','publicacion_asignatura','mensaje_solicitud','solicitud_recurso',
-  'interaccion_recurso','reporte_contenido','auditoria'];
+  'interaccion_recurso','reporte_contenido','auditoria','reporte'];
 const client = { query: (sql: string, params?: unknown[]) => db.query(sql, params) } as unknown as PoolClient;
 const start = new Date('2026-10-10T00:00:00Z'), until = new Date('2026-10-11T00:00:00Z');
 const localStart = new Date('2026-10-10T03:00:00Z'), localUntil = new Date('2026-10-11T03:00:00Z');
 let server: Server, base: string, sqlFailure = false, mongoFailure = false, mongoReads = 0, metricReads = 0, invalidAuth = false;
+let reportWriteFailure = false, reportCommitFailure = false, viewer = reader;
+let afterCalculation: (() => Promise<void>) | undefined;
+let statements: string[] = [];
 let events: { campusId: string; userId?: string; occurredAt: Date; type: string; provenance?: string }[] = [];
 let readMetrics: typeof import('../src/modules/analytics/analytics.repository.js').readDashboardMetrics;
 
@@ -32,7 +35,10 @@ before(async () => {
     assert.ok(ddl, table); await db.exec(ddl);
   }
   mock.method(Pool.prototype, 'connect', async () => ({ query: (sql: string, params?: unknown[]) => {
+    statements.push(sql);
     if (sqlFailure && !['BEGIN', 'ROLLBACK'].includes(sql)) throw new Error('private SQL credentials');
+    if (reportWriteFailure && sql.includes('INSERT INTO public.reporte(')) throw new Error('private report write details');
+    if (reportCommitFailure && sql === 'COMMIT' && statements.some(sql => sql.includes('INSERT INTO public.reporte('))) throw new Error('private commit details');
     if (sql.includes('jsonb_to_recordset')) metricReads++;
     return db.query(sql, params);
   }, release() {} }));
@@ -67,20 +73,24 @@ before(async () => {
       else date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
       return date.toISOString().slice(0, 10);
     };
-    return { toArray: async () => [{ total: group(selected), periods: group(selected, period) }] };
+    return { toArray: async () => {
+      const result = [{ total: group(selected), periods: group(selected, period) }];
+      await afterCalculation?.();
+      return result;
+    } };
   } }));
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     assert.equal(url.origin, 'https://dashboard-test.invalid');
     assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer ' + token);
     if (url.pathname === '/auth/v1/user') return invalidAuth ? Response.json({ code: 'bad_jwt' }, { status: 401 })
-      : Response.json({ id: reader, email: 'reader@duocuc.cl', email_confirmed_at: '2026-01-01T00:00:00Z' });
-    if (url.pathname.endsWith('/perfil_usuario')) return Response.json((await db.query('SELECT * FROM perfil_usuario WHERE id=$1', [reader])).rows);
+      : Response.json({ id: viewer, email: 'reader@duocuc.cl', email_confirmed_at: '2026-01-01T00:00:00Z' });
+    if (url.pathname.endsWith('/perfil_usuario')) return Response.json((await db.query('SELECT * FROM perfil_usuario WHERE id=$1', [viewer])).rows);
     const kind = url.pathname.endsWith('/usuario_rol') ? 'rol' : 'permiso';
     assert.equal(url.searchParams.get('revocado_en'), 'is.null');
     return Response.json((await db.query(`SELECT link.campus_id,json_build_object('id',cat.id,'nombre',cat.nombre) AS ${kind}
       FROM usuario_${kind} link JOIN ${kind} cat ON cat.id=link.${kind}_id
-      WHERE link.perfil_usuario_id=$1 AND link.revocado_en IS NULL`, [reader])).rows);
+      WHERE link.perfil_usuario_id=$1 AND link.revocado_en IS NULL`, [viewer])).rows);
   };
   ({ readDashboardMetrics: readMetrics } = await import('../src/modules/analytics/analytics.repository.js'));
   const { createApp } = await import('../src/app.js');
@@ -90,6 +100,7 @@ before(async () => {
 
 beforeEach(async () => {
   sqlFailure = false; mongoFailure = false; invalidAuth = false; mongoReads = 0; metricReads = 0; events = [];
+  reportWriteFailure = false; reportCommitFailure = false; afterCalculation = undefined; viewer = reader; statements = [];
   await db.exec('TRUNCATE ' + tables.join(',') + ',auth.users CASCADE');
   await db.query("INSERT INTO institucion(id,nombre) VALUES($1,'Institución'),($2,'Ajena')", [institution, foreignInstitution]);
   await db.query("INSERT INTO campus(id,institucion_id,nombre) VALUES($1,$4,'Principal'),($2,$4,'Otra'),($3,$5,'Ajena')",
@@ -112,10 +123,10 @@ async function profile(id = randomUUID(), state = 'ACTIVA', created = '2026-01-0
     VALUES($1,$2,$3,'Perfil',$4,$5,$5)`, [id, institution, at, state, created]);
   return id;
 }
-async function grant(name: string, at = campus, kind = 'rol') {
+async function grant(name: string, at = campus, kind = 'rol', userId = reader) {
   const catalog = (await db.query<{ id: string }>(`INSERT INTO ${kind}(nombre) VALUES($1)
     ON CONFLICT(nombre) DO UPDATE SET nombre=excluded.nombre RETURNING id`, [name])).rows[0].id;
-  await db.query(`INSERT INTO usuario_${kind}(perfil_usuario_id,${kind}_id,campus_id) VALUES($1,$2,$3)`, [reader, catalog, at]);
+  await db.query(`INSERT INTO usuario_${kind}(perfil_usuario_id,${kind}_id,campus_id) VALUES($1,$2,$3)`, [userId, catalog, at]);
 }
 async function change(user: string, before: string, after: string, when: string, at = campus) {
   const action = after === 'ACTIVA' ? 'REACTIVAR_CUENTA' : after === 'SUSPENDIDA' ? 'SUSPENDER_CUENTA' : 'DESACTIVAR_CUENTA';
@@ -142,6 +153,8 @@ const reportFilters = { from: '2026-10-10', to: '2026-10-10', grouping: 'month' 
 const generateReport = (body: unknown = reportFilters, authorization = 'Bearer ' + token, query = '') =>
   originalFetch(base.replace('/dashboard', '/reports') + query, { method: 'POST',
     headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const savedReport = (id: string, query = '', authorization = 'Bearer ' + token) =>
+  originalFetch(base.replace('/dashboard', '/reports/') + id + query, { headers: { Authorization: authorization } });
 
 test('generated report reuses all dashboard results and carries server-owned attribution and calculation version', async () => {
   const { career } = await academicFixtures(); await grant('ADMINISTRADOR', otherCampus);
@@ -163,12 +176,19 @@ test('generated report reuses all dashboard results and carries server-owned att
     assert.deepEqual(data.generatedBy, { userId: reader, name: 'Perfil' });
     assert.equal(data.calculationVersion, 'campuslink-kpi-v1');
     assert.ok(Date.parse(data.generatedAt) >= before && Date.parse(data.generatedAt) <= after);
-    const { generatedBy, calculationVersion, generatedAt, ...reportData } = data;
+    const { id, generatedBy, calculationVersion, generatedAt, ...reportData } = data;
     const { generatedAt: dashboardTime, ...dashboardData } = dashboard;
     assert.deepEqual(reportData, dashboardData);
     assert.equal(data.resourceDemand.views, 1); assert.equal(data.resourceDemand.requests, 1);
     assert.equal(data.subjectDemand.subjects[0].subjectName, 'Álgebra'); assert.equal(data.activityParticipation.value, 1);
     assert.equal(data.scope.campusId, null); assert.equal(data.scope.career.id, career);
+    const stored = (await db.query<any>('SELECT * FROM reporte WHERE id=$1', [id])).rows[0];
+    assert.deepEqual(stored.snapshot_json, data);
+    assert.deepEqual(stored.filtros_json, { ...filters, campusIds: [campus, otherCampus].sort() });
+    assert.equal(stored.generado_por_id, reader); assert.equal(stored.institucion_id, institution);
+    assert.equal(stored.campus_id, null); assert.equal(stored.carrera_id, career);
+    assert.equal(stored.agrupacion, grouping === 'week' ? 'SEMANA' : 'MES');
+    assert.equal(new Date(stored.generado_en).toISOString(), data.generatedAt);
   }
 });
 
@@ -178,6 +198,7 @@ test('report generation validates its entire body before reading metrics and rej
     { ...reportFilters, grouping: 'day' }, { ...reportFilters, from: '2000-01-01', grouping: 'week' },
     { ...reportFilters, campusIds: [campus] }, { ...reportFilters, campusIds: '' },
     { ...reportFilters, campusId: campus, campusIds: campus }, { ...reportFilters, careerId: 'invalid' },
+    { ...reportFilters, id: randomUUID() }, { ...reportFilters, filtros_json: {} }, { ...reportFilters, snapshot_json: {} },
     ...['generatedAt', 'generatedBy', 'calculationVersion', 'activeUsers', 'intervals'].map(key => ({ ...reportFilters, [key]: 'spoofed' }))]) {
     assert.equal((await generateReport(body)).status, 400, JSON.stringify(body));
   }
@@ -222,6 +243,125 @@ test('report generation preserves observed zeroes, future unavailability and dep
     sqlFailure = dependency === 'SQL'; mongoFailure = dependency === 'MongoDB';
     const response = await generateReport(); assert.equal(response.status, 503);
     assert.doesNotMatch(await response.text(), /private|credentials|generatedBy|activeUsers/);
+  }
+});
+
+test('snapshot stores normalized defaults and exact Santiago calendar bounds across DST', async () => {
+  const response = await generateReport({ from: '2026-09-06', to: '2026-09-06', campusIds: `${campus.toUpperCase()},${campus}` });
+  assert.equal(response.status, 200);
+  const { data } = await response.json();
+  assert.match(data.id, /^[0-9a-f-]{36}$/);
+  const stored = (await db.query<any>('SELECT * FROM reporte WHERE id=$1', [data.id])).rows[0];
+  assert.deepEqual(stored.filtros_json, { from: '2026-09-06', to: '2026-09-06', grouping: 'month',
+    institutionId: institution, campusIds: [campus], careerId: null });
+  assert.equal(stored.campus_id, campus); assert.equal(stored.carrera_id, null);
+  assert.equal(new Date(stored.periodo_desde).toISOString(), '2026-09-06T04:00:00.000Z');
+  assert.equal(new Date(stored.periodo_hasta).toISOString(), '2026-09-07T03:00:00.000Z');
+  assert.deepEqual(stored.snapshot_json, data);
+  const future = (await (await generateReport({ from: '9999-01-01', to: '9999-01-31' })).json()).data;
+  assert.ok(future.intervals.every((row: any) => row.metrics === null));
+  assert.deepEqual((await (await savedReport(future.id)).json()).data, future);
+});
+
+test('saved snapshot survives academic edits, new facts and author deletion without operational queries', async () => {
+  const { career } = await academicFixtures();
+  await db.query('INSERT INTO usuario_carrera(perfil_usuario_id,carrera_id) VALUES($1,$2)', [reader, career]);
+  const resource = await publication(), subject = randomUUID();
+  await db.query('INSERT INTO publicacion_carrera VALUES($1,$2)', [resource, career]);
+  await db.query("INSERT INTO asignatura(id,nombre,codigo) VALUES($1,'Original','ORIG')", [subject]);
+  await db.query('INSERT INTO publicacion_asignatura VALUES($1,$2)', [resource, subject]);
+  await view(resource, '2026-10-10T12:00:00Z');
+  events = [{ campusId: campus, userId: reader, occurredAt: new Date('2026-10-10T12:00:00Z'), type: 'JOINED' }];
+  const { data: original } = await (await generateReport({ ...reportFilters, careerId: career })).json();
+  const originalRow = (await db.query('SELECT * FROM reporte WHERE id=$1', [original.id])).rows[0];
+  await db.query("UPDATE institucion SET nombre='Institución editada' WHERE id=$1", [institution]);
+  await db.query("UPDATE campus SET nombre='Campus editado' WHERE id=$1", [campus]);
+  await db.query("UPDATE carrera SET nombre='Carrera editada',activo=false WHERE id=$1", [career]);
+  await db.query("UPDATE asignatura SET nombre='Asignatura editada' WHERE id=$1", [subject]);
+  await db.query('DELETE FROM usuario_carrera WHERE perfil_usuario_id=$1', [reader]);
+  await db.query('DELETE FROM publicacion_carrera WHERE publicacion_id=$1', [resource]);
+  await db.query('DELETE FROM publicacion_asignatura WHERE publicacion_id=$1', [resource]);
+  await db.query("UPDATE perfil_usuario SET nombre_completo='Autor editado',deleted_at=now(),estado_cuenta='DESACTIVADA' WHERE id=$1", [reader]);
+  await db.query("UPDATE publicacion_recurso SET titulo='Editado',deleted_at=now() WHERE id=$1", [resource]);
+  await view(resource, '2026-10-10T13:00:00Z'); events = [];
+  viewer = await profile(); await grant('ADMINISTRADOR', campus, 'rol', viewer);
+  const reads = { mongoReads, metricReads }; statements = []; mongoFailure = true;
+  for (let i = 0; i < 2; i++) {
+    const response = await savedReport(original.id);
+    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual((await response.json()).data, original);
+  }
+  assert.deepEqual({ mongoReads, metricReads }, reads);
+  assert.ok(statements.every(sql => !/INSERT|UPDATE|DELETE|publicacion|asignatura|carrera|perfil_usuario/i.test(sql)));
+  assert.deepEqual((await db.query('SELECT * FROM reporte WHERE id=$1', [original.id])).rows[0], originalRow);
+  mongoFailure = false;
+  const { data: updated } = await (await generateReport({ ...reportFilters, careerId: career })).json();
+  assert.notEqual(updated.id, original.id); assert.ok(updated.generatedAt > original.generatedAt);
+  assert.equal(updated.resourceDemand.value, 0); assert.equal(updated.activityParticipation.value, 0);
+  assert.equal(updated.generatedBy.userId, viewer);
+  assert.deepEqual((await (await savedReport(original.id)).json()).data, original);
+  assert.equal((await db.query('SELECT count(*)::int AS count FROM reporte')).rows[0].count, 2);
+});
+
+test('snapshot lookup checks every stored campus and current permission rather than authorship', async () => {
+  await grant('ADMINISTRADOR', otherCampus);
+  const { data } = await (await generateReport({ ...reportFilters, campusIds: `${campus},${otherCampus}` })).json();
+  await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE campus_id=$1', [otherCampus]);
+  assert.equal((await savedReport(data.id)).status, 403);
+  await grant('USUARIO_AUTORIZADO', otherCampus); await grant('ACCEDER_ANALITICA', otherCampus, 'permiso');
+  assert.equal((await savedReport(data.id)).status, 403);
+  await grant('ACCEDER_REPORTERIA', otherCampus, 'permiso');
+  assert.equal((await savedReport(data.id)).status, 200);
+  await db.query('UPDATE usuario_permiso SET revocado_en=now() WHERE campus_id=$1', [otherCampus]);
+  assert.equal((await savedReport(data.id)).status, 403);
+  for (const state of ['SUSPENDIDA', 'DESACTIVADA']) {
+    await db.query('UPDATE perfil_usuario SET estado_cuenta=$1 WHERE id=$2', [state, reader]);
+    assert.equal((await savedReport(data.id)).status, 403);
+  }
+  assert.equal((await db.query('SELECT count(*)::int AS count FROM reporte')).rows[0].count, 1);
+});
+
+test('snapshot lookup rejects invalid IDs, filters, foreign institutions, missing records and unauthenticated access', async () => {
+  const { data } = await (await generateReport()).json();
+  assert.equal((await savedReport('invalid')).status, 400);
+  assert.equal((await savedReport(data.id, '?campusId=' + campus)).status, 400);
+  assert.equal((await savedReport(randomUUID())).status, 404);
+  assert.equal((await savedReport(data.id, '', '')).status, 401);
+  invalidAuth = true; assert.equal((await savedReport(data.id)).status, 401); invalidAuth = false;
+  await db.query('UPDATE perfil_usuario SET institucion_id=$1,campus_id=$2 WHERE id=$3', [foreignInstitution, foreignCampus, reader]);
+  await grant('ADMINISTRADOR', foreignCampus);
+  const foreign = await savedReport(data.id); assert.equal(foreign.status, 404);
+  assert.doesNotMatch(await foreign.text(), /generatedBy|activeUsers|snapshot_json/);
+  sqlFailure = true;
+  const unavailable = await savedReport(data.id); assert.equal(unavailable.status, 503);
+  assert.doesNotMatch(await unavailable.text(), /private|credentials|generatedBy|activeUsers/);
+});
+
+test('failed report insert or commit returns no snapshot and rolls back without altering previous reports', async () => {
+  const { data: original } = await (await generateReport()).json();
+  for (const failure of ['insert', 'commit', 'mongo']) {
+    statements = []; reportWriteFailure = failure === 'insert'; reportCommitFailure = failure === 'commit'; mongoFailure = failure === 'mongo';
+    const response = await generateReport(); assert.equal(response.status, 503);
+    assert.doesNotMatch(await response.text(), /private|details|generatedBy|activeUsers/);
+    assert.equal((await db.query('SELECT count(*)::int AS count FROM reporte')).rows[0].count, 1);
+  }
+  reportWriteFailure = false; reportCommitFailure = false; mongoFailure = false;
+  assert.deepEqual((await (await savedReport(original.id)).json()).data, original);
+});
+
+test('saving rechecks role, reporting permission, account state and campus changes after calculation', async () => {
+  for (const change of ['role', 'permission', 'state', 'campus']) {
+    await db.query('DELETE FROM usuario_rol'); await db.query('DELETE FROM usuario_permiso');
+    await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA',campus_id=$1 WHERE id=$2", [campus, reader]);
+    await grant('USUARIO_AUTORIZADO'); await grant('ACCEDER_REPORTERIA', campus, 'permiso');
+    afterCalculation = async () => {
+      if (change === 'role') await db.query('UPDATE usuario_rol SET revocado_en=now()');
+      if (change === 'permission') await db.query('UPDATE usuario_permiso SET revocado_en=now()');
+      if (change === 'state') await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1", [reader]);
+      if (change === 'campus') await db.query('UPDATE perfil_usuario SET campus_id=$1 WHERE id=$2', [otherCampus, reader]);
+    };
+    const response = await generateReport(); assert.equal(response.status, change === 'campus' ? 409 : 403);
+    assert.equal((await db.query('SELECT count(*)::int AS count FROM reporte')).rows[0].count, 0);
   }
 });
 

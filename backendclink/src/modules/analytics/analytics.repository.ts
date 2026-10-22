@@ -3,15 +3,41 @@ import { probeSupabaseTables } from '../../database/supabase/health.js';
 import { probeMongoCollections } from '../../database/mongodb/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
 import type { PoolClient } from 'pg';
-import type { DashboardGrouping, DashboardOptions, DashboardScope, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
+import type { AnalyticalReport, DashboardGrouping, DashboardOptions, DashboardQuery, DashboardScope, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
+import type { AuthAssignment } from '../auth/auth.types.js';
 import type { AnalyticsWindow } from './analytics.periods.js';
 import { ANALYTICS_TIME_ZONE } from './analytics.periods.js';
 
 export function probeAnalyticsDependencies(): Promise<DependencyChecks> {
   return inspectDependencies({
-    supabase: () => probeSupabaseTables([{"table":"interaccion_recurso"},{"table":"solicitud_recurso"},{"table":"transaccion_recurso"},{"table":"confirmacion_transaccion"},{"table":"auditoria"}]),
+    supabase: () => probeSupabaseTables([{"table":"interaccion_recurso"},{"table":"solicitud_recurso"},{"table":"transaccion_recurso"},{"table":"confirmacion_transaccion"},{"table":"auditoria"},{"table":"reporte"}]),
     mongodb: () => probeMongoCollections(["activities","activity_interactions"]),
   });
+}
+
+/** Relectura al guardar: el cálculo puede haber terminado después de una revocación. */
+export async function readAnalyticsPermissions(client: PoolClient, userId: string): Promise<AuthAssignment[]> {
+  return (await client.query<AuthAssignment>(
+    `SELECT p.id,p.nombre AS name,up.campus_id AS "campusId" FROM public.usuario_permiso up
+     JOIN public.permiso p ON p.id=up.permiso_id WHERE up.perfil_usuario_id=$1 AND up.revocado_en IS NULL
+     ORDER BY up.id FOR SHARE OF up,p`, [userId])).rows;
+}
+
+/** Inserción única: sin upsert ni escritura de resultados existentes. */
+export async function insertAnalyticalReport(client: PoolClient, report: AnalyticalReport, filters: DashboardQuery, from: Date, until: Date) {
+  await client.query(
+    `INSERT INTO public.reporte(id,generado_por_id,institucion_id,campus_id,carrera_id,tipo_reporte,
+       periodo_desde,periodo_hasta,agrupacion,filtros_json,snapshot_json,generado_en)
+     VALUES($1,$2,$3,$4,$5,'KPI_ESENCIALES',$6,$7,$8,$9::jsonb,$10::jsonb,$11)`,
+    [report.id, report.generatedBy.userId, filters.institutionId, report.scope.campusId, filters.careerId,
+      from, until, filters.grouping === 'week' ? 'SEMANA' : 'MES', JSON.stringify(filters), JSON.stringify(report), report.generatedAt]);
+}
+
+/** Lectura histórica sin joins a recursos, carreras o perfiles del responsable. */
+export async function findAnalyticalReport(client: PoolClient, id: string, institutionId: string): Promise<AnalyticalReport | null> {
+  return (await client.query<{ snapshot_json: AnalyticalReport }>(
+    `SELECT snapshot_json FROM public.reporte WHERE id=$1 AND institucion_id=$2 AND tipo_reporte='KPI_ESENCIALES'`,
+    [id, institutionId])).rows[0]?.snapshot_json ?? null;
 }
 
 export async function findAnalyticsResource(client: PoolClient, id: string, campusId: string, institutionId: string) {

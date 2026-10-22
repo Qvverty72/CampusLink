@@ -41,6 +41,7 @@ export interface DashboardData extends DashboardMetrics {
 }
 
 export interface AnalyticalReport extends DashboardData {
+  id: string;
   generatedBy: { userId: string; name: string };
   calculationVersion: 'campuslink-kpi-v1';
 }

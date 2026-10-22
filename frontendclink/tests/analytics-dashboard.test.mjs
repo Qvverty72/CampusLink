@@ -352,14 +352,15 @@ test('report view presents server scope, period, grouping, generation time and r
   const scope = { institutionName: 'Institución del reporte', campusName: 'Principal, Otra',
     campuses: [{ id: 'a', name: 'Principal' }, { id: 'b', name: 'Otra' }], career: null };
   const period = { from: '2026-09-01', to: '2026-09-30', timeZone: 'America/Santiago' };
-  const metric = { value: 0, scope, period }, report = { scope, period, generatedAt: '2026-10-22T16:35:42Z',
+  const metric = { value: 0, scope, period }, report = { id: 'saved-report-id', scope, period, generatedAt: '2026-10-22T16:35:42Z',
     generatedBy: { name: 'Responsable del servidor' }, grouping: 'week', activeUsers: { ...metric, value: 7 },
     resourceDemand: { ...metric, views: 0, requests: 0 }, subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] },
     activityParticipation: { ...metric, legacyEvents: 0 }, intervals: [], notes: [] };
   let argumentsReceived;
   const actions = [], html = renderDashboard({ report, loading: false, error: '', dashboard: null, options,
     filters: { institutionId: 'institution-a', campusIds: ['campus-a'] }, generateReport(...args) { argumentsReceived = args; } }, actions);
-  for (const text of ['Reporte analítico', 'Institución del reporte', 'Principal, Otra', 'Sin filtro de carrera',
+  for (const text of ['Reporte analítico guardado', 'Identificador: saved-report-id', 'Esta instantánea conserva sus cifras.',
+    'Para obtener resultados actualizados, genera un nuevo reporte.', 'Institución del reporte', 'Principal, Otra', 'Sin filtro de carrera',
     '2026-09-01 al 2026-09-30', 'Semanal (lunes a domingo)', 'Generado el', '13:35:42', 'America/Santiago',
     'Responsable del servidor', 'Usuarios activos al corte', 'Participación en actividades']) assert.ok(html.includes(text), text);
   const button = actions.find(p => p.children.props.children === 'Generar reporte');

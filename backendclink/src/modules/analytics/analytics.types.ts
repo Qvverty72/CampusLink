@@ -43,8 +43,9 @@ export interface DashboardData extends DashboardMetrics {
   notes: string[];
 }
 
-/** Resultado dinámico; el almacenamiento histórico corresponde a F2.7-06. */
+/** Instantánea persistida; sus resultados nunca se reconstruyen al leerla. */
 export interface AnalyticalReport extends DashboardData {
+  id: string;
   generatedBy: { userId: string; name: string };
   calculationVersion: 'campuslink-kpi-v1';
 }

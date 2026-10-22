@@ -2,13 +2,13 @@ import { createModuleHealthCheck } from '../../services/module-health.js';
 import { probeAnalyticsDependencies } from './analytics.repository.js';
 import type { AnalyticalReport, AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount } from './analytics.types.js';
 import { ANALYTICS_TIME_ZONE, dashboardIntervals } from './analytics.periods.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { ApiError } from '../../services/api-response.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
 import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { countActivityInteractions, findAnalyticsResource, insertResourceView, readDashboardMetrics, readDashboardOptions } from './analytics.repository.js';
+import { countActivityInteractions, findAnalyticalReport, findAnalyticsResource, insertAnalyticalReport, insertResourceView, readAnalyticsPermissions, readDashboardMetrics, readDashboardOptions } from './analytics.repository.js';
 
 export const getAnalyticsHealth: () => Promise<AnalyticsHealth> =
   createModuleHealthCheck('analytics', probeAnalyticsDependencies);
@@ -118,8 +118,48 @@ export async function getDashboard(auth: VerifiedAuthConnection, rawQuery: unkno
 /** Un solo cálculo/validación para tablero y reporte; nunca recibe cifras del cliente. */
 export async function generateAnalyticalReport(auth: VerifiedAuthConnection, filters: unknown): Promise<AnalyticalReport> {
   const dashboard = await getDashboard(auth, filters);
-  return { ...dashboard, generatedBy: { userId: auth.userId, name: auth.profile.nombre_completo },
-    calculationVersion: 'campuslink-kpi-v1' };
+  const normalized: DashboardQuery = { institutionId: dashboard.scope.institutionId,
+    campusIds: dashboard.scope.campuses.map(row => row.id).sort(), careerId: dashboard.scope.career?.id ?? null,
+    from: dashboard.period.from, to: dashboard.period.to, grouping: dashboard.grouping };
+  const intervals = dashboardIntervals(normalized.from, normalized.to, normalized.grouping);
+  try {
+    // Transacción corta, después de consultar Mongo; comparte bloqueo con cambios de cuenta/asignaciones.
+    return await withPostgresTransaction(async client => {
+      const { profile, roles } = await lockAccountContext(client, auth.userId);
+      if (!profile || profile.institucion_id !== normalized.institutionId || profile.campus_id !== auth.campusId) {
+        throw new ApiError(409, 'CONFLICT', 'Tu contexto cambió. Vuelve a generar el reporte.');
+      }
+      const current = { ...auth, profile, roles, permissions: await readAnalyticsPermissions(client, auth.userId) };
+      for (const id of normalized.campusIds) requireCampusCapability(current, id, 'reports');
+      const report: AnalyticalReport = { ...dashboard, id: randomUUID(),
+        generatedBy: { userId: auth.userId, name: profile.nombre_completo }, calculationVersion: 'campuslink-kpi-v1' };
+      await insertAnalyticalReport(client, report, normalized, intervals[0].from, intervals[intervals.length - 1].until);
+      return report;
+    });
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo guardar el reporte. Inténtalo nuevamente.');
+  }
+}
+
+/** Solo lee cifras guardadas; los permisos de consulta siempre son los vigentes. */
+export async function getAnalyticalReport(auth: VerifiedAuthConnection, rawId: unknown): Promise<AnalyticalReport> {
+  if (typeof rawId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Indica un identificador de reporte válido.');
+  }
+  requireActiveAccount(auth.profile, auth.userId);
+  try {
+    const report = await withPostgresTransaction(client => findAnalyticalReport(client, rawId, auth.profile.institucion_id));
+    if (!report) throw new ApiError(404, 'NOT_FOUND', 'El reporte no está disponible.');
+    if (report.scope.institutionId !== auth.profile.institucion_id || !report.scope.campuses.length) {
+      throw new Error('Invalid stored report scope.');
+    }
+    for (const campus of report.scope.campuses) requireCampusCapability(auth, campus.id, 'reports');
+    return report;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo consultar el reporte guardado. Inténtalo nuevamente.');
+  }
 }
 
 /** Identidad de operación suministrada por el cliente; nunca identidad del actor o campus. */
