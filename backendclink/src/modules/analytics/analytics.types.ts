@@ -50,6 +50,13 @@ export interface AnalyticalReport extends DashboardData {
   calculationVersion: 'campuslink-kpi-v1';
 }
 
+export type HistoricalReportSummary = Pick<AnalyticalReport, 'id' | 'generatedAt' | 'generatedBy' | 'scope' | 'period' | 'grouping' | 'calculationVersion'>;
+export interface HistoricalReportsQuery {
+  institutionId: string; campusIds: string[]; careerId: string | null;
+  from: string | null; to: string | null; grouping: DashboardGrouping | null; limit: number;
+  cursor: { generatedAt: string; id: string } | null;
+}
+
 export interface ResourceAnalyticsEvent {
   key: string;
   type: 'VISTA' | 'SOLICITUD_CREADA' | 'TRANSACCION_RESERVADA' | 'TRANSACCION_PENDIENTE_CONFIRMACION' | 'TRANSACCION_COMPLETADA' | 'TRANSACCION_CANCELADA';

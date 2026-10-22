@@ -155,6 +155,111 @@ const generateReport = (body: unknown = reportFilters, authorization = 'Bearer '
     headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const savedReport = (id: string, query = '', authorization = 'Bearer ' + token) =>
   originalFetch(base.replace('/dashboard', '/reports/') + id + query, { headers: { Authorization: authorization } });
+const history = (query = '', authorization = 'Bearer ' + token) =>
+  originalFetch(base.replace('/dashboard', '/reports') + (query ? '?' + query : ''), { headers: { Authorization: authorization } });
+
+test('history exposes saved metadata, supports scope and overlapping civil periods, and never recalculates', async () => {
+  const { career } = await academicFixtures(); await grant('ADMINISTRADOR', otherCampus);
+  const first = (await (await generateReport({ from: '2026-09-01', to: '2026-09-30', grouping: 'week', careerId: career })).json()).data;
+  const second = (await (await generateReport({ ...reportFilters, campusIds: `${campus},${otherCampus}` })).json()).data;
+  const third = (await (await generateReport({ ...reportFilters, campusId: otherCampus })).json()).data;
+  const reads = { mongoReads, metricReads }; mongoFailure = true;
+  const response = await history(); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+  const page = (await response.json()).data;
+  assert.deepEqual(page.items.map((row: any) => row.id), [third.id, second.id, first.id]);
+  assert.equal(page.nextCursor, null);
+  const { activeUsers, resourceDemand, subjectDemand, activityParticipation, intervals, notes, ...metadata } = second;
+  assert.deepEqual(page.items[1], metadata);
+  for (const [query, ids] of [
+    [`campusIds=${campus}`, [second.id, first.id]],
+    [`campusIds=${otherCampus}`, [third.id, second.id]],
+    [`campusIds=${campus},${otherCampus}`, [third.id, second.id, first.id]],
+    [`careerId=${career}`, [first.id]],
+    ['grouping=week', [first.id]],
+    ['from=2026-09-30&to=2026-10-01', [first.id]],
+    ['from=2026-10-10&to=2026-10-10', [third.id, second.id]],
+    ['from=2026-10-11', []], ['to=2026-08-31', []],
+    [`institutionId=${institution.toUpperCase()}`, [third.id, second.id, first.id]],
+  ] as const) {
+    const filtered = await history(query); assert.equal(filtered.status, 200, query);
+    assert.deepEqual((await filtered.json()).data.items.map((row: any) => row.id), ids, query);
+  }
+  assert.deepEqual({ mongoReads, metricReads }, reads);
+  assert.deepEqual((await (await savedReport(first.id)).json()).data, first);
+  assert.deepEqual((await (await savedReport(second.id)).json()).data, second);
+});
+
+test('history authorizes all saved campuses before pagination and hides reports after revocation regardless of authorship', async () => {
+  await grant('ADMINISTRADOR', otherCampus);
+  const first = (await (await generateReport()).json()).data;
+  const mixed = (await (await generateReport({ ...reportFilters, campusIds: `${campus},${otherCampus}` })).json()).data;
+  const other = (await (await generateReport({ ...reportFilters, campusId: otherCampus })).json()).data;
+  await db.query('UPDATE usuario_rol SET revocado_en=now() WHERE campus_id=$1', [otherCampus]);
+  const response = await history('limit=1'); assert.equal(response.status, 200);
+  const page = (await response.json()).data;
+  assert.deepEqual(page.items.map((row: any) => row.id), [first.id]); assert.equal(page.nextCursor, null);
+  assert.equal((await savedReport(mixed.id)).status, 403); assert.equal((await savedReport(other.id)).status, 403);
+  assert.equal((await history(`campusIds=${otherCampus}`)).status, 403);
+  await grant('USUARIO_AUTORIZADO', otherCampus); await grant('ACCEDER_ANALITICA', otherCampus, 'permiso');
+  assert.equal((await (await history()).json()).data.items.length, 1);
+  await grant('ACCEDER_REPORTERIA', otherCampus, 'permiso');
+  assert.equal((await (await history()).json()).data.items.length, 3);
+  await db.exec('UPDATE usuario_rol SET revocado_en=now()');
+  assert.equal((await history()).status, 403);
+});
+
+test('history cursor handles tied generation times and new reports without duplicate or skipped rows', async () => {
+  const first = (await (await generateReport()).json()).data;
+  const second = (await (await generateReport()).json()).data;
+  // Simula dos generaciones que compartieron el mismo milisegundo.
+  await db.query("UPDATE reporte SET generado_en=$1::text::timestamptz,snapshot_json=jsonb_set(snapshot_json,'{generatedAt}',to_jsonb($1::text)) WHERE id=$2", [first.generatedAt, second.id]);
+  const expected = [first.id, second.id].sort().reverse();
+  const page = (await (await history('limit=1')).json()).data;
+  assert.equal(page.items[0].id, expected[0]); assert.ok(page.nextCursor);
+  const newest = (await (await generateReport()).json()).data;
+  const next = await history('limit=1&cursor=' + encodeURIComponent(page.nextCursor)); assert.equal(next.status, 200);
+  const nextPage = (await next.json()).data;
+  assert.equal(nextPage.items[0].id, expected[1]); assert.equal(nextPage.nextCursor, null);
+  assert.equal((await (await history('limit=1')).json()).data.items[0].id, newest.id);
+});
+
+test('history preserves original metadata after catalog edits and author deactivation, including inactive historical scopes', async () => {
+  const { career } = await academicFixtures();
+  const original = (await (await generateReport({ ...reportFilters, careerId: career })).json()).data;
+  await db.query("UPDATE institucion SET nombre='Renombrada' WHERE id=$1", [institution]);
+  await db.query("UPDATE campus SET nombre='Retirado',activo=false WHERE id=$1", [campus]);
+  await db.query("UPDATE carrera SET nombre='Retirada',activo=false WHERE id=$1", [career]);
+  await db.query("UPDATE perfil_usuario SET nombre_completo='Otro nombre',estado_cuenta='DESACTIVADA',deleted_at=now() WHERE id=$1", [reader]);
+  viewer = await profile(); await grant('ADMINISTRADOR', campus, 'rol', viewer);
+  mongoFailure = true;
+  const response = await history(`careerId=${career}&campusIds=${campus}`); assert.equal(response.status, 200);
+  const item = (await response.json()).data.items[0];
+  assert.deepEqual(item.scope, original.scope); assert.deepEqual(item.generatedBy, original.generatedBy);
+  assert.deepEqual((await (await savedReport(original.id)).json()).data, original);
+});
+
+test('history rejects malformed filters, foreign scopes, invalid sessions and unavailable dependencies without leaking snapshots', async () => {
+  for (const query of ['from=2026-02-30', 'from=2026-10-10&to=2026-10-01', 'to=0000-01-01', 'grouping=day', 'grouping=',
+    'from=2026-10-01&from=2026-10-02', 'campusIds=invalid', 'campusIds=', 'careerId=invalid', 'institutionId=invalid',
+    'campusId=' + campus, 'limit=0', 'limit=51', 'limit=1.5', 'limit=01', 'cursor=invalid', 'generatedBy=' + reader]) {
+    assert.equal((await history(query)).status, 400, query);
+  }
+  assert.equal((await history(`institutionId=${foreignInstitution}`)).status, 403);
+  assert.equal((await history(`campusIds=${foreignCampus}`)).status, 403);
+  const { data: original } = await (await generateReport()).json();
+  await db.query('UPDATE reporte SET institucion_id=$1 WHERE id=$2', [foreignInstitution, original.id]);
+  assert.deepEqual((await (await history()).json()).data, { items: [], nextCursor: null });
+  assert.equal((await history('', '')).status, 401);
+  invalidAuth = true; assert.equal((await history()).status, 401); invalidAuth = false;
+  for (const state of ['SUSPENDIDA', 'DESACTIVADA']) {
+    await db.query('UPDATE perfil_usuario SET estado_cuenta=$1 WHERE id=$2', [state, reader]);
+    assert.equal((await history()).status, 403);
+  }
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='ACTIVA' WHERE id=$1", [reader]);
+  sqlFailure = true; const failed = await history(); assert.equal(failed.status, 503);
+  assert.doesNotMatch(await failed.text(), /private|credentials|generatedBy|activeUsers|snapshot_json/);
+  assert.equal(mongoReads, 1); // Solo la generación inicial, jamás el historial.
+});
 
 test('generated report reuses all dashboard results and carries server-owned attribution and calculation version', async () => {
   const { career } = await academicFixtures(); await grant('ADMINISTRADOR', otherCampus);

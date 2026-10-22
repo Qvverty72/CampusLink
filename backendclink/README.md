@@ -678,6 +678,25 @@ Sin SQL pendiente: inspección Supabase READ ONLY confirmó las columnas existen
 
 Referencias: [PostgreSQL date_trunc y zonas](https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC), [MongoDB $dateTrunc](https://www.mongodb.com/docs/manual/reference/operator/aggregation/datetrunc/).
 
+## Consulta de reportes históricos (F2.7-07)
+
+`GET /api/v1/analytics/reports` requiere Bearer y devuelve200 `{data:{items:HistoricalReportSummary[],nextCursor:string|null}}`. Cada resumen conserva `id`, `generatedAt`, `generatedBy`, `scope`, `period`, `grouping` y `calculationVersion` de la instantánea original, sin cifras recalculadas ni nombres obtenidos de catálogos actuales. No se restringe al autor: cualquier lector actualmente autorizado en todos los campus del reporte puede consultarlo.
+
+Filtros query opcionales:
+
+- `institutionId`: UUID; por defecto institución actual. Otra institución devuelve403.
+- `campusIds`: cadena de UUID separados por coma. Coincide con reportes que incluyan al menos uno de los campus seleccionados; el lector debe conservar permiso en **todos** los campus de cada reporte. Sin filtro, todos sus ámbitos autorizados. Un campus solicitado sin permiso devuelve403.
+- `careerId`: UUID; coincide con la carrera guardada. Omitido incluye reportes con cualquier carrera o sin filtro de carrera.
+- `from`, `to`: fechas civiles inclusivas `AAAA-MM-DD`, ambas opcionales; intersección con el período consultado guardado, **no** con la fecha de generación. Rango invertido/fecha inválida devuelve400.
+- `grouping`: `week|month`; omitido incluye ambas.
+- `limit`: entero1..50,20 por defecto. `cursor`: valor opaco `nextCursor` de la página anterior; omitir para volver al inicio. Fecha de generación e ID descendentes ofrecen orden estable incluso con empates o nuevas generaciones.
+
+Ejemplo: `GET /api/v1/analytics/reports?campusIds=<uuid>&from=2026-09-01&to=2026-09-30&grouping=week`.
+
+Cuenta, institución y capacidades vigentes se verifican en la API. La consulta parametrizada filtra el **ámbito completo** de cada instantánea antes de limitar la página, así que no filtra metadatos, tamaños ni cursores de reportes inaccesibles. No consulta publicaciones, carreras, perfiles del autor ni MongoDB; campus/carreras hoy inactivos conservan sus nombres y resultados históricos. Sin coincidencias responde200 con `items:[]` y `nextCursor:null`. 400 por parámetros desconocidos, repetidos o inválidos;401 sin sesión;403 por cuenta/alcance;503 sanitizado por dependencia. `Cache-Control:no-store`. No hay nuevas tablas, funciones SQL, triggers, índices, migraciones ni cambios de escritura.
+
+Expo ofrece “Consultar reportes históricos” desde el tablero. El historial permite filtrar, paginar, abrir y comparar dos instantáneas, incluso de páginas diferentes, con sus parámetros, cuatro KPI, intervalos, notas, corte y versión de cálculo. Apertura, reapertura y comparación consultan `GET /reports/:reportId`, comprobando nuevamente los permisos; no invocan dashboard ni POST. La presentación `AnalyticsResults` es común al tablero, generación e historial. Errores no muestran cifras parciales; cambiar identidad/permisos, cerrar o reemplazar solicitudes retira resultados y descarta respuestas tardías. Los catálogos vigentes son ayuda opcional para seleccionar filtros; un catálogo sin sedes activas no impide consultar el historial. Exportación PDF/Excel permanece en F2.7-08.
+
 ## Valoración digital (F2.5-11)
 
 `POST /elibrary/:publicationId/transactions/:transactionId/rating` recibe `{score}` entero1..5, solo receptor del acuerdo COMPLETADA;201 recibo mínimo. Parser/elegibilidad son comunes con F2.4-11, cuyo contrato permanece igual. Lock del acuerdo y unique transaccion_id impiden simultáneas/duplicados; sin PATCH/DELETE ni valoración del dueño al receptor. Detalle privado añade rating/canRate para el formulario y resultado inmutable. La retirada del recurso no borra el respaldo.

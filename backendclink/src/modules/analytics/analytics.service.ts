@@ -1,6 +1,6 @@
 import { createModuleHealthCheck } from '../../services/module-health.js';
 import { probeAnalyticsDependencies } from './analytics.repository.js';
-import type { AnalyticalReport, AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount } from './analytics.types.js';
+import type { AnalyticalReport, AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount, HistoricalReportsQuery } from './analytics.types.js';
 import { ANALYTICS_TIME_ZONE, dashboardIntervals } from './analytics.periods.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { ApiError } from '../../services/api-response.js';
@@ -8,7 +8,7 @@ import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
 import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { countActivityInteractions, findAnalyticalReport, findAnalyticsResource, insertAnalyticalReport, insertResourceView, readAnalyticsPermissions, readDashboardMetrics, readDashboardOptions } from './analytics.repository.js';
+import { countActivityInteractions, findAnalyticalReport, findAnalyticsResource, insertAnalyticalReport, insertResourceView, readAnalyticsPermissions, readDashboardMetrics, readDashboardOptions, readHistoricalReports } from './analytics.repository.js';
 
 export const getAnalyticsHealth: () => Promise<AnalyticsHealth> =
   createModuleHealthCheck('analytics', probeAnalyticsDependencies);
@@ -139,6 +139,51 @@ export async function generateAnalyticalReport(auth: VerifiedAuthConnection, fil
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo guardar el reporte. Inténtalo nuevamente.');
+  }
+}
+
+/** Filtros históricos opcionales: no exige que el ámbito siga activo en los catálogos. */
+export async function listHistoricalReports(auth: VerifiedAuthConnection, raw: unknown) {
+  requireActiveAccount(auth.profile, auth.userId);
+  const invalid = () => new ApiError(400, 'VALIDATION_ERROR', 'Revisa los filtros del historial.');
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalid();
+  const input = raw as Record<string, unknown>;
+  if (Object.keys(input).some(key => !['institutionId','campusIds','careerId','from','to','grouping','limit','cursor'].includes(key))
+    || Object.values(input).some(value => typeof value !== 'string')) throw invalid();
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const institutionId = (input.institutionId as string | undefined)?.toLowerCase() ?? auth.profile.institucion_id;
+  const campusIds = input.campusIds === undefined ? [] : [...new Set((input.campusIds as string).toLowerCase().split(','))];
+  const careerId = (input.careerId as string | undefined)?.toLowerCase() ?? null;
+  if (!uuid.test(institutionId) || campusIds.some(id => !uuid.test(id)) || (careerId !== null && !uuid.test(careerId))) throw invalid();
+  const from = input.from === undefined ? null : dashboardDate(input.from);
+  const to = input.to === undefined ? null : dashboardDate(input.to);
+  const grouping = input.grouping ?? null;
+  if ((from && to && from > to) || (grouping !== null && grouping !== 'week' && grouping !== 'month')
+    || (input.limit !== undefined && !/^[1-9]\d?$/.test(input.limit as string))) throw invalid();
+  const limit = input.limit === undefined ? 20 : Number(input.limit);
+  if (limit > 50) throw invalid();
+  let cursor: HistoricalReportsQuery['cursor'] = null;
+  if (input.cursor !== undefined) {
+    if ((input.cursor as string).length > 200) throw invalid();
+    try {
+      const parts = Buffer.from(input.cursor as string, 'base64url').toString('utf8').split('|');
+      if (parts.length !== 2 || !uuid.test(parts[1]) || new Date(parts[0]).toISOString() !== parts[0]) throw invalid();
+      cursor = { generatedAt: parts[0], id: parts[1] };
+    } catch { throw invalid(); }
+  }
+  if (institutionId !== auth.profile.institucion_id) throw new ApiError(403, 'FORBIDDEN', 'No tienes autorización para esta institución.');
+  const authorized = [...new Set(auth.roles.map(role => role.campusId))].filter(id => accountCapabilities(auth, id).reports);
+  if (!authorized.length) throw new ApiError(403, 'FORBIDDEN', 'No tienes permiso de reportería.');
+  for (const id of campusIds) requireCampusCapability(auth, id, 'reports');
+  try {
+    const rows = await withPostgresTransaction(client => readHistoricalReports(client,
+      { institutionId, campusIds, careerId, from, to, grouping, limit, cursor }, authorized));
+    const items = rows.slice(0, limit), last = items.at(-1);
+    return { items, nextCursor: rows.length > limit && last
+      ? Buffer.from(`${last.generatedAt}|${last.id}`).toString('base64url') : null };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo consultar el historial. Inténtalo nuevamente.');
   }
 }
 

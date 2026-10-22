@@ -22,8 +22,8 @@ function load(path, dependencies) {
 const options = { institutions: [{ id: 'institution-a', name: 'Institución',
   campuses: [{ id: 'campus-a', name: 'Principal' }, { id: 'campus-b', name: 'Otra' }],
   careers: [{ id: 'career-a', name: 'Informática', campusIds: ['campus-a', 'campus-b'] }] }] };
-function harness() {
-  const calls = [], optionCalls = [], slots = []; let cursor = 0, effects = [], refreshes = 0;
+function harness(historical = false) {
+  const calls = [], optionCalls = [], listCalls = [], detailCalls = [], slots = []; let cursor = 0, effects = [], refreshes = 0;
   const auth = { identity: { userId: 'user-a', campusId: 'campus-a', profile: { institucion_id: 'institution-a', estado_cuenta: 'ACTIVA', deleted_at: null },
     roles: [{ name: 'ADMINISTRADOR', campusId: 'campus-a' }], permissions: [], capabilities: { reports: true } }, refreshIdentity() { refreshes++; } };
   const react = {
@@ -39,18 +39,20 @@ function harness() {
     },
   };
   const access = load('../src/features/analytics/types/access.ts', {});
-  const { useAnalyticsDashboard } = load('../src/features/analytics/hooks/useAnalyticsDashboard.ts', {
+  const hooks = load(historical ? '../src/features/analytics/hooks/useHistoricalReports.ts' : '../src/features/analytics/hooks/useAnalyticsDashboard.ts', {
     react, '@/features/auth/hooks/useAuth': { useAuth: () => auth }, '@/lib/api/authenticated-request': { AuthApiError },
     '../types/access': access,
     '../api/dashboardApi': {
       loadDashboardOptions: signal => new Promise((resolve, reject) => optionCalls.push({ signal, resolve, reject })),
       loadDashboard: (from, to, campusId, signal, filters, grouping) => new Promise((resolve, reject) => calls.push({ from, to, campusId, signal, filters, grouping, resolve, reject })),
       generateAnalyticalReport: (from, to, campusId, signal, filters, grouping) => new Promise((resolve, reject) => calls.push({ report: true, from, to, campusId, signal, filters, grouping, resolve, reject })),
+      loadHistoricalReports: (filters, cursor, signal) => new Promise((resolve, reject) => listCalls.push({ filters, cursor, signal, resolve, reject })),
+      loadHistoricalReport: (id, signal) => new Promise((resolve, reject) => detailCalls.push({ id, signal, resolve, reject })),
     },
   });
-  const h = { auth, calls, optionCalls, get refreshes() { return refreshes; },
+  const h = { auth, calls, optionCalls, listCalls, detailCalls, get refreshes() { return refreshes; },
     render() {
-      cursor = 0; const result = useAnalyticsDashboard({ from: '2026-10-01', to: '2026-10-10' });
+      cursor = 0; const result = historical ? hooks.useHistoricalReports() : hooks.useAnalyticsDashboard({ from: '2026-10-01', to: '2026-10-10' });
       const pending = effects; effects = []; pending.forEach(effect => effect()); return result;
     },
     async ready(data = options) { h.render(); optionCalls.at(-1).resolve(data); await setImmediate(); return h.render(); },
@@ -74,6 +76,97 @@ test('API sends single-campus compatibility and multi-campus/career filters, and
   assert.equal(observed[1].query.get('grouping'), 'week');
   await loadDashboardOptions(controller.signal); assert.equal(observed[2].path, '/api/v1/analytics/options');
   assert.equal(observed[2].signal, controller.signal);
+});
+
+test('history transport sends optional scope/period/cursor filters and reads immutable reports by ID using GET', async () => {
+  const observed = [], controller = new AbortController();
+  const api = load('../src/features/analytics/api/dashboardApi.ts', {
+    '@/lib/api/authenticated-request': { authenticatedEnvelopeRequest: async (path, init, query) => {
+      observed.push({ path, init, query }); return { data: { items: [], nextCursor: null } };
+    } },
+  });
+  await api.loadHistoricalReports({}, null, controller.signal);
+  assert.equal(observed[0].path, '/api/v1/analytics/reports'); assert.equal(observed[0].query.toString(), '');
+  await api.loadHistoricalReports({ institutionId: 'institution', campusIds: ['a', 'b'], careerId: 'career',
+    from: '2026-09-01', to: '2026-09-30', grouping: 'week' }, 'cursor-value', controller.signal);
+  assert.deepEqual(Object.fromEntries(observed[1].query), { institutionId: 'institution', careerId: 'career',
+    from: '2026-09-01', to: '2026-09-30', grouping: 'week', campusIds: 'a,b', cursor: 'cursor-value' });
+  await api.loadHistoricalReport('report/id', controller.signal);
+  assert.equal(observed[2].path, '/api/v1/analytics/reports/report%2Fid');
+  assert.ok(observed.every(call => call.init.signal === controller.signal && call.init.method === undefined && call.init.body === undefined));
+});
+
+test('history compares fresh saved reports across pages and never calls calculation or generation endpoints', async () => {
+  const h = harness(true);
+  try {
+    assert.equal(h.render().loading, true);
+    h.optionCalls[0].reject(new AuthApiError(403)); // Un catálogo retirado no bloquea los reportes históricos.
+    h.listCalls[0].resolve({ items: [{ id: 'a' }], nextCursor: 'page2' }); await setImmediate();
+    let state = h.render(); assert.equal(state.page.items[0].id, 'a'); assert.equal(state.options, null);
+    state.open('a'); assert.equal(h.render().detailLoading, true);
+    h.detailCalls[0].resolve({ id: 'a', marker: 'original' }); await setImmediate();
+    assert.equal(h.render().reports[0].marker, 'original');
+    h.render().nextPage(); assert.equal(h.render().page, null);
+    assert.equal(h.listCalls[1].cursor, 'page2'); assert.equal(h.render().reports[0].id, 'a');
+    h.listCalls[1].resolve({ items: [{ id: 'b' }], nextCursor: null }); await setImmediate();
+    h.render().open('b', true); state = h.render(); assert.equal(state.reports.length, 0); assert.equal(state.detailLoading, true);
+    assert.deepEqual(h.detailCalls.slice(1).map(call => call.id), ['a', 'b']);
+    h.detailCalls[1].resolve({ id: 'a', marker: 'original' }); h.detailCalls[2].resolve({ id: 'b', marker: 'another snapshot' }); await setImmediate();
+    assert.deepEqual(Array.from(h.render().reports, report => report.marker), ['original', 'another snapshot']);
+    assert.equal(h.calls.length, 0); assert.equal(h.refreshes, 0);
+    h.render().close(); assert.equal(h.render().reports.length, 0);
+    h.render().open('a'); h.render(); assert.equal(h.detailCalls.length, 4); // Reabrir exige autorización nueva.
+  } finally { h.dispose(); }
+});
+
+test('historical filter changes, rapid opens and identity changes discard late lists and snapshots', async () => {
+  const h = harness(true);
+  try {
+    h.render(); h.render().search({ from: '2026-09-01', campusIds: ['campus-b'] }); h.render();
+    assert.equal(h.listCalls[0].signal.aborted, true);
+    h.listCalls[0].resolve({ items: [{ id: 'stale' }], nextCursor: null }); await setImmediate(); assert.equal(h.render().page, null);
+    h.listCalls[1].resolve({ items: [{ id: 'a' }, { id: 'b' }], nextCursor: null }); await setImmediate();
+    h.render().open('a'); h.render(); h.render().open('b'); h.render();
+    assert.equal(h.detailCalls[0].signal.aborted, true);
+    h.detailCalls[0].resolve({ id: 'a' }); await setImmediate(); assert.equal(h.render().reports.length, 0);
+    h.detailCalls[1].resolve({ id: 'b' }); await setImmediate(); assert.equal(h.render().reports[0].id, 'b');
+    h.auth.identity.userId = 'user-b'; assert.equal(h.render().page, null); assert.equal(h.render().reports.length, 0);
+    assert.equal(h.listCalls[1].signal.aborted, true); assert.equal(h.detailCalls[1].signal.aborted, true);
+    h.auth.identity.roles = []; assert.equal(h.render().allowed, false); assert.equal(h.render().loading, false);
+    const count = h.listCalls.length; h.auth.identity = null; h.render(); assert.equal(h.listCalls.length, count);
+    h.dispose(); h.listCalls.at(-1).resolve({ items: [{ id: 'late' }], nextCursor: null }); await setImmediate(); assert.equal(h.render().page, null);
+  } finally { h.dispose(); }
+});
+
+test('historical comparison fails as a whole after revocation, refreshes identity and retries both authorized reads', async () => {
+  const h = harness(true);
+  try {
+    h.render(); h.listCalls[0].resolve({ items: [{ id: 'a' }, { id: 'b' }], nextCursor: null }); await setImmediate();
+    h.render().open('a'); h.render(); h.detailCalls[0].resolve({ id: 'a' }); await setImmediate();
+    h.render().open('b', true); h.render();
+    h.detailCalls[1].resolve({ id: 'a' }); h.detailCalls[2].reject(new AuthApiError(403, 'Permiso revocado.')); await setImmediate();
+    assert.equal(h.render().reports.length, 0); assert.equal(h.render().detailError, 'Permiso revocado.'); assert.equal(h.refreshes, 1);
+    h.render().retryDetail(); h.render();
+    assert.deepEqual(h.detailCalls.slice(3).map(call => call.id), ['a', 'b']);
+    h.detailCalls[3].resolve({ id: 'a' }); h.detailCalls[4].resolve({ id: 'b' }); await setImmediate(); assert.equal(h.render().reports.length, 2);
+    h.render().search({ grouping: 'week' }); h.render(); assert.equal(h.render().reports.length, 0);
+    h.listCalls[1].reject(new AuthApiError(503, 'Historial no disponible.')); await setImmediate();
+    assert.equal(h.render().error, 'Historial no disponible.'); assert.equal(h.render().loading, false);
+    h.render().search(); h.render(); h.listCalls[2].resolve({ items: [], nextCursor: null }); await setImmediate();
+    assert.equal(h.render().page.items.length, 0);
+  } finally { h.dispose(); }
+});
+
+test('revocation detected on the next historical page also retires an already open snapshot', async () => {
+  const h = harness(true);
+  try {
+    h.render(); h.listCalls[0].resolve({ items: [{ id: 'a' }], nextCursor: 'next' }); await setImmediate();
+    h.render().open('a'); h.render(); h.detailCalls[0].resolve({ id: 'a' }); await setImmediate();
+    assert.equal(h.render().reports.length, 1);
+    h.render().nextPage(); h.render(); h.listCalls[1].reject(new AuthApiError(403, 'Acceso revocado.')); await setImmediate();
+    assert.equal(h.render().reports.length, 0); assert.equal(h.render().selectedIds.length, 0);
+    assert.equal(h.refreshes, 1); assert.equal(h.render().error, 'Acceso revocado.');
+  } finally { h.dispose(); }
 });
 
 test('changing campus or career hides prior KPI and aborts/discards stale responses; empty campus selection never queries', async () => {
@@ -165,11 +258,16 @@ test('visual access considers reporting grants in other campuses, with role and 
 function renderDashboard(state, actions = []) {
   const require = createRequire(import.meta.url);
   const native = require('react-native-web');
+  const results = load('../src/features/analytics/components/AnalyticsResults.tsx', {
+    react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': native,
+  });
   const { default: Screen } = load('../app/(analytics)/analytics.tsx', {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': { ...native,
       Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); } },
     '@/components/navigation/BottomNavigationBar': { BottomNavigationBar: () => null },
     '@/features/analytics/hooks/useAnalyticsDashboard': { useAnalyticsDashboard: () => ({ consult() {}, ...state }) },
+    'expo-router': { Link: native.Text },
+    '@/features/analytics/components/AnalyticsResults': results,
   });
   const messages = [], originalError = console.error;
   console.error = (...args) => messages.push(args.join(' '));
@@ -368,4 +466,73 @@ test('report view presents server scope, period, grouping, generation time and r
   assert.equal(argumentsReceived[2], 'month'); // El formulario se envía; no se copian los metadatos del reporte anterior.
   const loading = renderDashboard({ report: null, reportRequested: true, loading: true, error: '', dashboard: null });
   assert.ok(loading.includes('Generando reporte')); assert.ok(!loading.includes('Responsable del servidor'));
+});
+
+function renderHistory(state, actions = [], fields = []) {
+  const require = createRequire(import.meta.url), native = require('react-native-web');
+  const results = load('../src/features/analytics/components/AnalyticsResults.tsx', {
+    react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': native,
+  });
+  const { default: Screen } = load('../app/(analytics)/history.tsx', {
+    react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-native': { ...native,
+      Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); },
+      TextInput: props => { fields.push(props); return React.createElement(native.TextInput, props); },
+    },
+    'expo-router': { Link: native.Text },
+    '@/components/navigation/BottomNavigationBar': { BottomNavigationBar: () => null },
+    '@/features/analytics/components/AnalyticsResults': results,
+    '@/features/analytics/hooks/useHistoricalReports': { useHistoricalReports: () => ({
+      allowed: true, page: null, options: null, selectedIds: [], reports: [], ...state,
+    }) },
+  });
+  return renderToStaticMarkup(React.createElement(Screen));
+}
+
+test('history screen renders original metadata and both saved results; actions open/compare without generation', () => {
+  const scope = { institutionName: 'Institución histórica', campusName: 'Sede original',
+    campuses: [{ id: 'a', name: 'Sede original' }], career: { id: 'career-old', name: 'Carrera original' } };
+  const period = { from: '2026-09-01', to: '2026-09-30', timeZone: 'America/Santiago', cutoff: '2026-10-01T03:00:00Z' };
+  const metric = { value: 0, scope, period };
+  const report = { id: 'snapshot-a', scope, period, generatedAt: '2026-10-22T16:35:42Z',
+    generatedBy: { name: 'Responsable original' }, calculationVersion: 'campuslink-kpi-v1', grouping: 'week',
+    activeUsers: { ...metric, value: 7 }, resourceDemand: { ...metric, views: 0, requests: 0 },
+    subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] }, activityParticipation: { ...metric, legacyEvents: 0 },
+    intervals: [{ key: 'week', label: 'Semana guardada', period, metrics: null, status: 'unavailable', coverage: 'unavailable' }], notes: ['Nota histórica guardada'] };
+  const other = { ...report, id: 'snapshot-b', activeUsers: { ...metric, value: 9 } };
+  const opened = [], actions = [], html = renderHistory({ page: { items: [report, other], nextCursor: 'page2' },
+    selectedIds: ['snapshot-a', 'snapshot-b'], reports: [report, other],
+    open(...args) { opened.push(args); }, nextPage() {}, close() {}, search() {},
+  }, actions);
+  for (const text of ['Reportes históricos', 'Institución histórica', 'Sede original', 'Carrera original', 'Responsable original',
+    '2026-09-01 al 2026-09-30', 'America/Santiago', '13:35:42', 'Comparación de instantáneas',
+    'snapshot-a', 'snapshot-b', 'campuslink-kpi-v1', 'Semana guardada', 'Nota histórica guardada']) assert.ok(html.includes(text), text);
+  assert.equal(html.split('Usuarios activos al corte').length - 1, 2);
+  assert.ok(!html.includes('Generar reporte'));
+  actions.find(action => action.children.props.children === 'Abrir reporte').onPress();
+  actions.find(action => action.children.props.children === 'Comparar con el reporte abierto').onPress();
+  assert.deepEqual(opened, [['snapshot-a'], ['snapshot-b', true]]);
+});
+
+test('history screen exposes search/reset/pagination, empty results, denied access, errors and retries', () => {
+  const calls = [], actions = [], fields = [];
+  let html = renderHistory({ options, page: { items: [], nextCursor: 'next' }, hasPrevious: true,
+    search(filters) { calls.push(filters); }, nextPage() { calls.push('next'); },
+  }, actions, fields);
+  assert.ok(html.includes('No hay reportes guardados')); assert.equal(fields.length, 2);
+  actions.find(action => action.children.props.children === 'Buscar reportes').onPress();
+  actions.find(action => action.children.props.children === 'Limpiar filtros').onPress();
+  actions.find(action => action.children.props.children === 'Siguiente página').onPress();
+  actions.find(action => action.children.props.children === 'Volver a la primera página').onPress();
+  assert.deepEqual(calls.map(value => value && typeof value === 'object' ? Object.keys(value) : value), [[], [], 'next', undefined]);
+  html = renderHistory({ allowed: false }); assert.ok(html.includes('Necesitas permiso de reportería')); assert.ok(!html.includes('Buscar reportes'));
+  html = renderHistory({ loading: true }); assert.ok(html.includes('Cargando historial'));
+  html = renderHistory({ selectedIds: ['a'], detailLoading: true }); assert.ok(html.includes('Abriendo instantáneas'));
+  const errors = []; html = renderHistory({ error: 'Sin conexión', detailError: 'Acceso revocado', selectedIds: ['a'],
+    search() { errors.push('list'); }, retryDetail() { errors.push('detail'); },
+  }, errors);
+  assert.ok(html.includes('Sin conexión')); assert.ok(html.includes('Acceso revocado')); assert.ok(!html.includes('Usuarios activos al corte'));
+  errors.find(action => action.children?.props.children === 'Reintentar historial').onPress();
+  errors.find(action => action.children?.props.children === 'Reintentar apertura').onPress();
+  assert.deepEqual(errors.filter(item => typeof item === 'string'), ['list', 'detail']);
 });

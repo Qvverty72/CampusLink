@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import { sendModuleHealth } from '../../services/health-response.js';
-import { generateAnalyticalReport, getAnalyticalReport, getAnalyticsHealth, getDashboard, getDashboardOptions, recordResourceView } from './analytics.service.js';
+import { generateAnalyticalReport, getAnalyticalReport, getAnalyticsHealth, getDashboard, getDashboardOptions, listHistoricalReports, recordResourceView } from './analytics.service.js';
 import type { AuthLocals } from '../auth/auth.types.js';
 import { sendSuccess } from '../../services/api-response.js';
 import { ApiError } from '../../services/api-response.js';
@@ -12,6 +12,10 @@ export const recordResourceViewController: RequestHandler<{publicationId:string}
 
 export const getAnalyticsHealthController: RequestHandler = async (_request, response) => {
   sendModuleHealth(response, await getAnalyticsHealth());
+};
+
+export const listHistoricalReportsController: RequestHandler<Record<string,string>,unknown,unknown,Record<string,string>,AuthLocals> = async (request,response) => {
+  sendSuccess(response, await listHistoricalReports(response.locals.auth, request.query));
 };
 
 export const getDashboardController: RequestHandler<Record<string,string>,unknown,unknown,Record<string,string>,AuthLocals> = async (request,response) => {

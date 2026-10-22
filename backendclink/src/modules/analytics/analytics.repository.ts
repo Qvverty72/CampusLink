@@ -3,7 +3,7 @@ import { probeSupabaseTables } from '../../database/supabase/health.js';
 import { probeMongoCollections } from '../../database/mongodb/health.js';
 import type { DependencyChecks } from '../../types/api.types.js';
 import type { PoolClient } from 'pg';
-import type { AnalyticalReport, DashboardGrouping, DashboardOptions, DashboardQuery, DashboardScope, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
+import type { AnalyticalReport, DashboardGrouping, DashboardOptions, DashboardQuery, DashboardScope, HistoricalReportsQuery, HistoricalReportSummary, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
 import type { AuthAssignment } from '../auth/auth.types.js';
 import type { AnalyticsWindow } from './analytics.periods.js';
 import { ANALYTICS_TIME_ZONE } from './analytics.periods.js';
@@ -38,6 +38,30 @@ export async function findAnalyticalReport(client: PoolClient, id: string, insti
   return (await client.query<{ snapshot_json: AnalyticalReport }>(
     `SELECT snapshot_json FROM public.reporte WHERE id=$1 AND institucion_id=$2 AND tipo_reporte='KPI_ESENCIALES'`,
     [id, institutionId])).rows[0]?.snapshot_json ?? null;
+}
+
+/** Filtra el ámbito completo antes de paginar; no consulta catálogos ni hechos operacionales. */
+export async function readHistoricalReports(client: PoolClient, query: HistoricalReportsQuery, authorizedCampusIds: string[]): Promise<HistoricalReportSummary[]> {
+  const result = await client.query<{ summary: HistoricalReportSummary }>(
+    `SELECT jsonb_build_object('id',snapshot_json->'id','generatedAt',snapshot_json->'generatedAt',
+       'generatedBy',snapshot_json->'generatedBy','scope',snapshot_json->'scope','period',snapshot_json->'period',
+       'grouping',snapshot_json->'grouping','calculationVersion',snapshot_json->'calculationVersion') AS summary
+     FROM public.reporte r WHERE institucion_id=$1 AND tipo_reporte='KPI_ESENCIALES'
+       AND snapshot_json->'scope'->>'institutionId'=$1::text
+       AND jsonb_array_length(snapshot_json->'scope'->'campuses')>0
+       AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(snapshot_json->'scope'->'campuses') c
+         WHERE NOT (c->>'id'=ANY($2::text[])))
+       AND (cardinality($3::text[])=0 OR EXISTS (SELECT 1 FROM jsonb_array_elements(snapshot_json->'scope'->'campuses') c
+         WHERE c->>'id'=ANY($3::text[])))
+       AND ($4::text IS NULL OR snapshot_json->'scope'->'career'->>'id'=$4)
+       AND ($5::text IS NULL OR snapshot_json->'period'->>'to'>=$5)
+       AND ($6::text IS NULL OR snapshot_json->'period'->>'from'<=$6)
+       AND ($7::text IS NULL OR snapshot_json->>'grouping'=$7)
+       AND ($8::timestamptz IS NULL OR (generado_en,id)<($8::timestamptz,$9::uuid))
+     ORDER BY generado_en DESC,id DESC LIMIT $10`,
+    [query.institutionId, authorizedCampusIds, query.campusIds, query.careerId, query.from, query.to, query.grouping,
+      query.cursor?.generatedAt ?? null, query.cursor?.id ?? null, query.limit + 1]);
+  return result.rows.map(row => row.summary);
 }
 
 export async function findAnalyticsResource(client: PoolClient, id: string, campusId: string, institutionId: string) {

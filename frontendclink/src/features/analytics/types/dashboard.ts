@@ -45,3 +45,9 @@ export interface AnalyticalReport extends DashboardData {
   generatedBy: { userId: string; name: string };
   calculationVersion: 'campuslink-kpi-v1';
 }
+
+export type HistoricalReportSummary = Pick<AnalyticalReport, 'id' | 'generatedAt' | 'generatedBy' | 'scope' | 'period' | 'grouping' | 'calculationVersion'>;
+export interface HistoricalReportsFilters {
+  institutionId?: string; campusIds?: string[]; careerId?: string; from?: string; to?: string; grouping?: DashboardGrouping;
+}
+export interface HistoricalReportsPage { items: HistoricalReportSummary[]; nextCursor: string | null }
