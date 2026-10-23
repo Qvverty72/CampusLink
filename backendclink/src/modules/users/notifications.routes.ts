@@ -27,6 +27,11 @@ export function createNotificationsRouter(operation = ownNotificationOperation):
     }
     sendSuccess(response, await operation(response.locals.auth, { cursor: request.query.cursor as string | undefined }));
   });
+  router.get('/:notificationId/activity-change', async (request, response) => {
+    const id = request.params.notificationId;
+    if (!uuid.test(id) || Object.keys(request.query).length) throw new ApiError(400, 'VALIDATION_ERROR', 'Notificación inválida.');
+    sendSuccess(response, await operation(response.locals.auth, { id: id.toLowerCase(), activityChange: true }));
+  });
   for (const remove of [false, true]) {
     router[remove ? 'delete' : 'put'](remove ? '/:notificationId' : '/:notificationId/read', async (request, response) => {
       const id = request.params.notificationId;

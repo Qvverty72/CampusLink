@@ -5,7 +5,7 @@ import { loadAcademicOptions, loadAcademicProfile, saveAcademicProfile } from '.
 import type { AcademicOptions, AcademicProfile } from '../types/profile';
 
 /** Carga perfil y catálogo, valida selecciones y guarda con detección de conflicto. */
-export function useAcademicProfile() {
+export function useAcademicProfile(onSaved?: () => void) {
   const auth = useAuth();
   const [profile, setProfile] = useState<AcademicProfile | null>(null);
   const [options, setOptions] = useState<AcademicOptions | null>(null);
@@ -41,7 +41,10 @@ export function useAcademicProfile() {
     setBusy(true); setError(null);
     try {
       await saveAcademicProfile({ fullName, campusId, careerIds, updatedAt: profile.updatedAt }, abort.signal);
-      if (!abort.signal.aborted) auth.refreshIdentity();
+      if (!abort.signal.aborted) {
+        auth.refreshIdentity();
+        onSaved?.();
+      }
     } catch (reason) {
       if (abort.signal.aborted) return;
       if (reason instanceof AuthApiError && reason.status === 409) {

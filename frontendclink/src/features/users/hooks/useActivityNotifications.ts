@@ -11,6 +11,7 @@ export function useActivityNotifications(onChanged?: () => void) {
   const [items, setItems] = useState<UserNotification[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadingPage, setLoadingPage] = useState<'first' | 'more' | null>('first');
   const [error, setError] = useState<string | null>(null);
   const [activityId, setActivityId] = useState<string | null>(null);
   const [publicationId,setPublicationId]=useState<string|null>(null);
@@ -23,6 +24,7 @@ export function useActivityNotifications(onChanged?: () => void) {
   async function load(next?: string) {
     if (pending.current || !mounted.current) return;
     const abort = new AbortController(); pending.current = abort; setBusy(true); setError(null);
+    setLoadingPage(next ? 'more' : 'first');
     try {
       const page = await fetchNotifications(next, abort.signal);
       if (!abort.signal.aborted) {
@@ -30,12 +32,13 @@ export function useActivityNotifications(onChanged?: () => void) {
         setCursor(page.nextCursor);
       }
     } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
-    finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
+    finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); setLoadingPage(null); } }
   }
   useFocusEffect(useCallback(() => {
     mounted.current = true; void load();
     return () => {
       mounted.current = false; pending.current?.abort(); pending.current = null;
+      setBusy(false); setLoadingPage(null);
       setActivityId(null);setPublicationId(null);
     };
   }, []));
@@ -56,5 +59,6 @@ export function useActivityNotifications(onChanged?: () => void) {
     } catch (reason) { if (!abort.signal.aborted) handleError(reason); }
     finally { if (!abort.signal.aborted) { pending.current = null; setBusy(false); } }
   }
-  return { items, cursor, busy, error, activityId, setActivityId, publicationId,setPublicationId,load, update };
+  return { items, cursor, busy, loading: loadingPage !== null, loadingMore: loadingPage === 'more',
+    error, activityId, setActivityId, publicationId,setPublicationId,load, update };
 }

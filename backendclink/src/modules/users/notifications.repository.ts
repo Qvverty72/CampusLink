@@ -97,3 +97,12 @@ export async function updateOwnNotification(client: PoolClient, userId: string, 
       ${remove ? '' : 'AND n.deleted_at IS NULL'} RETURNING n.id`, [userId, campusId, id]);
   return result.rows.length === 1;
 }
+
+/** La clave interna se usa únicamente en servidor para encontrar la revisión del aviso propio. */
+export async function findOwnActivityChange(client: PoolClient, userId: string, campusId: string, id: string) {
+  const result = await client.query<{ actividad_id: string; actividad_evento_clave: string }>(`
+    SELECT n.actividad_id,n.actividad_evento_clave FROM public.notificacion n
+    WHERE n.id=$3 AND ${ownNotificationScope} AND n.deleted_at IS NULL
+      AND n.tipo_notificacion='ACTIVITY_CHANGED'`, [userId, campusId, id]);
+  return result.rows[0] ?? null;
+}

@@ -3,9 +3,9 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import { APP_COLORS } from '@/types/colors';
 import { useAcademicProfile } from '../hooks/useAcademicProfile';
 
-export function AcademicProfileSection() {
+export function AcademicProfileSection({ onSaved }: { onSaved?: () => void }) {
   const { profile, options, editing, setEditing, fullName, setFullName, campusId, setCampusId,
-    careerIds, setCareerIds, busy, error, setError, conflict, setRevision, save, offered, selectionsValid } = useAcademicProfile();
+    careerIds, setCareerIds, busy, error, setError, conflict, setRevision, save, offered, selectionsValid } = useAcademicProfile(onSaved);
 
   return (
     <View style={styles.card}>

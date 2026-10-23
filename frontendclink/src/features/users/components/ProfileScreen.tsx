@@ -25,8 +25,8 @@ export function ProfileScreen() {
   const refreshing = profileLoading || unreadLoading;
   const refreshProfile = useCallback(() => {
     auth.refreshIdentity();
-    reloadAcademicProfile(); personal.retry(); refreshUnreadCount();
-  }, [auth.refreshIdentity, reloadAcademicProfile, personal.retry, refreshUnreadCount]);
+    personal.retry(); refreshUnreadCount();
+  }, [auth.refreshIdentity, personal.retry, refreshUnreadCount]);
   const insets = useSafeAreaInsets();
   const fullName = academicProfile?.fullName?.trim() || identity?.profile.nombre_completo?.trim() || 'Mi perfil';
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toLocaleUpperCase('es');
@@ -92,8 +92,8 @@ export function ProfileScreen() {
             </View>
             {identity?.capabilities.general && (
               <View style={styles.academicSummary}>
-                {profileLoading && <ProfileAcademicSkeleton />}
-                {!profileLoading && academicProfile && <>
+                {academicLoading && !academicProfile && <ProfileAcademicSkeleton />}
+                {academicProfile && <>
                   <AcademicChip icon={MapPin} label={academicProfile.campusName || 'Sin campus disponible'} kind="Campus" />
                   {academicProfile.careers.length ? academicProfile.careers.map(career => (
                     <AcademicChip key={career.id} icon={GraduationCap} label={career.nombre} kind="Carrera" />
@@ -137,6 +137,7 @@ export function ProfileScreen() {
           error={auth.error}
           onClose={() => setAccountMenuOpen(false)}
           onSignOut={signOut}
+          onAcademicSaved={reloadAcademicProfile}
         />
       )}
     </View>

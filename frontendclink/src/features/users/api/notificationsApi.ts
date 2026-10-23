@@ -1,8 +1,29 @@
 import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 
-import type { NotificationPage } from '../types/notification';
+import type { NotificationActivityChange, NotificationActivitySnapshot, NotificationPage } from '../types/notification';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Consulta únicamente el cambio asociado al aviso, sin cargar el flujo del mapa. */
+export async function fetchNotificationActivityChange(id: string, signal?: AbortSignal): Promise<NotificationActivityChange> {
+  if (!uuid.test(id)) throw new Error('Notificación inválida.');
+  const response = await authenticatedEnvelopeRequest<NotificationActivityChange>(`/api/v1/users/me/notifications/${id}/activity-change`, { signal });
+  const value = response.data;
+  const validSnapshot = (snapshot: NotificationActivitySnapshot | undefined) => snapshot
+    && typeof snapshot.title === 'string' && typeof snapshot.description === 'string'
+    && typeof snapshot.startAt === 'string' && typeof snapshot.endAt === 'string'
+    && Number.isFinite(Date.parse(snapshot.startAt)) && Date.parse(snapshot.endAt) > Date.parse(snapshot.startAt)
+    && (snapshot.location === null || (snapshot.location && typeof snapshot.location.buildingKey === 'string'
+      && typeof snapshot.location.floorKey === 'string' && typeof snapshot.location.buildingName === 'string'
+      && typeof snapshot.location.floorName === 'string'
+      && ['poiName', 'customLabel'].every(key => snapshot.location?.[key as 'poiName' | 'customLabel'] === undefined
+        || typeof snapshot.location[key as 'poiName' | 'customLabel'] === 'string')));
+  if (!value || value.notificationId !== id || !/^[0-9a-f]{24}$/.test(value.activityId)
+    || typeof value.title !== 'string' || !validSnapshot(value.before) || !validSnapshot(value.after)) {
+    throw new Error('No se pudo cargar el cambio de la actividad.');
+  }
+  return value;
+}
 
 /** Total de no leídas del usuario y alcance vigentes, sin depender de las páginas cargadas. */
 export async function fetchUnreadNotificationCount(signal?: AbortSignal): Promise<number> {

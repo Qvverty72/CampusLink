@@ -8,26 +8,31 @@ export function useProfile() {
   const auth = useAuth();
   const [closing, setClosing] = useState(false);
   const identity = auth.identity;
+  const academicScope = identity?.capabilities.general ? JSON.stringify([identity.userId, identity.campusId]) : null;
   const [academicRevision, setAcademicRevision] = useState(0);
   const [academicState, setAcademicState] = useState<{
-    identity: typeof identity; profile: AcademicProfile | null; error: string | null; loading: boolean;
-  }>({ identity: null, profile: null, error: null, loading: false });
+    scope: string | null; profile: AcademicProfile | null; error: string | null; loading: boolean;
+  }>({ scope: null, profile: null, error: null, loading: false });
 
   useEffect(() => {
-    if (!identity?.capabilities.general) return;
+    if (!academicScope) {
+      setAcademicState({ scope: null, profile: null, error: null, loading: false });
+      return;
+    }
     const abort = new AbortController();
-    setAcademicState(previous => ({ identity, profile: previous.identity === identity ? previous.profile : null, error: null, loading: true }));
+    setAcademicState(previous => ({ scope: academicScope, profile: previous.scope === academicScope ? previous.profile : null, error: null, loading: true }));
     void loadAcademicProfile(abort.signal).then(profile => {
-      if (!abort.signal.aborted) setAcademicState({ identity, profile, error: null, loading: false });
+      if (!abort.signal.aborted) setAcademicState({ scope: academicScope, profile, error: null, loading: false });
     }).catch(() => {
-      if (!abort.signal.aborted) setAcademicState(previous => ({ identity, profile: previous.identity === identity ? previous.profile : null,
+      if (!abort.signal.aborted) setAcademicState(previous => ({ scope: academicScope, profile: previous.scope === academicScope ? previous.profile : null,
         error: 'No se pudo cargar el perfil académico.', loading: false }));
     });
     return () => abort.abort();
-  }, [identity, academicRevision]);
+  }, [academicScope, academicRevision]);
 
   // No presentar datos de una identidad anterior mientras se ejecuta el nuevo efecto.
-  const currentAcademic = identity?.capabilities.general && academicState.identity === identity ? academicState : null;
+  // Renovar la identidad del mismo usuario/campus no invalida el encabezado.
+  const currentAcademic = academicScope && academicState.scope === academicScope ? academicState : null;
   const academicProfile = currentAcademic?.profile ?? null;
   const academicError = currentAcademic?.error ?? null;
   const academicLoading = Boolean(identity?.capabilities.general && (!currentAcademic || currentAcademic.loading));

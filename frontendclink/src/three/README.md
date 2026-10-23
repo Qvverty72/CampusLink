@@ -396,12 +396,18 @@ histórica; el listado muestra las fechas reales editadas de cada ocurrencia.
 
 Guardar refresca ficha y consulta compartida del campus, incluidos los resúmenes
 por edificio. No modifica la selección, las geometrías ni los stores 3D.
+La CTA «Explorar actividad en el mapa» de un aviso consulta la ubicación actual
+autorizada y selecciona su edificio y piso en el mapa vigente. Abre la información
+normal del piso, sin abrir automáticamente la ficha de actividad. El parámetro
+activityId se consume al resolver el destino; la ficha puede consultarse desde
+las actividades del piso. La carga del enlace no muestra tarjeta transitoria.
+
 F2.6-08 usa el historial y eventos embebidos para notificaciones in-app; la bandeja
-se abre desde Mi perfil y reutiliza ActivityDetail en modal. Una publicación de serie
+se abre desde Mi perfil y muestra un aviso previo independiente en modal. Una publicación de serie
 oficial aparece con título y mensaje normales de publicación individual, sin textos
 de recurrencia ni número/total. Backend anuncia cada ocurrencia al inicio real,
-incluida la primera; guardar fechas futuras o vencer la anterior no anticipa el aviso. Todos abren su activityId
-concreto, sin consultar el navegador de serie protegido por capacidad oficial.
+incluida la primera; guardar fechas futuras o vencer la anterior no anticipa el aviso. Cada aviso identifica su activityId
+concreto y la CTA conduce a su piso, sin consultar el navegador de serie protegido por capacidad oficial.
 Cambios conjuntos producen un aviso por usuario con su cantidad/motivos y destino
 afectado. OFFICIAL_EVENT_STARTED solo se conserva como tipo histórico. Comunitarias
 solo notifican cambios a participantes. Avisos anteriores

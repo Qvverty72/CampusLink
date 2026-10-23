@@ -1,4 +1,5 @@
-import {ActivityIndicator,Image,Modal,Pressable,ScrollView,StyleSheet,Text,View} from 'react-native';
+import {ActivityIndicator,Image,Modal,Pressable,StyleSheet,Text,View} from 'react-native';
+import {RefreshScrollView,useScrollRefresh} from '@/components/RefreshScrollView';
 import {usePhysicalgoodsHistory,usePhysicalgoodsHistoryDetail} from '../hooks/usePhysicalgoodsHistory';
 import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory';
 import {resourceConditions} from '../types/publication';
@@ -8,9 +9,10 @@ const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibi
 const state=(value:string)=>value.toLowerCase().replaceAll('_',' ');
 const date=(value:string)=>new Date(value).toLocaleString('es-CL');
 
-export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,onDetail,onAgreement}:{active:boolean;transactions?:boolean;refreshVersion:number;
+export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,onDetail,onAgreement,refreshEnabled=true}:{active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;
   onDetail:(target:PhysicalgoodsHistoryTarget)=>void;onAgreement:(publicationId:string,transactionId:string)=>void}) {
   const h=usePhysicalgoodsHistory(active,transactions,refreshVersion);
+  useScrollRefresh(h.reload,h.loading,active&&refreshEnabled&&!h.loading,transactions?'mis transacciones':'mis publicaciones');
   return <View style={styles.section}>
     <Text accessibilityRole="header" style={styles.title}>{transactions?'Mis transacciones':'Mis publicaciones'}</Text>
     <Text style={styles.text}>Incluye registros cerrados y publicaciones retiradas, conservando su campus de origen.</Text>
@@ -39,11 +41,12 @@ export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,o
   </View>;
 }
 
-export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement}:{target:PhysicalgoodsHistoryTarget;onClose:()=>void;
+export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,refreshEnabled=true}:{target:PhysicalgoodsHistoryTarget;onClose:()=>void;refreshEnabled?:boolean;
   onOpen?:(id:string)=>void;onAgreement:(publicationId:string,transactionId:string)=>void}) {
   const h=usePhysicalgoodsHistoryDetail(target),detail=h.detail;
   const request=detail&&'publication' in detail?detail:null,publication=request?.publication??(detail&&'title' in detail?detail:null);
-  return <Modal visible animationType="slide" onRequestClose={onClose}><ScrollView contentContainerStyle={styles.content}>
+  return <Modal visible animationType="slide" onRequestClose={onClose}><RefreshScrollView contentContainerStyle={styles.content}
+    onRefresh={h.reload} refreshing={h.loading} refreshEnabled={refreshEnabled&&!h.loading} refreshLabel="el detalle del historial">
     {button('Cerrar detalle del historial',onClose)}
     <Text accessibilityRole="header" style={styles.title}>{target.requestId?'Detalle de solicitud':'Mi publicación'}</Text>
     {button('Actualizar detalle del historial',h.reload,h.loading)}
@@ -76,7 +79,7 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement}:{
       {publication.canView ? onOpen && button('Abrir recurso en mi campus',()=>onOpen(publication.id)) :
         <Text style={styles.text}>Consulta histórica. Este recurso no está disponible para interacción en tu campus actual.</Text>}
     </View>}
-  </ScrollView></Modal>;
+  </RefreshScrollView></Modal>;
 }
 const styles=StyleSheet.create({
   section:{gap:14,marginTop:24},content:{padding:24,paddingTop:48,paddingBottom:60,gap:16,width:'100%',maxWidth:760,alignSelf:'center'},

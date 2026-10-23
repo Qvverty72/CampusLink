@@ -1,11 +1,12 @@
-import {ActivityIndicator,Modal,Pressable,ScrollView,StyleSheet,Text,View} from 'react-native';
+import {ActivityIndicator,Modal,Pressable,StyleSheet,Text,View} from 'react-native';
+import {RefreshScrollView} from '@/components/RefreshScrollView';
 import {usePhysicalgoodsTransaction} from '../hooks/usePhysicalgoodsTransaction';
 import type {PhysicalgoodsTransactionTarget} from '../types/publication';
 import {useState} from 'react';
 import {ContentReportForm} from '@/features/reports/components/ContentReportForm';
 
 /** Consulta del acuerdo, decisiones explícitas y mensajes de ubicación sin texto libre. */
-export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:PhysicalgoodsTransactionTarget;onClose:()=>void;onChanged:()=>void}) {
+export function PhysicalgoodsTransaction({target,onClose,onChanged,refreshEnabled=true}:{target:PhysicalgoodsTransactionTarget;onClose:()=>void;onChanged:()=>void;refreshEnabled?:boolean}) {
   const t=usePhysicalgoodsTransaction(target,onChanged),detail=t.detail;
   const [reporting,setReporting]=useState(false),[reportBusy,setReportBusy]=useState(false);
   const button=(label:string,press:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} onPress={press}
@@ -16,7 +17,9 @@ export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:Phys
     :['OCULTO','CANCELADO'].includes(detail?.publication.status??'')?'Se cancelará el acuerdo y se conservará su historial. La publicación seguirá fuera del marketplace.'
       :'El recurso volverá a estar disponible. Las otras solicitudes pendientes podrán resolverse y se conservará este acuerdo cancelado.';
   const close=()=>{if(!t.busy&&!reportBusy)onClose();};
-  return <Modal visible onRequestClose={close} animationType="slide"><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+  const refreshing=t.loading||t.messagesLoading||t.optionsLoading;
+  return <Modal visible onRequestClose={close} animationType="slide"><RefreshScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"
+    onRefresh={t.reload} refreshing={refreshing} refreshEnabled={refreshEnabled&&!refreshing&&!t.busy&&!reporting&&!reportBusy&&!t.action&&!t.ratingConfirmation} refreshLabel="el acuerdo">
     {button('Cerrar acuerdo',close,t.busy||reportBusy)}
     {reporting?<ContentReportForm target={{type:'TRANSACCION',...target}} title={detail?.publication.title??'Acuerdo del recurso'}
       onBusyChange={setReportBusy} onBack={()=>{setReporting(false);t.reload();}}/>:<>
@@ -106,7 +109,7 @@ export function PhysicalgoodsTransaction({target,onClose,onChanged}:{target:Phys
       </View>
     </>}
     </>}
-  </ScrollView></Modal>;
+  </RefreshScrollView></Modal>;
 }
 const styles=StyleSheet.create({
   content:{padding:24,paddingTop:48,paddingBottom:60,gap:16,width:'100%',maxWidth:760,alignSelf:'center'},

@@ -1,7 +1,10 @@
 import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 import { useAcquiredDigitalResources } from '../hooks/useAcquiredDigitalResources';
-export function AcquiredDigitalResources({embedded=false}:{embedded?:boolean}={}){const state=useAcquiredDigitalResources(embedded);return <View style={styles.box}>
+import { useScrollRefresh } from '@/components/RefreshScrollView';
+export function AcquiredDigitalResources({embedded=false}:{embedded?:boolean}={}){const state=useAcquiredDigitalResources(embedded);
+  useScrollRefresh(state.refresh,state.loading,state.open&&!state.loading&&!state.downloading,'mis recursos');
+  return <View style={styles.box}>
   {!embedded&&<Pressable accessibilityRole="button" onPress={state.toggle} style={styles.button}><Text style={styles.heading}>{state.open?'Cerrar materiales adquiridos':'Mis materiales adquiridos'}</Text></Pressable>}
   {state.open&&<>
     {state.error&&<Text style={styles.error} accessibilityLiveRegion="polite">{state.error}</Text>}

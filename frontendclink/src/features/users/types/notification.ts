@@ -1,3 +1,5 @@
+import type { ActivityDetail } from '@/features/activities/types/activity';
+
 /** Vista pública de una notificación de actividad recibida por el usuario. */
 export interface ActivityNotification {
   id: string; activityId: string; seriesId?: string; type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED' | 'OFFICIAL_EVENT_STARTED';
@@ -11,3 +13,12 @@ export interface PhysicalgoodsReminder {
 export type UserNotification=ActivityNotification|PhysicalgoodsReminder;
 /** Página de notificaciones; `nextCursor` nulo indica que no hay página siguiente. */
 export interface NotificationPage { items: UserNotification[]; nextCursor: string | null }
+
+export interface NotificationActivitySnapshot {
+  title: string; description: string; startAt: string; endAt: string;
+  location: ActivityDetail['location'] | null;
+}
+export interface NotificationActivityChange {
+  notificationId: string; activityId: string; title: string;
+  before: NotificationActivitySnapshot; after: NotificationActivitySnapshot;
+}

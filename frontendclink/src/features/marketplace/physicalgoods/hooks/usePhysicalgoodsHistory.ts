@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useCallback,useEffect,useState} from 'react';
 import {useAuth} from '@/features/auth/hooks/useAuth';
 import {AuthApiError} from '@/lib/api/authenticated-request';
 import {loadOwnPhysicalgoods,loadOwnPhysicalgoodsDetail,loadOwnPhysicalgoodsRequest,loadOwnPhysicalgoodsTransactions} from '../api/physicalgoodsApi';
@@ -22,7 +22,8 @@ export function usePhysicalgoodsHistory(active:boolean,transactions:boolean,refr
       }}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
   },[active,transactions,number,revision,refreshVersion]);
-  return {page,number,loading,error,setNumber,reload:()=>setRevision(value=>value+1)};
+  const reload=useCallback(()=>setRevision(value=>value+1),[]);
+  return {page,number,loading,error,setNumber,reload};
 }
 /** Cada apertura consulta el estado actual y descarta respuestas tardías al cerrar. */
 export function usePhysicalgoodsHistoryDetail(target:PhysicalgoodsHistoryTarget) {

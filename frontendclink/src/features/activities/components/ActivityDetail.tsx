@@ -1,5 +1,5 @@
 import { APP_COLORS } from '@/types/colors';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Flag, MapPinSearch, Repeat2, SquarePen, Trash, type LucideIcon } from 'lucide-react-native';
 import { useActivityDetail } from '../hooks/useActivityDetail';
@@ -17,9 +17,7 @@ import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
 import { useCompactScrollHeader, useScrollRefresh, useScrollReset } from '@/components/RefreshScrollView';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { recordViewedActivity } from '../api/activitiesApi';
-import { activityOperationId } from '../types/interaction';
-import { AuthApiError } from '@/lib/api/authenticated-request';
+import { useActivityView } from '../hooks/useActivityView';
 
 /** El texto nombra la acción; el ícono y su fondo son decorativos. */
 function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = false }: {
@@ -50,24 +48,11 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   locations?: ActivityLocationOption[]; onEdited?: (count: number) => void; onDeleted?: () => void;
   onEditOpen?: () => void;
 }) {
-  const { identity, refreshIdentity } = useAuth();
+  const { identity } = useAuth();
   const canViewOccurrences = identity?.capabilities.officialActivities === true;
   const { detail, ownParticipation, isLoading, error, refresh, join, leave, isUpdatingParticipation,
     pendingParticipation, participationError, remove, isDeleting, deletionError } = useActivityDetail(activityId);
-  const view = useRef<{ key: string; id: string; confirmed: boolean } | null>(null);
-  useEffect(() => {
-    if (!identity || !detail || isLoading || error || detail.campusId !== identity.campusId) return;
-    const key = JSON.stringify([identity.profile.id, identity.campusId, activityId]);
-    if (view.current?.key !== key) view.current = { key, id: activityOperationId(), confirmed: false };
-    if (view.current.confirmed) return;
-    const intent = view.current; const abort = new AbortController();
-    void recordViewedActivity(identity.campusId, activityId, intent.id, abort.signal).then(() => {
-      if (!abort.signal.aborted && view.current === intent) intent.confirmed = true;
-    }).catch(reason => {
-      if (!abort.signal.aborted && reason instanceof AuthApiError && [401, 403].includes(reason.status)) refreshIdentity();
-    });
-    return () => abort.abort();
-  }, [identity?.profile.id, identity?.campusId, activityId, detail?.id, detail?.campusId, isLoading, error, refreshIdentity]);
+  useActivityView(activityId, detail, isLoading, error);
   const busy = isUpdatingParticipation || isDeleting;
   const participationControls = (status: ActivityDetailData['participation']['status'], canJoin: boolean) =>
     <ActivityParticipationControls status={status} canJoin={canJoin} pending={pendingParticipation}

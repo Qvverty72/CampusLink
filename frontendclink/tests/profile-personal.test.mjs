@@ -47,6 +47,7 @@ function hooks() {
   const react = {
     useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial;
       return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; },
+    useRef(initial) { const i = index++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; },
     useCallback(fn, deps) { const i = index++, old = slots[i];
       if (!old || deps.some((value, j) => !Object.is(value, old.deps[j]))) slots[i] = { fn, deps }; return slots[i].fn; },
     useEffect(fn, deps) { const i = index++, old = slots[i];
@@ -111,7 +112,7 @@ test('manual profile refresh retains known counts, waits for both queries and hi
   assert.equal(requests[4].signal.aborted, true); h.unmount();
 });
 
-test('academic reload preserves confirmed data while loading and discards cancelled identity replies', async () => {
+test('academic data survives identity renewal, reloads explicitly and isolates user/campus replies', async () => {
   const h = hooks(), requests = []; let identity = { userId: 'user-a', campusId: 'campus-a', capabilities: { general: true }, roles: [], profile: {} };
   const { useProfile } = load('hooks/useProfile.ts', { react: h.react, '@/features/auth/hooks/useAuth': { useAuth: () => ({ identity, signOut: async () => {} }) },
     '../api/profileApi': { loadAcademicProfile: signal => new Promise((resolve, reject) => requests.push({ signal, resolve, reject })) },
@@ -119,13 +120,47 @@ test('academic reload preserves confirmed data while loading and discards cancel
   const render = () => h.render(useProfile);
   render(); assert.equal(render().academicLoading, true);
   requests[0].resolve({ fullName: 'Carlos', campusName: 'San Andrés', careers: [] }); await setImmediate();
+  identity = { ...identity, roles: [], profile: { nombre_completo: 'Carlos' } };
+  assert.equal(render().academicProfile.fullName, 'Carlos'); assert.equal(render().academicLoading, false);
+  assert.equal(requests.length, 1);
   render().reloadAcademicProfile(); render(); assert.equal(render().academicLoading, true); assert.equal(render().academicProfile.fullName, 'Carlos');
   requests[1].reject(new Error('offline')); await setImmediate(); assert.equal(render().academicLoading, false);
   assert.equal(render().academicProfile.campusName, 'San Andrés'); assert.ok(render().academicError);
+  render().reloadAcademicProfile(); render();
+  requests.at(-1).resolve({ fullName: 'Carlos', campusName: 'Campus', careers: [{ id: 'new-career', nombre: 'Career' }] }); await setImmediate();
+  assert.equal(render().academicProfile.careers[0].id, 'new-career'); assert.equal(render().academicError, null);
   render().reloadAcademicProfile(); render(); const old = requests.at(-1);
   identity = { ...identity, userId: 'user-b' }; assert.equal(render().academicProfile, null); assert.equal(old.signal.aborted, true);
   old.resolve({ fullName: 'Old' }); await setImmediate(); assert.equal(render().academicProfile, null);
+  const otherUser = requests.at(-1);
+  identity = { ...identity, campusId: 'campus-b' }; assert.equal(render().academicProfile, null); assert.equal(otherUser.signal.aborted, true);
+  otherUser.resolve({ fullName: 'Previous campus' }); await setImmediate(); assert.equal(render().academicProfile, null);
+  requests.at(-1).resolve({ fullName: 'New user', careers: [{ id: 'career', nombre: 'Career' }] }); await setImmediate();
+  assert.equal(render().academicProfile.careers[0].id, 'career');
+  identity = { ...identity, capabilities: { general: false } }; assert.equal(render().academicProfile, null);
+  assert.equal(render().academicLoading, false);
   h.unmount(); assert.equal(requests.at(-1).signal.aborted, true);
+});
+
+test('academic editor invalidates the header only after a successful, non-cancelled save', async () => {
+  const h = hooks(), calls = [], saves = [];
+  const profile = { fullName: 'Carlos', campusId: 'campus', careers: [], updatedAt: 'revision' };
+  const { useAcademicProfile } = load('hooks/useAcademicProfile.ts', { react: h.react,
+    '@/features/auth/hooks/useAuth': { useAuth: () => ({ refreshIdentity: () => calls.push('identity') }) },
+    '@/lib/api/authenticated-request': { AuthApiError: class extends Error {} },
+    '../api/profileApi': { loadAcademicProfile: async () => profile,
+      loadAcademicOptions: async () => ({ campuses: [{ id: 'campus' }], careers: [{ id: 'career', campusIds: ['campus'] }] }),
+      saveAcademicProfile: (input, signal) => new Promise((resolve, reject) => saves.push({ input, signal, resolve, reject })),
+    },
+  });
+  const render = () => h.render(() => useAcademicProfile(() => calls.push('saved')));
+  render(); await setImmediate(); render().setCareerIds(['career']);
+  let pending = render().save(); assert.deepEqual(calls, []); assert.deepEqual(Array.from(saves[0].input.careerIds), ['career']);
+  saves[0].resolve(); await pending; assert.deepEqual(calls, ['identity', 'saved']);
+  calls.length = 0; pending = render().save(); saves[1].reject(new Error('offline')); await pending;
+  assert.deepEqual(calls, []); assert.ok(render().error);
+  pending = render().save(); h.unmount(); assert.equal(saves[2].signal.aborted, true);
+  saves[2].resolve(); await pending; assert.deepEqual(calls, []);
 });
 
 function elements(node) {
@@ -133,11 +168,11 @@ function elements(node) {
   return [node, ...[node.props?.children].flat(4).flatMap(elements)];
 }
 
-test('profile wires the universal pull gesture to academic data, counters and bell, with loading/modal guards', () => {
+test('profile refreshes cards and bell while keeping academic chips visible, with initial/loading/modal guards', () => {
   const h = hooks(), calls = [], state = { academicLoading: false, academicProfile: { fullName: 'Carlos actualizado', careers: [] }, closing: false };
   const summary = { loading: false, retry: () => calls.push('summary') };
   const identity = { userId: 'user', campusId: 'campus', capabilities: { general: true }, roles: [], profile: { nombre_completo: 'Carlos anterior' } };
-  const academicSkeleton = () => null, countSkeleton = () => null, cards = () => null;
+  const academicSkeleton = () => null, countSkeleton = () => null, cards = () => null, account = () => null;
   const notifications = { unreadCount: 7, loading: false, refreshUnreadCount: () => calls.push('bell') };
   const { ProfileScreen } = load('components/ProfileScreen.tsx', {
     react: h.react, 'react/jsx-runtime': jsx, 'expo-router': { Link: 'Link' },
@@ -148,7 +183,7 @@ test('profile wires the universal pull gesture to academic data, counters and be
     '@/types/colors': { APP_COLORS: { PRIMARY: '#002E56', SECONDARY: '#3F6A8E', ACCENT: '#FDBB30' } },
     '../hooks/useProfile': { useProfile: () => ({ ...state, identity, auth: { session: { user: { email: 'test@duocuc.cl' } }, refreshIdentity: () => calls.push('identity') }, reloadAcademicProfile: () => calls.push('academic') }) },
     '../hooks/useUnreadNotificationCount': { useUnreadNotificationCount: () => notifications },
-    '../hooks/useProfileOverview': { useProfileOverview: () => summary }, './ProfileAccountModal': { ProfileAccountModal: () => null },
+    '../hooks/useProfileOverview': { useProfileOverview: () => summary }, './ProfileAccountModal': { ProfileAccountModal: account },
     './ProfilePersonalCards': { ProfilePersonalCards: cards }, './ProfileSkeleton': { ProfileAcademicSkeleton: academicSkeleton, ProfileNotificationCountSkeleton: countSkeleton },
     '../types/access': { canManageAccess: () => false }, '@/features/analytics/types/access': { canAccessAnalytics: () => false },
   });
@@ -157,56 +192,83 @@ test('profile wires the universal pull gesture to academic data, counters and be
   assert.equal(scroll.props.style.flex, 1);
   assert.equal(scroll.props.bounces, true); assert.equal(scroll.props.alwaysBounceVertical, true); assert.equal(scroll.props.overScrollMode, 'always');
   assert.equal(scroll.props.refreshIndicatorOffset, 28);
-  assert.equal(scroll.props.refreshEnabled, true); scroll.props.onRefresh(); assert.deepEqual(calls, ['identity', 'academic', 'summary', 'bell']);
+  assert.equal(scroll.props.refreshEnabled, true); scroll.props.onRefresh(); assert.deepEqual(calls, ['identity', 'summary', 'bell']);
   assert.ok(tree.some(node => node.props?.children === 'Carlos actualizado'));
   assert.equal(tree.some(node => node.type === countSkeleton), false);
   notifications.loading = true; tree = render(); assert.ok(tree.some(node => node.type === countSkeleton));
   assert.equal(tree.find(node => node.props?.accessibilityLabel === 'Notificaciones, actualizando contador').props.children[1].type, countSkeleton);
   notifications.loading = false;
   state.academicLoading = true; summary.loading = true; tree = render(); scroll = tree.find(node => node.type === 'UniversalScroll');
-  assert.equal(scroll.props.refreshing, true); assert.equal(scroll.props.refreshEnabled, false); assert.ok(tree.some(node => node.type === academicSkeleton));
+  assert.equal(scroll.props.refreshing, true); assert.equal(scroll.props.refreshEnabled, false); assert.equal(tree.some(node => node.type === academicSkeleton), false);
   assert.ok(tree.some(node => node.type === countSkeleton));
   assert.equal(tree.find(node => node.type === cards).props.loading, true);
-  assert.equal(tree.some(node => node.type?.name === 'AcademicChip'), false);
+  assert.equal(tree.filter(node => node.type?.name === 'AcademicChip').length, 2);
   state.academicLoading = false; tree = render();
-  assert.ok(tree.some(node => node.type === academicSkeleton)); assert.equal(tree.find(node => node.type === cards).props.loading, true);
+  assert.equal(tree.some(node => node.type === academicSkeleton), false); assert.equal(tree.find(node => node.type === cards).props.loading, true);
+  const confirmed = state.academicProfile;
+  state.academicProfile = null; state.academicLoading = true; tree = render();
+  assert.ok(tree.some(node => node.type === academicSkeleton)); assert.equal(tree.some(node => node.type?.name === 'AcademicChip'), false);
+  state.academicProfile = confirmed;
   state.academicLoading = false; summary.loading = false; tree = render();
   assert.equal(tree.some(node => node.type === academicSkeleton), false); assert.equal(tree.find(node => node.type === cards).props.loading, false);
   assert.equal(tree.some(node => node.type === countSkeleton), false);
   notifications.unreadCount = 0; tree = render();
   assert.ok(tree.some(node => node.props?.accessibilityLabel === 'Notificaciones')); assert.equal(tree.some(node => node.type === countSkeleton), false);
   tree.find(node => node.props?.accessibilityLabel === 'Abrir opciones de cuenta').props.onPress();
-  assert.equal(render().find(node => node.type === 'UniversalScroll').props.refreshEnabled, false);
+  tree = render(); assert.equal(tree.find(node => node.type === 'UniversalScroll').props.refreshEnabled, false);
+  tree.find(node => node.type === account).props.onAcademicSaved(); assert.equal(calls.at(-1), 'academic');
 });
 
-test('each profile section stays in its modal and activity details receive no map navigation callback', () => {
+test('personal sections retain their flows while enrolled activities only offer explicit map exploration', () => {
   const h = hooks(), names = ['publications', 'requests', 'transactions', 'resources', 'activities'];
-  const titles = Object.fromEntries(names.map(name => [name, name])); let section = 'activities', backs = 0;
+  const titles = Object.fromEntries(names.map(name => [name, name])); let section = 'activities', backs = 0; const maps = [];
   const history = () => null, detail = () => null, transaction = () => null, requests = () => null, acquired = () => null, activity = () => null;
+  let registration;
+  const own = { result: null, page: 1, loading: false, error: 'offline', reload: () => backs++, setPage: () => {} };
   const { ProfilePersonalScreen } = load('components/ProfilePersonalScreen.tsx', {
     'react/jsx-runtime': jsx, react: h.react,
-    'expo-router': { useLocalSearchParams: () => ({ section }), useRouter: () => ({ canGoBack: () => true, back() { backs++; } }) },
+    'expo-router': { useLocalSearchParams: () => ({ section }), useRouter: () => ({ canGoBack: () => true, back() { backs++; }, dismissTo(target) { maps.push(target); } }) },
     'react-native': { View: 'View', Text: 'Text', TouchableOpacity: 'Button', ActivityIndicator: 'Spinner', StyleSheet: { create: value => value } },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 20, bottom: 20 }) },
-    'lucide-react-native': Object.fromEntries(['CalendarCheck', 'ChevronRight', 'MapPin', 'RefreshCw', 'X'].map(name => [name, () => null])),
+    'lucide-react-native': Object.fromEntries(['CalendarCheck', 'MapPin', 'X'].map(name => [name, () => null])),
     '@/types/colors': { APP_COLORS: { PRIMARY: '#002E56', SECONDARY: '#3F6A8E' } },
     '@/features/auth/hooks/useAuth': { useAuth: () => ({ identity: { userId: 'user', campusId: 'campus', capabilities: { general: true } } }) },
-    '@/features/activities/components/ActivityDetail': { ActivityDetail: activity },
-    '@/components/RefreshScrollView': { RefreshScrollView: 'Scroll' },
+    '@/components/RefreshScrollView': { RefreshScrollView: 'Scroll', useScrollRefresh: (...args) => { registration = args; } },
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsHistory': { PhysicalgoodsHistory: history, PhysicalgoodsHistoryDetail: detail },
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsRequests': { PhysicalgoodsRequests: requests },
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsTransaction': { PhysicalgoodsTransaction: transaction },
     '@/features/marketplace/elibrary/components/AcquiredDigitalResources': { AcquiredDigitalResources: acquired },
-    './ProfilePersonalCards': { PERSONAL_TITLES: titles }, '../hooks/useOwnActivities': { useOwnActivities: () => { throw new Error('Unexpected preload'); } },
+    './ProfilePersonalCards': { PERSONAL_TITLES: titles }, '../hooks/useOwnActivities': { useOwnActivities: () => own },
   });
   const root = ProfilePersonalScreen(); const render = () => h.render(() => root.type(root.props));
   let tree = elements(render());
   const list = tree.find(node => typeof node.type === 'function' && node.type.name === 'OwnActivities');
   assert.ok(list); assert.equal(tree.some(node => [history, requests, acquired].includes(node.type)), false);
-  list.props.onSelect('123456789012345678901234'); tree = elements(render());
-  const selected = tree.find(node => node.type === activity);
-  assert.equal(selected.props.activityId, '123456789012345678901234'); assert.equal(selected.props.onExplore, undefined);
-  selected.props.onBack(); assert.ok(elements(render()).some(node => node.type === list.type));
+  list.type(list.props); assert.equal(registration[0], own.reload); assert.equal(registration[2], true);
+  assert.equal(elements(list.type(list.props)).some(node => node.props?.accessibilityLabel === 'Actualizar mis actividades'), false);
+  for (const total of [0, 1, 4, 5, 11]) {
+    own.result = { total, items: [], hasMore: total > 10 };
+    const content = elements(list.type(list.props));
+    assert.equal(content.some(node => node.props?.accessibilityLabel === 'Actividades anteriores'), total >= 5);
+    assert.equal(content.some(node => node.props?.accessibilityLabel === 'Actividades siguientes'), total >= 5);
+  }
+  const items = ['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY'].map((type, i) => ({ id: String(i + 1).repeat(24), type, title: `Actividad ${i + 1}`,
+    startAt: '2099-10-21T18:00:00Z', location: { buildingName: 'Cabaña A', floorName: 'Piso -1' } }));
+  own.result = { total: 2, items, hasMore: false };
+  const cards = elements(list.type(list.props)), buttons = cards.filter(node => node.type === 'Button');
+  assert.equal(cards.some(node => node.props?.children === 'Inscrito'), false);
+  assert.equal(cards.some(node => node.props?.accessibilityLabel?.startsWith('Ver actividad')), false);
+  assert.equal(list.props.onSelect, undefined); assert.equal(maps.length, 0);
+  assert.equal(buttons.length, items.length);
+  for (const [index, button] of buttons.entries()) {
+    assert.equal(button.props.accessibilityLabel, `Explorar ${items[index].title} en el mapa`);
+    assert.ok(elements(button).some(node => node.props?.children === 'Explorar actividad en el mapa'));
+    button.props.onPress(); assert.equal(maps[index].pathname, '/map'); assert.equal(maps[index].params.activityId, items[index].id);
+    assert.ok(elements(render()).some(node => node.type === list.type));
+  }
+  own.loading = true; const pending = elements(list.type(list.props)); assert.equal(registration[1], true); assert.equal(registration[2], false);
+  assert.ok(pending.filter(node => node.type === 'Button').every(node => node.props.disabled));
+  own.result = null; own.loading = false; tree = elements(render());
   tree.find(node => node.props?.accessibilityLabel === 'Cerrar consulta personal').props.onPress(); assert.equal(backs, 1);
   for (section of ['publications', 'requests', 'transactions', 'resources', 'invalid', ['activities']]) {
     const next = ProfilePersonalScreen(); tree = elements(h.render(() => next.type(next.props)));
@@ -216,4 +278,78 @@ test('each profile section stays in its modal and activity details receive no ma
     if (section === 'requests') assert.equal(tree.find(node => node.type === requests).props.onOpen, undefined);
     assert.equal(tree.some(node => node.type === activity), false);
   }
+});
+
+test('personal modal lists register their own queries and protect confirmation and download state', () => {
+  let registered;
+  const scroll = { useScrollRefresh: (onRefresh, refreshing, enabled) => { registered = { onRefresh, refreshing, enabled }; } };
+  const native = { View: 'View', Text: 'Text', Pressable: 'Button', TouchableOpacity: 'Button', ActivityIndicator: 'Spinner', StyleSheet: { create: value => value } };
+  const shared = { 'react/jsx-runtime': jsx, 'react-native': native, '@/components/RefreshScrollView': scroll };
+  const reload = () => {}, history = { reload, loading: false, page: null, number: 1 };
+  const { PhysicalgoodsHistory } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,
+    '../hooks/usePhysicalgoodsHistory': { usePhysicalgoodsHistory: () => history }, '../types/publication': { resourceConditions: [] } });
+  for (const transactions of [false, true]) {
+    PhysicalgoodsHistory({ active: true, transactions, refreshVersion: 0 }); assert.equal(registered.onRefresh, reload); assert.equal(registered.enabled, true);
+    history.loading = true; PhysicalgoodsHistory({ active: true, transactions, refreshVersion: 0 }); assert.equal(registered.refreshing, true); assert.equal(registered.enabled, false);
+    history.loading = false; PhysicalgoodsHistory({ active: true, transactions, refreshVersion: 0, refreshEnabled: false }); assert.equal(registered.enabled, false);
+  }
+  const requests = { reload, loading: false, busy: false, selection: null, page: null, number: 1 };
+  const { PhysicalgoodsRequests } = load('../marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx', { ...shared,
+    '../hooks/usePhysicalgoodsRequests': { usePhysicalgoodsRequests: () => requests } });
+  for (const received of [false, true]) {
+    PhysicalgoodsRequests({ active: true, received }); assert.equal(registered.onRefresh, reload); assert.equal(registered.enabled, true);
+    requests.busy = true; PhysicalgoodsRequests({ active: true, received }); assert.equal(registered.enabled, false); requests.busy = false;
+    requests.selection = { decision: 'ACEPTAR', request: { requester: {}, publication: {} } };
+    PhysicalgoodsRequests({ active: true, received }); assert.equal(registered.enabled, false); requests.selection = null;
+  }
+  const resources = { open: true, loading: false, downloading: null, items: [], page: 1, refresh: reload };
+  const { AcquiredDigitalResources } = load('../marketplace/elibrary/components/AcquiredDigitalResources.tsx', { ...shared,
+    '@/types/colors': { APP_COLORS: {} }, '../hooks/useAcquiredDigitalResources': { useAcquiredDigitalResources: () => resources } });
+  AcquiredDigitalResources({ embedded: true }); assert.equal(registered.onRefresh, reload); assert.equal(registered.enabled, true);
+  resources.downloading = 'file'; AcquiredDigitalResources({ embedded: true }); assert.equal(registered.enabled, false);
+});
+
+test('nested history/agreement modals use universal refresh and wait for their data without interrupting confirmations', () => {
+  const native = { Modal: 'Modal', View: 'View', Text: 'Text', Pressable: 'Button', ActivityIndicator: 'Spinner', StyleSheet: { create: value => value } };
+  const shared = { 'react/jsx-runtime': jsx, 'react-native': native, '@/components/RefreshScrollView': { RefreshScrollView: 'UniversalScroll' } };
+  const reload = () => {}, history = { detail: null, reload, loading: false };
+  const { PhysicalgoodsHistoryDetail } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,
+    '../hooks/usePhysicalgoodsHistory': { usePhysicalgoodsHistoryDetail: () => history }, '../types/publication': { resourceConditions: [] } });
+  const renderHistory = (refreshEnabled = true) => elements(PhysicalgoodsHistoryDetail({ target: { publicationId: 'publication' }, refreshEnabled })).find(node => node.type === 'UniversalScroll');
+  assert.equal(renderHistory().props.onRefresh, reload); assert.equal(renderHistory().props.refreshEnabled, true);
+  history.loading = true; assert.equal(renderHistory().props.refreshing, true); assert.equal(renderHistory().props.refreshEnabled, false);
+  history.loading = false; assert.equal(renderHistory(false).props.refreshEnabled, false);
+  const h = hooks(), agreement = { detail: null, reload, busy: false, loading: false, messagesLoading: false, optionsLoading: false, action: null, ratingConfirmation: false };
+  const { PhysicalgoodsTransaction } = load('../marketplace/physicalgoods/components/PhysicalgoodsTransaction.tsx', { ...shared, react: h.react,
+    '../hooks/usePhysicalgoodsTransaction': { usePhysicalgoodsTransaction: () => agreement }, '@/features/reports/components/ContentReportForm': { ContentReportForm: () => null } });
+  const render = (refreshEnabled = true) => elements(h.render(() => PhysicalgoodsTransaction({ target: {}, refreshEnabled }))).find(node => node.type === 'UniversalScroll');
+  assert.equal(render().props.onRefresh, reload); assert.equal(render().props.refreshEnabled, true);
+  assert.equal(render(false).props.refreshEnabled, false);
+  for (const key of ['loading', 'messagesLoading', 'optionsLoading']) { agreement[key] = true;
+    assert.equal(render().props.refreshing, true); assert.equal(render().props.refreshEnabled, false); agreement[key] = false; }
+  for (const key of ['busy', 'action', 'ratingConfirmation']) { agreement[key] = true;
+    assert.equal(render().props.refreshEnabled, false); agreement[key] = false; }
+});
+
+test('acquired resource refresh reloads the visible detail without returning to the list and cancels obsolete replies', async () => {
+  const h = hooks(), requests = [], lists = [];
+  const { useAcquiredDigitalResources } = load('../marketplace/elibrary/hooks/useAcquiredDigitalResources.ts', { react: h.react,
+    '../api/elibraryApi': { loadAcquiredDigitalResources: (page, signal) => new Promise((resolve, reject) => lists.push({ page, signal, resolve, reject })),
+      loadAcquiredDigitalResource: (id, signal) => new Promise((resolve, reject) => requests.push({ id, signal, resolve, reject })) },
+    '../api/saveDigitalFile': {},
+  });
+  const render = () => h.render(() => useAcquiredDigitalResources(true));
+  render(); assert.equal(render().loading, true); lists[0].resolve({ data: [{ id: 'one' }], meta: { hasMore: false } }); await setImmediate();
+  const stable = render().refresh; assert.equal(render().refresh, stable); stable(); render();
+  assert.equal(lists.length, 2); assert.equal(render().loading, true); lists[1].reject(new Error('offline')); await setImmediate();
+  assert.equal(render().loading, false); assert.ok(render().error);
+  let pending = render().show('one'); requests[0].resolve({ id: 'one', title: 'Original' }); await pending;
+  render().refresh(); assert.equal(render().loading, true); assert.equal(requests[1].id, 'one'); assert.equal(lists.length, 2);
+  requests[1].resolve({ id: 'one', title: 'Updated' }); await setImmediate(); assert.equal(render().detail.title, 'Updated');
+  render().refresh(); requests[2].reject(new Error('offline')); await setImmediate();
+  assert.equal(render().loading, false); assert.equal(render().detail.id, 'one'); assert.ok(render().error);
+  render().refresh(); pending = render().show('two'); assert.equal(requests[3].signal.aborted, true);
+  requests[3].resolve({ id: 'one', title: 'Obsolete' }); requests[4].resolve({ id: 'two', title: 'Second' }); await pending;
+  assert.equal(render().detail.id, 'two'); render().refresh(); h.unmount(); assert.equal(requests.at(-1).signal.aborted, true);
+  requests.at(-1).resolve({ id: 'two', title: 'After close' }); await setImmediate(); assert.equal(render().detail.title, 'Second');
 });

@@ -11,6 +11,7 @@ import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
 import type { PendingActivityNotification } from '../src/modules/activities/activities.notifications.repository.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityChangeDocument } from '../src/modules/activities/activities.edit.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
 import { publicationNotifications, changeNotification, groupedChangeNotification, occurrencePublicationNotification, participantsAtChange } from '../src/modules/activities/activities.notifications.js';
 
 const db = new PGlite();
@@ -390,6 +391,67 @@ test('notification acknowledgement only marks its scoped event, retaining activi
   } finally { dbMock.mock.restore(); }
 });
 
+test('change preview resolves the exact revision for official/community notices, including historical grouped edits', async () => {
+  const map: CampusMapDocument = { campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now, buildings: [
+    { id: 'a', name: 'Cabaña A', floors: [{ id: 'a1', name: 'Piso 1' }] },
+    { id: 'b', name: 'Cabaña B', floors: [{ id: 'b1', name: 'Piso 1' }] },
+  ] };
+  for (const type of ['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY']) {
+    const activityId = new ObjectId();
+    const before = { title: 'Original', description: 'Descripción', type, startAt: new Date('2099-10-21T18:00:00Z'),
+      endAt: new Date('2099-10-21T20:00:00Z'), location: { buildingKey: 'a', floorKey: 'a1' } };
+    const after = { ...before, title: 'Primera edición', startAt: new Date('2099-10-22T19:00:00Z'),
+      endAt: new Date('2099-10-22T21:00:00Z'), location: { buildingKey: 'b', floorKey: 'b1' } };
+    const first: ActivityChangeDocument = { _id: new ObjectId(), operationId: new ObjectId(), activityId, campusId,
+      actorUserId: userId, revision: 1, scope: 'ONE', changedAt: now, before, after,
+      changedFields: ['title', 'startAt', 'endAt', 'location'], notificationReasons: ['DATES_CHANGED', 'LOCATION_CHANGED', 'CONTENT_CHANGED'] };
+    const latest = { ...first, _id: new ObjectId(), operationId: new ObjectId(), revision: 2, before: after, after: { ...after, title: 'Edición posterior' } };
+    const document: ActivityDocument = { _id: activityId, campusId, createdByUserId: userId, ...latest.after, status: 'ACTIVE', visibility: 'PUBLIC',
+      participantCount: 1, createdAt: now, updatedAt: now, changeHistory: [first, latest] };
+    const dependencies = { now: () => now, getActiveMap: async () => map,
+      findActivity: async (campus: string, id: string) => { assert.equal(campus, campusId); assert.equal(id, activityId.toHexString()); return document; } };
+    const event = { ...task('ACTIVITY_CHANGED'), activityId: activityId.toHexString(), event: changeNotification(first, [userId]) };
+    await sql.deliverActivityNotification(event, [userId], transaction);
+    const notice = (await db.query<{ id: string }>('SELECT id FROM notificacion WHERE actividad_evento_clave=$1', [event.event.key])).rows[0];
+    const result = await operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies);
+    assert.ok('before' in result); assert.equal(result.notificationId, notice.id); assert.equal(result.title, first.after.title);
+    assert.equal(result.before.location?.buildingName, 'Cabaña A'); assert.equal(result.after.location?.buildingName, 'Cabaña B');
+    assert.equal(result.before.startAt, before.startAt.toISOString()); assert.equal(result.after.endAt, after.endAt.toISOString());
+    for (const key of ['actorUserId', 'changeHistory', 'operationId', 'recipientIds', 'actividad_evento_clave']) assert.equal(key in result, false);
+    assert.deepEqual(Object.keys(result.after).sort(), ['description', 'endAt', 'location', 'startAt', 'title']);
+    assert.equal((await db.query<{ leida_en: Date | null }>('SELECT leida_en FROM notificacion WHERE id=$1', [notice.id])).rows[0].leida_en, null, 'read-only query');
+
+    first.before.location = { buildingKey: 'removed', floorKey: 'gone' };
+    const missingLocation = await operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies);
+    assert.ok('before' in missingLocation); assert.equal(missingLocation.before.location, null);
+
+    const grouped = { ...event, event: groupedChangeNotification([first], new Map([[activityId.toHexString(), [userId]]])) };
+    await sql.deliverActivityNotification(grouped, [userId], transaction);
+    const groupedId = (await db.query<{ id: string }>('SELECT id FROM notificacion WHERE actividad_evento_clave=$1', [grouped.event.key])).rows[0].id;
+    const historic = await operation(auth, { id: groupedId, activityChange: true }, transaction, dependencies);
+    assert.ok('after' in historic); assert.equal(historic.after.title, first.after.title);
+
+    document.changeHistory = [latest];
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    document.changeHistory = [first, first];
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    document.changeHistory = [{ ...first, campusId: otherCampus }];
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    document.changeHistory = [{ ...first, before: { ...before, startAt: new Date('invalid') } }];
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    document.changeHistory = [first, latest]; document.visibility = 'HIDDEN';
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    document.visibility = 'PUBLIC'; document.endAt = now;
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    document.endAt = after.endAt; document.campusId = otherCampus;
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    document.campusId = campusId;
+    await assert.rejects(operation({ ...auth, userId: second, profile: { ...auth.profile, id: second } }, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+    await operation(auth, { id: notice.id, remove: true }, transaction);
+    await assert.rejects(operation(auth, { id: notice.id, activityChange: true }, transaction, dependencies), { status: 404 });
+  }
+});
+
 test('HTTP inbox/read/delete require identity, reject overrides and return own data without cache', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async input => {
@@ -407,6 +469,10 @@ test('HTTP inbox/read/delete require identity, reject overrides and return own d
   try {
     assert.equal((await originalFetch(url)).status, 401);
     assert.equal((await originalFetch(url + '/unread-count')).status, 401);
+    assert.equal((await originalFetch(url + '/' + randomUUID() + '/activity-change')).status, 401);
+    assert.equal((await originalFetch(url + '/invalid/activity-change', { headers })).status, 400);
+    assert.equal((await originalFetch(url + '/' + randomUUID() + '/activity-change?campusId=' + otherCampus, { headers })).status, 400);
+    assert.equal((await originalFetch(url + '/' + randomUUID() + '/activity-change', { headers })).status, 404);
     assert.equal((await originalFetch(url + '/unread-count?campusId=' + otherCampus, { headers })).status, 400);
     assert.equal((await originalFetch(url + '/unread-count?cursor=' + randomUUID(), { headers })).status, 400);
     const totalResponse = await originalFetch(url + '/unread-count', { headers });

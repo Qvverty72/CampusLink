@@ -33,6 +33,12 @@ También se exporta `ScrollRefreshRegistration` con las props `onRefresh`, `refr
 
 `useScrollReset(viewKey)` vuelve al inicio cuando cambia una vista/página. `useCompactScrollHeader()` oculta/restaura el encabezado del contenedor y devuelve su cierre opcional. Estos controles utilizan `onClose` y `onHeaderVisibilityChange` del scroll y no dependen de un dominio.
 
+Los callbacks registrados mediante `useScrollRefresh` deben ser estables (por ejemplo, con `useCallback`). El registro actualiza el contexto del contenedor; crear otro callback en cada render puede provocar un ciclo de registro y renderizado.
+
+En Perfil, las listas de publicaciones/transacciones, solicitudes enviadas/recibidas, recursos adquiridos e inscripciones registran la consulta de su vista visible. El modal de cuenta (Perfil académico/Cerrar sesión) y todas sus vistas de consulta/edición académica usan `ScrollView` normal, sin pull-to-refresh. Confirmaciones de solicitudes/acuerdos, denuncias, mutaciones y descargas bloquean el gesto para conservar el trabajo en curso. Los detalles físicos y acuerdos tienen su propio `RefreshScrollView`; el detalle de actividad reutiliza su registro existente. El refresh de un recurso adquirido consulta ese mismo detalle sin volver a la lista. Se conserva la página visible.
+
 En web, el gesto comienza arriba, con un dedo, movimiento vertical descendente de al menos 64 px y se confirma al soltar. No usa rueda/mouse. Limpia listeners y restaura overscroll al desmontar. En nativo también hay acción accesible para actualizar. No alternar este componente con un ScrollView simple según loading: eso remonta sus hijos y puede perder estado de formularios.
 
 El archivo anterior `features/activities/components/ActivityRefreshScrollView.tsx` conserva aliases de compatibilidad; los consumidores nuevos deben importar esta implementación compartida.
+
+La bandeja de Notificaciones conserva pull-to-refresh. Los avisos de actividad abiertos usan `ScrollView` normal, sin gesto de recarga. Los detalles físicos y acuerdos reciben `refreshEnabled={false}` cuando se abren desde Notificaciones; en otros puntos de entrada mantienen su comportamiento predeterminado.

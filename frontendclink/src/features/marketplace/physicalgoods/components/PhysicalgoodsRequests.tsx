@@ -1,11 +1,13 @@
 import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { usePhysicalgoodsRequests } from '../hooks/usePhysicalgoodsRequests';
+import { useScrollRefresh } from '@/components/RefreshScrollView';
 
 /** Lista propia por publicación: una reserva conserva las demás solicitudes pendientes. */
-export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,onDetail,received=true,refreshVersion=0}:{active:boolean;onOpen?:(id:string)=>void;onResolved:()=>void;
+export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,onDetail,received=true,refreshVersion=0,refreshEnabled=true}:{active:boolean;onOpen?:(id:string)=>void;onResolved:()=>void;refreshEnabled?:boolean;
   onDetail:(publicationId:string,requestId:string)=>void;
   onAgreement:(publicationId:string,transactionId:string)=>void;received?:boolean;refreshVersion?:number}) {
   const r=usePhysicalgoodsRequests(active,onResolved,received,refreshVersion);
+  useScrollRefresh(r.reload,r.loading,active&&refreshEnabled&&!r.busy&&!r.loading&&!r.selection,received?'las solicitudes recibidas':'mis solicitudes');
   const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled}
     onPress={action} style={[styles.button,disabled&&styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
   return <View style={styles.section}>

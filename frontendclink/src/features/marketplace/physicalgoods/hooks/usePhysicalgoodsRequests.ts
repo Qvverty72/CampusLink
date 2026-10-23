@@ -1,4 +1,4 @@
-import { useEffect,useRef,useState } from 'react';
+import { useCallback,useEffect,useRef,useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { loadPhysicalgoodsRequests,resolvePhysicalgoodsRequest } from '../api/physicalgoodsApi';
@@ -36,9 +36,10 @@ export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,rece
     catch(reason) { if(!abort.signal.aborted)report(reason); }
     finally {if(!abort.signal.aborted){running.current=false;setBusy(false);setRevision(value=>value+1);onResolved();}}
   }
+  const reload=useCallback(()=>{if(!running.current){setError(null);setSelection(null);setRevision(value=>value+1);}},[]);
   return {page,number,loading,busy,error,selection,resolve,
     select:(request:PhysicalgoodsReceivedRequest,decision:'ACEPTAR'|'RECHAZAR')=>{if(!running.current){setError(null);setSelection({request,decision});}},
     cancel:()=>{if(!running.current)setSelection(null);},
-    reload:()=>{if(!running.current){setError(null);setSelection(null);setRevision(value=>value+1);}},
+    reload,
     setNumber:(value:number)=>{if(!running.current){setError(null);setSelection(null);setNumber(value);}}};
 }

@@ -11,10 +11,11 @@ interface ProfileAccountModalProps {
   error: string | null;
   onClose: () => void;
   onSignOut: () => Promise<void>;
+  onAcademicSaved?: () => void;
 }
 
 /** Opciones de cuenta y consulta/edición académica dentro de un único modal. */
-export function ProfileAccountModal({ canEditAcademic, closing, error, onClose, onSignOut }: ProfileAccountModalProps) {
+export function ProfileAccountModal({ canEditAcademic, closing, error, onClose, onSignOut, onAcademicSaved }: ProfileAccountModalProps) {
   const [page, setPage] = useState<'menu' | 'academic'>('menu');
   const insets = useSafeAreaInsets();
   const academicVisible = page === 'academic' && canEditAcademic;
@@ -65,7 +66,7 @@ export function ProfileAccountModal({ canEditAcademic, closing, error, onClose, 
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            {academicVisible ? <AcademicProfileSection /> : <>
+            {academicVisible ? <AcademicProfileSection onSaved={onAcademicSaved} /> : <>
               {canEditAcademic && (
                 <TouchableOpacity
                   accessibilityRole="button"
