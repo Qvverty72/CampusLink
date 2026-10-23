@@ -16,6 +16,10 @@ export function createNotificationsRouter(operation = ownNotificationOperation):
     }
     next();
   });
+  router.get('/unread-count', async (request, response) => {
+    if (Object.keys(request.query).length) throw new ApiError(400, 'VALIDATION_ERROR', 'El contador no admite filtros.');
+    sendSuccess(response, await operation(response.locals.auth, { countOnly: true }));
+  });
   router.get('/', async (request, response) => {
     if (Object.keys(request.query).some(key => key !== 'cursor') || (request.query.cursor !== undefined
       && (typeof request.query.cursor !== 'string' || !uuid.test(request.query.cursor)))) {

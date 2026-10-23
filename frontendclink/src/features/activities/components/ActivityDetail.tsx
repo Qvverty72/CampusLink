@@ -15,7 +15,7 @@ import { ActivityDescription } from './ActivityDescription';
 import { ActivityBackButton } from './ActivityBackButton';
 import { ActivityWithdrawalButton } from './ActivityWithdrawalButton';
 import { ActivityContentTransition } from './ActivityContentTransition';
-import { useActivityCompactHeader, useActivityRefresh, useActivityScrollReset } from './ActivityRefreshScrollView';
+import { useCompactScrollHeader, useScrollRefresh, useScrollReset } from '@/components/RefreshScrollView';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { recordViewedActivity } from '../api/activitiesApi';
 import { activityOperationId } from '../types/interaction';
@@ -40,7 +40,7 @@ function DetailActionButton({ icon: Icon, label, onPress, disabled, danger = fal
 function ActivityReportView({ activityId, title, onBack }: {
   activityId: string; title: string; onBack: () => void;
 }) {
-  useActivityCompactHeader();
+  useCompactScrollHeader();
   return <ContentReportForm target={{ type: 'ACTIVIDAD', activityId }} title={title} onBack={onBack} />;
 }
 
@@ -79,13 +79,13 @@ export function ActivityDetail({ activityId, onBack, onExplore, onSelectOccurren
   const [editing, setEditing] = useState<ActivityDetailData | null>(null);
   const [reporting, setReporting] = useState<{ id: string; title: string } | null>(null);
   const editingOpen = Boolean(editing && locations);
-  useActivityScrollReset(`${activityId}:${canViewOccurrences && showSeries ? 'series' : 'detail'}`);
+  useScrollReset(`${activityId}:${canViewOccurrences && showSeries ? 'series' : 'detail'}`);
   useLayoutEffect(() => {
     if (editingOpen) onEditOpen?.();
   }, [editingOpen, onEditOpen]);
   const refreshSheet = useCallback(() => { setConfirmDelete(false); refresh(); }, [refresh]);
-  useActivityRefresh(refreshSheet, isLoading,
-    !busy && !isLoading && !editingOpen && !reporting && !showSeries);
+  useScrollRefresh(refreshSheet, isLoading,
+    !busy && !isLoading && !editingOpen && !reporting && !showSeries, 'la ficha');
   if (reporting?.id === activityId) return <ActivityContentTransition transitionKey="report">
     <ActivityReportView key={activityId} activityId={activityId}
       title={reporting.title} onBack={() => { setReporting(null); refresh(); }} />

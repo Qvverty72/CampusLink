@@ -223,9 +223,9 @@ modal, con indicador de carga. En información del piso actualiza los contadores
 actividades vigentes; en Detalle de actividades actualiza el listado para mostrar
 nuevas publicaciones, manteniendo ubicación y tipo seleccionados. En la ficha
 actualiza su consulta individual, en lugar del botón Actualizar ficha.
-`ActivityRefreshScrollView` conserva el scroll de piso, campus/edificio y notificaciones;
-`useActivityRefresh` registra la consulta de la vista visible. El componente nulo
-`ActivityRefreshRegistration` se monta únicamente en información del piso y en
+`RefreshScrollView` de `src/components` conserva el scroll de piso, campus/edificio y notificaciones;
+`useScrollRefresh` registra la consulta de la vista visible. El componente nulo
+`ScrollRefreshRegistration` se monta únicamente en información del piso y en
 listado/carga/error de `LocationActivities`, reutilizando `ActivitiesState.refresh`.
 La ficha registra su propio callback; formularios y detalle de POI no montan el
 registrador. No hay registros simultáneos de listado y ficha.

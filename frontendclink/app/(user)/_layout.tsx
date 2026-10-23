@@ -15,7 +15,8 @@ export default function UserLayout() {
     >
       <Stack.Screen name="profile" />
       <Stack.Protected guard={!!auth.identity?.capabilities.general}>
-        <Stack.Screen name="notifications" />
+        <Stack.Screen name="personal" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="notifications" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack.Protected>
       <Stack.Protected guard={auth.status === 'ready' && canManageAccess(auth.identity?.roles ?? [])}>
         <Stack.Screen name="access" />

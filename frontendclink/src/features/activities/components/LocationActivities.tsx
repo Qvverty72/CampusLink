@@ -11,7 +11,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { CreateActivityForm } from './CreateActivityForm';
 import { ACTIVITY_DESCRIPTION_OPTIONS, type ActivityLocationOption } from '../types/creation';
 import { ActivityContentTransition } from './ActivityContentTransition';
-import { ActivityRefreshRegistration } from './ActivityRefreshScrollView';
+import { ScrollRefreshRegistration } from '@/components/RefreshScrollView';
 
 const PAGE_SIZE = 5;
 const ACTIVITY_TYPES = ['OFFICIAL_EVENT', 'COMMUNITY_ACTIVITY'] as const;
@@ -101,7 +101,7 @@ function LocationActivitiesContent({ state, query = {}, onExplore, locations, ca
       onDeleted={() => { setSelectedId(null); setPublished('Actividad eliminada.'); state.refresh(); }}
       onBack={() => { setSelectedId(null); setPublished(null); state.refresh(); }} onExplore={onExplore} />
   </View>);
-  const listRefresh = <ActivityRefreshRegistration onRefresh={refreshList} refreshing={state.isLoading}
+  const listRefresh = <ScrollRefreshRegistration onRefresh={refreshList} refreshing={state.isLoading}
     enabled={!state.isLoading} label="las actividades" />;
   if (state.isLoading) return transition('loading', <View style={styles.section}>
     {listRefresh}

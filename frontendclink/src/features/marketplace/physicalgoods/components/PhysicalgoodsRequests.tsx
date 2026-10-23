@@ -2,7 +2,7 @@ import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { usePhysicalgoodsRequests } from '../hooks/usePhysicalgoodsRequests';
 
 /** Lista propia por publicación: una reserva conserva las demás solicitudes pendientes. */
-export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,onDetail,received=true,refreshVersion=0}:{active:boolean;onOpen:(id:string)=>void;onResolved:()=>void;
+export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,onDetail,received=true,refreshVersion=0}:{active:boolean;onOpen?:(id:string)=>void;onResolved:()=>void;
   onDetail:(publicationId:string,requestId:string)=>void;
   onAgreement:(publicationId:string,transactionId:string)=>void;received?:boolean;refreshVersion?:number}) {
   const r=usePhysicalgoodsRequests(active,onResolved,received,refreshVersion);
@@ -39,7 +39,7 @@ export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,onDe
         {button(`Rechazar solicitud de ${request.requester.fullName}`,()=>r.select(request,'RECHAZAR'),r.busy||r.loading)}
       </View>}
       {button('Ver solicitud: '+request.publication.title,()=>onDetail(request.publication.id,request.id),r.busy)}
-      {request.publication.canView!==false&&button('Ver recurso: '+request.publication.title,()=>onOpen(request.publication.id),r.busy)}
+      {onOpen&&request.publication.canView!==false&&button('Ver recurso: '+request.publication.title,()=>onOpen(request.publication.id),r.busy)}
     </View>)}
     <View style={styles.choices}>
       {button('Solicitudes anteriores',()=>r.setNumber(r.number-1),r.busy||r.loading||r.number===1)}

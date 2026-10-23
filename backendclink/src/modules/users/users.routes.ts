@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { getProfileOverview } from './profile-overview.service.js';
+import { sendSuccess } from '../../services/apiResponse.js';
 import { getUsersHealthController } from './users.controller.js';
 import { getAcademicProfileController, getAcademicOptionsController, updateAcademicProfileController } from './users.controller.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
@@ -9,6 +11,9 @@ import { createNotificationsRouter } from './notifications.routes.js';
 // Los diagnósticos son técnicos; las rutas de negocio verifican identidad y contexto.
 export function createUsersRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
+  router.get('/me/overview', requireAuthentication, async (_request, response) => {
+    sendSuccess(response, await getProfileOverview(response.locals.auth));
+  });
   router.use('/me/notifications', createNotificationsRouter());
   if (diagnosticsEnabled) router.get('/health', getUsersHealthController);
   router.get('/me/profile', requireAuthentication, getAcademicProfileController);

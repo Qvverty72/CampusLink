@@ -4,6 +4,14 @@ import type { NotificationPage } from '../types/notification';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Total de no leídas del usuario y alcance vigentes, sin depender de las páginas cargadas. */
+export async function fetchUnreadNotificationCount(signal?: AbortSignal): Promise<number> {
+  const response = await authenticatedEnvelopeRequest<{ unreadCount: number }>('/api/v1/users/me/notifications/unread-count', { signal });
+  const count = response.data?.unreadCount;
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error('No se pudo consultar el contador de notificaciones.');
+  return count;
+}
+
 /** Lee una página cursorada y valida IDs, tipos y marcas de tiempo antes de exponerla. */
 export async function fetchNotifications(cursor?: string, signal?: AbortSignal): Promise<NotificationPage> {
   const query = new URLSearchParams(); if (cursor) query.set('cursor', cursor);

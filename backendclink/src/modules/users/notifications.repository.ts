@@ -65,6 +65,13 @@ const ownNotificationScope=`n.destinatario_id=$1 AND (
   OR (n.tipo_notificacion='PHYSICAL_PUBLICATION_CLOSE_REMINDER' AND EXISTS(SELECT 1 FROM public.publicacion_recurso p
     WHERE p.id=n.publicacion_id AND p.tipo_recurso='FISICO' AND p.propietario_id=$1)))`;
 
+/** Total de no leídas en el mismo alcance de la bandeja, independiente de la paginación. */
+export async function countOwnUnreadNotifications(client: PoolClient, userId: string, campusId: string): Promise<number> {
+  const result = await client.query<{ unread_count: string }>(`SELECT COUNT(*)::text AS unread_count
+    FROM public.notificacion n WHERE ${ownNotificationScope} AND n.deleted_at IS NULL AND n.leida_en IS NULL`, [userId, campusId]);
+  return Number(result.rows[0].unread_count);
+}
+
 export async function listOwnNotifications(client: PoolClient, userId: string, campusId: string, cursor?: string): Promise<NotificationPage> {
   const result = await client.query<SqlNotification>(`WITH own AS (
       SELECT n.* FROM public.notificacion n WHERE ${ownNotificationScope})

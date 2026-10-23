@@ -9,7 +9,7 @@ import { AuthApiError } from '@/lib/api/authenticated-request';
 import { fetchActivitySeries } from '../api/activitiesApi';
 import { recurrenceSummary, type ActivitySeries } from '../types/recurrence';
 import type { Activity } from '../types/activity';
-import { useActivityCompactHeader, useActivityRefresh, useActivityScrollReset } from './ActivityRefreshScrollView';
+import { useCompactScrollHeader, useScrollRefresh, useScrollReset } from '@/components/RefreshScrollView';
 
 const OCCURRENCES_PER_PAGE = 5;
 
@@ -104,7 +104,7 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
   const { identity, refreshIdentity } = useAuth(); const [revision, setRevision] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [page, setPage] = useState(1);
-  const closeModal = useActivityCompactHeader();
+  const closeModal = useCompactScrollHeader();
   const canViewOccurrences = identity?.capabilities.officialActivities === true;
   const key = JSON.stringify([identity?.campusId, identity?.userId, canViewOccurrences, seriesId, revision]);
   const [state, setState] = useState<{ key: string; series: ActivitySeries | null; error: string | null }>({ key: '', series: null, error: null });
@@ -129,7 +129,7 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
   useLayoutEffect(() => {
     if (series) setPage(value => Math.min(value, totalPages));
   }, [series, totalPages]);
-  useActivityScrollReset(`series:${seriesId}:page:${page}`);
+  useScrollReset(`series:${seriesId}:page:${page}`);
   useEffect(() => {
     if (!series?.occurrences.length) return;
     const end = Math.min(...series.occurrences.map(value => Date.parse(value.endAt)));
@@ -142,7 +142,7 @@ export function ActivitySeriesView({ seriesId, currentActivityId, onBack, onSele
   }, []);
   const loading = canViewOccurrences && !series && !error;
   const refresh = useCallback(() => { setNow(Date.now()); setRevision(value => value + 1); }, []);
-  useActivityRefresh(refresh, loading, canViewOccurrences && !loading, 'la serie');
+  useScrollRefresh(refresh, loading, canViewOccurrences && !loading, 'la serie');
   const reference = series?.occurrences.find(activity => activity.id === currentActivityId) ?? series?.occurrences[0];
   const timeZone = series?.recurrence.timeZone;
   const pattern = series ? recurrenceSummary({ enabled: true, ...series.recurrence,

@@ -1,8 +1,8 @@
 import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 import { useAcquiredDigitalResources } from '../hooks/useAcquiredDigitalResources';
-export function AcquiredDigitalResources(){const state=useAcquiredDigitalResources();return <View style={styles.box}>
-  <Pressable accessibilityRole="button" onPress={state.toggle} style={styles.button}><Text style={styles.heading}>{state.open?'Cerrar materiales adquiridos':'Mis materiales adquiridos'}</Text></Pressable>
+export function AcquiredDigitalResources({embedded=false}:{embedded?:boolean}={}){const state=useAcquiredDigitalResources(embedded);return <View style={styles.box}>
+  {!embedded&&<Pressable accessibilityRole="button" onPress={state.toggle} style={styles.button}><Text style={styles.heading}>{state.open?'Cerrar materiales adquiridos':'Mis materiales adquiridos'}</Text></Pressable>}
   {state.open&&<>
     {state.error&&<Text style={styles.error} accessibilityLiveRegion="polite">{state.error}</Text>}
     {state.loading?<ActivityIndicator/>:state.detail?<>

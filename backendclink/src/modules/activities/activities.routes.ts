@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { getOwnActivities, type OwnActivityDependencies } from './activities.mine.service.js';
+import { sendSuccess } from '../../services/apiResponse.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { createActivitiesController, createActivityDetailController, createActivityPublicationController, createActivitySeriesController, createActivitySeriesDetailController, createActivityEditController } from './activities.controller.js';
@@ -14,8 +16,15 @@ import { createActivityViewController } from './activities.controller.js';
 import { parseActivityParticipantsQuery, parseActivityDeletion } from './activities.management.validation.js';
 
 /** Registra lecturas y mutaciones de actividades con autenticación y validadores específicos por ruta. */
-export function createActivitiesRouter(dependencies: ActivityEditDependencies = {}): Router {
+export function createActivitiesRouter(dependencies: ActivityEditDependencies & OwnActivityDependencies = {}): Router {
   const router = Router();
+  router.get('/mine/count', requireAuthentication, validateRequest({ query: parseEmptyActivityInput, body: parseEmptyActivityInput }), async (_request, response) => {
+    const result = await getOwnActivities(response.locals.auth, { limit: '1' }, dependencies);
+    sendSuccess(response, { campusId: result.campusId, total: result.total });
+  });
+  router.get('/mine', requireAuthentication, async (request, response) => {
+    sendSuccess(response, await getOwnActivities(response.locals.auth, request.query, dependencies));
+  });
   router.post('/:activityId/interactions', requireAuthentication,
     validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseActivityView }), createActivityViewController(dependencies));
   router.get('/community/creation-availability', requireAuthentication,

@@ -12,7 +12,7 @@ import { PointOfInterestDetail } from '@/three/components/PointOfInterestDetail'
 import { PointOfInterestBanner } from '@/three/components/PointOfInterestBanner';
 import { LocationActivities } from './LocationActivities';
 import { ActivityContentTransition } from './ActivityContentTransition';
-import { ActivityRefreshRegistration, ActivityRefreshScrollView } from './ActivityRefreshScrollView';
+import { ScrollRefreshRegistration, RefreshScrollView } from '@/components/RefreshScrollView';
 import type { ActivitiesState } from '../hooks/useLocationActivities';
 import { filterLocationActivities, type Activity } from '../types/activity';
 import { ACTIVITY_TYPES, ActivityTypeCounter } from './ActivityTypeCounter';
@@ -71,7 +71,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
         </View>
       </Pressable>
     </View> : null}
-    <ActivityRefreshScrollView ref={scroll} style={[styles.scroll, !headerVisible && styles.compactScroll]}
+    <RefreshScrollView ref={scroll} style={[styles.scroll, !headerVisible && styles.compactScroll]}
       onClose={onClose} onHeaderVisibilityChange={setHeaderVisible}
       contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <ActivityContentTransition transitionKey={viewKey} style={styles.transitionContent}>
@@ -82,7 +82,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
           activityType={activityType} locations={activityLocations(map)} onBackToFloorInfo={() => setActivityType(null)}
           onDetailVisibilityChange={setDetailOpen} onEditOpen={resetScroll} onPageChange={resetScroll} />
       </> : <>
-        <ActivityRefreshRegistration onRefresh={activities.refresh} refreshing={activities.isLoading}
+        <ScrollRefreshRegistration onRefresh={activities.refresh} refreshing={activities.isLoading}
           enabled={!activities.isLoading} label="las actividades del piso" />
         <View style={styles.overview}>
           <View style={styles.descriptionColumn}>
@@ -111,7 +111,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
         </View>
       </>}
       </ActivityContentTransition>
-    </ActivityRefreshScrollView>
+    </RefreshScrollView>
   </View>;
 }
 

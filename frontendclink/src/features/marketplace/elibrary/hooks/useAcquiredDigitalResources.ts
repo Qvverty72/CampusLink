@@ -2,8 +2,8 @@ import { useEffect,useRef,useState } from 'react';
 import { downloadDigitalFile,loadAcquiredDigitalResource,loadAcquiredDigitalResources } from '../api/elibraryApi';
 import { saveDigitalFile } from '../api/saveDigitalFile';
 import type { DigitalAttachment,DigitalPublication } from '../types/publication';
-export function useAcquiredDigitalResources(){
-  const [open,setOpen]=useState(false),[items,setItems]=useState<DigitalPublication[]>([]),[detail,setDetail]=useState<DigitalPublication|null>(null),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState<string|null>(null),[revision,setRevision]=useState(0),[downloading,setDownloading]=useState<string|null>(null);
+export function useAcquiredDigitalResources(initialOpen=false){
+  const [open,setOpen]=useState(initialOpen),[items,setItems]=useState<DigitalPublication[]>([]),[detail,setDetail]=useState<DigitalPublication|null>(null),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState<string|null>(null),[revision,setRevision]=useState(0),[downloading,setDownloading]=useState<string|null>(null);
   const request=useRef<AbortController|null>(null),download=useRef<AbortController|null>(null);
   useEffect(()=>()=>{request.current?.abort();download.current?.abort();},[]);
   useEffect(()=>{if(!open)return;const abort=new AbortController();setLoading(true);setItems([]);setError(null);setHasMore(false);void loadAcquiredDigitalResources(page,abort.signal).then(result=>{if(!abort.signal.aborted){setItems(result.data);setHasMore(result.meta.hasMore);}}).catch(()=>{if(!abort.signal.aborted)setError('No se pudieron cargar tus materiales adquiridos.');}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});return()=>abort.abort();},[open,page,revision]);

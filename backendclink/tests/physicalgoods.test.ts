@@ -136,7 +136,7 @@ before(async () => {
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
-    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria','interaccion_recurso','recurso_digital']) {
+    'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria','interaccion_recurso','recurso_digital','acceso_recurso_digital']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
@@ -896,6 +896,26 @@ async function requestedPair() {
   const b=await requestsService.createPhysicalgoodsRequest(second,saved.id,{messageCode:'PARA_MIS_ESTUDIOS'});
   return {saved,first,second,a,b};
 }
+
+test('profile overview counts own physical history across campuses and rejects stale or suspended accounts', async () => {
+  const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
+  const { saved, first, second, a } = await requestedPair();
+  assert.deepEqual(await getProfileOverview(auth), { activePublications: 1, pendingRequests: 2, transactions: 0, acquiredResources: 0 });
+  await resolveRequest(saved.id, a.id);
+  assert.equal((await getProfileOverview(auth)).pendingRequests, 1);
+  assert.equal((await getProfileOverview(auth)).transactions, 1);
+  assert.equal((await getProfileOverview(first)).transactions, 1);
+  assert.equal((await getProfileOverview(second)).transactions, 0);
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1', [saved.id]);
+  const withdrawn = await getProfileOverview(auth);
+  assert.equal(withdrawn.activePublications, 0); assert.equal(withdrawn.transactions, 1);
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1', [auth.userId, otherCampus]);
+  await assert.rejects(getProfileOverview(auth), { status: 409 });
+  const moved = { ...auth, campusId: otherCampus, profile: { ...auth.profile, campus_id: otherCampus } };
+  assert.equal((await getProfileOverview(moved)).transactions, 1);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1", [auth.userId]);
+  await assert.rejects(getProfileOverview(moved), { status: 403 });
+});
 const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',actor=auth)=>requestsService.resolvePhysicalgoodsRequest(actor,publicationId,requestId,{decision});
 const transactionRows=(publicationId:string)=>db.query('select * from transaccion_recurso where publicacion_id=$1 order by iniciada_en,id',[publicationId]);
 

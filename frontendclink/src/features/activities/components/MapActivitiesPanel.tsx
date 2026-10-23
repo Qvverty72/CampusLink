@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import type { ActivitiesState } from '@/features/activities/hooks/useLocationActivities';
 import { LocationActivities } from '@/features/activities/components/LocationActivities';
-import { ActivityRefreshScrollView } from './ActivityRefreshScrollView';
+import { RefreshScrollView } from '@/components/RefreshScrollView';
 import { filterLocationActivities, type Activity } from '@/features/activities/types/activity';
 import { useMapDataStore } from '@/three/store/mapDataStore';
 import { useMapStore } from '@/three/store/mapStore';
@@ -53,12 +53,12 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
             </View>
           </Pressable>
         </View> : null}
-        <ActivityRefreshScrollView ref={scroll} style={[styles.scroll, !headerVisible && styles.compactScroll]}
+        <RefreshScrollView ref={scroll} style={[styles.scroll, !headerVisible && styles.compactScroll]}
           onClose={close} onHeaderVisibilityChange={setHeaderVisible} keyboardShouldPersistTaps="handled">
           {activityType ? <LocationActivities key={`${buildingKey ?? 'campus'}:${activityType}`} state={state}
             activityType={activityType} query={{ buildingKey: buildingKey ?? undefined }} onExplore={explore} locations={activityLocations(map)}
             onDetailVisibilityChange={setDetailOpen} onEditOpen={resetScroll} onPageChange={resetScroll} /> : null}
-        </ActivityRefreshScrollView>
+        </RefreshScrollView>
       </View></View>
     </Modal>
   </>;

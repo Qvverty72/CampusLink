@@ -63,6 +63,31 @@ after(async () => {
 const dependencies = (documents: ActivityDocument[]) => ({ getActiveMap: async () => map,
   findActivities: async (campus: string) => { assert.equal(campus, campusId); return documents; }, now: () => now });
 
+test('personal activity reads are server-scoped, paginated after validation and omit restricted series metadata', async () => {
+  const { getOwnActivities, joinedActivitiesPipeline } = await import('../src/modules/activities/activities.mine.service.js');
+  const first = document(), second = document({ seriesId: new ObjectId(), occurrenceIndex: 1, occurrenceCount: 2, originalStartAt: now });
+  let reads = 0;
+  const deps = { ...dependencies([]), findJoinedActivities: async (campus: string, user: string) => {
+    reads++; assert.equal(campus, campusId); assert.equal(user, userId);
+    return [second, document({ status: 'HIDDEN' }), document({ campusId: otherCampus }), document({ endAt: now }), first];
+  } };
+  const result = await getOwnActivities(auth, { limit: '1', page: '2' }, deps);
+  assert.equal(result.total, 2); assert.equal(result.items.length, 1); assert.equal(result.hasMore, false);
+  assert.equal(result.items[0].series, undefined); assert.equal('createdByUserId' in result.items[0], false);
+  for (const query of [{ userId }, { campusId: otherCampus }, { status: 'LEFT' }, { page: '-1' }, { limit: '101' }, { page: ['1'] }]) {
+    await assert.rejects(getOwnActivities(auth, query, deps), { status: 400 });
+  }
+  assert.equal(reads, 1);
+  await assert.rejects(getOwnActivities({ ...auth, profile: { ...auth.profile, estado_cuenta: 'SUSPENDIDA' } }, {}, deps), { status: 403 });
+  assert.equal(reads, 1);
+  const pipeline = joinedActivitiesPipeline(campusId, userId, now);
+  assert.equal(pipeline[0].$match!.campusId, campusId);
+  const lookup = pipeline[1].$lookup!;
+  assert.equal(lookup.from, 'activity_participation');
+  assert.deepEqual(lookup.pipeline[0].$match, { campusId, userId, $expr: { $eq: ['$activityId', '$$activityId'] } });
+  assert.deepEqual(pipeline[2].$match!.$or, [{ 'ownParticipation.status': 'JOINED' }, { createdByUserId: userId, ownParticipation: { $size: 0 } }]);
+});
+
 test('future and ongoing activities use data IDs, support a floor without a POI and serialize dates', async () => {
   const future = document();
   const ongoing = document({ type: 'OFFICIAL_EVENT', startAt: new Date('2026-10-10T11:00:00Z'), endAt: new Date('2026-10-10T13:00:00Z'),
@@ -144,6 +169,7 @@ test('HTTP route rejects missing identity and filter overrides, returns an envel
   };
   const app = express();
   app.use('/api/v1/activities', createActivitiesRouter({ ...dependencies([document()]),
+    findJoinedActivities: async (campus, user) => { assert.equal(campus, campusId); assert.equal(user, userId); return [document()]; },
     findActivities: async () => { reads++; return [document()]; } }));
   app.use(apiErrorHandler);
   const server = app.listen(0, '127.0.0.1');
@@ -157,6 +183,14 @@ test('HTTP route rejects missing identity and filter overrides, returns an envel
     assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
     const body = await response.json(); assert.equal(body.data.length, 1); assert.equal(body.data[0].campusId, campusId);
     assert.equal(reads, 1);
+    assert.equal((await originalFetch(url + '/mine')).status, 401);
+    assert.equal((await originalFetch(url + '/mine/count')).status, 401);
+    assert.equal((await originalFetch(url + '/mine?userId=' + userId, { headers })).status, 400);
+    const mine = await originalFetch(url + '/mine?limit=1', { headers });
+    assert.equal(mine.status, 200); assert.equal(mine.headers.get('cache-control'), 'no-store');
+    assert.equal((await mine.json()).data.items.length, 1);
+    const total = await originalFetch(url + '/mine/count', { headers });
+    assert.deepEqual((await total.json()).data, { campusId, total: 1 });
   } finally {
     globalThis.fetch = originalFetch;
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

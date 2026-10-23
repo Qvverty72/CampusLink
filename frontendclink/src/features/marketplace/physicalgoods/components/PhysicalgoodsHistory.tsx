@@ -40,7 +40,7 @@ export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,o
 }
 
 export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement}:{target:PhysicalgoodsHistoryTarget;onClose:()=>void;
-  onOpen:(id:string)=>void;onAgreement:(publicationId:string,transactionId:string)=>void}) {
+  onOpen?:(id:string)=>void;onAgreement:(publicationId:string,transactionId:string)=>void}) {
   const h=usePhysicalgoodsHistoryDetail(target),detail=h.detail;
   const request=detail&&'publication' in detail?detail:null,publication=request?.publication??(detail&&'title' in detail?detail:null);
   return <Modal visible animationType="slide" onRequestClose={onClose}><ScrollView contentContainerStyle={styles.content}>
@@ -73,7 +73,7 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement}:{
           {image.principal&&<Text style={styles.text}>Imagen principal</Text>}
         </View>)}
       </>}
-      {publication.canView?button('Abrir recurso en mi campus',()=>onOpen(publication.id)):
+      {publication.canView ? onOpen && button('Abrir recurso en mi campus',()=>onOpen(publication.id)) :
         <Text style={styles.text}>Consulta histórica. Este recurso no está disponible para interacción en tu campus actual.</Text>}
     </View>}
   </ScrollView></Modal>;

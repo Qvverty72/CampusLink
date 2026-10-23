@@ -313,6 +313,47 @@ test('owner query/read/delete never expose another user/campus, and current prof
   await assert.rejects(operation({ ...auth, profile: { ...auth.profile, estado_cuenta: 'SUSPENDIDA' } }, {}, transaction), { status: 403 });
 });
 
+test('unread total covers every page, follows inbox scope and only changes after read/delete', async () => {
+  const countUser = randomUUID();
+  await db.query('INSERT INTO perfil_usuario VALUES ($1,$2,$3,NULL)', [countUser, campusId, 'ACTIVA']);
+  const countAuth = { ...auth, userId: countUser, profile: { ...auth.profile, id: countUser } };
+  const count = async () => {
+    const result = await operation(countAuth, { countOnly: true }, transaction);
+    assert.ok('unreadCount' in result); return result.unreadCount;
+  };
+  const initial = await count();
+  const noticeIds: string[] = [];
+  for (let index = 0; index < 35; index++) {
+    const event = task(); await sql.deliverActivityNotification(event, [countUser], transaction);
+    const row = await db.query<{ id: string }>('SELECT id FROM notificacion WHERE destinatario_id=$1 AND actividad_evento_clave=$2', [countUser, event.event.key]);
+    noticeIds.push(row.rows[0].id);
+  }
+  assert.equal(await count(), initial + 35);
+  const page = await operation(countAuth, {}, transaction); assert.ok('items' in page);
+  assert.equal(page.items.length, 30); assert.ok((await count()) > page.items.length);
+  await operation(countAuth, { id: noticeIds[0] }, transaction);
+  await operation(countAuth, { id: noticeIds[0] }, transaction);
+  assert.equal(await count(), initial + 34);
+  await operation(countAuth, { id: noticeIds[1], remove: true }, transaction);
+  await operation(countAuth, { id: noticeIds[1], remove: true }, transaction);
+  assert.equal(await count(), initial + 33);
+
+  const publication = randomUUID(), foreignPublication = randomUUID();
+  await db.query('INSERT INTO publicacion_recurso VALUES ($1,$2,$3),($4,$5,$3)', [publication, countUser, 'FISICO', foreignPublication, second]);
+  // Otro usuario/campus y recordatorio de publicación ajena no pertenecen al alcance.
+  await db.query(`INSERT INTO notificacion(destinatario_id,campus_id,actividad_id,tipo_notificacion,mensaje,actividad_evento_clave)
+    VALUES ($1,$2,$3,'OFFICIAL_EVENT_PUBLISHED','foreign campus',$4),($5,$6,$3,'OFFICIAL_EVENT_PUBLISHED','foreign user',$7)`,
+  [countUser, otherCampus, id.toHexString(), randomUUID(), second, campusId, randomUUID()]);
+  await db.query(`INSERT INTO notificacion(destinatario_id,campus_id,publicacion_id,tipo_notificacion,mensaje)
+    VALUES ($1,$2,$3,'PHYSICAL_PUBLICATION_CLOSE_REMINDER','own original campus'),
+      ($1,$2,$4,'PHYSICAL_PUBLICATION_CLOSE_REMINDER','foreign owner')`, [countUser, otherCampus, publication, foreignPublication]);
+  assert.equal(await count(), initial + 34);
+  await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1', [countUser, otherCampus]);
+  try { await assert.rejects(count(), { status: 403 }); }
+  finally { await db.query('UPDATE perfil_usuario SET campus_id=$2 WHERE id=$1', [countUser, campusId]); }
+  await assert.rejects(operation({ ...countAuth, profile: { ...countAuth.profile, estado_cuenta: 'SUSPENDIDA' } }, { countOnly: true }, transaction), { status: 403 });
+});
+
 test('cursor pagination retains all notices without duplicate/skipped rows, including a deleted cursor', async () => {
   for (let index = 0; index < 35; index++) {
     const event = task('ACTIVITY_CHANGED'); event.event.occurredAt = new Date(now.getTime() + index);
@@ -365,6 +406,13 @@ test('HTTP inbox/read/delete require identity, reject overrides and return own d
   const headers = { Authorization: 'Bearer notification.test.token', 'Content-Type': 'application/json' };
   try {
     assert.equal((await originalFetch(url)).status, 401);
+    assert.equal((await originalFetch(url + '/unread-count')).status, 401);
+    assert.equal((await originalFetch(url + '/unread-count?campusId=' + otherCampus, { headers })).status, 400);
+    assert.equal((await originalFetch(url + '/unread-count?cursor=' + randomUUID(), { headers })).status, 400);
+    const totalResponse = await originalFetch(url + '/unread-count', { headers });
+    assert.equal(totalResponse.status, 200); assert.equal(totalResponse.headers.get('cache-control'), 'no-store');
+    const total = (await totalResponse.json()).data;
+    assert.ok(Number.isSafeInteger(total.unreadCount)); assert.ok(total.unreadCount > 30);
     for (const method of ['PUT', 'DELETE']) assert.equal((await originalFetch(url + '/' + randomUUID() + (method === 'PUT' ? '/read' : ''), { method })).status, 401);
     assert.equal((await originalFetch(url + '?campusId=' + otherCampus, { headers })).status, 400);
     assert.equal((await originalFetch(url + '?cursor=invalid', { headers })).status, 400);

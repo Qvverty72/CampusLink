@@ -414,6 +414,22 @@ async function acquisition(publicationId: string, receiverId: string, confirmati
   if (confirmations > 1) await db.query("insert into confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) values($1,$2,'RECEPTOR')", [transactionId, receiverId]);
   return transactionId;
 }
+
+test('profile overview counts only legitimate digital acquisitions and preserves withdrawn originals', async () => {
+  const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
+  const saved = await service.createDigitalPublication(auth, input(), file()), receiver = await peer(), other = await peer();
+  const transactionId = await acquisition(saved.id, receiver.userId, 1);
+  assert.equal((await getProfileOverview(receiver)).acquiredResources, 0);
+  await db.query("INSERT INTO confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) VALUES($1,$2,'RECEPTOR')", [transactionId, receiver.userId]);
+  assert.equal((await getProfileOverview(receiver)).acquiredResources, 1);
+  assert.equal((await getProfileOverview(other)).acquiredResources, 0);
+  assert.equal((await getProfileOverview(auth)).activePublications, 0);
+  await db.query("UPDATE publicacion_recurso SET deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1", [saved.id]);
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='DESACTIVADA' WHERE id=$1", [auth.userId]);
+  assert.equal((await getProfileOverview(receiver)).acquiredResources, 1);
+  await db.query('DELETE FROM acceso_recurso_digital WHERE transaccion_id=$1', [transactionId]);
+  assert.equal((await getProfileOverview(receiver)).acquiredResources, 0);
+});
 async function attach(id: string, bytes: Buffer | null = pdf, extra = false) {
   const body = new FormData(); if (bytes) body.append('file', new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), 'segundo.pdf');
   if (extra) body.append('metadata', '{}');

@@ -6,7 +6,7 @@ import { fetchNotifications, updateNotification } from '../api/notificationsApi'
 import type { UserNotification } from '../types/notification';
 
 /** Pagina notificaciones y refleja lecturas/eliminaciones solo tras el acuse del servidor. */
-export function useActivityNotifications() {
+export function useActivityNotifications(onChanged?: () => void) {
   const { refreshIdentity } = useAuth();
   const [items, setItems] = useState<UserNotification[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -47,6 +47,7 @@ export function useActivityNotifications() {
       if (!abort.signal.aborted) {
         setItems(current => remove ? current.filter(row => row.id !== item.id)
           : current.map(row => row.id === item.id ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row));
+        onChanged?.();
         if (!remove) {
           if(item.type==='PHYSICAL_PUBLICATION_CLOSE_REMINDER')setPublicationId(item.publicationId);
           else setActivityId(item.activityId);
