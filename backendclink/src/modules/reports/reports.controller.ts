@@ -7,6 +7,36 @@ import type { AuthLocals } from '../auth/auth.types.js';
 import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
 import { reportPhysicalgoods } from './reports.physicalgoods.service.js';
 import { reportDigitalResource } from './reports.elibrary.service.js';
+import { getReportedOriginal, getReportReview, listReportReviews, listReportResolutions, getReportResolution } from './reports.review.service.js';
+import { sendSuccess as sendEnvelope } from '../../services/apiResponse.js';
+import { resolveReport } from './reports.resolution.service.js';
+
+type ReviewHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const listReportResolutionsController: ReviewHandler = async (request, response) => {
+  const result = await listReportResolutions(response.locals.auth, request.params.campusId, request.query);
+  sendEnvelope(response, result.data, { meta: result.meta });
+};
+export const getReportResolutionController: ReviewHandler = async (request, response) => {
+  sendSuccess(response, await getReportResolution(response.locals.auth, request.params.campusId, request.params.reportId));
+};
+export const resolveReportController: ReviewHandler = async (request, response) => {
+  sendSuccess(response, await resolveReport(response.locals.auth, request.params.campusId, request.params.reportId, request.body));
+};
+export const listReportReviewsController: ReviewHandler = async (request, response) => {
+  const result = await listReportReviews(response.locals.auth, request.params.campusId, request.query);
+  sendEnvelope(response, result.data, { meta: result.meta });
+};
+export const getReportReviewController: ReviewHandler = async (request, response) => {
+  sendSuccess(response, await getReportReview(response.locals.auth, request.params.campusId, request.params.reportId));
+};
+export const downloadReportedOriginalController: ReviewHandler = async (request, response) => {
+  const file = await getReportedOriginal(response.locals.auth, request.params.campusId, request.params.reportId, request.params.fileId);
+  const name = encodeURIComponent(file.name).replace(/['()*]/g, character => '%' + character.charCodeAt(0).toString(16));
+  response.setHeader('Content-Type', 'application/octet-stream');
+  response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${name}`);
+  response.setHeader('Content-Length', file.bytes.length);
+  response.send(file.bytes);
+};
 
 export const getReportsHealthController: RequestHandler = async (_request, response) => {
   sendModuleHealth(response, await getReportsHealth());

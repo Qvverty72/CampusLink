@@ -12,6 +12,18 @@ import { spatialBuildings } from './activities.location.js';
 import type { ActivityChangeDocument } from './activities.edit.types.js';
 import type { ActivityDocument, ActivityParticipationDocument, ActivityParticipantsQuery, ActivityParticipantsRecords, ActivityDeletionResult } from './activities.types.js';
 
+/** Ocultamiento idempotente: conserva estado temporal, datos, historial e inscripciones de la ocurrencia. */
+export async function hideReportedActivity(campusId: string, activityId: string): Promise<void> {
+  const activities = getMongoDb().collection<ActivityDocument>('activities');
+  const key = { campusId, _id: new ObjectId(activityId) };
+  const changed = await activities.findOneAndUpdate({ ...key, visibility: 'PUBLIC', deletedAt: null },
+    { $set: { visibility: 'HIDDEN', updatedAt: new Date() }, $inc: { editRevision: 1 } }, { returnDocument: 'after' });
+  if (changed) return;
+  const current = await activities.findOne(key);
+  if (!current) throw new ApiError(409, 'CONFLICT', 'La actividad vinculada ya no está disponible.');
+  if (current.visibility !== 'HIDDEN' && !current.deletedAt) throw new ApiError(409, 'CONFLICT', 'No se pudo ocultar la actividad en su estado actual.');
+}
+
 /** Una instantánea mantiene total, creador legado y página coherentes durante altas y bajas. */
 export async function findActivityParticipants(document: ActivityDocument, query: ActivityParticipantsQuery,
   currentUserId: string): Promise<ActivityParticipantsRecords> {

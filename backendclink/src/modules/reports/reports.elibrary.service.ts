@@ -12,7 +12,6 @@ export async function reportDigitalResource(auth:VerifiedAuthConnection,rawId:un
   const id=digitalId(rawId),tradeId=rawTrade===null?null:digitalId(rawTrade,'transactionId'),parsed=parseContentReport(raw);
   if(!parsed.success)throw new ApiError(400,'VALIDATION_ERROR','Revisa los datos de la denuncia.',{details:parsed.issues});
   const input=parsed.data as ContentReportInput;
-  if(/\u0000/.test(input.reason+(input.description??'')))throw new ApiError(400,'VALIDATION_ERROR','El motivo o descripción contiene caracteres inválidos.');
   return withDigitalTradeContext(auth,id,async(client,resource,current)=>{
     if(!tradeId&&!(await findDigitalPublications(client,resource.institucion_id,id)).length)throw new ApiError(404,'NOT_FOUND','La publicación no está disponible para denunciar.');
     const trade=tradeId?await findDigitalTrade(client,id,tradeId):null;

@@ -4,6 +4,31 @@ import type { ActivityDependencies } from '../activities/activities.service.js';
 
 export type ReportsHealth = ModuleHealth<'reports'>;
 
+export interface ReportReviewSummary {
+  id: string; campusId: string; entityType: string; entityId: string;
+  title: string | null; reason: string; status: string; reportedAt: string;
+}
+export interface ReportReviewDetail extends ReportReviewSummary {
+  resolution: { justification: string; measure: string; resolvedById: string; resolvedAt: string } | null;
+  description: string | null;
+  reporter: { id: string; name: string | null };
+  snapshot: (Record<string, unknown> & {
+    publication?: Record<string, unknown> & { id?: string; tipo_recurso?: string; files?: { id?: string }[] };
+    transaction?: Record<string, unknown> & { id?: string };
+  }) | null;
+  currentPublication: { id: string; title: string; status: string; deletedAt: string | null } | null;
+  currentTransaction: Record<string, unknown> | null;
+}
+
+export interface ReportResolutionSummary extends ReportReviewSummary {
+  resolution: { justification: string | null; measure: string | null; resolvedById: string | null; resolvedAt: string | null };
+}
+export interface ReportResolutionDetail extends Omit<ReportReviewDetail, 'resolution'> {
+  resolution: ReportResolutionSummary['resolution'];
+}
+
+export interface ReportResolutionInput { decision: 'DESESTIMAR' | 'ACOGER'; justification: string }
+
 export interface ContentReportInput { reason: string; description?: string }
 export type ReportActivityInput = ContentReportInput;
 export interface ContentReportReceipt { id:string;campusId:string;status:'PENDIENTE';reportedAt:string }

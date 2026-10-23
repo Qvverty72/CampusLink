@@ -514,11 +514,33 @@ Servicio físico de reports revalida perfil/roles/campus y bloquea perfil→publ
 
 Frontend mantiene reports/api→useContentReport→ContentReportForm dentro de los detalles existentes. La extracción sustituye el formulario/hook exclusivos de actividades, sin archivos puente, stores o pantallas nuevas. Conserva texto al fallar, bloquea doble envío/cierre durante envío y descarta respuestas al cambiar identidad/elemento o desmontar. Un acuse perdido no provoca reenvío automático; la UI informa que puede haberse guardado y que reenviar puede crear otra denuncia, como el flujo previo de actividades. No se introduce una regla de deduplicación no definida por el backlog.
 
-La denuncia queda para moderación F2.8-02/03; este ticket no añade lectura/listado/resolución pública de casos ni denuncias de valoraciones. Motivo/denunciante/contexto siguen privados al registro administrativo. El Issue75 conserva una referencia antigua a MOD-04; el backlog vigente F2.4-12/F2.8-01 define motivo/descripción/PENDIENTE y no incluye esa espera. La diferencia se documenta en GH-75 sin inventar catálogo o medidas administrativas.
+La denuncia queda para moderación F2.8-02/03; no hay lectura/listado/resolución pública de casos ni denuncias de valoraciones. Motivo/denunciante/contexto siguen privados al registro administrativo. El Issue75 conserva una referencia antigua a MOD-04; el backlog vigente F2.4-12/F2.8-01 define motivo/descripción/PENDIENTE y no incluye esa espera. La diferencia se documenta en GH-75 sin inventar catálogo o medidas administrativas.
+
+### Revisión administrativa de denuncias (F2.8-02)
+
+Desde Mi perfil → Denuncias de contenido, un ADMINISTRADOR elige entre sus campus activos y consulta casos paginados. No basta ACCEDER_REPORTERIA. La API vuelve a leer cuenta y roles vigentes dentro de la transacción; la asignación administrativa puede corresponder a una sede distinta de la del perfil. Todas las rutas requieren Bearer y responden no-store:
+
+- GET `/api/v1/reports/campuses/:campusId?page=1&limit=20`: data con id, campusId, entityType/entityId, título de evidencia, reason, status y reportedAt; meta page/limit/hasMore, máximo100. Rechaza filtros desconocidos; orden fecha/ID descendente y campus aplicado antes de paginar.
+- GET `/api/v1/reports/campuses/:campusId/:reportId`: detalle privado con reporter `{id,name}`, description, snapshot inmutable y antecedentes actuales separados de publicación/transacción (participantes, estados, confirmaciones). Sigue leyendo evidencia tras edición, ocultamiento o retirada, sin consultar visibilidad pública ni sustituir el snapshot por el contenido actual. Sin query adicional.
+- GET `/api/v1/reports/campuses/:campusId/:reportId/files/:fileId`: bytes originales de un archivo digital presente en el snapshot del caso, incluso retirado lógicamente. Revalida vínculo recurso/archivo/campus, bucket/path/tipo/tamaño y autorización administrativa antes y después de Storage. Respuesta octet-stream con Content-Disposition attachment; no entrega rutas Storage ni URLs firmadas. No concede adquisiciones ni amplía descarga normal de biblioteca. Sin query adicional.
+
+400 entrada inválida;401 sesión ausente/inválida;403 cuenta/administración/campus activo;404 caso o archivo ajeno/no vinculado;503 dependencia sin información interna. Lectura no cambia estado a EN_REVISION ni resuelve casos; la resolución pertenece a F2.8-03. No esquema, funciones SQL, triggers, migraciones o dependencias nuevas. Evidencia permanece solo en memoria del cliente; cambios de cuenta/sede/caso cancelan peticiones y descartan respuestas anteriores.
 
 **Sin SQL pendiente ni cambios de esquema/dependencias:** reutiliza exclusivamente `reporte_contenido` y columnas originales, incluyendo su JSON/estados/defaults. Inspección Supabase READ ONLY del2026-10-15 confirmó RLS, SELECT/INSERT servidor y ausencia de acceso directo anon/authenticated. Sin tablas, atributos, índices, migraciones, env nuevos ni denuncias remotas de prueba.
 
 Validación local:381/381 tests backend con Node22.23.3 (113 físicos,9 nuevos), TypeScript/build backend, TypeScript frontend y export web/Android/iOS --no-bytecode. QA Edge390×844/1280×900 como propietario/receptor: publicación/acuerdos en todos sus estados, motivo/descripción, doble clic, error/reintento, recibo,404, respuesta incierta/recibo incorrecto, campus anterior, respuesta tardía descartada y regresión del envío de actividades desde notificaciones. Regresiones de fotografías/contenido/retirada, transacciones/coordinación, valoraciones, historial y recordatorios aprobadas. QA con datos/dispositivos reales y contención remota multiconexión quedan para cierre de fase.
+
+### Resolver denuncias (F2.8-03)
+
+`POST /api/v1/reports/campuses/:campusId/:reportId/resolution`, Bearer y sin query, recibe únicamente `{decision:'DESESTIMAR'|'ACOGER', justification:string}`. Justificación obligatoria, normalizada y limitada a 2000 caracteres; NUL y campos adicionales rechazados. Las dos decisiones fueron aprobadas por el usuario el 2026-10-22: desestimar sin modificar contenido o acoger y ocultar la publicación/ocurrencia vinculada. La API deriva medida, responsable, campus y fecha, revalida cuenta/administración por sede bajo bloqueo e impide procesar casos finales de nuevo (409).
+
+Respuesta200 `no-store` con detalle del caso y `resolution:{justification,measure:'NINGUNA'|'OCULTAR',resolvedById,resolvedAt}`; GET de detalle también incorpora `resolution` (null sin decisión). DESESTIMAR termina en DESESTIMADO; ACOGER termina en RESUELTO. Denuncia y evidencia original no se reemplazan. Auditoría F2.3-08 conserva decisión/justificación/actor/campus/fecha y snapshots antes/después, con enlace al caso y objetivo original. Estados finales no tienen API de edición o reapertura.
+
+Publicación: se bloquea la fila del campus y se cambia a OCULTO, conservando retirada lógica previa y todos sus antecedentes; para transacciones se obtiene el vínculo de SQL, sin confiar en el snapshot. Publicación, decisión y auditoría comparten transacción. No se borran ni cancelan solicitudes, transacciones, confirmaciones, derechos o archivos; una adquisición completada sigue habilitando descarga.
+
+Actividad: como MongoDB y PostgreSQL son motores distintos, primero se conserva la decisión en los campos existentes del caso en EN_REVISION; luego se revalida autorización y se oculta únicamente la ocurrencia (`visibility:HIDDEN`, incremento de revisión), sin borrar datos/inscripciones/historial ni cambiar su estado temporal. Tras confirmar Mongo se cierra RESUELTO y se audita en la misma transacción SQL. Un fallo puede dejar EN_REVISION con contenido ya oculto; la UI exige recargar y ofrece completar la misma decisión, preservando justificación, administrador y fecha originales. No permite sustituirla por otra; el ocultamiento repetido no vuelve a incrementar revisión. No hay atomicidad distribuida ni worker de reintentos; el cierre se recupera explícitamente desde el caso. No se informa éxito antes del cierre SQL.
+
+400 entrada inválida;401 identidad;403 cuenta/administración/sede;404 caso fuera del campus;409 caso final, decisión en curso diferente o vínculo incompatible;503 dependencia/acuse incierto, sin detalles privados y con recarga del caso. La pantalla incluye justificación, confirmación explícita, estado de envío, consulta del resultado y protección contra respuestas tardías al cambiar identidad/campus/caso. Sin tablas, columnas, funciones SQL, triggers, migraciones, dependencias o variables nuevas.
 
 ## Publicación digital (F2.5-01)
 
@@ -593,7 +615,126 @@ Expo registra una vista al abrir correctamente la ficha, sin señales por tarjet
 
 Las rutas existentes `POST /marketplace/physicalgoods/:id/requests` y `POST /marketplace/elibrary/:id/requests` aceptan `Idempotency-Key: UUIDv4`. El cliente debe conservarla ante resultados inciertos. La PK de la solicitud deriva de esa clave y del actor; un replay devuelve la solicitud original incluso si fue resuelta, sin crear otro evento. Reutilizarla con distinto recurso o mensaje devuelve409. La cabecera es opcional por compatibilidad; clientes anteriores sin clave conservan únicamente la protección contra solicitudes activas duplicadas. Los clientes Expo actualizados la envían y la conservan al reintentar. Las confirmaciones y los cierres conservan sus protecciones idempotentes previas; nuevas fechas usan `clock_timestamp()` para registrar el instante de escritura después de adquirir los locks.
 
-Actividades reutilizan `activity_interactions` VIEWED/JOINED/LEFT y su cobertura LEGACY_STATE. Cuentas reutilizan la auditoría atómica anterior/nueva: `readAccountStateAnalyticsEvents` conserva cambios de estado aunque el perfil se desactive o cambie de sede. Los futuros KPI deben reconstruir el estado al corte con esos cambios, sin contar únicamente el estado actual. Consultas de eventos son internas; quien implemente F2.7-02/03 debe autorizar el campus y período en servicio/controlador antes de invocarlas. No hay API pública de lectura de métricas, tablero, eventos de búsqueda ni índices, tablas, columnas, funciones SQL o triggers nuevos.
+Actividades reutilizan `activity_interactions` VIEWED/JOINED/LEFT y su cobertura LEGACY_STATE. Cuentas reutilizan la auditoría atómica anterior/nueva: `readAccountStateAnalyticsEvents` conserva cambios de estado aunque el perfil se desactive o cambie de sede. Las proyecciones de eventos son internas; los consumidores deben autorizar campus y período antes de invocarlas. F2.7-02 añade la consulta autenticada del tablero descrita a continuación. Sin eventos de búsqueda ni índices, tablas, columnas, funciones SQL o triggers nuevos.
+
+## Tablero de cuatro KPI esenciales (F2.7-02)
+
+`GET /api/v1/analytics/dashboard?from=2026-10-01&to=2026-10-21&campusId=<uuid>` requiere Bearer y cuenta activa. Desde F2.7-04, `from` y `to` son fechas civiles válidas e inclusivas de `America/Santiago`; `campusId` es opcional y toma el campus vigente del perfil. El servicio exige `reports`: ADMINISTRADOR o USUARIO_AUTORIZADO con ACCEDER_REPORTERIA en cada sede consultada. ACCEDER_ANALITICA por sí solo no concede el tablero. Cada campus debe estar activo y pertenecer a la institución del perfil, aunque el usuario envíe otro UUID o tenga asignaciones inconsistentes. Filtros institucionales y agrupaciones se describen a continuación.
+
+Respuesta `{data:{scope,period,generatedAt,activeUsers,resourceDemand,subjectDemand,activityParticipation,grouping,intervals,notes}}`. Cada KPI contiene `value`, `period` y `scope` (IDs/nombres de institución/campus). `period` incluye `from`, `to`, `timeZone:'America/Santiago'` y `cutoff` exclusivo expresado como instante ISO UTC: inicio del día siguiente en la zona institucional, limitado a `generatedAt` para el período en curso. Ambos motores consultan `[from,cutoff)`, sin truncar los microsegundos SQL. Un rango totalmente futuro tiene valores KPI `null`. 400 filtros/fechas/agrupación/rango inválidos;401 sesión;403 ámbito/permiso;503 dependencia consultada. Todas las respuestas son no-store; un fallo SQL o MongoDB no se convierte en cuatro ceros ni devuelve KPI parciales.
+
+- `activeUsers`: cuentas creadas antes del corte y no eliminadas antes de él, con estado ACTIVA reconstruido usando estados antes/después de auditoría. Incluye perfiles hoy suspendidos/desactivados cuando eran activos al corte y perfiles sin evento de creación. No equivale a inicios de sesión. La pertenencia al campus es la del perfil al consultar: el esquema actual no tiene historial de cambios de campus.
+- `resourceDemand`: `views` y `requests` separados, `value=views+requests`. Cuenta VISTA de interaccion_recurso y cada solicitud por solicitada_en, incluso cancelada/resuelta y con publicaciones/actores retirados. Un recurso sin asignatura sigue contando.
+- `subjectDemand`: `subjects:[{subjectId,subjectName,views,requests}]`, totales separados y `value=views+requests` de esas asociaciones. Usa publicacion_asignatura vigente, incluso asignaturas deshabilitadas; cada hecho cuenta una vez por asignatura. Un recurso con varias asignaturas contribuye a cada una, por lo que este total no representa interacciones exclusivas.
+- `activityParticipation`: JOINED históricos en activity_interactions (incluido creador/reinscripciones), sin restar LEFT ni consultar visibilidad actual de la actividad. `label:'Inscripciones registradas'` y `legacyEvents` explican la cobertura parcial importada. No representa asistencia presencial ni participantes actuales.
+
+Las notas visibles explican cobertura parcial anterior, asociaciones actuales y estado auditado. La API no recupera vistas que antes se agruparon por24h ni transiciones nunca registradas. No se guarda ninguna instantánea ni se altera el esquema. Arquitectura: router → controller → analytics.service (validación/autorización/DTO) → analytics.repository (agregaciones SQL/MongoDB). Frontend separa pantalla, hook de carga cancelable, API y tipos; borra métricas ante cambios de identidad/alcance y refresca identidad ante401/403.
+
+## Filtros institucionales de analítica (F2.7-03)
+
+`GET /api/v1/analytics/options`, autenticado y sin query, devuelve `{data:{institutions:[{id,name,campuses:[{id,name}],careers:[{id,name,campusIds}]}]}}`. Solo incluye campus activos con capacidad `reports` vigente y pertenecientes a la institución del perfil. Las carreras corresponden a oferta o asociaciones directas de perfiles/publicaciones de esas sedes. Incluye relaciones académicas inactivas conservadas para analítica; no expone usuarios, publicaciones ni métricas. No concede acceso a otras instituciones por tener una asignación inconsistente.
+
+`GET /api/v1/analytics/dashboard?institutionId=<uuid>&campusIds=<uuid>,<uuid>&careerId=<uuid>&from=2026-10-01&to=2026-10-21` selecciona una institución, uno o varios campus y carrera opcional. Se normalizan UUID y campus repetidos sin multiplicar conteos. `campusIds` es una cadena separada por comas, no parámetros repetidos/arrays. Se mantiene `campusId` para consumidores de una sola sede; no puede combinarse con `campusIds`. Institución omitida toma la del perfil; campus omitidos toman el del perfil. Carrera omitida significa ausencia de filtro (incluye registros sin clasificación). Institución/carrera inválidas, sedes ajenas o inactivas y permisos revocados reciben403 antes de leer MongoDB; sintaxis/campos extra reciben400. Fallos de cualquiera de los motores reciben503, sin KPI parciales.
+
+El mismo ámbito llega a todos los KPI: cuentas por campus actual y `usuario_carrera`; demanda por campus de origen de la publicación y `publicacion_carrera`; demanda de asignaturas agrega `publicacion_asignatura` de esos mismos recursos; participación filtra campus del evento y carrera actual del participante por `userId`, sin exigir estado de cuenta activo actual. Las asociaciones de carrera/asignatura digitales son independientes: no se exige que la asignatura pertenezca a la carrera seleccionada ni que esa carrera se ofrezca en el campus de origen del recurso. Se usan `EXISTS` y agregados por publicación para evitar multiplicar eventos por carreras; el total sin filtro no suma subtotales de carreras. El estado de cuenta conserva la reconstrucción al corte ya documentada.
+
+`scope` añade `campuses:[{id,name}]` y `career:{id,name}|null`; conserva `institutionId/institutionName` y `campusName` (nombres separados por coma). `campusId` conserva el UUID con una sede y pasa a null con varias. Cada tarjeta recibe el mismo scope, período y carrera. Las consultas dinámicas usan relaciones actuales, que pueden alterar métricas al editar una asociación; las cifras entre carreras no son exclusivas. Las instantáneas de F2.7-06 deberán preservar filtros y resultados sin recalcularlos; esta tarea no crea almacenamiento de reportes.
+
+Expo consulta las opciones del servidor y ofrece institución, selección múltiple de sedes y carrera opcional, con rótulo del ámbito en cada tarjeta. Permite abrir Analítica con permiso en otra sede aunque la sede actual del perfil carezca de él. Cambios de identidad, permisos o filtros retiran datos anteriores inmediatamente y abortan/descartan respuestas tardías; seleccionar cero campus no consulta métricas. Consultar/reintentar renueva opciones y fechas. El cálculo sigue en servicio/repositorio; no se filtran cifras en el cliente. Sin tablas, funciones SQL, triggers, migraciones ni dependencias nuevas.
+
+## Métricas por período (F2.7-04)
+
+El mismo endpoint admite `grouping=week|month` (predeterminado `month`). Ejemplo: `/api/v1/analytics/dashboard?from=2026-09-01&to=2026-10-21&grouping=week&campusIds=<uuid>,<uuid>`. La zona institucional es `America/Santiago`, confirmada por el usuario para GH-99; no se acepta una zona arbitraria del cliente. Semanas de lunes a domingo, meses calendario y máximo 260 intervalos por consulta (400 si se excede). El inicio/final del rango recortan los intervalos extremos. La API convierte fechas civiles mediante Temporal, ya instalado, respetando días de 23/25 horas y medianoches inexistentes por horario de verano. Los eventos originales no se modifican.
+
+`intervals` está ordenado y contiene `{key,label,period,status,coverage,metrics}`. `key` es la fecha civil de inicio de la semana/mes completo, incluso si se recorta. `period` identifica los días incluidos y el corte exclusivo efectivo. `metrics` contiene los cuatro KPI, con su ámbito/período y demanda por asignatura. La demanda y las inscripciones pueden sumarse entre intervalos contiguos del mismo reporte; los usuarios activos son saldos independientes al corte y **no se suman**. El total raíz usa la misma definición de cálculo y el último corte efectivo.
+
+- `status:'recorded'`: hay vistas, solicitudes o inscripciones registradas.
+- `status:'no_activity'`: cero vistas, solicitudes e inscripciones registradas. Puede haber cuentas activas al corte.
+- `status:'unavailable'`, `coverage:'unavailable'`, `metrics:null`: intervalo futuro, sin observaciones disponibles; no equivale a cero.
+- Para intervalos observables, `coverage:'partial'`: las fuentes históricas no tienen metadata que certifique captura completa. Cero registros no garantiza que toda actividad real haya sido capturada; la primera fila tampoco demuestra cuándo empezó la cobertura. Se conserva `legacyEvents` y la advertencia de vistas antiguas coalescidas. No se inventa una fecha de despliegue ni se introduce persistencia adicional. Para un rango enteramente futuro, los `value` raíz son `null`; los contadores auxiliares vacíos no deben interpretarse como observaciones.
+
+Servicio valida fechas, agrupación, límites y permisos, genera un solo instante de corte y coordina repositorios; frontend solo presenta resultados. SQL obtiene todos los cortes de cuentas en una consulta y toda la demanda/asignaturas en otra usando rangos parametrizados, `date_trunc` con zona explícita y relaciones existentes sin multiplicar hechos por carreras. MongoDB realiza una agregación con `$facet` (total/períodos), `$dateTrunc` y `startOfWeek:'monday'`. Ambos reciben los mismos extremos; no hay consultas de red por intervalo. Se conservan bajas lógicas, estado auditado, filtros institucionales y permisos de cada sede.
+
+Expo ofrece semana/mes, resumen y evolución por intervalo con fechas, ámbito, usuarios al corte, vistas/solicitudes separadas, asignaturas e inscripciones. La agrupación confirmada forma parte de la identidad de consulta: una respuesta mensual tardía no reemplaza una semanal. Fechas iniciales de pantalla también se calculan en `America/Santiago`.
+
+La issue menciona ANA-10, cuya definición no existe en el backlog primario actual. La decisión del usuario en GH-99 fija explícitamente zona y semanas; no se afirma conformidad con un texto no disponible. No hay DDL, funciones SQL nuevas, triggers, tablas, migraciones, paquetes ni escrituras de analítica adicionales. Reportes persistidos siguen fuera de alcance (F2.7-06).
+
+## Generación de reporte analítico (F2.7-05)
+
+`POST /api/v1/analytics/reports` requiere Bearer y `Content-Type: application/json`. Recibe los mismos filtros que el tablero en un cuerpo JSON, sin query:
+
+```json
+{
+  "institutionId": "<uuid>",
+  "campusIds": "<uuid>,<uuid>",
+  "careerId": "<uuid>",
+  "from": "2026-09-01",
+  "to": "2026-09-30",
+  "grouping": "week"
+}
+```
+
+`from/to` son obligatorios, civiles inclusivos en America/Santiago. `grouping` admite `week|month` (mes por defecto); semanas lunes-domingo, hasta 260 intervalos. Institución y campus omitidos usan el perfil vigente. `careerId` se omite para consultar sin filtro de carrera. `campusIds` conserva la cadena de UUID separados por coma del tablero; `campusId` sigue disponible como alternativa de una sede y no se combina con `campusIds`. El servicio normaliza y valida todos los filtros; no acepta cifras, fechas de generación ni responsables aportados por el cliente.
+
+200 `{data: AnalyticalReport}`: mismo contrato completo de `DashboardData` (`scope`, `period`, `generatedAt`, `grouping`, cuatro KPI, `intervals`, `notes`), más `generatedBy:{userId,name}` obtenido de la identidad verificada y `calculationVersion:"campuslink-kpi-v1"`. Desde F2.7-06 añade `id` UUID de la instantánea guardada. Los nombres institucionales/campus/carrera proceden del repositorio. `generatedAt` es el instante de inicio del cálculo; es también el límite común de observación del período en curso. La versión identifica las definiciones actuales de F2.7-01..04; un cambio semántico futuro debe revisarla. Los indicadores, notas y metadatos de disponibilidad conservan su significado del tablero: cuentas activas al corte (no sumar saldos), vistas/solicitudes separadas, demanda por asignatura no exclusiva, inscripciones sin afirmar asistencia y asociaciones académicas actuales.
+
+Router autenticado → controller de transporte → `generateAnalyticalReport` → `getDashboard` → repositorios existentes. Toda generación vuelve a verificar cuenta y asignaciones vigentes; se exige `reports` en **cada** campus y la institución/carrera deben ser válidas para ese ámbito. No reutiliza resultados recibidos del navegador. 400 por filtros/cuerpo/query inválidos, 401 por sesión, 403 por autorización/ámbito y 503 por fuente no disponible, sin cifras parciales; `Cache-Control:no-store` en todas las respuestas autenticadas. Mismos parámetros y hechos disponibles producen iguales cifras que el tablero; consultas separadas pueden observar nuevas escrituras, y SQL/Mongo no comparten instantánea distribuida.
+
+En Expo, “Generar reporte” envía los filtros y fechas del formulario y presenta ámbito, carrera o ausencia de filtro, período, agrupación, fecha/hora institucional y responsable junto a las mismas tarjetas/evolución del tablero. Desde F2.7-06 confirma “Reporte analítico guardado”, muestra su identificador e indica generar uno nuevo para actualizar cifras. Durante carga/error se retiran las cifras anteriores; cambiar selección/identidad o salir cancela la solicitud y descarta respuestas tardías. “Consultar” vuelve al tablero. Sin tablas, funciones SQL, triggers, migraciones, paquetes ni variables de entorno adicionales.
+
+## Instantánea histórica del reporte (F2.7-06)
+
+Cada `POST /api/v1/analytics/reports` calcula mediante `getDashboard` y guarda **un registro nuevo** en la tabla `public.reporte` existente antes de responder con éxito. La API construye tanto metadatos como resultados: el cuerpo sigue aceptando exclusivamente filtros; no acepta `id`, fecha, responsable, versión ni JSON de resultados del cliente.
+
+Arquitectura: router autenticado → controller HTTP → servicio (validación, autorización, cálculo y DTO) → repositorio (SQL parametrizado). Tras calcular PostgreSQL/Mongo, una transacción SQL corta relee y bloquea el perfil y las asignaciones del solicitante con los mecanismos existentes; comprueba de nuevo cuenta activa, contexto institucional/campus y reportería sobre **cada** sede incluida antes del INSERT. No mantiene bloqueos SQL durante la agregación Mongo. Revocación durante el cálculo impide guardar; cambio de campus/institución devuelve409. Error de inserción o commit devuelve503 sanitizado sin resultado exitoso; no hay escritura parcial dentro de la transacción ni sobrescritura de reportes anteriores.
+
+- `snapshot_json`: DTO `AnalyticalReport` completo, incluido `id`, responsable/nombre, `scope` con institución/campus/carrera y sus nombres al generar, `period` con zona/corte, agrupación, fecha, cuatro KPI, desglose por asignatura, intervalos, disponibilidad, notas y versión `campuslink-kpi-v1`.
+- `filtros_json`: `{institutionId,campusIds:string[],careerId:string|null,from,to,grouping}` normalizados; sin duplicados de campus. Permite conservar todas las sedes aunque `campus_id` relacional sea null para reportes múltiples.
+- Columnas existentes: responsable, institución, campus único o null, carrera opcional, `tipo_reporte=KPI_ESENCIALES`, `agrupacion=SEMANA|MES`, `generado_en=generatedAt`. `periodo_desde/periodo_hasta` representan el rango solicitado `[inicio,fin exclusivo)` en instantes UTC derivados de America/Santiago; el corte efectivo del período en curso y las fechas civiles inclusivas permanecen en el JSON. Los cambios DST se respetan.
+
+`GET /api/v1/analytics/reports/:reportId` requiere Bearer, UUID válido y **ningún filtro/query**. Devuelve200 `{data:AnalyticalReport}` exactamente como se guardó. Consulta por PK/institución/tipo y verifica cuenta y reportería actuales sobre todos los campus conservados en `scope`; la autoría no sustituye el permiso. 400 por ID/query inválidos,401 sin sesión,403 por cuenta/permisos,404 por reporte inexistente o de otra institución,503 por dependencia no disponible. `Cache-Control:no-store`. No llama a `getDashboard`, no consulta hechos SQL/Mongo ni vuelve a obtener los nombres del responsable/catálogos: ediciones, cambios de carrera, nuevos hechos y bajas lógicas no modifican las cifras o metadatos originales. El ámbito histórico puede incluir catálogos hoy inactivos; solo se evalúan los permisos actuales del lector, sin reactivar contenido operacional.
+
+El módulo no ofrece UPDATE, DELETE ni upsert de instantáneas. Para cifras actualizadas se genera otro reporte con nuevo UUID, fecha y resultado, preservando los anteriores. Consultas sucesivas durante la generación pueden observar escrituras nuevas: SQL y Mongo siguen sin una instantánea distribuida. La cancelación o pérdida de respuesta no revierte un commit del servidor; reenviar POST puede producir otro reporte. No se añade deduplicación no definida por el backlog.
+
+Sin SQL pendiente: inspección Supabase READ ONLY confirmó las columnas existentes de `reporte`, RLS habilitado y ausencia de privilegios directos anon/authenticated. La API usa la conexión SQL de servidor existente. Sin DDL, índices, funciones SQL, triggers, migraciones, nuevas dependencias o escrituras remotas de prueba. Listado/filtros de historial y comparación visual corresponden a F2.7-07; exportación PDF/Excel a F2.7-08. Esas tareas deben consumir la instantánea y volver a autorizar cada campus.
+
+Referencias: [PostgreSQL date_trunc y zonas](https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC), [MongoDB $dateTrunc](https://www.mongodb.com/docs/manual/reference/operator/aggregation/datetrunc/).
+
+## Consulta de reportes históricos (F2.7-07)
+
+`GET /api/v1/analytics/reports` requiere Bearer y devuelve200 `{data:{items:HistoricalReportSummary[],nextCursor:string|null}}`. Cada resumen conserva `id`, `generatedAt`, `generatedBy`, `scope`, `period`, `grouping` y `calculationVersion` de la instantánea original, sin cifras recalculadas ni nombres obtenidos de catálogos actuales. No se restringe al autor: cualquier lector actualmente autorizado en todos los campus del reporte puede consultarlo.
+
+Filtros query opcionales:
+
+- `institutionId`: UUID; por defecto institución actual. Otra institución devuelve403.
+- `campusIds`: cadena de UUID separados por coma. Coincide con reportes que incluyan al menos uno de los campus seleccionados; el lector debe conservar permiso en **todos** los campus de cada reporte. Sin filtro, todos sus ámbitos autorizados. Un campus solicitado sin permiso devuelve403.
+- `careerId`: UUID; coincide con la carrera guardada. Omitido incluye reportes con cualquier carrera o sin filtro de carrera.
+- `from`, `to`: fechas civiles inclusivas `AAAA-MM-DD`, ambas opcionales; intersección con el período consultado guardado, **no** con la fecha de generación. Rango invertido/fecha inválida devuelve400.
+- `grouping`: `week|month`; omitido incluye ambas.
+- `limit`: entero1..50,20 por defecto. `cursor`: valor opaco `nextCursor` de la página anterior; omitir para volver al inicio. Fecha de generación e ID descendentes ofrecen orden estable incluso con empates o nuevas generaciones.
+
+Ejemplo: `GET /api/v1/analytics/reports?campusIds=<uuid>&from=2026-09-01&to=2026-09-30&grouping=week`.
+
+Cuenta, institución y capacidades vigentes se verifican en la API. La consulta parametrizada filtra el **ámbito completo** de cada instantánea antes de limitar la página, así que no filtra metadatos, tamaños ni cursores de reportes inaccesibles. No consulta publicaciones, carreras, perfiles del autor ni MongoDB; campus/carreras hoy inactivos conservan sus nombres y resultados históricos. Sin coincidencias responde200 con `items:[]` y `nextCursor:null`. 400 por parámetros desconocidos, repetidos o inválidos;401 sin sesión;403 por cuenta/alcance;503 sanitizado por dependencia. `Cache-Control:no-store`. No hay nuevas tablas, funciones SQL, triggers, índices, migraciones ni cambios de escritura.
+
+Expo ofrece “Consultar reportes históricos” desde el tablero. El historial permite filtrar, paginar, abrir y comparar dos instantáneas, incluso de páginas diferentes, con sus parámetros, cuatro KPI, intervalos, notas, corte y versión de cálculo. Apertura, reapertura y comparación consultan `GET /reports/:reportId`, comprobando nuevamente los permisos; no invocan dashboard ni POST. La presentación `AnalyticsResults` es común al tablero, generación e historial. Errores no muestran cifras parciales; cambiar identidad/permisos, cerrar o reemplazar solicitudes retira resultados y descarta respuestas tardías. Los catálogos vigentes son ayuda opcional para seleccionar filtros; un catálogo sin sedes activas no impide consultar el historial. Exportación PDF/Excel permanece en F2.7-08.
+
+## Exportar reportes guardados (F2.7-08)
+
+`GET /api/v1/analytics/reports/:reportId/export/:format`, Bearer, sin query ni filtros nuevos. `reportId` debe ser el UUID de una instantánea existente y `format` debe ser `pdf` o `xlsx`. Responde200 con bytes y `Content-Disposition: attachment; filename="campuslink-reporte-<id>.<format>"`, `Cache-Control:no-store` y MIME `application/pdf` o `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Errores JSON:400 ID/formato/query inválidos;401 sesión;403 cuenta/alcance;404 ausente u otra institución;503 dependencia/serialización o versión no soportada, sin detalles privados ni archivo parcial.
+
+Se reutiliza `getAnalyticalReport` para leer exclusivamente el snapshot guardado y autorizar **todos** sus campus. Nunca consulta métricas operacionales, catálogos actuales ni genera otro reporte. El servicio prepara los bytes fuera de locks y luego relee perfil, roles y permisos con los mecanismos SQL existentes antes de entregarlos: una suspensión, cambio de contexto o revocación durante la preparación impide descargar. La autoría no concede acceso permanente. Ninguna escritura sobre el reporte ni objetos SQL nuevos.
+
+`analytics.export.ts` presenta los valores almacenados sin sumar, normalizar ni recalcular resultados. Ambos formatos conservan ID, institución/campus/carrera (IDs y nombres originales), fechas civiles, zona/corte, agrupación, fecha original de generación con precisión ISO, responsable, versión y notas. Las definiciones están vinculadas a `campuslink-kpi-v1`; agregar una versión futura debe preservar el glosario histórico. Una versión desconocida no se interpreta usando reglas actuales.
+
+- PDF: informe A4 con títulos, resumen, intervalos/asignaturas, definiciones y notas; ajuste de líneas y paginación sin truncar nombres. Fuente LiberationSans y licencia ya incluidas en pdfjs-dist, embebida con fontkit; los caracteres fuera de su repertorio se representan por su código `[U+...]` para no eliminarlos silenciosamente.
+- Excel: XLSX real con hojas Reporte, Indicadores, Periodos, Asignaturas, Definiciones y Notas. Encabezados fijos y filtros; números en celdas numéricas y fechas civiles ISO ordenables. Asignaturas tiene filas independientes por intervalo/asignatura, además del resumen identificado `total`; no sumar resumen e intervalos. `unavailable` conserva celdas numéricas vacías, `no_activity` conserva ceros y el saldo guardado de usuarios activos. El texto permanece literal, sin fórmulas ni macros. La columna de eventos importados conserva el dato original de cobertura.
+
+Expo muestra Exportar PDF/Excel en cada instantánea recién generada o abierta desde historial/comparación. El transporte binario usa la sesión actual y la API; el cliente no envía cifras ni crea archivos desde las tarjetas. `useReportExport` bloquea dobles clics, muestra progreso/error, permite reintentar y cancela respuestas tardías ante cambio de identidad/permisos/reporte o desmontaje. Web descarga un Blob temporal; móvil usa caché y expo-sharing y retira el archivo al terminar. `lib/files/saveFile` extrae el mecanismo existente de biblioteca digital, cuyo wrapper PDF mantiene el contrato anterior.
+
+Dependencias nuevas con versión fija y lock: ExcelJS4.4.0 para escribir XLSX y @pdf-lib/fontkit1.1.1 para embeber la fuente. Se reutilizan pdf-lib, pdfjs-dist, autenticación, conexión PostgreSQL, expo-file-system y expo-sharing. Sin tablas, funciones SQL, triggers, migraciones, índices, configuración ni cambios de ingesta/persistencia. Validación local incluye HTTP/PostgreSQL embebido, lectura de XLSX/PDF reales, límites de página, revocación durante preparación, cancelación y guardado web/móvil simulado; aún requiere QA en dispositivo y entorno desplegado.
+
+Referencias de serialización: [ExcelJS](https://github.com/exceljs/exceljs#readme) y [PDF-lib](https://pdf-lib.js.org/).
 
 ## Valoración digital (F2.5-11)
 
@@ -603,6 +744,24 @@ Actividades reutilizan `activity_interactions` VIEWED/JOINED/LEFT y su cobertura
 
 `POST /api/v1/reports/elibrary/:publicationId` y `POST /elibrary/:publicationId/transactions/:transactionId` reutilizan reports con `{reason,description?}` y acuse privado. Recurso disponible institucional o acuerdo propio, incluso retirado; identidad, objetivo y campus de origen se derivan y comprueban en servidor. Conservan evidencia privada de metadatos y términos, nunca bytes, paths ni enlaces. Estado inicial PENDIENTE; no ocultan recursos ni cambian acuerdos/accesos. El formulario compartido distingue el campus de origen digital. La revisión y resolución administrativa corresponden a F2.8-02/03; enviar una denuncia no concede descarga. Sin SQL pendiente.
 
+## Denuncias comunes de contenido (F2.8-01)
+
+Los tres módulos usan `reports` y el mismo registro `reporte_contenido`. El formulario compartido se abre desde el detalle del contenido o del acuerdo propio. No se admiten valoraciones como objetivo ni denuncias de cuentas desvinculadas del contenido/intercambio.
+
+Los recursos digitales accesibles también pueden denunciarse desde otro campus de la misma institución. La denuncia pertenece al campus de origen del recurso. Este alcance fue confirmado por el usuario el 2026-10-22 para resolver la diferencia entre F2.5-01 y F2.5-12; se conserva la autorización institucional existente.
+
+| Método | Ruta bajo `/api/v1/reports` | Objetivo |
+| --- | --- | --- |
+| POST | `/activities/:activityId` | Actividad comunitaria o evento oficial accesible del campus vigente |
+| POST | `/physicalgoods/:publicationId` | Publicación física accesible del campus vigente |
+| POST | `/physicalgoods/:publicationId/transactions/:transactionId` | Acuerdo físico propio |
+| POST | `/elibrary/:publicationId` | Publicación digital accesible |
+| POST | `/elibrary/:publicationId/transactions/:transactionId` | Acuerdo digital propio |
+
+Todos requieren Bearer, sin query, con JSON `{reason,description?}`: motivo obligatorio de 1–200 caracteres y descripción opcional de hasta 2000, normalizados en la API. Se rechazan campos adicionales y caracteres NUL antes de acceder a persistencia. Identidad, campus, relación, evidencia, estado y fecha se determinan en el servidor. El guardado de actividades reutiliza `lockAccountContext` para revalidar cuenta, institución, campus, verificación y roles persistidos dentro de la transacción, como los otros flujos; una concesión revocada no autoriza un envío iniciado previamente.
+
+Respuesta 201 `no-store` con acuse mínimo (id, campusId, status PENDIENTE, reportedAt y actividad o publicación/transacción). No devuelve denunciante ni evidencia. Un fallo SQL o acuse de commit incierto devuelve 503 sin detalles internos; no se reintenta automáticamente. La evidencia conserva el contenido validado durante el envío. No se ocultan publicaciones/actividades, cambian acuerdos ni conceden archivos al denunciar. Revisión y resolución corresponden a F2.8-02/03. Sin nuevas tablas, funciones SQL, triggers, migraciones o dependencias.
+
 ## Trabajo posterior
 
 Para preparar datos de QA entre módulos, consultar [Seeder general](qa/README.md).
@@ -611,8 +770,19 @@ y el manifiesto permanecen en `qa/local/` ignorado por Git y Docker.
 
 - Implementar flujos de negocio bajo sus tareas de backlog, con autorización explícita y campus vigente.
 - Aplicar las comprobaciones compartidas de autorización al crear nuevos endpoints y mantener sincronizado el catálogo aprobado con el backlog.
-- Implementar tablero y agregaciones de KPI sobre las fuentes históricas de F2.7-01, con autorización de reportería. El health no demuestra cobertura analítica.
-- Integrar moderación de actividades en reports cuando corresponda; su health inicial comprueba el registro relacional de denuncias.
+- Reutilizar filtros y agrupaciones del tablero para F2.7-05/06; el health no demuestra cobertura analítica.
+- Ejecutar QA real del historial de resoluciones F2.8-04 cuando el equipo integre la rama.
+
+## Historial de resoluciones de moderación (F2.8-04)
+
+Desde Mi perfil → Denuncias de contenido → Historial de resoluciones. Reutiliza la pantalla, hook, cliente autenticado y módulo reports existentes. Router/controller → servicio de revisión (validación y autorización) → repositorio SQL parametrizado. No añade objetos de base de datos, migraciones, dependencias ni escrituras.
+
+- `GET /api/v1/reports/campuses/:campusId/resolutions?page=1&limit=20`: devuelve `{data:ReportResolutionSummary[],meta:{page,limit,hasMore}}`, máximo100. Solo admite page/limit. Filtra campus y estados finales RESUELTO/DESESTIMADO antes de paginar. EN_REVISION queda fuera aunque tenga decisión durable pendiente de completar. Orden `resuelto_en DESC NULLS LAST,id DESC`; fecha UTC con seis decimales.
+- `GET /api/v1/reports/campuses/:campusId/resolutions/:reportId`: sin query; devuelve `{data:ReportResolutionDetail}`. Pendiente, en revisión, ajeno o inexistente devuelve404 dentro de un campus autorizado.
+
+Listado conserva identificador/tipo/título original del contenido, motivo, estado y fecha de denuncia, y `resolution:{justification,measure,resolvedById,resolvedAt}`. Detalle añade descripción, snapshot original y referencia del denunciante (`reporter:{id,name:null}`); currentPublication/currentTransaction son null. Solo lee reporte_contenido: no rehidrata publicaciones, actividades, transacciones ni nombres de cuentas desde su estado actual. Responsable identificado por UUID original; su desactivación o traslado no modifica la decisión histórica. Campos ausentes en registros legados se conservan null y se presentan como no registrados; no se inventa una decisión ni se reconstruyen antecedentes ausentes.
+
+Ambos GET exigen Bearer y no-store. La API vuelve a leer cuenta activa, roles por campus y campus activo mediante authorizedReview; admite sedes delegadas explícitamente. Reportería por sí sola no habilita moderación. 400 por UUID/paginación/query inválida,401 por sesión,403 por cuenta/campus/permisos,404 por caso no final o ajeno,503 sanitizado por dependencia. Historial sin formulario de resolución ni descarga de archivos; el flujo administrativo de revisión conserva esas operaciones. Cambiar vista/campus/identidad cancela solicitudes, limpia selección y descarta respuestas tardías; cambiar vista vuelve a página1. Sin SQL pendiente.
 
 ## Referencias técnicas
 

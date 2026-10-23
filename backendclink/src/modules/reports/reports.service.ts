@@ -1,7 +1,7 @@
 import { createModuleHealthCheck } from '../../services/module-health.js';
-import { probeReportsDependencies } from './reports.repository.js';
+import { probeReportsDependencies, saveActivityReport } from './reports.repository.js';
 import type { ReportsHealth } from './reports.types.js';
-import type { ActivityReportReceipt, ActivityReportSnapshot, ReportActivityInput, ReportsDependencies } from './reports.types.js';
+import type { ActivityReportReceipt, ActivityReportSnapshot, NewActivityReport, ReportActivityInput, ReportsDependencies } from './reports.types.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { spatialBuildings } from '../activities/activities.location.js';
@@ -39,6 +39,6 @@ export async function reportActivity(auth: VerifiedAuthConnection, activityId: s
   }
   if (typeof document.category === 'string' && document.category.trim()) snapshot.category = document.category.trim();
   if (Array.isArray(document.tags)) snapshot.tags = document.tags.filter(tag => typeof tag === 'string' && tag.trim()).map(tag => tag.trim());
-  const save = dependencies.saveActivityReport ?? (await import('./reports.repository.js')).saveActivityReport;
+  const save = dependencies.saveActivityReport ?? ((report: NewActivityReport) => saveActivityReport(report, auth));
   return save({ ...parsed.data as ReportActivityInput, activityId: id, campusId: auth.campusId, userId: auth.userId, snapshot });
 }

@@ -904,7 +904,7 @@ test('digital transaction reports require participation even after withdrawal, a
 });
 test('digital reports reject privileged/invalid fields, fail atomically and expose no private SQL on uncertain COMMIT',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();current=receiver;
-  for(const raw of [{reason:''},{reason:'x'.repeat(201)},{reason:'Motivo',campusId:sibling},{reason:'Motivo',snapshot:{}},{reason:'Motivo',reporterId:auth.userId},{reason:'bad\u0000value'}])assert.equal((await digitalReport(saved.id,raw)).status,400);
+  for(const raw of [{reason:''},{reason:'x'.repeat(201)},{reason:'Motivo',campusId:sibling},{reason:'Motivo',snapshot:{}},{reason:'Motivo',reporterId:auth.userId},{reason:'bad\u0000value'},{reason:'Motivo',description:'Detalle\u0000'}])assert.equal((await digitalReport(saved.id,raw)).status,400);
   failDigitalReport=true;const failure=await digitalReport(saved.id,{reason:'Motivo'});assert.equal(failure.status,503);assert.doesNotMatch(await failure.text(),/private|SQL|password/);assert.equal((await db.query('SELECT * FROM reporte_contenido WHERE reportante_id=$1',[receiver.userId])).rows.length,0);
   failDigitalReport=false;lostCommit=true;assert.equal((await digitalReport(saved.id,{reason:'Motivo'})).status,503);
   assert.equal((await db.query('SELECT * FROM reporte_contenido WHERE reportante_id=$1',[receiver.userId])).rows.length,1);

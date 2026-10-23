@@ -14,10 +14,12 @@
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
+    "@pdf-lib/fontkit": "1.1.1",
     "@supabase/supabase-js": "latest",
     "busboy": "^1.6.0",
     "cors": "latest",
     "dotenv": "latest",
+    "exceljs": "4.4.0",
     "express": "latest",
     "helmet": "latest",
     "mongodb": "^7.6.0",

@@ -4,6 +4,7 @@ import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar
 import { useProfile } from '../hooks/useProfile';
 import { AcademicProfileSection } from './AcademicProfile';
 import { canManageAccess } from '../types/access';
+import { canAccessAnalytics } from '@/features/analytics/types/access';
 
 /** Reúne identidad, perfil académico, permisos visibles y cierre de sesión. */
 export function ProfileScreen() {
@@ -48,21 +49,21 @@ export function ProfileScreen() {
               <Text style={styles.moduleLinkText}>Administrar cuentas y accesos</Text>
             </Pressable>
           </Link>}
-          {identity?.capabilities.reports && <Link href={'/reports'} asChild>
+          {canManageAccess(identity?.roles ?? []) && <Link href={'/reports'} asChild>
             <Pressable
               accessibilityRole={'button'}
-              accessibilityLabel={'Ir a Reportes'}
+              accessibilityLabel={'Revisar denuncias de contenido'}
               style={({ pressed }) => [
                 styles.moduleLink,
                 pressed && styles.moduleLinkPressed,
               ]}
             >
-              <Text style={styles.moduleLinkText}>Reportes</Text>
+              <Text style={styles.moduleLinkText}>Denuncias de contenido</Text>
               <Text style={styles.moduleLinkArrow}>→</Text>
             </Pressable>
           </Link>}
 
-          {identity?.capabilities.analytics && <Link href={'/analytics'} asChild>
+          {canAccessAnalytics(identity) && <Link href={'/analytics'} asChild>
             <Pressable
               accessibilityRole={'button'}
               accessibilityLabel={'Ir a Analítica'}
