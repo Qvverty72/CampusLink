@@ -23,6 +23,8 @@ Crear cada carpeta cuando contenga código real. Los módulos aún sin implement
 
 Usar rutas relativas entre carpetas del mismo módulo e imports `@/features/<modulo>/<carpeta>/<archivo>` desde otros módulos. Actualizar todos los consumidores al mover un archivo; evitar archivos puente que mantengan rutas antiguas.
 
+Los componentes `ActivityReportConfirmation` y `ActivityReportSkeleton`, junto al catálogo y contratos `types/activityReport.ts`, pertenecen a `activities`. El retorno `ActivityBackButton` es común a ficha, edición y denuncia; recibe etiqueta, callback y disabled, sin variantes específicas por pantalla. `reports` conserva `ContentReportForm`, `useContentReport`, `reportsApi` y los contratos generales de denuncia compartidos por actividades, recursos y transacciones; sus imports específicos de actividades usan el alias del módulo.
+
 Las APIs no dependen de componentes ni hooks. Los hooks consumen APIs y tipos; los componentes consumen hooks y tipos. `useAuth` expone el contexto compartido; `AuthProvider` monta `useAuthSession`. El cliente Supabase es un singleton de `auth/api` reutilizado por el transporte autenticado común de `src/lib/api`.
 
 La autorización de negocio permanece en el backend. Esta estructura organiza el frontend sin trasladar reglas del servidor a la interfaz. El backend mantiene sus capas de routes/controllers/services/repositories/types; no usa la distribución de carpetas de React.

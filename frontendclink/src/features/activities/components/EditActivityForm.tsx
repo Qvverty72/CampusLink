@@ -1,6 +1,6 @@
 import { APP_COLORS } from '@/types/colors';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { previewActivityEdit, saveActivityEdit } from '../api/activitiesApi';
@@ -8,6 +8,7 @@ import type { ActivityDetail } from '../types/activity';
 import { isActivityDescriptionAllowed, type ActivityDraft, type ActivityLocationOption } from '../types/creation';
 import { activityEditDraft, validateActivityEditDraft } from '../types/editing';
 import { ActivityFields } from './ActivityFields';
+import { ActivityBackButton } from './ActivityBackButton';
 
 /** Edita una sola ocurrencia mediante previewHash y revisión para detectar escrituras concurrentes. */
 export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
@@ -50,9 +51,7 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
     } finally { if (!abort.signal.aborted) setBusy(false); if (request.current === abort) request.current = null; }
   };
   return <View style={styles.form}>
-    <TouchableOpacity disabled={busy} accessibilityRole="button" onPress={onCancel} style={styles.back}>
-      <Text style={styles.link}>‹ Volver a la ficha</Text>
-    </TouchableOpacity>
+    <ActivityBackButton label="Volver a la ficha" onBack={onCancel} disabled={busy}/>
     <Text accessibilityRole="header" style={styles.heading}>Editar {canViewOccurrences && activity.series ? 'ocurrencia' : 'actividad'}</Text>
     <Text style={styles.text}>Conserva sus inscripciones y su tipo {activity.type === 'OFFICIAL_EVENT' ? 'oficial' : 'comunitario'}. Los cambios quedan en su historial.</Text>
     <ActivityFields draft={draft} change={change} disabled={busy} locations={locations} organizer={activity.organizer?.name} locationDropdowns
@@ -66,6 +65,5 @@ export function EditActivityForm({ activity, locations, onCancel, onSaved }: {
   </View>;
 }
 const styles = StyleSheet.create({ form: { gap: 12, paddingVertical: 12 }, heading: { fontWeight: '700', fontSize: 18, color: '#0F172A' },
-  text: { color: '#475569', lineHeight: 21 }, link: { color: APP_COLORS.PRIMARY, fontWeight: '700' }, disabled: { opacity: 0.5 },
-  back: { minHeight: 44, paddingVertical: 12 },
+  text: { color: '#475569', lineHeight: 21 }, disabled: { opacity: 0.5 },
   save: { backgroundColor: APP_COLORS.PRIMARY, padding: 14, alignItems: 'center', borderRadius: 8 }, saveText: { color: '#FFFFFF', fontWeight: '700' }, error: { color: '#B91C1C' } });
