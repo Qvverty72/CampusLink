@@ -71,16 +71,24 @@ for (const screen of ['physical', 'digital']) {
     const error = renderCatalog(screen, { mode: 'requests', state: 'error' }).markup;
     assert.match(error, /role="alert"/); assert.match(error, /Reintentar consulta/); assert.doesNotMatch(error, /Aún no hay solicitudes/);
     const empty = renderCatalog(screen, { mode: 'requests', state: 'empty' }).markup;
-    assert.match(empty, /Aún no hay solicitudes recibidas/); assert.match(empty, /Actualizar solicitudes/);
+    assert.match(empty, screen === 'physical' ? /No tienes solicitudes pendientes/ : /Aún no hay solicitudes recibidas/); assert.match(empty, /Actualizar solicitudes/);
   });
 }
 
 
 for (const screen of ['physical', 'digital']) test(`${screen}: modal oculta opciones hasta abrir desplegable y busca en un solo campo`,()=>{
  const closed=renderCatalog(screen,{mode:'filters'}).markup;
- assert.match(closed,/Seleccionar carrera/);assert.match(closed,/Seleccionar asignatura/);assert.doesNotMatch(closed,/role="radiogroup"|Buscar por nombre o código/);
- assert.equal((closed.match(/aria-expanded="false"/g)??[]).length,screen==='physical'?4:2);
+ assert.match(closed,/Seleccionar carrera/);assert.match(closed,/Seleccionar asignatura/);assert.doesNotMatch(closed,/Opciones de carrera|Opciones de asignatura|Buscar por nombre o código/);
+ assert.equal((closed.match(/aria-expanded="false"/g)??[]).length,2);
+ const idle=renderCatalog(screen,{mode:'filters',variant:'careerId'}).markup;assert.match(idle,/Escribe el nombre o código/);assert.doesNotMatch(idle,/Opciones de carrera|Opciones de asignatura|Ingeniería en Informática|0 opciones/);
  const searched=renderCatalog(screen,{mode:'filters',variant:'careerId',filterQuery:'informatica'}).markup;
  assert.match(searched,/Buscar carrera para filtrar/);assert.match(searched,/Ingeniería en Informática/);assert.match(searched,/role="radiogroup"/);assert.doesNotMatch(searched,/Ingeniería en Administración/);
  assert.equal((searched.match(/aria-expanded="true"/g)??[]).length,1);
+});
+
+test('filtros de Mercado expone categorías, condiciones reales, precios y publicaciones propias; Biblioteca solo académicos', () => {
+ const physical = renderCatalog('physical', { mode: 'filters', width: 320 }).markup;
+ for (const text of ['Categoría: Todas','Categoría: Apuntes','Categoría: Libros','Categoría: Calculadoras','Condición: Todas','Condición: Nuevo','Condición: Buen estado','Condición: Usado','Condición: Deteriorado','Precio mínimo','Precio máximo','Solo mis publicaciones disponibles','Carrera y asignatura','Ver resultados']) assert.ok(physical.includes(text),text);
+ const digital = renderCatalog('digital', { mode: 'filters', width: 320 }).markup;
+ assert.match(digital,/Carrera y asignatura/); assert.doesNotMatch(digital,/Categoría:|Condición:|Precio mínimo|Solo mis publicaciones/);
 });

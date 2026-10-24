@@ -28,6 +28,15 @@ test('polling20s conserva callback vigente, pausa background/formulario y limpia
  callback=()=>calls+=10;render();assert.equal(interval,1);for(const fn of listeners)fn('background');timers.values().next().value();assert.equal(calls,1);for(const fn of listeners)fn('active');timers.values().next().value();assert.equal(calls,11);
  enabled=false;render();assert.equal(timers.size,0);assert.equal(listeners.size,0);enabled=true;render();h.unmount();assert.equal(timers.size,0);assert.equal(listeners.size,0);
 });
+test('polling configurable de mensajes usa 7s y aborta lecturas al pausar o cerrar sin cambiar el intervalo general',()=>{
+ const h=runtime(),timers=new Map(),listeners=new Set();let enabled=true,calls=0,pauses=0;
+ const {useAgreementPolling,COORDINATION_MESSAGES_POLL_INTERVAL,AGREEMENT_POLL_INTERVAL}=load('hooks/useAgreementPolling.ts',{react:h.react,'react-native':{AppState:{currentState:'active',addEventListener:(_,fn)=>{listeners.add(fn);return{remove:()=>listeners.delete(fn)};}}}},{setInterval:(fn,delay)=>{assert.equal(delay,7000);timers.set(1,fn);return 1;},clearInterval:id=>timers.delete(id)});
+ assert.equal(COORDINATION_MESSAGES_POLL_INTERVAL,7000);assert.equal(AGREEMENT_POLL_INTERVAL,20000);
+ const render=()=>h.render(()=>useAgreementPolling(()=>calls++,enabled,COORDINATION_MESSAGES_POLL_INTERVAL,()=>pauses++));render();timers.get(1)();assert.equal(calls,1);
+ for(const listener of listeners)listener('background');assert.equal(pauses,1);timers.get(1)();assert.equal(calls,1);
+ for(const listener of listeners)listener('active');timers.get(1)();assert.equal(calls,2);
+ enabled=false;render();assert.equal(pauses,2);assert.equal(timers.size,0);assert.equal(listeners.size,0);h.unmount();
+});
 test('registro marketplace usa callback estable y respeta pestaña oculta sin perder la última consulta',()=>{
  const h=runtime(),calls=[];let value=0,fn=()=>value++;
  const {useMarketplaceRefresh}=load('hooks/useMarketplaceRefresh.ts',{react:h.react,'@/components/RefreshScrollView':{useScrollRefresh:(...args)=>calls.push(args)}});
@@ -49,17 +58,17 @@ test('acuerdos digitales bloquean gesto/poll en formulario, decisión y pestaña
 
 test('Mercado usa página de catálogo para pull y desactiva gesto al entrar a publicar o actividad',()=>{
  const h=runtime(),refresh=noop,resources={refresh,loading:false,busy:false,selectedId:null};
- const deps={react:h.react,'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text',Pressable:'Button',StyleSheet:{create:value=>value}},'expo-router':{},'@/components/RefreshScrollView':{RefreshScrollView:'Refresh'},'@/components/navigation/BottomNavigationBar':{},'@/features/auth/hooks/useAuth':{},'../hooks/usePublishPhysicalgoods':{},'../hooks/usePhysicalgoodsResources':{usePhysicalgoodsResources:()=>resources},'../types/publication':{},'../../components/CatalogUI':{CatalogTabs:'Tabs',PublishFAB:'Fab',ScreenHeader:'Header'},'../../components/PublicationFormUI':{},'../../components/PublicationChoices':{},'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:59,bottom:34})}};
+ const deps={react:h.react,'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text',Pressable:'Button',StyleSheet:{create:value=>value}},'expo-router':{},'@/components/RefreshScrollView':{RefreshScrollView:'Refresh'},'@/components/navigation/BottomNavigationBar':{},'@/features/auth/hooks/useAuth':{},'../hooks/usePublishPhysicalgoods':{},'../hooks/usePhysicalgoodsResources':{usePhysicalgoodsResources:()=>resources},'../types/publication':{},'../../utils/agreementPresentation':{agreementCopy:{}},'../../components/CatalogUI':{CatalogTabs:'Tabs',PublishFAB:'Fab',ScreenHeader:'Header'},'../../components/PublicationFormUI':{},'../../components/PublicationChoices':{},'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:59,bottom:34})}};
  for(const name of ['PhysicalgoodsResources','PublicationImages','PhysicalgoodsRequests','PhysicalgoodsTransaction','PhysicalgoodsHistory'])deps['./'+name]={[name]:name};
  const {Content}=load('physicalgoods/components/PublishPhysicalgoods.tsx',deps,{},'\nmodule.exports.Content=PhysicalgoodsContent;');const render=()=>elements(h.render(()=>Content({})));let tree=render();assert.equal(tree.find(node=>node.type==='Refresh').props.onRefresh,refresh);assert.equal(tree.find(node=>node.type==='Refresh').props.refreshIndicatorOffset,67);assert.equal(tree.find(node=>node.type==='Refresh').props.refreshEnabled,true);
  tree.find(node=>node.type==='Fab').props.onPress();tree=render();assert.equal(tree.find(node=>node.type==='Refresh').props.onRefresh,undefined);assert.equal(tree.find(node=>node.type==='Refresh').props.refreshEnabled,false);
  tree.find(node=>node.type==='Header').props.onBack();tree=render();tree.find(node=>node.type==='Header').props.onAction();tree=render();assert.equal(tree.find(node=>node.type==='Refresh').props.onRefresh,undefined);
  const main=()=>tree.find(node=>node.type==='Tabs'&&node.props.variant==='underline');
- assert.deepEqual(Array.from(main().props.tabs,tab=>tab.label),['Publicaciones','Solicitudes','Transacciones']);
- main().props.onSelect('requests');tree=render();let secondary=tree.find(node=>node.type==='Tabs'&&node.props.variant!=='underline');assert.equal(secondary.props.selected,'sent');
- secondary.props.onSelect('received');tree=render();assert.equal(main().props.selected,'requests');
+ assert.deepEqual(Array.from(main().props.tabs,tab=>tab.label),['Publicaciones','Solicitudes','Acuerdos']);
+ main().props.onSelect('requests');tree=render();let secondary=tree.find(node=>node.type==='PhysicalgoodsRequests'&&node.props.active);assert.equal(secondary.props.received,false);
+ secondary.props.onModeChange(true);tree=render();assert.equal(main().props.selected,'requests');
  assert.equal(tree.filter(node=>node.type==='PhysicalgoodsRequests'&&node.props.active).length,1);
- main().props.onSelect('mine');tree=render();main().props.onSelect('requests');tree=render();secondary=tree.find(node=>node.type==='Tabs'&&node.props.variant!=='underline');assert.equal(secondary.props.selected,'received');
+ main().props.onSelect('mine');tree=render();main().props.onSelect('requests');tree=render();secondary=tree.find(node=>node.type==='PhysicalgoodsRequests'&&node.props.active);assert.notEqual(secondary.props.received,false);
 });
 test('Biblioteca desactiva refresh de catálogo al publicar y deja al panel personal registrar su consulta',()=>{
  const h=runtime(),library={refresh:noop,loading:false,busy:false,formOpen:false,items:[],filters:{},page:1,title:'Borrador conservado'};

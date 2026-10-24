@@ -34,8 +34,8 @@ export const loadPhysicalgoodsCoordinationMessages = (target:PhysicalgoodsTransa
   transactionPath(target)+'/messages',{signal},new URLSearchParams({page:String(page),limit:'10'}));
 export const changePhysicalgoodsTransaction = (target:PhysicalgoodsTransactionTarget,action:'confirm'|'cancel',signal:AbortSignal) => authenticatedRequest<{id:string;status:PhysicalgoodsTransaction['status']}>(
   transactionPath(target)+'/'+action,{method:'POST',signal,headers:{'Content-Type':'application/json'},body:'{}'});
-export const sendPhysicalgoodsCoordination = (target:PhysicalgoodsTransactionTarget,buildingId:string,floorId:string,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsCoordinationMessage>(
-  transactionPath(target)+'/messages',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({buildingId,floorId})});
+export const sendPhysicalgoodsCoordination = (target:PhysicalgoodsTransactionTarget,buildingId:string,floorId:string,signal:AbortSignal,poiKey?:string) => authenticatedRequest<PhysicalgoodsCoordinationMessage>(
+  transactionPath(target)+'/messages',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({buildingId,floorId,...(poiKey?{poiKey}:{})})});
 /** Construye filtros de búsqueda y consulta una página del campus autorizado. */
 export function loadPhysicalgoodsResources(filters: PhysicalgoodsSearchFilters, page: number, signal: AbortSignal): Promise<PhysicalgoodsPage> {
   const query = new URLSearchParams({ page: String(page), limit: '10' });

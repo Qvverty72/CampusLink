@@ -39,13 +39,14 @@ const publication={id:'pub',title:'Guía',description:'Descripción',status:'DIS
 test('physical personal cards retain terminal and withdrawn records and route exact detail/agreement IDs',()=>{
   const opened=[],agreements=[],reviews=[];const own={...publication,campus:{name:'Origen'},publishedAt:'2026-10-23T12:00:00Z',isWithdrawn:true,modality:'DONACION'};
   const state={loading:false,page:{data:[own],meta:{}},number:1};
-  const {PhysicalgoodsHistory}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{...base,'@/components/RefreshScrollView':{useScrollRefresh:noop},'../hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistory:()=>state},'../types/publication':{resourceConditions:[]}});
-  const render=transactions=>elements(PhysicalgoodsHistory({active:true,transactions,refreshVersion:0,onDetail:value=>opened.push(value),onAgreement:(...args)=>agreements.push(args),onRequests:()=>reviews.push(true)}));
+  const {PhysicalgoodsHistory}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{...base,'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},
+    'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0,bottom:0})}, '../../components/PersonalUI':{PersonalStatus:'Status'}, '../../components/RequestFlowUI':{RequestTimeline:'Timeline'},'@/components/RefreshScrollView':{useScrollRefresh:noop},'../hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistory:()=>state},'../types/publication':{resourceConditions:[]}});
+  const render=transactions=>{const node=PhysicalgoodsHistory({active:true,transactions,refreshVersion:0,onDetail:value=>opened.push(value),onAgreement:(...args)=>agreements.push(args),onRequests:()=>reviews.push(true)});return elements(typeof node.type==='function'?node.type(node.props):node);};
   let nodes=render(false);assert.equal(nodes.find(n=>n.type==='ActivityCard').props.historical,true);assert.equal(nodes.find(n=>n.type==='ActivityCard').props.status,'RETIRADA');
   const activity=nodes.find(n=>n.type==='PublicationActivity');assert.equal(activity.props.activity.pendingRequests,2);activity.props.onRequests();assert.equal(reviews.length,1);
   nodes.find(n=>n.type==='ActivityAction').props.onPress();assert.equal(opened[0].publicationId,'pub');
   state.page.data=[{id:'agreement',publication:own,campus:own.campus,status:'COMPLETADA',startedAt:own.publishedAt,role:'RECEPTOR',modality:'VENTA',amount:1000,currency:'CLP'}];nodes=render(true);
-  assert.equal(nodes.find(n=>n.type==='ActivityCard').props.historical,true);nodes.find(n=>n.type==='ActivityAction').props.onPress();assert.deepEqual(agreements,[['pub','agreement']]);assert.equal(nodes.filter(n=>n.type==='PublicationActivity').length,0);
+  nodes.find(n=>n.type==='Agreements').props.onAgreement('pub','agreement');assert.deepEqual(agreements,[['pub','agreement']]);assert.equal(nodes.filter(n=>n.type==='PublicationActivity').length,0);
 });
 
 test('digital personal navigation opens received requests and retains previously visited panels',()=>{
@@ -91,8 +92,8 @@ test('acquired detail failure retries its authorization query instead of silentl
 
 test('M3 renders the personal tabs, real pending counts and terminal history with actions',()=>{
   const {markup}=renderCatalog('physical',{mode:'personal',width:320});
-  for(const text of ['Mi actividad','Publicaciones','Solicitudes','Transacciones','2 solicitudes pendientes','Revisar solicitudes','Tu publicación','Retirada','Ver publicación'])assert.ok(markup.includes(text),text);
-  const transactions=renderCatalog('physical',{mode:'transactions'}).markup;assert.match(transactions,/Completada/);assert.match(transactions,/Cancelada/);assert.match(transactions,/Ver acuerdo/);
+  for(const text of ['Mi actividad','Publicaciones','Solicitudes','Acuerdos','2 solicitudes pendientes','Revisar solicitudes','Tu publicación','Retirada','Ver publicación'])assert.ok(markup.includes(text),text);
+  const transactions=renderCatalog('physical',{mode:'transactions'}).markup;assert.match(transactions,/Mis acuerdos/);assert.match(transactions,/Coordinando entrega/);assert.match(transactions,/Falta tu confirmación/);
 });
 
 test('L3 owned cards show independent digital activity and keep deactivated publications visible',()=>{

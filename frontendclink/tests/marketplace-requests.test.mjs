@@ -57,10 +57,10 @@ test('physical decisions require confirmation, serialize writes and recover a lo
   const q=physicalHook();q.render();q.reads[0].resolve({data:[physicalRow(),physicalRow('second')],meta:{hasMore:false}});await flush();
   let state=q.render();state.select(physicalRow(),'ACEPTAR');state=q.render();assert.equal(q.writes.length,0);assert.equal(state.selection.request.id,'first');
   state.cancel();state=q.render();await state.resolve();assert.equal(q.writes.length,0);
-  state.select(physicalRow(),'ACEPTAR');state=q.render();const pending=state.resolve();state.resolve();assert.equal(q.writes.length,1);
+  state.select(physicalRow(),'ACEPTAR');state=q.render();const pending=state.resolve();state.resolve();assert.equal(q.writes.length,1);assert.equal(q.render().saving.id,'first');
   assert.deepEqual(Array.from(q.writes[0].args.slice(0,3)),['publication','first','ACEPTAR']);
-  q.writes[0].reject(new Error('lost reply'));await pending;state=q.render();assert.ok(state.error);state=q.render();assert.equal(q.reads.length,2);
-  q.reads[1].resolve({data:[{...physicalRow(),status:'ACEPTADA'},physicalRow('second','RESERVADO')],meta:{hasMore:false}});await flush();state=q.render();assert.equal(state.error,null);
+  q.writes[0].reject(new Error('lost reply'));await pending;state=q.render();assert.ok(state.error);assert.equal(state.feedback,null);state=q.render();assert.equal(q.reads.length,2);
+  q.reads[1].resolve({data:[{...physicalRow(),status:'ACEPTADA'},physicalRow('second','RESERVADO')],meta:{hasMore:false}});await flush();state=q.render();assert.equal(state.error,null);assert.match(state.feedback,/aceptada/);
   state.select(physicalRow('second'),'ACEPTAR');state=q.render();assert.equal(state.selection,null);
   state.select(physicalRow('second'),'RECHAZAR');state=q.render();assert.equal(state.selection.decision,'RECHAZAR');assert.equal(q.writes.length,1);q.h.unmount();
 });
@@ -93,7 +93,7 @@ test('digital obsolete agreement reads are aborted when changing inbox, without 
 });
 
 const native={View:'View',Text:'Text',Pressable:'Button',Modal:'Modal',ScrollView:'Scroll',ActivityIndicator:'Spinner',StyleSheet:{create:value=>value}};
-const requestsUI=Object.fromEntries(['RequestButton','RequestCard','RequestDecisionDialog','RequestsFeedback','RequestsHeader','RequestsPager'].map(name=>[name,name]));
+const requestsUI=Object.fromEntries(['RequestButton','RequestCard','RequestDecisionDialog','RequestsFeedback','RequestsHeader','RequestsPager', 'RequestSegments'].map(name=>[name,name]));
 requestsUI.requestUI={};requestsUI.requestStatusLabel=value=>value;
 test('physical reserved and historical cards preserve detail access and prevent a second acceptance',()=>{
   const calls=[];const state={page:{data:[physicalRow('reserved','RESERVADO'),{...physicalRow('history'),canResolve:false,publication:{...physicalRow().publication,canView:false,isWithdrawn:true}}],meta:{}},number:1,loading:false,busy:false,reload:noop};

@@ -70,3 +70,22 @@ test('catálogo en carga/deshabilitado no abre menú; vacío y selección no dis
  const f=fixture([],'missing');f.props.expanded=true;f.props.loading=true;let trigger=elements(f.root()).find(node=>node.type==='Button');assert.equal(trigger.props.disabled,true);assert.equal(trigger.props.accessibilityState.expanded,false);assert.equal(f.render(),null);
  f.props.loading=false;f.props.disabled=true;assert.equal(f.render(),null);f.props.disabled=false;trigger=elements(f.root()).find(node=>node.type==='Button');assert.equal(trigger.props.accessibilityValue.text,'Selección no disponible');const tree=f.render();assert.match(JSON.stringify(tree),/Sin opciones disponibles/);radios(tree)[0].props.onPress();assert.deepEqual(f.changes,['']);f.h.unmount();
 });
+
+
+test('filtro académico exige texto, espera300ms y al borrar oculta de inmediato sin perder selección',()=>{
+ const f=fixture(options,'inf');f.props.searchRequired=true;f.props.expanded=true;let tree=f.render();
+ assert.equal(radios(tree).length,0);assert.match(JSON.stringify(tree),/Escribe el nombre o código/);assert.doesNotMatch(JSON.stringify(tree),/Cualquiera|Ingeniería en Informática/);
+ input(tree).props.onChangeText('   ');tree=f.render();f.h.tick(300);tree=f.render();assert.equal(radios(tree).length,0);
+ input(tree).props.onChangeText('admin');tree=f.render();f.h.tick(299);tree=f.render();assert.equal(radios(tree).length,0);f.h.tick(1);tree=f.render();assert.equal(radios(tree).length,2);assert.match(JSON.stringify(tree),/Administración/);assert.deepEqual(f.changes,[]);
+ input(tree).props.onChangeText('');tree=f.render();assert.equal(radios(tree).length,0);assert.doesNotMatch(JSON.stringify(tree),/Administración|Buscando opciones/);f.h.tick(300);tree=f.render();assert.equal(radios(tree).length,0);assert.equal(f.props.value,'inf');
+ elements(tree).find(node=>node.props?.accessibilityLabel==='Quitar filtro de carrera').props.onPress();assert.deepEqual(f.changes,['']);assert.equal(f.props.expanded,false);f.h.unmount();
+});
+
+test('placeholder académico conserva etiqueta accesible cuando la etiqueta visual se agrupa', () => {
+ const f=fixture(options);f.props.showLabel=false;f.props.placeholder='Carrera';
+ let root=f.root();let trigger=elements(root).find(node=>node.type==='Button');
+ assert.equal(trigger.props.accessibilityLabel,'Seleccionar carrera');assert.equal(trigger.props.accessibilityValue.text,'Carrera');
+ assert.equal(elements(root).filter(node=>node.type==='Text'&&node.props.children==='Carrera').length,1);
+ f.props.value='inf';root=f.root();trigger=elements(root).find(node=>node.type==='Button');
+ assert.equal(trigger.props.accessibilityValue.text,'Ingeniería en Informática');f.h.unmount();
+});

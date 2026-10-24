@@ -4,8 +4,10 @@ import { ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { MarketplaceReportForm } from '../../components/MarketplaceReportForm';
-import { CATALOG_COLORS as colors, FilterOptions, PriceTag, StatusTag, ui } from '../../components/CatalogUI';
-import { AgreementNotice, DetailActionBar, DetailHeader, DetailSection, OwnerCard, RequestMessageForm, RequestResourceSummary, ResourceDetailSkeleton, detailUI } from '../../components/ResourceDetailUI';
+import { CATALOG_COLORS as colors, FilterOptions, StatusTag, ui } from '../../components/CatalogUI';
+import { AgreementNotice, DetailActionBar, DetailHeader, DetailSection, OwnerCard, RequestMessageForm, RequestResourceSummary, ResourceDetailSkeleton, ResourcePrice, detailUI } from '../../components/ResourceDetailUI';
+import { PersonalStatus } from '../../components/PersonalUI';
+import { RequestSentConfirmation } from '../../components/RequestFlowUI';
 import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { useRequestPhysicalgoods } from '../hooks/useRequestPhysicalgoods';
 import { PHYSICALGOODS_MAX_IMAGES, resourceConditions } from '../types/publication';
@@ -39,13 +41,13 @@ export function PhysicalgoodsDetail({ resources: r, onClose, onBusyChange, onReq
     : gallery && !gallery.acceptsRequests ? `El recurso está ${statusLabel(gallery.status).toLowerCase()} y no admite nuevas solicitudes.`
       : request.loading ? 'Comprobando disponibilidad y solicitudes…' : request.error ? 'No pudimos comprobar si puedes solicitarlo. Reintenta la consulta.' : null;
   return <View style={detailUI.page}>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingTop: Math.max(16, insets.top + 8) }]}>
+    <ScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingBottom: 24, paddingTop: Math.max(16, insets.top + 8) }]}>
       <DetailHeader onBack={() => { if (reporting) setReporting(false); else if (requesting) setRequesting(false); else if (managing) setManaging(false); else onClose(); }}
         onReport={gallery && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} disabled={busy} title={reporting ? 'Denunciar recurso' : requesting ? 'Solicitar recurso' : managing ? 'Administrar publicación' : 'Mercado'} />
       {reporting && gallery ? <MarketplaceReportForm target={{ type: 'PUBLICACION_FISICA', publicationId: gallery.id }} title={gallery.title} onBusyChange={setReportBusy} onBack={() => setReporting(false)} />
         : requesting ? <>
-          {gallery && <RequestResourceSummary title={gallery.title} modality={gallery.modality} price={gallery.price} />}
-          {active ? <View style={detailUI.card}><Text style={ui.sectionTitle}>Solicitud registrada</Text><StatusTag>{active.status.toLowerCase()}</StatusTag><Text style={detailUI.body}>Consulta el estado de tu solicitud y sus detalles.</Text></View>
+          {gallery && !active && <RequestResourceSummary title={gallery.title} modality={gallery.modality} price={gallery.price} />}
+          {active ? <RequestSentConfirmation title={gallery?.title ?? ''} ownerName={gallery?.owner.fullName ?? 'El propietario'} modality={gallery?.modality ?? 'VENTA'} price={gallery?.price ?? null} status={active.status} />
             : <RequestMessageForm title={gallery?.title ?? ''} messages={request.options?.messages ?? []} selected={request.messageCode} onSelect={request.setMessageCode}
               disabled={busy} loading={request.loading || r.galleryLoading} error={request.error} onRetry={request.reload} />}
           <AgreementNotice />
@@ -57,17 +59,17 @@ export function PhysicalgoodsDetail({ resources: r, onClose, onBusyChange, onReq
               : <><ImageIcon size={38} color={colors.secondary} /><Text style={detailUI.helper}>Sin fotografías disponibles</Text></>}</View>
             {gallery.images.length > 1 && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>{gallery.images.map((image, index) => <Pressable key={image.id} accessibilityRole="button" accessibilityLabel={`Ver fotografía ${index + 1}`}
               accessibilityState={{ selected: photo?.id === image.id }} onPress={() => setPhotoId(image.id)} style={[styles.thumbnail, photo?.id === image.id && styles.selected]}><Image source={{ uri: image.url }} style={styles.image} /></Pressable>)}</ScrollView>}
-            <View style={{ gap: 12 }}><Text accessibilityRole="header" style={detailUI.title}>{gallery.title}</Text><PriceTag modality={gallery.modality} price={gallery.price} />
-              <View style={detailUI.inline}><StatusTag>{statusLabel(gallery.status)}</StatusTag><StatusTag neutral>{resourceConditions.find(row => row.value === gallery.condition)?.label ?? gallery.condition}</StatusTag><StatusTag neutral>{gallery.category.name}</StatusTag></View>
+            <View style={{ gap: 12 }}><View style={styles.titleRow}><Text accessibilityRole="header" style={[detailUI.title, styles.resourceTitle]}>{gallery.title}</Text><View style={styles.price}><ResourcePrice modality={gallery.modality} price={gallery.price} /></View></View>
+              <View style={detailUI.inline}><PersonalStatus status={gallery.status} /><StatusTag neutral>{resourceConditions.find(row => row.value === gallery.condition)?.label ?? gallery.condition}</StatusTag><StatusTag neutral>{gallery.category.name}</StatusTag></View>
             </View>
             <DetailSection title="Descripción"><Text style={detailUI.body}>{gallery.description}</Text></DetailSection>
-            <OwnerCard owner={gallery.owner} physical /><AgreementNotice />
+            <OwnerCard owner={gallery.owner} physical campus={gallery.campus?.name} /><AgreementNotice />
             {request.error && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{request.error}</Text><Pressable accessibilityRole="button" disabled={busy || request.loading} onPress={request.reload} style={ui.outlined}><Text style={ui.link}>Consultar estado</Text></Pressable></View>}
             {isOwner && gallery.canEdit && <Pressable accessibilityRole="button" disabled={busy} onPress={() => setManaging(true)} style={ui.outlined}><Text style={ui.link}>Administrar publicación</Text></Pressable>}
           </>}
         </>}
     </ScrollView>
-    {!reporting && !managing && <DetailActionBar label={label} helper={helper} disabled={disabled} onPress={active ? openRequest : requesting ? send : () => setRequesting(true)} />}
+    {!reporting && !managing && <DetailActionBar flow busy={request.busy} secondaryAction={requesting && active ? { label: 'Volver al mercado', onPress: onClose } : undefined} label={label} helper={requesting && active && !isOwner ? null : helper} disabled={disabled} onPress={active ? openRequest : requesting ? send : () => setRequesting(true)} />}
   </View>;
 }
 
@@ -94,7 +96,8 @@ function PhysicalgoodsManagement({ resources: r }: { resources: Resources }) {
 }
 
 const styles = StyleSheet.create({
-  hero: { height: 230, width: '100%', borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', gap: 10 },
-  image: { width: '100%', height: '100%', resizeMode: 'contain' }, thumbnail: { width: 58, height: 58, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: colors.border, padding: 3, backgroundColor: '#FFFFFF' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, resourceTitle: { flex: 1, minWidth: 0, fontSize: 28, lineHeight: 35 }, price: { maxWidth: '45%', flexShrink: 1 },
+  hero: { height: 260, width: '100%', borderRadius: 24, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', gap: 10 },
+  image: { width: '100%', height: '100%', resizeMode: 'cover' }, thumbnail: { width: 58, height: 58, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: colors.border, padding: 3, backgroundColor: '#FFFFFF' },
   selected: { borderColor: colors.primary }, managementImage: { width: '100%', height: 170, resizeMode: 'contain' },
 });

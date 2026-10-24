@@ -96,11 +96,13 @@ export function parsePhysicalgoodsRating(body:unknown):number {
   return parseMarketplaceRating(body);
 }
 export function parsePhysicalgoodsCoordination(body: unknown) {
-  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['buildingId','floorId'].includes(key))) return invalid('body','Selecciona un edificio y un piso.');
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['buildingId','floorId','poiKey'].includes(key))) return invalid('body','Selecciona un edificio, un piso y un punto de interés opcional.');
   const values = body as Record<string,unknown>;
   const buildingId = text(values.buildingId,'buildingId',120),floorId = text(values.floorId,'floorId',120);
   if (![buildingId,floorId].every(value => /^[a-zA-Z0-9_-]+$/.test(value))) return invalid('location','Selecciona una ubicación válida.');
-  return { buildingId,floorId };
+  const poiKey = values.poiKey === undefined ? undefined : text(values.poiKey,'poiKey',120);
+  if (poiKey !== undefined && !/^[a-zA-Z0-9_-]+$/.test(poiKey)) return invalid('poiKey','Selecciona un punto de interés válido.');
+  return { buildingId,floorId,...(poiKey !== undefined ? {poiKey} : {}) };
 }
 /** Acepta exclusivamente un código de catálogo; el solicitante y el contexto los determina el servidor. */
 export function parsePhysicalgoodsRequest(body: unknown): string {

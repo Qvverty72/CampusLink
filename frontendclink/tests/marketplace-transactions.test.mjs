@@ -39,7 +39,7 @@ const digital={id:'trade',publicationId:'publication',title:'Guía',campusId:'ca
 function physicalHook(){const h=runtime(),details=[],messages=[],options=[],writes=[],sends=[];let changed=0;
  const pending=(rows,args)=>{const value=deferred();rows.push({...value,args});return value.promise;};
  const {usePhysicalgoodsTransaction}=load('physicalgoods/hooks/usePhysicalgoodsTransaction.ts',{react:h.react,'@/features/auth/hooks/useAuth':{useAuth:()=>({identity:{userId:'owner',campusId:'campus'},refreshIdentity:noop})},'@/lib/api/authenticated-request':{AuthApiError},
- '../api/physicalgoodsApi':{loadPhysicalgoodsTransaction:(...args)=>pending(details,args),loadPhysicalgoodsCoordinationMessages:(...args)=>pending(messages,args),loadPhysicalgoodsCoordinationOptions:(...args)=>pending(options,args),changePhysicalgoodsTransaction:(...args)=>pending(writes,args),sendPhysicalgoodsCoordination:(...args)=>pending(sends,args)}});
+ '../api/physicalgoodsApi':{loadPhysicalgoodsTransaction:(...args)=>pending(details,args),loadPhysicalgoodsCoordinationMessages:(...args)=>{const promise=pending(messages,args);const row=messages.at(-1);args.at(-1).addEventListener('abort',()=>row.resolve({data:[],meta:{hasMore:false}}),{once:true});return promise;},loadPhysicalgoodsCoordinationOptions:(...args)=>pending(options,args),changePhysicalgoodsTransaction:(...args)=>pending(writes,args),sendPhysicalgoodsCoordination:(...args)=>pending(sends,args)}});
  return{h,details,messages,options,writes,sends,get changed(){return changed;},render:()=>h.render(()=>usePhysicalgoodsTransaction({publicationId:'publication',transactionId:'trade'},()=>changed++))};}
 async function readyPhysical(q){q.render();q.details[0].resolve(physical);q.messages[0].resolve({data:[],meta:{hasMore:false}});await setImmediate();q.render();return q.render();}
 function digitalHook(viewer='owner'){const h=runtime(),details=[],lists=[],writes=[],ratings=[];const pending=(rows,args)=>{const value=deferred();rows.push({...value,args});return value.promise;};
@@ -79,7 +79,7 @@ test('digital retry targets the opened agreement, aborts stale reads on close an
 });
 
 const native={View:'View',Text:'Text',Pressable:'Button',Modal:'Modal',ScrollView:'Scroll',StyleSheet:{create:value=>value}};
-function sharedUI(){return load('components/TransactionUI.tsx',{'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{},'./CatalogUI':{CATALOG_COLORS:{},StatusTag:'Status',ui:{}},'./ResourceDetailUI':{detailUI:{}},'./RequestsUI':{RequestButton:'Action',requestStatusLabel:value=>value,requestUI:{}}});}
+function sharedUI(){return load('components/TransactionUI.tsx',{'../utils/agreementPresentation':{agreementCopy:{}},'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{},'./CatalogUI':{CATALOG_COLORS:{},StatusTag:'Status',ui:{}},'./ResourceDetailUI':{detailUI:{}},'./RequestsUI':{RequestButton:'Action',requestStatusLabel:value=>value,requestUI:{}}});}
 test('shared progress keeps physical coordination optional, digital has two steps, and only valid role confirmations count',()=>{
  const {TransactionProgress,participantConfirmation,TransactionActions}=sharedUI();
  const physical=JSON.stringify(elements(TransactionProgress({status:'RESERVADA',confirmedCount:0})));const digital=JSON.stringify(elements(TransactionProgress({status:'PENDIENTE_CONFIRMACION',confirmedCount:1,digital:true})));
@@ -90,12 +90,16 @@ test('shared progress keeps physical coordination optional, digital has two step
 });
 
 test('physical transaction renders location choices and preview, waiting, historical read-only and independent map error',()=>{
- const ready=renderCatalog('physical',{mode:'transaction',width:320}).markup;
- for(const text of ['Solicitud aceptada','Coordinar entrega','Ambos confirman','Seleccionar edificio','Seleccionar piso','Estoy en Edificio Central, en Piso 1.','Enviar mensaje','Confirmar que se realizó','Cancelar transacción','Mensajes de coordinación'])assert.ok(ready.includes(text),text);
+ const ready=renderCatalog('physical',{mode:'transaction',width:320,agreementPanel:'coordinate'}).markup;
+ for(const text of ['Aceptada','Coordinar','Confirmar','Seleccionar edificio','Seleccionar piso','Estoy en Edificio Central, en Piso 1.','Avisar mi ubicación','Mensajes de coordinación'])assert.ok(ready.includes(text),text);
+ assert.doesNotMatch(ready,/Confirmar que se realizó/);
+ const confirm=renderCatalog('physical',{mode:'transaction',width:320,agreementPanel:'confirm'}).markup;
+ assert.match(confirm,/Confirmaciones · 0 de 2/);assert.match(confirm,/Confirmar que se realizó/);assert.doesNotMatch(confirm,/Dónde estás/);
  assert.doesNotMatch(ready,/<textarea/);
- const waiting=renderCatalog('physical',{mode:'transaction',variant:'waiting'}).markup;assert.match(waiting,/Esperando a la otra parte/);
- const historical=renderCatalog('physical',{mode:'transaction',variant:'historical'}).markup;assert.match(historical,/Consulta histórica/);assert.doesNotMatch(historical,/Seleccionar edificio|Confirmar que se realizó|Cancelar transacción|Confirma tu parte/);
- const mapError=renderCatalog('physical',{mode:'transaction',variant:'map-error'}).markup;assert.match(mapError,/Reintentar ubicaciones/);assert.match(mapError,/Confirmar que se realizó/);
+ const waiting=renderCatalog('physical',{mode:'transaction',variant:'waiting'}).markup;assert.match(waiting,/Esperando a Diego Pérez/);assert.doesNotMatch(ready,/Actualizar mensajes|Cancelar transacción/);
+ const historical=renderCatalog('physical',{mode:'transaction',variant:'historical',agreementPanel:'coordinate'}).markup;assert.match(historical,/Consulta histórica/);assert.match(historical,/Mensajes de coordinación/);assert.doesNotMatch(historical,/Seleccionar edificio|Confirmar que se realizó|Cancelar transacción|Confirma tu parte/);
+ const mapError=renderCatalog('physical',{mode:'transaction',variant:'map-error',agreementPanel:'coordinate'}).markup;assert.match(mapError,/Reintentar ubicaciones/);
+ assert.match(renderCatalog('physical',{mode:'transaction',variant:'map-error',agreementPanel:'confirm'}).markup,/Confirmar que se realizó/);
 });
 
 test('digital detail has two steps, never exposes original downloads before both confirm, and sends completed receivers to acquired',()=>{
@@ -105,7 +109,7 @@ test('digital detail has two steps, never exposes original downloads before both
 });
 
 test('physical cancellation dialog preserves withdrawn resources and digital cancellation describes only that agreement',()=>{
- const physical=renderCatalog('physical',{mode:'transaction',variant:'withdrawn-cancel'}).markup;assert.match(physical,/Confirmar cancelación/);assert.match(physical,/publicación seguirá retirada/);assert.match(physical,/Volver sin cambios/);
+ const physical=renderCatalog('physical',{mode:'transaction',variant:'withdrawn-cancel'}).markup;assert.match(physical,/Sí, cancelar/);assert.match(physical,/publicación seguirá retirada/);assert.match(physical,/Volver/);
  const digital=renderCatalog('digital',{mode:'transaction',variant:'cancel-dialog'}).markup;assert.match(digital,/Los demás acuerdos y la publicación no cambian/);assert.match(digital,/sin conceder acceso/);
 });
 
@@ -135,4 +139,83 @@ test('poll digital actualiza confirmación sin escribir y se detiene en estados 
 });
 test('poll digital pendiente se aborta antes de una mutación y no puede deshacerla',async()=>{
  const q=digitalHook();let state=await readyDigital(q);const poll=state.poll(),stale=q.details.at(-1);state.selectTransition('cancel');state=q.render();const mutation=state.transition();assert.equal(stale.args.at(-1).aborted,true);stale.resolve(digital);await poll;q.writes[0].resolve({});await setImmediate();q.details.at(-1).resolve({...digital,status:'CANCELADA',canConfirm:false,canCancel:false});await mutation;assert.equal(q.render().trade.status,'CANCELADA');q.h.unmount();
+});
+
+test('physical polling applies agreement changes without waiting for coordination and then updates messages',async()=>{
+ const q=physicalHook();let state=await readyPhysical(q);q.options[0].resolve({buildings:[]});await setImmediate();state=q.render();const pending=state.poll();
+ q.details.at(-1).resolve({...physical,status:'PENDIENTE_CONFIRMACION',confirmations:[{userId:'receiver',role:'RECEPTOR',confirmedAt:stamp}]});await setImmediate();state=q.render();assert.equal(state.detail.status,'PENDIENTE_CONFIRMACION');assert.equal(state.loading,false);
+ q.messages.at(-1).resolve({data:[{id:'new',senderId:'receiver',text:'Estoy en Biblioteca, en Planta Baja.',createdAt:stamp}],meta:{hasMore:false}});await pending;state=q.render();assert.equal(state.messages.data[0].id,'new');assert.equal(q.writes.length,0);q.h.unmount();
+});
+
+const messagePage=id=>({data:[{id,senderId:'receiver',text:'Estoy en Biblioteca, en Planta Baja.',createdAt:stamp}],meta:{hasMore:true}});
+async function coordinationReady(q){let state=await readyPhysical(q);q.options[0].resolve({buildings:[{id:'a',name:'Biblioteca',floors:[{id:'ground',name:'Planta Baja'}]}]});await setImmediate();state=q.render();state.setBuilding('a');state=q.render();state.setFloor('ground');return q.render();}
+
+test('silent messages polling reads only the current page, preserves location and data, and avoids overlapping/unchanged updates',async()=>{
+ const q=physicalHook();let state=await coordinationReady(q),details=q.details.length,options=q.options.length;
+ const pending=state.pollMessages();void state.pollMessages();assert.equal(q.messages.length,2);assert.equal(q.details.length,details);assert.equal(q.options.length,options);
+ state=q.render();assert.equal(state.loading,false);assert.equal(state.messagesLoading,false);assert.equal(state.messagesRefreshing,false);assert.equal(state.buildingId,'a');assert.equal(state.floorId,'ground');
+ q.messages.at(-1).resolve(messagePage('new'));await pending;state=q.render();const before=state.messages;assert.equal(before.data[0].id,'new');
+ const same=state.pollMessages();q.messages.at(-1).resolve(messagePage('new'));await same;state=q.render();assert.equal(state.messages,before);
+ const background=state.pollMessages();q.messages.at(-1).reject(new Error('offline'));await background;state=q.render();assert.equal(state.messages,before);assert.equal(state.messageError,null);
+ const agreementOnly=state.poll({messages:false}),messageCount=q.messages.length;q.details.at(-1).resolve(physical);await agreementOnly;assert.equal(q.messages.length,messageCount);assert.equal(q.writes.length,0);q.h.unmount();
+});
+
+test('manual messages refresh cancels silent reads, returns to page one and retains the thread/location without reloading the agreement',async()=>{
+ const q=physicalHook();let state=await coordinationReady(q);state.setPage(2);q.render();q.messages.at(-1).resolve(messagePage('older'));await setImmediate();state=q.render();
+ const before=state.messages,detailCount=q.details.length,optionsCount=q.options.length;
+ const stale=state.pollMessages(),oldRequest=q.messages.at(-1);state.refreshMessages();state.refreshMessages();state=q.render();
+ assert.equal(oldRequest.args.at(-1).aborted,true);await stale;assert.equal(state.page,1);assert.equal(state.messages,before);assert.equal(state.messagesRefreshing,true);assert.equal(state.messagesLoading,false);
+ assert.equal(q.messages.at(-1).args[1],1);assert.equal(q.details.length,detailCount);assert.equal(q.options.length,optionsCount);assert.equal(state.preview,'Estoy en Biblioteca, en Planta Baja.');
+ const count=q.messages.length;await state.pollMessages();assert.equal(q.messages.length,count);
+ q.messages.at(-1).resolve(messagePage('latest'));await setImmediate();state=q.render();assert.equal(state.messages.data[0].id,'latest');assert.equal(state.messagesRefreshing,false);assert.equal(state.buildingId,'a');assert.equal(state.floorId,'ground');q.h.unmount();
+});
+
+test('manual messages errors keep visible messages and retry; closing aborts the request and clears its spinner',async()=>{
+ const q=physicalHook();let state=await coordinationReady(q);const initial=state.messages;
+ state.refreshMessages();q.render();q.messages.at(-1).reject(new Error('offline'));await setImmediate();state=q.render();assert.equal(state.messages,initial);assert.ok(state.messageError);assert.equal(state.messagesRefreshing,false);
+ state.refreshMessages();q.render();q.messages.at(-1).resolve(messagePage('recovered'));await setImmediate();state=q.render();assert.equal(state.messageError,null);assert.equal(state.messages.data[0].id,'recovered');
+ state.refreshMessages();state=q.render();const pending=q.messages.at(-1);state.cancelMessageRefresh();assert.equal(pending.args.at(-1).aborted,true);await setImmediate();state=q.render();assert.equal(state.messagesRefreshing,false);assert.equal(state.messages.data[0].id,'recovered');q.h.unmount();
+});
+
+test('a confirmation aborts pending silent messages before writing and unmount cancels its next read',async()=>{
+ const q=physicalHook();let state=await coordinationReady(q);const pending=state.pollMessages(),request=q.messages.at(-1);
+ state.selectAction('confirm');state=q.render();const write=state.confirm();assert.equal(request.args.at(-1).aborted,true);await pending;assert.equal(q.writes.length,1);
+ q.writes[0].resolve({});await write;q.render();q.details.at(-1).resolve(physical);q.messages.at(-1).resolve(messagePage('fresh'));await setImmediate();state=q.render();
+ const last=state.pollMessages(),read=q.messages.at(-1);q.h.unmount();assert.equal(read.args.at(-1).aborted,true);await last;
+});
+
+const poiBuildings=[{id:'a',name:'Edificio A',floors:[{id:'one',name:'Piso 1',pois:[{id:'library',name:'Biblioteca'}]},{id:'two',name:'Piso 2',pois:[]}]},{id:'b',name:'Edificio B',floors:[{id:'ground',name:'Planta Baja',pois:[]}]}];
+async function poiReady(q){await readyPhysical(q);q.options[0].resolve({buildings:poiBuildings});await setImmediate();let state=q.render();state.setBuilding('a');state=q.render();state.setFloor('one');return q.render();}
+
+test('optional POI preview and send use the selected floor/catalog names and only submit IDs',async()=>{
+ const q=physicalHook();let state=await poiReady(q);state.setPoi('library');state=q.render();assert.equal(state.preview,'Estoy en Edificio A, en Piso 1, en Biblioteca.');
+ const pending=state.send();q.messages.at(-1).resolve({data:[],meta:{hasMore:false}});await setImmediate();assert.equal(q.sends.length,1);assert.equal(q.sends[0].args[4],'library');assert.equal(q.sends[0].args[1],'a');assert.equal(q.sends[0].args[2],'one');assert.ok(q.sends[0].args[3] instanceof AbortSignal);assert.ok(!q.sends[0].args.includes('Biblioteca'));
+ q.sends[0].resolve({});await pending;q.h.unmount();
+});
+
+test('POI hierarchy retains reselected parents, clears descendants on change and blocks an invalid point',async()=>{
+ const q=physicalHook();let state=await poiReady(q);state.setPoi('library');state=q.render();state.setBuilding('a');state=q.render();state.setFloor('one');state=q.render();assert.equal(state.poiKey,'library');
+ state.setPoi('missing');state=q.render();assert.equal(state.preview,null);await state.send();assert.equal(q.sends.length,0);
+ state.setPoi('library');state=q.render();state.setFloor('two');state=q.render();assert.equal(state.poiKey,'');assert.equal(state.preview,'Estoy en Edificio A, en Piso 2.');
+ state.setBuilding('b');state=q.render();assert.equal(state.floorId,'');assert.equal(state.poiKey,'');assert.equal(state.preview,null);q.h.unmount();
+});
+
+test('reloading location options clears a removed POI and keeps the valid floor-only location',async()=>{
+ const q=physicalHook();let state=await poiReady(q);state.setPoi('library');state=q.render();state.reloadOptions();q.render();
+ q.options.at(-1).resolve({buildings:[{id:'a',name:'Edificio A',floors:[{id:'one',name:'Piso 1',pois:[]}]}]});await setImmediate();state=q.render();assert.equal(state.poiKey,'');assert.equal(state.floorId,'one');assert.equal(state.preview,'Estoy en Edificio A, en Piso 1.');q.h.unmount();
+});
+
+test('coordination HTTP client preserves the old payload and adds only optional poiKey',async()=>{
+ const calls=[],{sendPhysicalgoodsCoordination}=load('physicalgoods/api/physicalgoodsApi.ts',{'@/lib/api/authenticated-request':{authenticatedRequest:(...args)=>{calls.push(args);return Promise.resolve({});}}});
+ const target={publicationId:'11111111-1111-4111-8111-111111111111',transactionId:'22222222-2222-4222-8222-222222222222'},signal=new AbortController().signal;
+ await sendPhysicalgoodsCoordination(target,'a','one',signal);await sendPhysicalgoodsCoordination(target,'a','one',signal,'library');
+ assert.deepEqual(JSON.parse(calls[0][1].body),{buildingId:'a',floorId:'one'});assert.deepEqual(JSON.parse(calls[1][1].body),{buildingId:'a',floorId:'one',poiKey:'library'});assert.equal(calls[1][1].signal,signal);
+});
+
+test('silent messages refresh preserves a failed POI send until a new matching server receipt confirms delivery',async()=>{
+ const q=physicalHook();let state=await poiReady(q);state.setPoi('library');state=q.render();const text=state.preview;
+ const pending=state.send();q.messages.at(-1).resolve({data:[],meta:{hasMore:false}});await setImmediate();q.sends[0].reject(new Error('lost response'));await pending;
+ q.render();q.render();q.details.at(-1).resolve(physical);q.messages.at(-1).resolve({data:[],meta:{hasMore:false}});await setImmediate();state=q.render();assert.ok(state.messageError);
+ const error=state.messageError,missing=state.pollMessages();q.messages.at(-1).resolve({data:[],meta:{hasMore:false}});await missing;state=q.render();assert.equal(state.messageError,error);
+ const recovered=state.pollMessages();q.messages.at(-1).resolve({data:[{id:'receipt-poi',senderId:'owner',text,createdAt:stamp}],meta:{hasMore:false}});await recovered;state=q.render();assert.equal(state.messageError,null);assert.equal(q.sends.length,1);q.h.unmount();
 });

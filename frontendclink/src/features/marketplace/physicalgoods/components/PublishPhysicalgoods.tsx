@@ -14,6 +14,7 @@ import { PhysicalgoodsTransaction } from './PhysicalgoodsTransaction';
 import type { PhysicalgoodsTransactionTarget } from '../types/publication';
 import {PhysicalgoodsHistory,PhysicalgoodsHistoryDetail} from './PhysicalgoodsHistory';
 import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory';
+import { agreementCopy } from '../../utils/agreementPresentation';
 import { CatalogTabs, PublishFAB, ScreenHeader } from '../../components/CatalogUI';
 import { PublicationSection, PublicationModality, PublicationUpload, PublicationFeedback, PublicationSubmit, publicationUI as f } from '../../components/PublicationFormUI';
 import { PublicationChoices } from '../../components/PublicationChoices';
@@ -45,32 +46,31 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
     <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]} keyboardShouldPersistTaps="handled">
-      <ScreenHeader title={publishing ? 'Publicar recurso' : personal ? 'Mi actividad' : 'Mercado'}
+      <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : personal ? 'Mi actividad' : 'Mercado'}
         subtitle={publishing ? 'Comparte un recurso físico con tu campus' : personal ? 'Tus publicaciones, solicitudes y transacciones' : 'Recursos físicos de tu campus'}
         action={view === 'explore' ? 'Mi actividad' : undefined} onAction={() => setView('mine')}
         onBack={view !== 'explore' ? () => setView('explore') : undefined} />
       {personal && <CatalogTabs variant="underline" selected={received || sent ? 'requests' : view === 'transactions' ? 'transactions' : 'mine'}
         onSelect={tab => { if (tab === 'requests') showRequests(requestView); else setView(tab); }} tabs={[
-          { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes' }, { id: 'transactions', label: 'Transacciones' },
+          { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes' }, { id: 'transactions', label: 'Acuerdos' },
         ]} />}
-      {(received || sent) && <CatalogTabs selected={view as 'sent' | 'received'} onSelect={showRequests}
-        tabs={[{ id: 'sent', label: 'Enviadas' }, { id: 'received', label: 'Recibidas' }]} />}
+
       <View style={publishing ? undefined : { display: 'none' }}>
         <PublicationForm onPublished={refresh} onGallery={id => { setView('explore'); resources.open(id); }} />
       </View>
-      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests active={received} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
+      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests onModeChange={value => showRequests(value ? 'received' : 'sent')} onExplore={() => setView('explore')} active={received} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
-      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
+      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests onModeChange={value => showRequests(value ? 'received' : 'sent')} onExplore={() => setView('explore')} active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
       <View style={view==='mine'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='mine'} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} onRequests={() => showRequests('received')} onPublish={() => setView('publish')} /></View>
-      <View style={view==='transactions'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='transactions'} transactions refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} /></View>
+      <View style={view==='transactions'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='transactions'} transactions showTitle={false} onExplore={() => setView('explore')} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} /></View>
       <View style={view!=='explore' ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} onPublish={() => setView('publish')}
         onRequestDetail={(publicationId, requestId) => { resources.close(); openRequest(publicationId, requestId); }} /></View>
     </RefreshScrollView>
     {historyDetail&&<PhysicalgoodsHistoryDetail key={`${historyDetail.publicationId}:${historyDetail.requestId??''}`} target={historyDetail}
       onClose={()=>{setHistoryDetail(null);setRequestsVersion(value=>value+1);}} onAgreement={openAgreement}
       onOpen={id=>{setHistoryDetail(null);setView('explore');resources.open(id);}} />}
-    {agreement&&<PhysicalgoodsTransaction key={`${agreement.publicationId}:${agreement.transactionId}`} target={agreement} onChanged={refresh}
+    {agreement&&<PhysicalgoodsTransaction key={`${agreement.publicationId}:${agreement.transactionId}`} target={agreement} onOpen={id=>{setAgreement(null);setView('explore');resources.open(id);}} onChanged={refresh}
       onClose={()=>{setAgreement(null);setRequestsVersion(value=>value+1);}} />}
     {view === 'explore' && <PublishFAB onPress={() => setView('publish')} />}
     <BottomNavigationBar activeItemId="physicalgoods" />

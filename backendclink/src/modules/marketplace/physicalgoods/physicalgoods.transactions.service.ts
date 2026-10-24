@@ -116,7 +116,9 @@ async function coordinationBuildings(campusId:string) {
   return buildings.filter(building=>building.name.trim()&&building.name.length<=200&&/^[a-zA-Z0-9_-]{1,120}$/.test(building.id)
     &&buildings.filter(value=>value.id===building.id).length===1).map(building=>({id:building.id,name:building.name,
       floors:building.floors.filter(floor=>floor.name.trim()&&floor.name.length<=200&&/^[a-zA-Z0-9_-]{1,120}$/.test(floor.id)
-        &&building.floors.filter(value=>value.id===floor.id).length===1).map(floor=>({id:floor.id,name:floor.name}))})).filter(building=>building.floors.length);
+        &&building.floors.filter(value=>value.id===floor.id).length===1).map(floor=>({id:floor.id,name:floor.name,
+          pois:floor.pois.filter(poi=>poi.name.trim()&&poi.name.length<=200&&/^[a-zA-Z0-9_-]{1,120}$/.test(poi.poiKey)
+            &&floor.pois.filter(value=>value.poiKey===poi.poiKey).length===1).map(poi=>({id:poi.poiKey,name:poi.name}))}))})).filter(building=>building.floors.length);
   } catch {
     throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudieron cargar las ubicaciones del campus.');
   }
@@ -149,10 +151,12 @@ export async function sendPhysicalgoodsCoordination(auth:VerifiedAuthConnection,
   const buildings=await coordinationBuildings(campusId),building=buildings.find(value=>value.id===location.buildingId);
   const floor=building?.floors.find(value=>value.id===location.floorId);
   if(!building||!floor)throw new ApiError(400,'VALIDATION_ERROR','El edificio o piso ya no está disponible. Actualiza las ubicaciones.');
+  const poi=location.poiKey?floor.pois.find(value=>value.id===location.poiKey):undefined;
+  if(location.poiKey&&!poi)throw new ApiError(400,'VALIDATION_ERROR','El punto de interés ya no está disponible en ese piso. Actualiza las ubicaciones.');
   return transactionContext(auth,publicationId,transactionId,async(client,resource,transaction,current)=>{
     if(!inProgress(transaction))throw new ApiError(409,'CONFLICT','El acuerdo ya fue cerrado.');
     const recipient=current.userId===transaction.propietario_id?transaction.receptor_id:transaction.propietario_id;
-    const message=await insertPhysicalgoodsCoordination(client,resource.id,transaction.id,recipient,`Estoy en ${building.name}, en ${floor.name}.`);
+    const message=await insertPhysicalgoodsCoordination(client,resource.id,transaction.id,recipient,`Estoy en ${building.name}, en ${floor.name}${poi?`, en ${poi.name}`:''}.`);
     return coordinationDto(message,transaction);
   });
 }

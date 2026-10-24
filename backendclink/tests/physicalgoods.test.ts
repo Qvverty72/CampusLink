@@ -1173,8 +1173,8 @@ test('participants can still reach and close the agreement from own lists after 
 
 test('coordination loads visible active-campus building and floor names and never mesh identifiers or foreign maps',async()=>{
   const {saved,id}=await acceptedAgreement();
-  const options=await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id);assert.equal(options.buildings.length,2);assert.deepEqual(options.buildings[1],{id:'cabin01',name:'Cabaña C',floors:[{id:'cabin01_floor1',name:'Piso -3'}]});
-  assert.doesNotMatch(JSON.stringify(options),/pois|meshName|transform|campusId/);
+  const options=await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id);assert.equal(options.buildings.length,2);assert.deepEqual(options.buildings[1],{id:'cabin01',name:'Cabaña C',floors:[{id:'cabin01_floor1',name:'Piso -3',pois:[]}]});
+  assert.doesNotMatch(JSON.stringify(options),/meshName|transform|campusId/);
   activeMap!.buildings.push({id:'hidden',name:'Hidden',isVisible:false,floors:[{id:'hidden_floor',name:'Hidden'}]},{id:'retired',name:'Retired',deletedAt:new Date(),floors:[]});
   (activeMap!.buildings[0] as any).floors.push({id:'hidden_floor',name:'Hidden',isVisible:false},{id:'retired_floor',name:'Retired',deletedAt:new Date()});
   assert.equal((await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id)).buildings.length,2);
@@ -1195,6 +1195,53 @@ test('predefined coordination persists in existing notifications with server rec
   await assert.rejects(transactionsService.getPhysicalgoodsCoordinationMessages(second,saved.id,id,{}),{status:404});
   (activeMap!.buildings[0] as any).name='Edificio renombrado';(activeMap!.buildings[0] as any).floors[1].name='Piso renombrado';
   assert.equal((await transactionsService.getPhysicalgoodsCoordinationMessages(first,saved.id,id,{})).data.find(row=>row.id===message.id)?.text,message.text);assert.deepEqual((await columns()).rows,before.rows);
+});
+
+function coordinationPois(){
+  const floor=(activeMap!.buildings[0] as any).floors[1];
+  floor.pois=[{poiKey:'library',name:'Biblioteca',isVisible:true,description:'private metadata',meshName:'hidden-mesh'},
+    {poiKey:'hidden',name:'Oculto',isVisible:false},{poiKey:'deleted',name:'Retirado',isVisible:true,deletedAt:new Date()},
+    {poiKey:'duplicate',name:'Uno',isVisible:true},{poiKey:'duplicate',name:'Dos',isVisible:true},
+    {poiKey:'../invalid',name:'Inválido',isVisible:true},{poiKey:'blank',name:' ',isVisible:true}];
+  (activeMap!.buildings[1] as any).floors[0].pois=[{poiKey:'other-floor',name:'Otro piso',isVisible:true}];
+  return floor;
+}
+
+test('coordination options expose only visible unambiguous POIs belonging to each active-campus floor',async()=>{
+  const {saved,id}=await acceptedAgreement();coordinationPois();
+  const options=await transactionsService.getPhysicalgoodsCoordinationOptions(auth,saved.id,id);
+  assert.deepEqual(options.buildings[0].floors[0].pois,[]);
+  assert.deepEqual(options.buildings[0].floors[1].pois,[{id:'library',name:'Biblioteca'}]);
+  assert.deepEqual(options.buildings[1].floors[0].pois,[{id:'other-floor',name:'Otro piso'}]);
+  assert.doesNotMatch(JSON.stringify(options),/private metadata|hidden-mesh|description|deletedAt|isVisible/);
+});
+
+test('optional POI coordination uses server names and existing notification history, including after rename, removal and closure',async()=>{
+  const {saved,first,id}=await acceptedAgreement(),floor=coordinationPois();
+  const message=await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,{...location,poiKey:'library'});
+  assert.equal(message.text,'Estoy en Edificio E, en Piso 2, en Biblioteca.');assert.equal(message.recipientId,first.userId);assert.equal(message.senderId,auth.userId);
+  const stored=(await db.query('select * from notificacion where id=$1',[message.id])).rows[0];assert.equal(stored.mensaje,message.text);assert.equal(stored.tipo_notificacion,'COORDINACION_RECURSO');
+  floor.pois[0].name='Renombrada';floor.pois[0].deletedAt=new Date();
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
+  assert.equal((await transactionsService.getPhysicalgoodsCoordinationMessages(first,saved.id,id,{})).data[0].text,message.text);
+});
+
+test('coordination rejects POIs from another floor, hidden/removed/duplicate/invalid points and client-supplied labels without inserting messages',async()=>{
+  const {saved,id}=await acceptedAgreement();coordinationPois();
+  for(const poiKey of ['other-floor','hidden','deleted','duplicate','missing','../invalid','',null,42,['library']]){
+    await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,{...location,poiKey}),{status:400});
+  }
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,{...location,poiKey:'library',poiName:'Inventado'}),{status:400});
+  assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+  const fallback=await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location);assert.equal(fallback.text,'Estoy en Edificio E, en Piso 2.');
+});
+
+test('HTTP coordination accepts optional poiKey and preserves the exact legacy body while rejecting a stale POI',async()=>{
+  const {saved,id}=await acceptedAgreement(),floor=coordinationPois(),url=base+'/'+saved.id+'/transactions/'+id,headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+  let response=await originalFetch(url+'/coordination-options',{headers});assert.deepEqual((await response.json()).data.buildings[0].floors[1].pois,[{id:'library',name:'Biblioteca'}]);
+  response=await originalFetch(url+'/messages',{method:'POST',headers,body:JSON.stringify({...location,poiKey:'library'})});assert.equal(response.status,201);assert.equal((await response.json()).data.text,'Estoy en Edificio E, en Piso 2, en Biblioteca.');
+  floor.pois[0].isVisible=false;response=await originalFetch(url+'/messages',{method:'POST',headers,body:JSON.stringify({...location,poiKey:'library'})});assert.equal(response.status,400);
+  response=await originalFetch(url+'/messages',{method:'POST',headers,body:JSON.stringify(location)});assert.equal(response.status,201);assert.equal((await response.json()).data.text,'Estoy en Edificio E, en Piso 2.');
 });
 
 test('coordination rejects free text, identity overrides, malformed fields and floors that do not belong to the selected building',async()=>{

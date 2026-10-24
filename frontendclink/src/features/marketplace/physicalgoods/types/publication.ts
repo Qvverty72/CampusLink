@@ -131,7 +131,7 @@ export interface PhysicalgoodsTransaction {
   rating:PhysicalgoodsRating|null;
   canRate:boolean;
 }
-export interface PhysicalgoodsCoordinationOptions { buildings:{id:string;name:string;floors:{id:string;name:string}[]}[] }
+export interface PhysicalgoodsCoordinationOptions { buildings:{id:string;name:string;floors:{id:string;name:string;pois?:{id:string;name:string}[]}[]}[] }
 export interface PhysicalgoodsCoordinationMessage { id:string;senderId:string;recipientId:string;text:string;createdAt:string }
 export interface PhysicalgoodsCoordinationPage {data:PhysicalgoodsCoordinationMessage[];meta:PhysicalgoodsPage['meta']}
 export interface PhysicalgoodsOwnPublication extends PhysicalgoodsResource {

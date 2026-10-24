@@ -97,11 +97,11 @@ const elements = node => !node || typeof node !== 'object' ? [] : [node, ...[nod
 for (const kind of ['physical', 'digital']) {
   test(`${kind}: controles de búsqueda, modalidad, sheet y chips conservan IDs y permiten quitar filtros`, () => {
     const h = runtime(), changes = [];
-    const components = { SearchInput: 'Search', FilterChips: 'Chips', FilterSheet: 'Sheet', FilterOptions: 'Options', ui: {} };
-    const shared = { react: h.react, 'react/jsx-runtime': jsx, 'react-native': { View: 'View', Text: 'Text', TextInput: 'Input', Pressable: 'Button' }, '../../components/CatalogUI': components, '../../components/SearchableFilterSelect': { SearchableFilterSelect: 'Options' } };
+    const components = { SearchInput: 'Search', FilterChips: 'Chips', FilterSheet: 'Sheet', FilterOptions: 'Options', ui: {}, CATALOG_COLORS: {} };
+    const shared = { react: h.react, 'react/jsx-runtime': jsx, 'react-native': { View: 'View', Text: 'Text', TextInput: 'Input', Pressable: 'Button', ScrollView: 'Scroll', Switch: 'Switch', StyleSheet: { create: value => value } }, '../../components/CatalogUI': components, '../../components/AcademicFilterFields': { AcademicFilterFields: 'Academic' } };
     let render;
     if (kind === 'physical') {
-      const { PhysicalgoodsSearchFilters } = load('physicalgoods/components/PhysicalgoodsSearchFilters.tsx', { ...shared, '../types/publication': { resourceConditions: [] } });
+      const { PhysicalgoodsSearchFilters } = load('physicalgoods/components/PhysicalgoodsSearchFilters.tsx', { ...shared, '../types/publication': { resourceConditions: [{ value: 'NUEVO', label: 'Nuevo' }, { value: 'BUEN_ESTADO', label: 'Buen estado' }, { value: 'USADO', label: 'Usado' }, { value: 'DETERIORADO', label: 'Deteriorado' }] } });
       const resources = { filters: { ...emptyPhysicalgoodsFilters, categoryId: 'books' }, options: { categories: [{ id: 'books', name: 'Libros' }], careers: [], subjects: [] }, setFilter: (...args) => changes.push(args) };
       render = () => PhysicalgoodsSearchFilters({ resources });
     } else {
@@ -117,11 +117,36 @@ for (const kind of ['physical', 'digital']) {
     else { assert.equal(changes[0].q, 'cálculo'); assert.equal(changes[1].modality, 'VENTA'); assert.equal(changes[2].careerId, ''); }
     nodes.find(node => node.type === 'Chips').props.onMore(); nodes = elements(h.render(render));
     assert.equal(nodes.find(node => node.type === 'Sheet').props.visible, true);
-    let selects = nodes.filter(node => node.type === 'Options'); assert.ok(selects.every(node => !node.props.expanded));
-    selects[0].props.onExpandedChange(true); nodes = elements(h.render(render)); selects = nodes.filter(node => node.type === 'Options'); assert.equal(selects.filter(node => node.props.expanded).length, 1);
-    selects[1].props.onExpandedChange(true); nodes = elements(h.render(render)); selects = nodes.filter(node => node.type === 'Options'); assert.equal(selects[0].props.expanded, false); assert.equal(selects[1].props.expanded, true);
+    assert.equal(nodes.find(node => node.type === 'Sheet').props.fillHeight, true);
+    assert.equal(nodes.find(node => node.type === 'Sheet').props.compact, true);
+    assert.equal(nodes.find(node => node.type === 'Sheet').props.preferredHeight, kind === 'physical' ? 680 : 480);
+    let academic = nodes.find(node => node.type === 'Academic'); assert.equal(academic.props.openField, null);
+    academic.props.onOpenFieldChange('careerId'); nodes = elements(h.render(render));
+    academic = nodes.find(node => node.type === 'Academic'); assert.equal(academic.props.openField, 'careerId');
+    academic.props.onOpenFieldChange('subjectId'); nodes = elements(h.render(render));
+    academic = nodes.find(node => node.type === 'Academic'); assert.equal(academic.props.openField, 'subjectId');
+    academic.props.onChange('subjectId', 'subject');
+    if (kind === 'physical') {
+      assert.deepEqual(changes.at(-1), ['subjectId', 'subject']);
+      for (const [label, id] of [['Nuevo','NUEVO'],['Buen estado','BUEN_ESTADO'],['Usado','USADO'],['Deteriorado','DETERIORADO'],['Todas','']]) {
+        nodes.find(node => node.props?.accessibilityLabel === `Condición: ${label}`).props.onPress();
+        if (id) assert.deepEqual(changes.at(-1), ['condition', id]);
+      }
+      nodes.find(node => node.props?.accessibilityLabel === 'Categoría: Todas').props.onPress();
+      assert.deepEqual(changes.at(-1), ['categoryId', '']);
+      const before = changes.length;
+      nodes.find(node => node.props?.accessibilityLabel === 'Categoría: Libros').props.onPress();
+      assert.equal(changes.length, before, 'Repetir la selección no consulta');
+      nodes.find(node => node.props?.accessibilityLabel === 'Precio mínimo').props.onChangeText('1000');
+      assert.deepEqual(changes.at(-1), ['minPrice','1000']);
+      nodes.find(node => node.props?.accessibilityLabel === 'Precio máximo').props.onChangeText('5000');
+      assert.deepEqual(changes.at(-1), ['maxPrice','5000']);
+      nodes.find(node => node.type === 'Switch').props.onValueChange(true);
+      assert.deepEqual(changes.at(-1), ['mine',true]);
+    } else { assert.equal(changes.at(-1).subjectId, 'subject'); assert.equal(changes.at(-1).careerId, 'career'); }
     nodes.find(node => node.type === 'Sheet').props.onClose(); nodes = elements(h.render(render));
-    assert.equal(nodes.find(node => node.type === 'Sheet').props.visible, false); assert.ok(nodes.filter(node => node.type === 'Options').every(node => !node.props.expanded));
+    assert.equal(nodes.find(node => node.type === 'Sheet').props.visible, false);
+    assert.equal(nodes.find(node => node.type === 'Academic').props.openField, null);
     h.unmount();
   });
 }
@@ -144,4 +169,21 @@ for (const kind of ['physical','digital']) test(`${kind}: refrescar vuelve a pá
  if(kind==='physical')state.setFilter('modality','DONACION');state=f.render();f.h.tick(300);state=f.render();f.calls.at(-1).resolve({data:[],meta:{hasMore:true}});await setImmediate();state=f.render();
  if(kind==='physical')state.setNumber(3);else state.nextPage();state=f.render();f.calls.at(-1).resolve({data:[],meta:{hasMore:true}});await setImmediate();state=f.render();state.refresh();state=f.render();
  assert.equal(f.calls.at(-1).page,1);assert.equal(f.calls.at(-1).filters.q,'cálculo');assert.equal(f.calls.at(-1).filters.modality,'DONACION');assert.equal(state.filters.q,'cálculo');f.h.unmount();
+});
+
+test('grupo académico comparte búsqueda requerida y conserva IDs, apertura y estado de carga', () => {
+  const { AcademicFilterFields } = load('components/AcademicFilterFields.tsx', {
+    'react/jsx-runtime': jsx, 'react-native': { View: 'View', Text: 'Text' },
+    './CatalogUI': { ui: {} }, './SearchableFilterSelect': { SearchableFilterSelect: 'Options' },
+  });
+  const changes = [], openings = [], careers = [{ id: 'career', name: 'Informática' }];
+  const nodes = elements(AcademicFilterFields({ careers, subjects: [], careerId: 'career', subjectId: '', openField: 'careerId',
+    onChange: (...args) => changes.push(args), onOpenFieldChange: value => openings.push(value), disabled: true, loading: true }));
+  const selects = nodes.filter(node => node.type === 'Options');
+  assert.equal(selects.length, 2); assert.equal(selects[0].props.options, careers);
+  assert.equal(selects[0].props.value, 'career'); assert.equal(selects[0].props.expanded, true); assert.equal(selects[1].props.expanded, false);
+  for (const select of selects) { assert.equal(select.props.searchRequired, true); assert.equal(select.props.showLabel, false);
+    assert.equal(select.props.placeholder, select.props.label); assert.equal(select.props.disabled, true); assert.equal(select.props.loading, true); }
+  selects[1].props.onExpandedChange(true); selects[1].props.onChange('subject'); selects[0].props.onExpandedChange(false);
+  assert.deepEqual(openings, ['subjectId', null]); assert.deepEqual(changes, [['subjectId', 'subject']]);
 });

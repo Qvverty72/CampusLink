@@ -29,12 +29,13 @@ function runtime() {
 }
 const elements = node => !node || typeof node !== 'object' ? [] : [node, ...[node.props?.children].flat(4).flatMap(elements)];
 const noop = () => {};
-const components = Object.fromEntries(['AgreementNotice', 'DetailActionBar', 'DetailHeader', 'DetailSection', 'OwnerCard', 'RequestMessageForm', 'RequestResourceSummary', 'ResourceDetailSkeleton'].map(name => [name, name]));
+const components = Object.fromEntries(['AgreementNotice', 'DetailActionBar', 'DetailHeader', 'DetailSection', 'OwnerCard', 'RequestMessageForm', 'RequestResourceSummary', 'ResourceDetailSkeleton', 'ResourcePrice'].map(name => [name, name]));
 components.detailUI = {};
 const native = { View: 'View', Text: 'Text', Pressable: 'Button', ScrollView: 'Scroll', Image: 'Image', StyleSheet: { create: value => value } };
 const catalogUI = { CATALOG_COLORS: {}, ui: {}, FilterOptions: 'Options', PriceTag: 'Price', StatusTag: 'Status' };
 const baseUI = h => ({ react: h.react, 'react/jsx-runtime': jsx, 'react-native': native,
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
+  '../../components/PersonalUI': { PersonalStatus: 'Status' }, '../../components/RequestFlowUI': { RequestSentConfirmation: 'Sent' },
   '../../components/CatalogUI': catalogUI, '../../components/ResourceDetailUI': components,
   '../../components/MarketplaceReportForm': { MarketplaceReportForm: 'Report' },
 });

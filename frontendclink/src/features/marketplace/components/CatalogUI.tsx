@@ -64,18 +64,18 @@ export function FilterChips({ modality, onModality, onMore, moreLabel = 'Filtros
   </View>;
 }
 
-export function FilterSheet({ visible, title, onClose, children, confirmLabel = 'Ver resultados' }: { visible: boolean; title: string; onClose: () => void; children: ReactNode; confirmLabel?: string }) {
+export function FilterSheet({ visible, title, onClose, children, confirmLabel = 'Ver resultados', fillHeight = false, compact = false, preferredHeight }: { visible: boolean; title: string; onClose: () => void; children: ReactNode; confirmLabel?: string; fillHeight?: boolean; compact?: boolean; preferredHeight?: number }) {
   const insets = useSafeAreaInsets();
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <KeyboardAvoidingView style={ui.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={StyleSheet.absoluteFill} />
-      <View accessibilityViewIsModal style={[ui.sheet, { paddingBottom: Math.max(20, insets.bottom), marginTop: Math.max(24, insets.top) }]}>
-        <View style={ui.handle} />
+      <View accessibilityViewIsModal style={[ui.sheet, fillHeight && ui.fullSheet, fillHeight && preferredHeight !== undefined && { height: preferredHeight }, compact && ui.compactSheet, { paddingBottom: Math.max(20, insets.bottom), marginTop: Math.max(24, insets.top) }]}>
+        {!compact && <View style={ui.handle} />}
         <View style={ui.headingRow}><Text accessibilityRole="header" style={ui.sectionTitle}>{title}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={ui.iconButton}><X color={CATALOG_COLORS.primary} size={22} /></Pressable>
         </View>
-        <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={ui.sheetContent}>{children}</ScrollView>
-        <Pressable accessibilityRole="button" onPress={onClose} style={ui.primary}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>
+        <ScrollView style={fillHeight ? ui.sheetBody : undefined} bounces={fillHeight ? false : undefined} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={ui.sheetContent}>{children}</ScrollView>
+        <Pressable accessibilityRole="button" onPress={onClose} style={[ui.primary, compact && ui.filterConfirm]}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>
       </View>
     </KeyboardAvoidingView>
   </Modal>;
@@ -173,6 +173,9 @@ export const ui = StyleSheet.create({
   chipText: { fontSize: 13, fontWeight: '600', color: CATALOG_COLORS.primary }, activeChip: { backgroundColor: CATALOG_COLORS.primary, borderColor: CATALOG_COLORS.primary }, activeChipText: { color: '#FFFFFF' },
   activeFilters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, removableChip: { minHeight: 44, maxWidth: '100%', borderRadius: 22, paddingHorizontal: 12, backgroundColor: CATALOG_COLORS.tint, flexDirection: 'row', alignItems: 'center', gap: 8 }, removableText: { fontSize: 12, color: CATALOG_COLORS.primary, flexShrink: 1 },
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(9,36,58,0.4)' }, sheet: { width: '100%', maxWidth: 760, maxHeight: '90%', alignSelf: 'center', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#FFFFFF', paddingHorizontal: 20, gap: 8 },
+  compactSheet: { paddingTop: 8, paddingHorizontal: 16 }, filterConfirm: { borderRadius: 28, minHeight: 48 },
+  filterLabel: { color: CATALOG_COLORS.secondary, fontSize: 12, fontWeight: '500' },
+  fullSheet: { height: '90%', flexShrink: 1 }, sheetBody: { flex: 1, minHeight: 0 },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: CATALOG_COLORS.inputBorder, alignSelf: 'center', marginTop: 10 }, sheetContent: { gap: 20, paddingBottom: 20 },
   optionGroup: { gap: 8 }, label: { color: CATALOG_COLORS.ink, fontSize: 14, fontWeight: '700' }, input: { minHeight: 48, borderWidth: 1, borderColor: CATALOG_COLORS.inputBorder, borderRadius: 12, padding: 12, fontSize: 14, color: CATALOG_COLORS.ink },
   option: { minHeight: 44, maxWidth: '100%', padding: 12, borderWidth: 1, borderColor: CATALOG_COLORS.inputBorder, borderRadius: 12, justifyContent: 'center' }, optionText: { fontSize: 13, color: CATALOG_COLORS.muted }, selectedOption: { borderColor: CATALOG_COLORS.primary, backgroundColor: CATALOG_COLORS.tint }, selectedText: { color: CATALOG_COLORS.primary, fontWeight: '700' },

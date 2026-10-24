@@ -288,12 +288,14 @@ test('personal modal lists register their own queries and protect confirmation a
     '../../components/ActivityUI': { activityUI: {}, ActivityHeader: 'Header', ActivityFeedback: 'Feedback', ActivityPager: 'Pager', ActivityAction: 'Action' },
     '../../components/ResourceDetailUI': { detailUI: {} }, '../../components/CatalogUI': { CATALOG_COLORS: {} }, 'lucide-react-native': {} };
   const reload = () => {}, history = { reload, loading: false, page: null, number: 1 };
-  const { PhysicalgoodsHistory } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,
+  const { PhysicalgoodsHistory } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},
+    'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0,bottom:0})}, '../../components/PersonalUI':{PersonalStatus:'Status'}, '../../components/RequestFlowUI':{RequestTimeline:'Timeline'},
     '../hooks/usePhysicalgoodsHistory': { usePhysicalgoodsHistory: () => history }, '../types/publication': { resourceConditions: [] } });
-  for (const transactions of [false, true]) {
-    PhysicalgoodsHistory({ active: true, transactions, refreshVersion: 0 }); assert.equal(registered.onRefresh, reload); assert.equal(registered.enabled, true);
-    history.loading = true; PhysicalgoodsHistory({ active: true, transactions, refreshVersion: 0 }); assert.equal(registered.refreshing, true); assert.equal(registered.enabled, false);
-    history.loading = false; PhysicalgoodsHistory({ active: true, transactions, refreshVersion: 0, refreshEnabled: false }); assert.equal(registered.enabled, false);
+  const renderPublications=(props)=>{const node=PhysicalgoodsHistory(props);return node.type(node.props);};
+  for (const transactions of [false]) {
+    renderPublications({ active: true, transactions, refreshVersion: 0 }); assert.equal(registered.onRefresh, reload); assert.equal(registered.enabled, true);
+    history.loading = true; renderPublications({ active: true, transactions, refreshVersion: 0 }); assert.equal(registered.refreshing, true); assert.equal(registered.enabled, false);
+    history.loading = false; renderPublications({ active: true, transactions, refreshVersion: 0, refreshEnabled: false }); assert.equal(registered.enabled, false);
   }
   const requests = { reload, loading: false, busy: false, selection: null, page: null, number: 1 };
   const { PhysicalgoodsRequests } = load('../marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx', { ...shared,
@@ -319,7 +321,8 @@ test('nested history/agreement modals use universal refresh and wait for their d
   const shared = { 'react/jsx-runtime': jsx, 'react-native': native, '@/components/RefreshScrollView': { RefreshScrollView: 'UniversalScroll' },
     '../../components/ActivityUI': {}, '../../components/ResourceDetailUI': { detailUI: {}, ResourceDetailSkeleton: 'Skeleton' }, '../../components/CatalogUI': { CATALOG_COLORS: {} } };
   const reload = () => {}, history = { detail: null, reload, loading: false };
-  const { PhysicalgoodsHistoryDetail } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,
+  const { PhysicalgoodsHistoryDetail } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},
+    'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0,bottom:0})}, '../../components/PersonalUI':{PersonalStatus:'Status'}, '../../components/RequestFlowUI':{RequestTimeline:'Timeline'},
     '../hooks/usePhysicalgoodsHistory': { usePhysicalgoodsHistoryDetail: () => history }, '../types/publication': { resourceConditions: [] } });
   const renderHistory = (refreshEnabled = true) => elements(PhysicalgoodsHistoryDetail({ target: { publicationId: 'publication' }, refreshEnabled })).find(node => node.type === 'UniversalScroll');
   assert.equal(renderHistory().props.onRefresh, reload); assert.equal(renderHistory().props.refreshEnabled, true);
@@ -328,6 +331,9 @@ test('nested history/agreement modals use universal refresh and wait for their d
   const h = hooks(), agreement = { detail: null, reload, busy: false, loading: false, messagesLoading: false, optionsLoading: false, action: null, ratingConfirmation: false };
   const { PhysicalgoodsTransaction } = load('../marketplace/physicalgoods/components/PhysicalgoodsTransaction.tsx', { ...shared, react: h.react,
     '../hooks/usePhysicalgoodsTransaction': { usePhysicalgoodsTransaction: () => agreement },
+    '../hooks/usePhysicalgoodsAgreementRequest':{usePhysicalgoodsAgreementRequest:()=>({request:null,loading:false,error:null})},
+    './PhysicalgoodsAgreementProduct':{PhysicalgoodsAgreementProduct:'ProductModal'}, '../../components/AgreementStepModal':{AgreementStepModal:'StepModal'},
+    '../../components/AgreementUI':{AgreementHeader:'Header',AgreementMenu:'Menu'}, '../../utils/agreementPresentation':{agreementCopy:{},agreementPresentation:()=>({})}, './PhysicalgoodsHistory':{},
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 59, bottom: 34 }) },
     '../../components/RequestsUI': { RequestButton: 'Button' },
     '../../components/TransactionUI': { transactionUI: {}, TransactionHeader: 'Header', TransactionFeedback: 'Feedback', TransactionDecisionDialog: 'Dialog' },
