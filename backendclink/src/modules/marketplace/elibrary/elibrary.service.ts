@@ -11,7 +11,7 @@ import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import type { DigitalPublication, DigitalUpload } from './elibrary.types.js';
 import { digitalId, parseDigitalInput, validateDigitalAcademics, validateDigitalFile } from './elibrary.validation.js';
 import { auditDigitalAcademics, findDigitalAcademicCatalog, replaceDigitalAcademics } from './elibrary.academics.repository.js';
-import { digitalFileHasReference, findDigitalCampus, findDigitalPublications, insertDigitalPublication,
+import { digitalFileHasReference, findDigitalCampus, findDigitalPublications, findDigitalOwnerSummary, insertDigitalPublication,
   lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from './elibrary.repository.js';
 
 const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo completar la operación.');
@@ -76,6 +76,11 @@ export async function getDigitalPublications(auth: VerifiedAuthConnection, publi
       const { campus } = await currentDigitalContext(client, auth);
       const publications = await findDigitalPublications(client, campus.institucion_id, id, undefined, auth.userId);
       if (id && !publications.length) throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible en tu institución.');
+      if (id) {
+        const owner = await findDigitalOwnerSummary(client, id, campus.institucion_id);
+        if (!owner) throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible en tu institución.');
+        publications[0] = { ...publications[0], owner };
+      }
       return publications;
     });
   } catch (error) { if (error instanceof ApiError) throw error; throw unavailable(); }

@@ -31,7 +31,7 @@ export function physicalgoodsHistoryPagination(query:unknown) {
   return result.data;
 }
 function ownDto(row:PhysicalgoodsOwnRow,current:VerifiedAuthConnection) {
-  return {id:row.id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at,
+  return {id:row.id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at,activity:{pendingRequests:row.pending_requests},
     campus:{id:row.campus_id,name:row.campus_nombre},category:{id:row.categoria_id,name:row.categoria_nombre},
     modality:row.modalidad,price:row.modalidad==='VENTA'?Number(row.precio):null,condition:row.estado_uso,publishedAt:row.publicado_en,
     canView:row.campus_id===current.campusId&&!row.deleted_at&&['DISPONIBLE','RESERVADO','FINALIZADO'].includes(row.estado_publicacion)};

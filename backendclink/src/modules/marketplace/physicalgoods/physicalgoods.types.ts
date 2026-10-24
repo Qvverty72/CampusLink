@@ -68,6 +68,7 @@ export interface PhysicalgoodsDetailRow extends PhysicalgoodsMediaRow {
   propietario_nombre: string;
 }
 export interface PhysicalgoodsOwnRow extends PhysicalgoodsDetailRow {
+  pending_requests: number;
   deleted_at: Date | null;
   publicado_en: string;
 }

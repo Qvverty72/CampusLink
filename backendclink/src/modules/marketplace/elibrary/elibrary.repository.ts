@@ -96,12 +96,46 @@ export async function findDigitalPublications(client: PoolClient, institutionId:
     .map(row => ({ ...row, careerIds: row.careers.map(career => career.id), subjectIds: row.subjects.map(subject => subject.id) }));
 }
 
+/** Agregados privados de una página propia ya autorizada; nunca agrega identidades de solicitantes. */
+export async function findOwnedDigitalActivity(client: PoolClient, institutionId: string, ownerId: string, ids: string[]) {
+  if (!ids.length) return [];
+  return (await client.query<{ id: string; pendingRequests: number; completedAgreements: number }>(
+    `SELECT p.id,
+      (SELECT count(*)::int FROM public.solicitud_recurso request WHERE request.publicacion_id=p.id AND request.estado_solicitud='PENDIENTE') AS "pendingRequests",
+      (SELECT count(*)::int FROM public.transaccion_recurso agreement WHERE agreement.publicacion_id=p.id AND agreement.propietario_id=p.propietario_id
+        AND agreement.estado_transaccion='COMPLETADA'
+        AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirmation WHERE confirmation.transaccion_id=agreement.id AND confirmation.usuario_id=agreement.propietario_id AND confirmation.rol_confirmante='PROPIETARIO')
+        AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirmation WHERE confirmation.transaccion_id=agreement.id AND confirmation.usuario_id=agreement.receptor_id AND confirmation.rol_confirmante='RECEPTOR')) AS "completedAgreements"
+     FROM public.publicacion_recurso p JOIN public.campus campus ON campus.id=p.campus_id
+     JOIN public.recurso_digital digital ON digital.publicacion_id=p.id
+     WHERE p.id=ANY($1::uuid[]) AND p.tipo_recurso='DIGITAL' AND p.propietario_id=$2 AND campus.institucion_id=$3`, [ids,ownerId,institutionId])).rows;
+}
+
 export async function findDigitalResource(client: PoolClient, id: string, institutionId: string) {
   return (await client.query<DigitalResourceRow>(
     `SELECT p.id,p.campus_id,p.propietario_id,p.titulo AS title,p.estado_publicacion,p.deleted_at,c.institucion_id
      FROM public.publicacion_recurso p JOIN public.recurso_digital d ON d.publicacion_id=p.id
      JOIN public.campus c ON c.id=p.campus_id
      WHERE p.id=$1 AND p.tipo_recurso='DIGITAL' AND c.institucion_id=$2 FOR NO KEY UPDATE OF p`, [id, institutionId])).rows[0] ?? null;
+}
+
+/** Solo detalle autorizado: perfil público y agregados digitales de la misma institución, sin identidades de receptores. */
+export async function findDigitalOwnerSummary(client: PoolClient, publicationId: string, institutionId: string) {
+  return (await client.query<NonNullable<DigitalPublication['owner']>>(
+    `SELECT owner.id,owner.nombre_completo AS "fullName",stats."averageRating",stats."ratingCount",stats."completedAgreements"
+     FROM public.publicacion_recurso publication JOIN public.campus campus ON campus.id=publication.campus_id
+     JOIN public.perfil_usuario owner ON owner.id=publication.propietario_id
+     CROSS JOIN LATERAL (
+       SELECT avg(rating.puntuacion)::float8 AS "averageRating",count(rating.id)::int AS "ratingCount",count(*)::int AS "completedAgreements"
+       FROM public.transaccion_recurso agreement JOIN public.publicacion_recurso resource ON resource.id=agreement.publicacion_id
+       JOIN public.campus origin ON origin.id=resource.campus_id
+       LEFT JOIN public.valoracion rating ON rating.transaccion_id=agreement.id AND rating.evaluado_id=agreement.propietario_id AND rating.evaluador_id=agreement.receptor_id
+       WHERE agreement.propietario_id=owner.id AND resource.propietario_id=owner.id AND resource.tipo_recurso='DIGITAL'
+         AND origin.institucion_id=$2 AND agreement.estado_transaccion='COMPLETADA'
+         AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirmation WHERE confirmation.transaccion_id=agreement.id AND confirmation.usuario_id=agreement.propietario_id AND confirmation.rol_confirmante='PROPIETARIO')
+         AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirmation WHERE confirmation.transaccion_id=agreement.id AND confirmation.usuario_id=agreement.receptor_id AND confirmation.rol_confirmante='RECEPTOR')
+     ) stats WHERE publication.id=$1 AND campus.institucion_id=$2 AND publication.tipo_recurso='DIGITAL'
+       AND publication.estado_publicacion='DISPONIBLE' AND publication.deleted_at IS NULL`, [publicationId, institutionId])).rows[0] ?? null;
 }
 export async function insertDigitalAttachment(client: PoolClient, publicationId: string, id: string, path: string, file: DigitalUpload) {
   const order = Number((await client.query<{ next_order: number }>(

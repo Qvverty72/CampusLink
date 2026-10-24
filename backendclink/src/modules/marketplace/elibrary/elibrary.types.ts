@@ -18,8 +18,10 @@ export interface DigitalAcademicCatalog {
 export interface DigitalUpload { name: string; mimeType: string; bytes: Buffer }
 export interface DigitalAttachment { id: string; name: string; mimeType: string; sizeBytes: number }
 export interface DigitalPublication extends DigitalInput {
+  activity?: { pendingRequests: number; completedAgreements: number };
   id: string;
   ownerId: string;
+  owner?: { id: string; fullName: string; averageRating: number | null; ratingCount: number; completedAgreements: number };
   campusId: string;
   institutionId: string;
   campusName: string;

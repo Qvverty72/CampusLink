@@ -583,6 +583,8 @@ Validación de PDF utiliza `pdf-lib`; transporte multipart acotado usa `busboy`;
 
 ## Vista previa digital (F2.5-05)
 
+El detalle `GET /api/v1/marketplace/elibrary/:publicationId` añade `owner: {id,fullName,averageRating,ratingCount,completedAgreements}`. Solo expone nombre público y agregados de acuerdos digitales de la institución de la publicación: estado COMPLETADA y confirmaciones de ambas partes. Incluye recursos retirados en esas cifras históricas; excluye intercambios físicos y de otras instituciones. Las valoraciones agregadas deben corresponder al receptor y propietario del acuerdo; sin valoraciones, averageRating es null. Esta proyección se consulta únicamente tras autorizar el detalle, no por cada resultado del catálogo; no expone identidades de receptores, comentarios, correos ni rutas de archivos. No requiere cambios de esquema.
+
 `GET /api/v1/marketplace/elibrary/:publicationId/files/:fileId/preview` requiere sesión/cuenta habilitada y publicación disponible de la misma institución. Sin query ni página/offset cliente. Devuelve JSON `{available,text,page,message}`: hasta400 caracteres y como máximo mitad de hasta800 caracteres extraídos de la primera página. PDF corto/escaneado/sin texto: sin muestra, conserva metadatos. Nunca devuelve PDF, enlaces ni rutas. Revalida identidad/recurso tras Storage/extracción. Descarga completa mantiene autorización separada.
 
 Mozilla `pdfjs-dist`6.4.299 se ejecuta en worker sin variables de entorno, evaluación ni descarga de fuentes; máximo2 concurrentes, heap128MB y8s. Workers, timers y slots se liberan en finally. Node requerido>=22.13 <23; manifest/lock coinciden. Sin SQL ni archivos PREVIEW persistidos nuevos.
@@ -783,6 +785,12 @@ Desde Mi perfil → Denuncias de contenido → Historial de resoluciones. Reutil
 Listado conserva identificador/tipo/título original del contenido, motivo, estado y fecha de denuncia, y `resolution:{justification,measure,resolvedById,resolvedAt}`. Detalle añade descripción, snapshot original y referencia del denunciante (`reporter:{id,name:null}`); currentPublication/currentTransaction son null. Solo lee reporte_contenido: no rehidrata publicaciones, actividades, transacciones ni nombres de cuentas desde su estado actual. Responsable identificado por UUID original; su desactivación o traslado no modifica la decisión histórica. Campos ausentes en registros legados se conservan null y se presentan como no registrados; no se inventa una decisión ni se reconstruyen antecedentes ausentes.
 
 Ambos GET exigen Bearer y no-store. La API vuelve a leer cuenta activa, roles por campus y campus activo mediante authorizedReview; admite sedes delegadas explícitamente. Reportería por sí sola no habilita moderación. 400 por UUID/paginación/query inválida,401 por sesión,403 por cuenta/campus/permisos,404 por caso no final o ajeno,503 sanitizado por dependencia. Historial sin formulario de resolución ni descarga de archivos; el flujo administrativo de revisión conserva esas operaciones. Cambiar vista/campus/identidad cancela solicitudes, limpia selección y descarta respuestas tardías; cambiar vista vuelve a página1. Sin SQL pendiente.
+
+## Actividad de publicaciones propias (M3/L3)
+
+Las lecturas privadas físicas `GET /api/v1/marketplace/physicalgoods/my-publications` y `/:publicationId/history` agregan `activity:{pendingRequests}` por publicación. Las lecturas digitales `GET /api/v1/marketplace/elibrary/mine` y `/mine/:publicationId` agregan `activity:{pendingRequests,completedAgreements}`. Pendientes cuenta solicitudes en PENDIENTE, sin implicar un estado de leído. Completados digitales exige transacción COMPLETADA y confirmaciones correctas de propietario y receptor. No agrega identidades de solicitantes, datos de contacto ni rutas de archivos.
+
+Las métricas se derivan de las tablas existentes después de autorizar propiedad/contexto. Incluyen publicaciones retiradas dentro del historial permitido, sin reactivarlas ni modificar derechos. Los contadores digitales se consultan en lote para la página propia autorizada; no se añaden al catálogo público, recomendaciones ni materiales adquiridos. Pagos, estado global de la publicación, alcance institucional digital y comprobación de derechos/descarga permanecen sin cambios. Sin migraciones ni configuración nueva.
 
 ## Referencias técnicas
 

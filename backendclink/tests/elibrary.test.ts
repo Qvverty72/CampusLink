@@ -882,6 +882,38 @@ test('failed digital confirmation persists no transition and cancellation retain
   const events=await read();assert.deepEqual(events.map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION','TRANSACCION_CANCELADA']);assert.equal(events.at(-1)?.userId,receiver.userId);
 });
 
+test('public digital detail exposes only owner name and scoped aggregate figures, never recipient identities or original paths', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  current = await peer();
+  const response = await get('/' + saved.id); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
+  const detail = (await response.json()).data;
+  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Estudiante', averageRating: null, ratingCount: 0, completedAgreements: 0 });
+  assert.doesNotMatch(JSON.stringify(detail.owner), /email|campus|receptor|storage|bucket|path|verificado|estado_cuenta/);
+  assert.equal((await service.getDigitalPublications(current))[0].owner, undefined, 'No agregar agregados a cada fila del catálogo');
+  current = await peer(foreignCampus, foreignInstitution); assert.equal((await get('/' + saved.id)).status, 404);
+});
+
+test('digital owner summary counts valid completed agreements including retired resources and excludes other types, institutions and partial confirmations', async () => {
+  const saved = await service.createDigitalPublication(auth, input(), file());
+  const historical = await service.createDigitalPublication(auth, input({ title: 'Anterior' }), file());
+  const first = await peer(), second = await peer(), third = await peer(), partial = await peer();
+  const a = await acquisition(saved.id, first.userId), b = await acquisition(historical.id, second.userId);
+  await acquisition(saved.id, third.userId);
+  const invalid = await acquisition(saved.id, partial.userId, 1);
+  for (const [id, receiver, score] of [[a, first.userId, 4], [b, second.userId, 2], [invalid, partial.userId, 5]] as const)
+    await db.query('INSERT INTO valoracion(transaccion_id,evaluador_id,evaluado_id,puntuacion) VALUES($1,$2,$3,$4)', [id, receiver, auth.userId, score]);
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1', [historical.id]);
+  for (const [type, origin] of [['FISICO', campus], ['DIGITAL', foreignCampus]] as const) {
+    const id = randomUUID(), receiver = await peer();
+    await db.query(`INSERT INTO publicacion_recurso(id,campus_id,propietario_id,tipo_recurso,titulo,descripcion,modalidad,precio,moneda,estado_publicacion)
+      VALUES($1,$2,$3,$4,'Otro recurso','Antecedente','VENTA',2500,'CLP','DISPONIBLE')`, [id, origin, auth.userId, type]);
+    const trade = await acquisition(id, receiver.userId);
+    await db.query('INSERT INTO valoracion(transaccion_id,evaluador_id,evaluado_id,puntuacion) VALUES($1,$2,$3,1)', [trade, receiver.userId, auth.userId]);
+  }
+  const detail = (await service.getDigitalPublications(first, saved.id))[0];
+  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Estudiante', averageRating: 3, ratingCount: 2, completedAgreements: 3 });
+});
+
 test('digital rating shares physical rules: completed receiver only, integer 1..5, one immutable row under concurrency',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
   const rating=await import('../src/modules/marketplace/elibrary/elibrary.rating.service.js');
@@ -1068,4 +1100,21 @@ test('stored routes outside the canonical publication prefix or traversal paths 
     await db.query('update archivo_publicacion set storage_path=$2 where id=$1', [saved.files[0].id, path]);
     const before = storageCalls.length; assert.equal((await original(saved.id, saved.files[0].id)).status, 404); assert.equal(storageCalls.length, before);
   }
+});
+test('owned digital activity reports pending and valid completed agreements privately without exhausting the publication',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),first=await peer(),second=await peer(),third=await peer();
+  await acquisition(saved.id,first.userId);await acquisition(saved.id,second.userId,1);
+  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const request=await trades.createDigitalRequest(third,saved.id,{messageCode:'LIB_QA_INTERES'});
+  const read=async()=>{current=structuredClone(auth);const response=await get('/mine/'+saved.id);assert.equal(response.status,200);return (await response.json()).data;};
+  let own=await read();assert.deepEqual(own.activity,{pendingRequests:1,completedAgreements:1});assert.equal(own.status,'DISPONIBLE');
+  const list=(await(await get('/mine')).json()).data;assert.deepEqual(list.find((row:{id:string})=>row.id===saved.id).activity,own.activity);
+  assert.doesNotMatch(JSON.stringify(own.activity),/Receiver|receptor|solicitante|bucket|path/);
+  current=first;assert.equal((await get('/mine/'+saved.id)).status,404);
+  assert.equal((await(await get('/'+saved.id)).json()).data.activity,undefined);
+  assert.equal((await(await get('/acquired/'+saved.id)).json()).data.activity,undefined);
+  await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'RECHAZAR'});
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[saved.id]);
+  own=await read();assert.equal(own.isWithdrawn,true);assert.deepEqual(own.activity,{pendingRequests:0,completedAgreements:1});
+  current=first;assert.equal((await get('/acquired/'+saved.id)).status,200);
 });

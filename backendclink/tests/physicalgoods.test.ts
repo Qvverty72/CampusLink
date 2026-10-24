@@ -1764,3 +1764,20 @@ test('report HTTP is authenticated, no-store, private and sanitized, with no cli
     await db.exec('SET ROLE '+role);try{await assert.rejects(db.query('SELECT * FROM reporte_contenido'),/permission denied/);await assert.rejects(db.query('UPDATE reporte_contenido SET estado_reporte=\'RESUELTO\''),/permission denied/);}finally{await db.exec('RESET ROLE');}
   }
 });
+test('own physical activity counts only pending requests per resource and preserves retired history without Storage reads',async()=>{
+  const saved=await create(auth,input()),another=await create(auth,input()),first=await otherActor(),second=await otherActor();
+  const a=await requestsService.createPhysicalgoodsRequest(first,saved.id,{messageCode:'ME_INTERESA'});
+  await requestsService.createPhysicalgoodsRequest(second,saved.id,{messageCode:'PARA_MIS_ESTUDIOS'});
+  await requestsService.createPhysicalgoodsRequest(first,another.id,{messageCode:'ME_INTERESA'});
+  const calls=storageCalls.length;
+  let rows=(await historyService.getOwnPhysicalgoods(auth,{})).data;
+  assert.equal(rows.find(row=>row.id===saved.id)!.activity.pendingRequests,2);
+  assert.equal(rows.find(row=>row.id===another.id)!.activity.pendingRequests,1);assert.equal(storageCalls.length,calls);
+  await requestsService.resolvePhysicalgoodsRequest(auth,saved.id,a.id,{decision:'RECHAZAR'});
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[saved.id]);
+  rows=(await historyService.getOwnPhysicalgoods(auth,{})).data;
+  const retired=rows.find(row=>row.id===saved.id)!;assert.equal(retired.isWithdrawn,true);assert.equal(retired.activity.pendingRequests,1);
+  assert.equal((await historyService.getOwnPhysicalgoodsDetail(auth,saved.id)).activity.pendingRequests,1);
+  assert.deepEqual((await historyService.getOwnPhysicalgoods(first,{})).data,[]);
+  await assert.rejects(historyService.getOwnPhysicalgoodsDetail(first,saved.id),{status:404});
+});

@@ -24,6 +24,7 @@ export async function findPhysicalgoodsDetail(client: PoolClient, publicationId:
 /** Historial del propietario: no filtra disponibilidad ni traslada el campus de origen. */
 export async function listOwnPhysicalgoods(client: PoolClient, userId: string, pagination: PaginationParams) {
   return (await client.query<PhysicalgoodsOwnRow>(`SELECT ${mediaProjection},p.deleted_at,
+    (SELECT count(*)::int FROM public.solicitud_recurso request WHERE request.publicacion_id=p.id AND request.estado_solicitud='PENDIENTE') AS pending_requests,
     to_char(p.publicado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS publicado_en,
     campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
     JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
@@ -32,6 +33,7 @@ export async function listOwnPhysicalgoods(client: PoolClient, userId: string, p
 }
 export async function findOwnPhysicalgoods(client: PoolClient, publicationId: string, userId: string) {
   return (await client.query<PhysicalgoodsOwnRow>(`SELECT ${mediaProjection},p.deleted_at,
+    (SELECT count(*)::int FROM public.solicitud_recurso request WHERE request.publicacion_id=p.id AND request.estado_solicitud='PENDIENTE') AS pending_requests,
     to_char(p.publicado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS publicado_en,
     campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
     JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
