@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { recordResourceOpening } from '../../api/resourceInteractions';
@@ -178,8 +178,9 @@ export function useDigitalLibrary() {
     if (currentTarget.current) { setDetail(currentTarget.current); setRevision(value => value + 1); files.forEach(releaseDigitalFile); setFiles([]); }
     setFormOpen(false); setError(null); setNotice(null); setTarget(null); currentTarget.current = null; setAttachMode(false);
   }
+  const refresh = useCallback(() => { if (!saving.current && !picking.current) { setPage(1); setError(null); setRevision(value => value + 1); } }, []);
   return { items, detail, selectedId, detailLoading, loading: loading || draftFilters !== debouncedFilters, busy, formOpen, title, setTitle, description, setDescription, price, setPrice,
-    page, hasMore, filters: draftFilters, search: (value: DigitalFilters) => { setError(null); setDraftFilters({ ...value }); },
+    refresh, refreshVersion: revision, page, hasMore, filters: draftFilters, search: (value: DigitalFilters) => { setError(null); setDraftFilters({ ...value }); },
     savedContent:(value:DigitalPublication)=>{setDetail(previous=>value.isWithdrawn?null:{...value,owner:value.owner??(previous?.ownerId===value.ownerId?previous.owner:undefined)});if(value.isWithdrawn)setSelectedId(null);setNotice(value.isWithdrawn?'La publicación se retiró. Los archivos y adquisiciones se conservan.':'La publicación se actualizó.');setRevision(previous=>previous+1);},
     previousPage: () => setPage(value => Math.max(1, value - 1)), nextPage: () => { if (hasMore && !loading) setPage(value => value + 1); },
     careerIds, setCareerIds, subjectIds, setSubjectIds, catalog, catalogLoading, catalogError,

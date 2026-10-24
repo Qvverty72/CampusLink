@@ -23,6 +23,8 @@ function renderForm(progress, error = null) {
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     'react-native': native,
+    '@/components/RefreshScrollView': { RefreshScrollView: native.ScrollView },
+    '@/components/Skeleton': { Skeleton: ({ children }) => React.createElement(native.View, null, children), SkeletonBlock: () => null },
     'lucide-react-native': { BookOpen: () => null, FileText: () => null, Plus: () => null, Tag: () => null, Gift: () => null, UploadCloud: () => null, ShieldCheck: () => null, X: () => null },
     '@/features/auth/hooks/useAuth': { useAuth: () => ({}) },
     '@/types/colors': { APP_COLORS: { PRIMARY: '#003459' } },

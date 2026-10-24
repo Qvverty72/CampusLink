@@ -13,7 +13,7 @@ export function useDigitalRequestAction(id:string, enabled=true) {
   useEffect(()=>setError(null),[id]);
   useEffect(()=>{const abort=new AbortController();setOptions(null);setCode('');setLoading(enabled);if(enabled)void loadDigitalRequestOptions(id,abort.signal).then(value=>{if(!abort.signal.aborted){setOptions(value);if(value.activeRequestId||value.acquired)setError(null);}}).catch(reason=>{if(!abort.signal.aborted)setError(message(reason));}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});return()=>{abort.abort();pending.current?.abort();};},[id,revision,enabled]);
   async function submit(){if(saving.current||!enabled||!options?.canRequest||!options.messages.some(row=>row.code===code))return;saving.current=true;setBusy(true);setError(null);const abort=new AbortController();pending.current=abort;
-    try{if(operation.current?.id!==id||operation.current.code!==code)operation.current={id,code,key:operationId()};await requestDigitalResource(id,code,abort.signal,operation.current.key);operation.current=null;}catch(reason){if(!abort.signal.aborted)setError(message(reason));}
+    try{if(operation.current?.id!==id||operation.current.code!==code)operation.current={id,code,key:operationId()};await requestDigitalResource(id,code,abort.signal,operation.current.key);operation.current=null;return !abort.signal.aborted;}catch(reason){if(!abort.signal.aborted)setError(message(reason));return false;}
     finally{saving.current=false;if(!abort.signal.aborted){setBusy(false);setRevision(value=>value+1);}}}
   return {options,code,setCode,busy,loading,error,submit,reload:()=>{setError(null);setRevision(value=>value+1);}};
 }
@@ -28,9 +28,10 @@ export function useDigitalTradeCenter(initialOpen=false,initialReceived=false) {
   const transitionOutcome=useRef<{id:string;action:'confirm'|'cancel'}|null>(null);
   const ratingOutcome=useRef<{id:string;score:number}|null>(null);
   const pending=useRef<AbortController|null>(null),reading=useRef<AbortController|null>(null),saving=useRef(false);
+  const polling=useRef<AbortController|null>(null);
   const outcome=useRef<{id:string;status:string}|null>(null);
   const loading=listLoading||tradeLoading;
-  useEffect(()=>()=>{pending.current?.abort();reading.current?.abort();},[]);
+  useEffect(()=>()=>{pending.current?.abort();reading.current?.abort();polling.current?.abort();},[]);
   useEffect(()=>{
     if(!open||busy||tradeTarget){setListLoading(false);return;}
     const abort=new AbortController();setListLoading(true);setRows([]);setHasMore(false);setSelection(null);
@@ -40,7 +41,7 @@ export function useDigitalTradeCenter(initialOpen=false,initialReceived=false) {
     }}).catch(reason=>{if(!abort.signal.aborted)setError(message(reason));}).finally(()=>{if(!abort.signal.aborted)setListLoading(false);});
     return()=>abort.abort();
   },[open,received,page,revision,busy,tradeTarget?.transactionId]);
-  function stopReading(){reading.current?.abort();setTradeLoading(false);}
+  function stopReading(){reading.current?.abort();polling.current?.abort();polling.current=null;setTradeLoading(false);}
   function reconcile(value:DigitalTrade){
     if(ratingOutcome.current?.id===value.id&&value.rating){
       if(value.rating.score===ratingOutcome.current.score)setError(null);
@@ -61,6 +62,7 @@ export function useDigitalTradeCenter(initialOpen=false,initialReceived=false) {
   }
   async function mutate(operation:(signal:AbortSignal)=>Promise<unknown>){
     if(saving.current)return;const abort=new AbortController();pending.current=abort;saving.current=true;setBusy(true);setError(null);setSelection(null);setAction(null);
+    polling.current?.abort();polling.current=null;
     try{await operation(abort.signal);}catch(reason){if(!abort.signal.aborted)setError(message(reason));}
     finally{
       if(!abort.signal.aborted&&trade){try{const value=await loadDigitalTrade(trade.publicationId,trade.id,abort.signal);if(!abort.signal.aborted){setTrade(value);reconcile(value);}}catch(reason){if(!abort.signal.aborted)setError(message(reason));}}
@@ -80,7 +82,15 @@ export function useDigitalTradeCenter(initialOpen=false,initialReceived=false) {
     if(saving.current||loading||error||!trade?.canRate||trade.status!=='COMPLETADA'||trade.receiverId!==identity?.userId||!Number.isInteger(score)||score<1||score>5)return;
     ratingOutcome.current={id:trade.id,score};return mutate(signal=>rateDigitalOwner(trade,score,signal));
   }
-  return{open,received,page,hasMore,rows,trade,tradeTarget,action,viewerId:identity?.userId,loading,busy,error,selection,select,resolve,selectTransition,transition,
+  async function poll(){
+    if(polling.current||saving.current||loading||error||action||selection||!trade||!['RESERVADA','PENDIENTE_CONFIRMACION'].includes(trade.status))return;
+    const abort=new AbortController();polling.current=abort;
+    try{const value=await loadDigitalTrade(trade.publicationId,trade.id,abort.signal);if(!abort.signal.aborted&&!saving.current){setTrade(value);reconcile(value);}}
+    catch{/* La consulta automática conserva los datos visibles; la manual permite gestionar el error. */}
+    finally{if(polling.current===abort)polling.current=null;}
+  }
+  function refresh(){if(saving.current||loading||selection||action)return;if(tradeTarget){void readTrade(tradeTarget);return;}setPage(1);setError(null);setRevision(value=>value+1);}
+  return{open,received,page,hasMore,rows,trade,tradeTarget,action,viewerId:identity?.userId,loading,busy,error,selection,select,resolve,selectTransition,transition,poll,refresh,
     cancelTransition:()=>{if(!saving.current)setAction(null);},
     cancelSelection:()=>{if(!saving.current)setSelection(null);},
     score,setScore:(value:number)=>{if(!saving.current&&!loading&&trade?.canRate&&trade.status==='COMPLETADA'&&trade.receiverId===identity?.userId&&Number.isInteger(value)&&value>=1&&value<=5)setScore(value);},

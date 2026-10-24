@@ -89,7 +89,7 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests }: { lib
         </>}
     </ScrollView>
     {resource && !reporting && !managing && <DetailActionBar label={label} helper={helper} disabled={disabled} bottomOffset={98 + Math.max(insets.bottom, 8)}
-      onPress={acquired ? () => onAcquired(resource.id) : active ? onRequests : requesting ? () => { void request.submit(); } : () => setRequesting(true)} />}
+      onPress={acquired ? () => onAcquired(resource.id) : active ? onRequests : requesting ? () => { void request.submit().then(sent => { if (sent) void library.openDetail(resource.id); }); } : () => setRequesting(true)} />}
     <BottomNavigationBar activeItemId="elibrary" />
   </View>;
 }

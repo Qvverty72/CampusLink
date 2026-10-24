@@ -18,6 +18,7 @@ function load(file, dependencies, globals = {}) {
 function runtime() {
   const slots = [], timers = new Map(); let cursor = 0, effects = [], clock = 0, next = 0;
   const react = {
+    useCallback(fn) { return fn; },
     useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = { value: typeof initial === 'function' ? initial() : initial };
       return [slots[i].value, value => { slots[i].value = typeof value === 'function' ? value(slots[i].value) : value; }]; },
     useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; },
@@ -97,7 +98,7 @@ for (const kind of ['physical', 'digital']) {
   test(`${kind}: controles de búsqueda, modalidad, sheet y chips conservan IDs y permiten quitar filtros`, () => {
     const h = runtime(), changes = [];
     const components = { SearchInput: 'Search', FilterChips: 'Chips', FilterSheet: 'Sheet', FilterOptions: 'Options', ui: {} };
-    const shared = { react: h.react, 'react/jsx-runtime': jsx, 'react-native': { View: 'View', Text: 'Text', TextInput: 'Input', Pressable: 'Button' }, '../../components/CatalogUI': components };
+    const shared = { react: h.react, 'react/jsx-runtime': jsx, 'react-native': { View: 'View', Text: 'Text', TextInput: 'Input', Pressable: 'Button' }, '../../components/CatalogUI': components, '../../components/SearchableFilterSelect': { SearchableFilterSelect: 'Options' } };
     let render;
     if (kind === 'physical') {
       const { PhysicalgoodsSearchFilters } = load('physicalgoods/components/PhysicalgoodsSearchFilters.tsx', { ...shared, '../types/publication': { resourceConditions: [] } });
@@ -116,8 +117,11 @@ for (const kind of ['physical', 'digital']) {
     else { assert.equal(changes[0].q, 'cálculo'); assert.equal(changes[1].modality, 'VENTA'); assert.equal(changes[2].careerId, ''); }
     nodes.find(node => node.type === 'Chips').props.onMore(); nodes = elements(h.render(render));
     assert.equal(nodes.find(node => node.type === 'Sheet').props.visible, true);
+    let selects = nodes.filter(node => node.type === 'Options'); assert.ok(selects.every(node => !node.props.expanded));
+    selects[0].props.onExpandedChange(true); nodes = elements(h.render(render)); selects = nodes.filter(node => node.type === 'Options'); assert.equal(selects.filter(node => node.props.expanded).length, 1);
+    selects[1].props.onExpandedChange(true); nodes = elements(h.render(render)); selects = nodes.filter(node => node.type === 'Options'); assert.equal(selects[0].props.expanded, false); assert.equal(selects[1].props.expanded, true);
     nodes.find(node => node.type === 'Sheet').props.onClose(); nodes = elements(h.render(render));
-    assert.equal(nodes.find(node => node.type === 'Sheet').props.visible, false);
+    assert.equal(nodes.find(node => node.type === 'Sheet').props.visible, false); assert.ok(nodes.filter(node => node.type === 'Options').every(node => !node.props.expanded));
     h.unmount();
   });
 }
@@ -132,4 +136,12 @@ test('digital: conserva filtros al abrir/cerrar detalle y cancela debounce al de
   state.search({ ...state.filters, q: 'pendiente' }); state = f.render();
   const before = f.calls.length; f.h.unmount(); f.h.tick(300);
   assert.equal(f.calls.length, before); assert.equal(f.calls.at(-1).signal.aborted, true);
+});
+
+for (const kind of ['physical','digital']) test(`${kind}: refrescar vuelve a página1 y conserva búsqueda/modalidad`,async()=>{
+ const f=fixture(kind);let state=f.render();f.calls[0].resolve({data:[],meta:{hasMore:true}});await setImmediate();state=f.render();
+ if(kind==='physical')state.setFilter('q','cálculo');else state.search({...state.filters,q:'cálculo',modality:'DONACION'});
+ if(kind==='physical')state.setFilter('modality','DONACION');state=f.render();f.h.tick(300);state=f.render();f.calls.at(-1).resolve({data:[],meta:{hasMore:true}});await setImmediate();state=f.render();
+ if(kind==='physical')state.setNumber(3);else state.nextPage();state=f.render();f.calls.at(-1).resolve({data:[],meta:{hasMore:true}});await setImmediate();state=f.render();state.refresh();state=f.render();
+ assert.equal(f.calls.at(-1).page,1);assert.equal(f.calls.at(-1).filters.q,'cálculo');assert.equal(f.calls.at(-1).filters.modality,'DONACION');assert.equal(state.filters.q,'cálculo');f.h.unmount();
 });

@@ -1,5 +1,6 @@
+import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ArrowLeft, Check, Circle, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, Check, Circle } from 'lucide-react-native';
 import { CATALOG_COLORS as colors, StatusTag, ui } from './CatalogUI';
 import { detailUI } from './ResourceDetailUI';
 import { RequestButton, requestStatusLabel, requestUI } from './RequestsUI';
@@ -8,16 +9,15 @@ import type { TransactionAction, TransactionConfirmation, TransactionParticipant
 export const transactionDate = (date: string) => new Date(date).toLocaleString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 export const participantConfirmation = (participant: TransactionParticipant, confirmations: TransactionConfirmation[]) => confirmations.find(row => row.userId === participant.id && row.role === participant.role);
 
-export function TransactionHeader({ digital = false, disabled, onBack, onReload }: { digital?: boolean; disabled: boolean; onBack: () => void; onReload: () => void }) {
+export function TransactionHeader({ digital = false, disabled, onBack }: { digital?: boolean; disabled: boolean; onBack: () => void; onReload: () => void }) {
   return <View style={transactionUI.inline}><Pressable accessibilityRole="button" accessibilityLabel="Volver al historial de acuerdos" disabled={disabled} onPress={onBack} style={ui.back}><ArrowLeft size={19} color={colors.primary} /><Text style={ui.link}>Volver</Text></Pressable>
     <Text style={[detailUI.helper, { flex: 1 }]}>{digital ? 'Acuerdo digital' : 'Transacción física'}</Text>
-    <Pressable accessibilityRole="button" accessibilityLabel="Actualizar acuerdo" accessibilityState={{ disabled }} disabled={disabled} onPress={onReload} style={[ui.iconButton, disabled && ui.disabled]}><RefreshCw size={19} color={colors.primary} /></Pressable>
   </View>;
 }
 
 export function TransactionFeedback({ loading, error, onRetry, disabled = false, retryLabel = 'Reintentar consulta del acuerdo', loadingLabel = 'Cargando acuerdo', compact = false }: { loading: boolean; error?: string | null; onRetry: () => void; disabled?: boolean; retryLabel?: string; loadingLabel?: string; compact?: boolean }) {
   return <>{error && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{error}</Text><RequestButton label={retryLabel} onPress={onRetry} disabled={disabled || loading} /></View>}
-    {loading && <View accessibilityRole="progressbar" accessibilityLabel={loadingLabel} style={{ gap: 14 }}>{(compact ? [52, 74] : [100, 150, 120]).map((height, index) => <View key={index} style={{ height, backgroundColor: colors.border, borderRadius: 16 }} />)}</View>}
+    {loading && <Skeleton label={loadingLabel} contentStyle={{ gap: 14 }}>{(compact ? [52, 74] : [100, 150, 120]).map((height, index) => <SkeletonBlock style={ui.skeletonBlock} key={index} height={height} borderRadius={16} />)}</Skeleton>}
   </>;
 }
 

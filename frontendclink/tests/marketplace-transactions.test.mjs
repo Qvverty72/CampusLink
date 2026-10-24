@@ -79,7 +79,7 @@ test('digital retry targets the opened agreement, aborts stale reads on close an
 });
 
 const native={View:'View',Text:'Text',Pressable:'Button',Modal:'Modal',ScrollView:'Scroll',StyleSheet:{create:value=>value}};
-function sharedUI(){return load('components/TransactionUI.tsx',{'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{},'./CatalogUI':{CATALOG_COLORS:{},StatusTag:'Status',ui:{}},'./ResourceDetailUI':{detailUI:{}},'./RequestsUI':{RequestButton:'Action',requestStatusLabel:value=>value,requestUI:{}}});}
+function sharedUI(){return load('components/TransactionUI.tsx',{'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{},'./CatalogUI':{CATALOG_COLORS:{},StatusTag:'Status',ui:{}},'./ResourceDetailUI':{detailUI:{}},'./RequestsUI':{RequestButton:'Action',requestStatusLabel:value=>value,requestUI:{}}});}
 test('shared progress keeps physical coordination optional, digital has two steps, and only valid role confirmations count',()=>{
  const {TransactionProgress,participantConfirmation,TransactionActions}=sharedUI();
  const physical=JSON.stringify(elements(TransactionProgress({status:'RESERVADA',confirmedCount:0})));const digital=JSON.stringify(elements(TransactionProgress({status:'PENDIENTE_CONFIRMACION',confirmedCount:1,digital:true})));
@@ -125,4 +125,14 @@ test('valoración digital: solo receptor completado, enteros1..5 y sin duplicar 
 
 test('valoración digital: respuesta perdida se recupera por recibo sin reenviar',async()=>{
  const complete={...digital,status:'COMPLETADA',canRate:true},q=digitalHook('receiver');let state=await readyDigital(q,complete);state.setScore(4);state=q.render();const send=state.rate();q.ratings[0].reject(new Error('response lost'));await setImmediate();q.details.at(-1).resolve({...complete,canRate:false,rating:{id:'rating',score:4,createdAt:stamp}});await send;state=q.render();assert.equal(state.error,null);assert.equal(state.trade.rating.score,4);assert.equal(state.score,0);await state.rate();assert.equal(q.ratings.length,1);
+});
+
+test('poll físico no muestra skeleton, no duplica lecturas y se cancela al recargar manualmente',async()=>{
+ const q=physicalHook();let state=await readyPhysical(q);const count=q.details.length;const poll=state.poll();void state.poll();assert.equal(q.details.length,count+1);state=q.render();assert.equal(state.loading,false);assert.ok(state.detail);const stale=q.details.at(-1);state.reload();q.render();assert.equal(stale.args.at(-1).aborted,true);stale.resolve({...physical,status:'CANCELADA'});await poll;assert.notEqual(q.render().detail?.status,'CANCELADA');q.h.unmount();
+});
+test('poll digital actualiza confirmación sin escribir y se detiene en estados terminales',async()=>{
+ const q=digitalHook();let state=await readyDigital(q);const poll=state.poll();void state.poll();assert.equal(q.details.length,2);state=q.render();assert.equal(state.loading,false);q.details.at(-1).resolve({...digital,status:'COMPLETADA',canConfirm:false,canCancel:false});await poll;state=q.render();assert.equal(state.trade.status,'COMPLETADA');await state.poll();assert.equal(q.details.length,2);assert.equal(q.writes.length,0);q.h.unmount();
+});
+test('poll digital pendiente se aborta antes de una mutación y no puede deshacerla',async()=>{
+ const q=digitalHook();let state=await readyDigital(q);const poll=state.poll(),stale=q.details.at(-1);state.selectTransition('cancel');state=q.render();const mutation=state.transition();assert.equal(stale.args.at(-1).aborted,true);stale.resolve(digital);await poll;q.writes[0].resolve({});await setImmediate();q.details.at(-1).resolve({...digital,status:'CANCELADA',canConfirm:false,canCancel:false});await mutation;assert.equal(q.render().trade.status,'CANCELADA');q.h.unmount();
 });

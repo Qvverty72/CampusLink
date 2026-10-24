@@ -19,6 +19,7 @@ function load(sourcePath, dependencies) {
 function hookHarness(path, name, dependencies) {
   const slots = []; let cursor = 0, effects = [];
   const react = {
+    useCallback(fn) { return fn; },
     useState(initial) {
       const index = cursor++;
       if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;

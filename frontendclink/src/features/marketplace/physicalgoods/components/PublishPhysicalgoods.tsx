@@ -1,3 +1,4 @@
+import { RefreshScrollView } from '@/components/RefreshScrollView';
 import { useEffect, useRef, useState } from 'react';
 import {useLocalSearchParams} from 'expo-router';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -31,7 +32,9 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const scroll = useRef<ScrollView>(null);
   const resources = usePhysicalgoodsResources();
   const [view,setView] = useState<'explore'|'publish'|'received'|'sent'|'mine'|'transactions'>('explore');
+  const [requestView, setRequestView] = useState<'sent' | 'received'>('sent');
   const publishing=view==='publish',received=view==='received',sent=view==='sent';
+  const showRequests = (next: 'sent' | 'received') => { setRequestView(next); setView(next); };
   const personal = view !== 'explore' && !publishing;
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [view]);
   const [agreement,setAgreement]=useState<PhysicalgoodsTransactionTarget|null>(null),[requestsVersion,setRequestsVersion]=useState(0);
@@ -41,14 +44,17 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const openAgreement=(publicationId:string,transactionId:string)=>{setHistoryDetail(null);setAgreement({publicationId,transactionId});};
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
-    <ScrollView ref={scroll} contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]} keyboardShouldPersistTaps="handled">
+    <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]} keyboardShouldPersistTaps="handled">
       <ScreenHeader title={publishing ? 'Publicar recurso' : personal ? 'Mi actividad' : 'Mercado'}
         subtitle={publishing ? 'Comparte un recurso físico con tu campus' : personal ? 'Tus publicaciones, solicitudes y transacciones' : 'Recursos físicos de tu campus'}
         action={view === 'explore' ? 'Mi actividad' : undefined} onAction={() => setView('mine')}
         onBack={view !== 'explore' ? () => setView('explore') : undefined} />
-      {personal && <CatalogTabs selected={view} onSelect={setView} tabs={[
-        { id: 'mine', label: 'Publicaciones' }, { id: 'sent', label: 'Enviadas' }, { id: 'received', label: 'Recibidas' }, { id: 'transactions', label: 'Transacciones' },
-      ]} />}
+      {personal && <CatalogTabs variant="underline" selected={received || sent ? 'requests' : view === 'transactions' ? 'transactions' : 'mine'}
+        onSelect={tab => { if (tab === 'requests') showRequests(requestView); else setView(tab); }} tabs={[
+          { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes' }, { id: 'transactions', label: 'Transacciones' },
+        ]} />}
+      {(received || sent) && <CatalogTabs selected={view as 'sent' | 'received'} onSelect={showRequests}
+        tabs={[{ id: 'sent', label: 'Enviadas' }, { id: 'received', label: 'Recibidas' }]} />}
       <View style={publishing ? undefined : { display: 'none' }}>
         <PublicationForm onPublished={refresh} onGallery={id => { setView('explore'); resources.open(id); }} />
       </View>
@@ -56,11 +62,11 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
       <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
-      <View style={view==='mine'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='mine'} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} onRequests={() => setView('received')} /></View>
+      <View style={view==='mine'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='mine'} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} onRequests={() => showRequests('received')} onPublish={() => setView('publish')} /></View>
       <View style={view==='transactions'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='transactions'} transactions refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} /></View>
       <View style={view!=='explore' ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} onPublish={() => setView('publish')}
         onRequestDetail={(publicationId, requestId) => { resources.close(); openRequest(publicationId, requestId); }} /></View>
-    </ScrollView>
+    </RefreshScrollView>
     {historyDetail&&<PhysicalgoodsHistoryDetail key={`${historyDetail.publicationId}:${historyDetail.requestId??''}`} target={historyDetail}
       onClose={()=>{setHistoryDetail(null);setRequestsVersion(value=>value+1);}} onAgreement={openAgreement}
       onOpen={id=>{setHistoryDetail(null);setView('explore');resources.open(id);}} />}

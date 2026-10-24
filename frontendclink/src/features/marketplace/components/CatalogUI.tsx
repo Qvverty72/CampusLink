@@ -1,6 +1,7 @@
+import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP_COLORS } from '@/types/colors';
@@ -66,17 +67,17 @@ export function FilterChips({ modality, onModality, onMore, moreLabel = 'Filtros
 export function FilterSheet({ visible, title, onClose, children, confirmLabel = 'Ver resultados' }: { visible: boolean; title: string; onClose: () => void; children: ReactNode; confirmLabel?: string }) {
   const insets = useSafeAreaInsets();
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-    <View style={ui.overlay}>
+    <KeyboardAvoidingView style={ui.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={StyleSheet.absoluteFill} />
       <View accessibilityViewIsModal style={[ui.sheet, { paddingBottom: Math.max(20, insets.bottom), marginTop: Math.max(24, insets.top) }]}>
         <View style={ui.handle} />
         <View style={ui.headingRow}><Text accessibilityRole="header" style={ui.sectionTitle}>{title}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={ui.iconButton}><X color={CATALOG_COLORS.primary} size={22} /></Pressable>
         </View>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={ui.sheetContent}>{children}</ScrollView>
+        <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={ui.sheetContent}>{children}</ScrollView>
         <Pressable accessibilityRole="button" onPress={onClose} style={ui.primary}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   </Modal>;
 }
 
@@ -117,12 +118,12 @@ export function EmptyState({ filtered, onClear, onPublish }: { filtered: boolean
 }
 
 export function CatalogSkeleton({ grid = false }: { grid?: boolean }) {
-  return <View accessibilityLabel="Cargando recursos" accessibilityRole="progressbar" style={grid ? ui.grid : ui.skeletonRows}>
+  return <Skeleton label="Cargando recursos" contentStyle={grid ? ui.grid : ui.skeletonRows}>
     {Array.from({ length: 4 }, (_, i) => <View key={i} style={[ui.skeletonCard, grid ? ui.gridCard : ui.skeletonRow]}>
-      <View style={[ui.skeletonBlock, grid ? { height: 110, width: '100%' } : { width: 56, height: 68 }]} />
-      <View style={ui.skeletonText}><View style={[ui.skeletonBlock, { width: '90%', height: 13 }]} /><View style={[ui.skeletonBlock, { width: '65%', height: 11 }]} /><View style={[ui.skeletonBlock, { width: 68, height: 22 }]} /></View>
+      <SkeletonBlock style={ui.skeletonBlock} width={grid ? '100%' : 56} height={grid ? 110 : 68} />
+      <View style={ui.skeletonText}><SkeletonBlock style={ui.skeletonBlock} width="90%" height={13} /><SkeletonBlock style={ui.skeletonBlock} width="65%" height={11} /><SkeletonBlock style={ui.skeletonBlock} width={68} height={22} /></View>
     </View>)}
-  </View>;
+  </Skeleton>;
 }
 
 export function CatalogPagination({ page, hasMore, loading, previous, next }: { page: number; hasMore: boolean; loading: boolean; previous: () => void; next: () => void }) {
@@ -144,14 +145,20 @@ export function PublishFAB({ onPress }: { onPress: () => void }) {
   </View>;
 }
 
-export function CatalogTabs<T extends string>({ tabs, selected, onSelect }: { tabs: { id: T; label: string }[]; selected: T; onSelect: (id: T) => void }) {
-  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ui.chipRow} accessibilityRole="tablist">
+export function CatalogTabs<T extends string>({ tabs, selected, onSelect, variant = 'chips' }: { tabs: { id: T; label: string }[]; selected: T; onSelect: (id: T) => void; variant?: 'chips' | 'underline' }) {
+  const underline = variant === 'underline';
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={underline ? ui.tabRow : ui.chipRow} accessibilityRole="tablist">
     {tabs.map(tab => <Pressable key={tab.id} accessibilityRole="tab" accessibilityState={{ selected: selected === tab.id }} aria-selected={selected === tab.id}
-      onPress={() => onSelect(tab.id)} style={[ui.chip, selected === tab.id && ui.activeChip]}><Text style={[ui.chipText, selected === tab.id && ui.activeChipText]}>{tab.label}</Text></Pressable>)}
+      onPress={() => onSelect(tab.id)} style={underline ? [ui.tab, selected === tab.id && ui.selectedTab] : [ui.chip, selected === tab.id && ui.activeChip]}>
+      <Text style={underline ? [ui.tabText, selected === tab.id && ui.selectedTabText] : [ui.chipText, selected === tab.id && ui.activeChipText]}>{tab.label}</Text></Pressable>)}
   </ScrollView>;
 }
 
 export const ui = StyleSheet.create({
+  tabRow: { flexGrow: 1, gap: 12, borderBottomWidth: 1, borderBottomColor: CATALOG_COLORS.border },
+  tab: { minHeight: 44, paddingHorizontal: 2, paddingVertical: 12, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  selectedTab: { borderBottomColor: CATALOG_COLORS.primary }, tabText: { fontSize: 13, lineHeight: 19, color: CATALOG_COLORS.muted, fontWeight: '500' },
+  selectedTabText: { color: CATALOG_COLORS.primary, fontWeight: '700' },
   header: { gap: 6 }, headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   title: { fontSize: 26, fontWeight: '800', color: CATALOG_COLORS.primary, flexShrink: 1, letterSpacing: -0.6 },
   subtitle: { color: CATALOG_COLORS.muted, fontSize: 13, lineHeight: 20 },
@@ -173,7 +180,8 @@ export const ui = StyleSheet.create({
   tag: { borderRadius: 8, backgroundColor: CATALOG_COLORS.tint, paddingHorizontal: 8, paddingVertical: 5, alignSelf: 'flex-start', maxWidth: '100%' }, tagText: { color: CATALOG_COLORS.primary, fontSize: 11, fontWeight: '700' }, neutralTag: { backgroundColor: '#EEF2F6' }, neutralTagText: { color: '#40596C' },
   empty: { alignItems: 'center', gap: 12, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: CATALOG_COLORS.border, backgroundColor: '#FFFFFF' }, emptyText: { fontSize: 14, lineHeight: 21, color: CATALOG_COLORS.muted, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, gridCard: { width: '48%', flexGrow: 1, flexBasis: '46%' },
-  skeletonRows: { gap: 12 }, skeletonCard: { borderRadius: 16, overflow: 'hidden', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: CATALOG_COLORS.border }, skeletonRow: { padding: 12, flexDirection: 'row', gap: 12 }, skeletonBlock: { backgroundColor: CATALOG_COLORS.border, borderRadius: 6 }, skeletonText: { flex: 1, padding: 12, gap: 10 },
+  skeletonBlock: { backgroundColor: CATALOG_COLORS.inputBorder },
+  skeletonRows: { gap: 12 }, skeletonCard: { borderRadius: 16, overflow: 'hidden', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: CATALOG_COLORS.border }, skeletonRow: { padding: 12, flexDirection: 'row', gap: 12 }, skeletonText: { flex: 1, padding: 12, gap: 10 },
   pagination: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 }, pageButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 2 }, disabled: { opacity: 0.4 },
   fabContainer: { position: 'absolute', right: 20 }, fab: { minHeight: 52, paddingHorizontal: 18, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: CATALOG_COLORS.primary, boxShadow: '0 4px 12px rgba(0,46,86,0.2)' },
 });

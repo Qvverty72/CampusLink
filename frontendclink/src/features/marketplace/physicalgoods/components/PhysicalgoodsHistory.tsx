@@ -12,26 +12,26 @@ const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibi
 const state=(value:string)=>value.toLowerCase().replaceAll('_',' ');
 const date=(value:string)=>new Date(value).toLocaleString('es-CL');
 
-export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,onDetail,onAgreement,onRequests,refreshEnabled=true}:{active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;
-  onDetail:(target:PhysicalgoodsHistoryTarget)=>void;onAgreement:(publicationId:string,transactionId:string)=>void;onRequests?:()=>void}) {
+export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,onDetail,onAgreement,onRequests,onPublish,refreshEnabled=true}:{active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;
+  onDetail:(target:PhysicalgoodsHistoryTarget)=>void;onAgreement:(publicationId:string,transactionId:string)=>void;onRequests?:()=>void;onPublish?:()=>void}) {
   const h=usePhysicalgoodsHistory(active,transactions,refreshVersion);
-  useScrollRefresh(h.reload,h.loading,active&&refreshEnabled&&!h.loading,transactions?'mis transacciones':'mis publicaciones');
+  useScrollRefresh(h.reload,h.loading,active&&refreshEnabled&&!h.loading,transactions?'mis transacciones':'mis publicaciones',active);
   return <View style={activityUI.section}>
-    <ActivityHeader title={transactions?'Mis transacciones':'Mis publicaciones'} helper="Incluye registros cerrados y publicaciones retiradas, con su campus de origen." loading={h.loading} onReload={h.reload} />
+    <ActivityHeader compact title={transactions?'Mis transacciones':'Mis publicaciones'} helper={transactions ? 'Compras, ventas y donaciones, con su campus de origen.' : 'Gestiona tus recursos, incluidas las publicaciones retiradas.'} loading={h.loading} onReload={h.reload} />
     <ActivityFeedback loading={h.loading} error={h.error} empty={Boolean(h.page&&!h.page.data.length)} onReload={h.reload}
-      emptyTitle={transactions?'No hay transacciones en esta página':'Aún no hay publicaciones en esta página'} emptyHelper={transactions?'Tus acuerdos aparecerán aquí cuando una solicitud sea aceptada.':'Los recursos que compartas aparecerán aquí junto con su actividad.'} />
-    {!h.loading&&h.page?.data.map(row=>{
+      emptyTitle={transactions?'No hay transacciones en esta página':'Aún no hay publicaciones en esta página'} emptyAction={!transactions && onPublish ? 'Publicar recurso' : undefined} onEmptyAction={!transactions ? onPublish : undefined}
+      emptyHelper={transactions?'Tus acuerdos aparecerán aquí cuando una solicitud sea aceptada.':'Los recursos que compartas aparecerán aquí junto con su actividad.'} />
+    {!h.loading&&Boolean(h.page?.data.length)&&<View style={activityUI.list}>{h.page?.data.map(row=>{
       const transaction='publication' in row,publication=transaction?row.publication:row;
       const historical=publication.isWithdrawn||['FINALIZADO','CANCELADO','CANCELADA','COMPLETADA','OCULTO'].includes(row.status);
       return <ActivityCard key={row.id} title={publication.title} status={publication.isWithdrawn&&!transaction?'RETIRADA':row.status} historical={historical}
-        helper={`${row.campus.name} · ${new Date(transaction?row.startedAt:row.publishedAt).toLocaleDateString('es-CL')}`}>
-        <Text style={detailUI.body}>{row.modality==='DONACION'?'Donación':`$${(transaction?row.amount:row.price)?.toLocaleString('es-CL')} ${transaction?row.currency:'CLP'}`}</Text>
-        {transaction?<Text style={detailUI.helper}>Tu participación: {row.role==='PROPIETARIO'?'propietario':'receptor'}{publication.isWithdrawn?' · Publicación retirada':''}</Text>
-          :<PublicationActivity activity={row.activity} onRequests={onRequests} />}
+        helper={`${row.campus.name} · ${new Date(transaction?row.startedAt:row.publishedAt).toLocaleDateString('es-CL')}`}
+        keyData={row.modality==='DONACION'?'Donación':`$${(transaction?row.amount:row.price)?.toLocaleString('es-CL')}`}
+        role={transaction ? row.role==='PROPIETARIO' ? row.status==='COMPLETADA'?'Entregaste':'Propietario' : row.status==='COMPLETADA'?'Recibiste':'Receptor' : 'Tu publicación'}>
         {transaction?<ActivityAction label="Ver acuerdo" accessibilityLabel={'Ver acuerdo: '+publication.title} onPress={()=>onAgreement(publication.id,row.id)} />
-          :<ActivityAction label="Ver publicación" accessibilityLabel={'Ver publicación: '+publication.title} onPress={()=>onDetail({publicationId:row.id})} />}
+          :<PublicationActivity activity={row.activity} onRequests={onRequests}><ActivityAction label="Ver publicación" accessibilityLabel={'Ver publicación: '+publication.title} onPress={()=>onDetail({publicationId:row.id})} /></PublicationActivity>}
       </ActivityCard>;
-    })}
+    })}</View>}
     <ActivityPager page={h.number} hasMore={Boolean(h.page?.meta.hasMore)} disabled={h.loading} onPrevious={()=>h.setNumber(h.number-1)} onNext={()=>h.setNumber(h.number+1)} />
   </View>;
 }

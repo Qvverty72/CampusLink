@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { operationId } from '@/lib/api/operation-id';
@@ -117,10 +117,11 @@ export function usePhysicalgoodsResources() {
     setFilters(previous => ({ ...previous, [key]: value, ...(key === 'modality' && value === 'DONACION' ? { minPrice: '', maxPrice: '' } : {}) }));
   }
   function clearFilters() { setError(null); setFilters({ ...emptyPhysicalgoodsFilters }); setApplied({ ...emptyPhysicalgoodsFilters }); setNumber(1); }
+  const refresh = useCallback(() => { if (!running.current) { setNumber(1); setError(null); setRevision(value => value + 1); } }, []);
   return { options, page, filters, setFilter, search: () => applyFilters(filters), clearFilters, number, loading: loading || filters !== debouncedFilters, error, selectedId, gallery, galleryLoading, galleryError, editCategory, setEditCategory, busy, draftImages, change,
     remainingImageSlots: Math.max(0, PHYSICALGOODS_MAX_IMAGES - (gallery?.images.length ?? 0) - draftImages.length),
     open: (id: string) => { if (running.current) return; opening.current = {id,key:operationId(),recorded:false}; savedCategory.current = ''; setGallery(null); setDraftImages([]); setGalleryError(null); setSelectedId(id); }, close,
-    setNumber,
+    setNumber, refresh,
     reload: () => setRevision(value => value + 1), reloadGallery: () => { setGalleryError(null); setGalleryRevision(value => value + 1); }, selectPhotos, upload,
     removeDraft: (index: number) => setDraftImages(previous => previous.filter((_, current) => current !== index)),
     principal: (id: string) => change(signal => choosePhysicalgoodsPrincipal(selectedId!, id, signal)),

@@ -1,3 +1,5 @@
+import { useAgreementPolling } from '../../hooks/useAgreementPolling';
+import { useMarketplaceRefresh } from '../../hooks/useMarketplaceRefresh';
 import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 import { useDigitalRequestAction,useDigitalTradeCenter } from '../hooks/useDigitalTrades';
@@ -17,7 +19,11 @@ export function DigitalRequestAction({id}:{id:string}) {
     </>:<Text style={styles.text}>Este recurso no admite una nueva solicitud en este momento.</Text>}
   </View>;
 }
-export function DigitalTradeCenter({embedded=false,receivedEntryVersion=0,onAcquired}:{embedded?:boolean;receivedEntryVersion?:number;onAcquired?:(id:string)=>void}={}){const state=useDigitalTradeCenter(embedded,receivedEntryVersion>0);useEffect(()=>{if(receivedEntryVersion>0)state.mode(true);},[receivedEntryVersion]);const [reporting,setReporting]=useState(false),[reportBusy,setReportBusy]=useState(false);useEffect(()=>setReporting(false),[state.trade?.id]);return <View style={{gap:16}}>
+export function DigitalTradeCenter({embedded=false,receivedEntryVersion=0,onAcquired,active=true}:{active?:boolean;embedded?:boolean;receivedEntryVersion?:number;onAcquired?:(id:string)=>void}={}){const state=useDigitalTradeCenter(embedded,receivedEntryVersion>0);useEffect(()=>{if(receivedEntryVersion>0)state.mode(true);},[receivedEntryVersion]);const [reporting,setReporting]=useState(false),[reportBusy,setReportBusy]=useState(false);useEffect(()=>setReporting(false),[state.trade?.id]);
+  const enabled=state.open&&!state.loading&&!state.busy&&!state.selection&&!state.action&&!reporting&&!reportBusy&&!state.trade?.canRate;
+  useMarketplaceRefresh(state.refresh,state.loading,enabled,'mis solicitudes y acuerdos',active);
+  useAgreementPolling(state.poll,active&&enabled&&!state.error&&Boolean(state.trade&&['RESERVADA','PENDIENTE_CONFIRMACION'].includes(state.trade.status)));
+  return <View style={{gap:16}}>
   {!embedded&&<Pressable accessibilityRole="button" disabled={state.busy||reportBusy} onPress={state.toggle} style={styles.button}><Text style={styles.heading}>{state.open?'Cerrar solicitudes y acuerdos':'Mis solicitudes y acuerdos'}</Text></Pressable>}
   {state.open&&<>
     {state.tradeTarget?reporting&&state.trade?<MarketplaceReportForm target={{type:'TRANSACCION_DIGITAL',publicationId:state.trade.publicationId,transactionId:state.trade.id,campusId:state.trade.campusId}} title={state.trade.title} onBack={()=>setReporting(false)} onBusyChange={setReportBusy}/>:<DigitalTransactionDetail state={state} onReport={()=>setReporting(true)} onAcquired={onAcquired}/>:<DigitalRequests state={state}/>}

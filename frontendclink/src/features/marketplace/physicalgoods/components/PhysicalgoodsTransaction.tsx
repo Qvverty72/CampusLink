@@ -1,3 +1,4 @@
+import { useAgreementPolling } from '../../hooks/useAgreementPolling';
 import { OwnerRating } from '../../components/OwnerRating';
 import { Modal, Text, View } from 'react-native';
 import { useState } from 'react';
@@ -24,8 +25,9 @@ export function PhysicalgoodsTransaction({ target, onClose, onChanged, refreshEn
     : ['OCULTO', 'CANCELADO'].includes(detail?.publication.status ?? '') ? 'Se conservará el historial. La publicación seguirá fuera del marketplace.'
       : 'El recurso volverá a estar disponible. Las otras solicitudes seguirán pendientes y podrán resolverse. Este acuerdo quedará en el historial.';
   const refreshing = t.loading || t.messagesLoading || t.optionsLoading;
-  return <Modal visible onRequestClose={close} animationType="slide"><RefreshScrollView style={detailUI.page} contentContainerStyle={[transactionUI.content, { paddingTop: Math.max(20, insets.top + 8), paddingBottom: Math.max(40, insets.bottom + 20) }]} keyboardShouldPersistTaps="handled"
-    onRefresh={t.reload} refreshing={refreshing} refreshEnabled={refreshEnabled && !refreshing && !t.busy && !reporting && !reportBusy && !t.action && !t.ratingConfirmation} refreshLabel="el acuerdo">
+  useAgreementPolling(t.poll, refreshEnabled && !refreshing && !t.busy && !reporting && !reportBusy && !t.action && !t.ratingConfirmation && !t.error && Boolean(detail && ['RESERVADA', 'PENDIENTE_CONFIRMACION'].includes(detail.status)));
+  return <Modal visible onRequestClose={close} animationType="slide"><RefreshScrollView refreshIndicatorOffset={insets.top + 8} style={detailUI.page} contentContainerStyle={[transactionUI.content, { paddingTop: Math.max(20, insets.top + 8), paddingBottom: Math.max(40, insets.bottom + 20) }]} keyboardShouldPersistTaps="handled"
+    onRefresh={t.reload} refreshing={refreshing} refreshEnabled={refreshEnabled && !refreshing && !t.busy && !reporting && !reportBusy && !t.action && !t.ratingConfirmation && !detail?.canRate} refreshLabel="el acuerdo">
     <TransactionHeader onBack={close} onReload={t.reload} disabled={t.busy || reportBusy || Boolean(t.action)} />
     {reporting ? <MarketplaceReportForm target={{ type: 'TRANSACCION', ...target }} title={detail?.publication.title ?? 'Acuerdo del recurso'} onBusyChange={setReportBusy} onBack={() => { setReporting(false); t.reload(); }} /> : <>
       <TransactionFeedback loading={t.loading} error={t.error} onRetry={t.reload} disabled={t.busy} />

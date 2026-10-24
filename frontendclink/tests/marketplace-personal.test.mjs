@@ -91,13 +91,13 @@ test('acquired detail failure retries its authorization query instead of silentl
 
 test('M3 renders the personal tabs, real pending counts and terminal history with actions',()=>{
   const {markup}=renderCatalog('physical',{mode:'personal',width:320});
-  for(const text of ['Mi actividad','Publicaciones','Enviadas','Recibidas','Transacciones','2 solicitudes pendientes','Revisar solicitudes','Historial conservado','Retirada','Ver publicación'])assert.ok(markup.includes(text),text);
+  for(const text of ['Mi actividad','Publicaciones','Solicitudes','Transacciones','2 solicitudes pendientes','Revisar solicitudes','Tu publicación','Retirada','Ver publicación'])assert.ok(markup.includes(text),text);
   const transactions=renderCatalog('physical',{mode:'transactions'}).markup;assert.match(transactions,/Completada/);assert.match(transactions,/Cancelada/);assert.match(transactions,/Ver acuerdo/);
 });
 
 test('L3 owned cards show independent digital activity and keep deactivated publications visible',()=>{
   const {markup}=renderCatalog('digital',{mode:'owned',width:320});
-  for(const text of ['Mi biblioteca','Adquiridos','Publicaciones','Acuerdos','2 solicitudes pendientes','4 acuerdos completados','Disponible para nuevos acuerdos','Desactivada','Consultar publicación'])assert.ok(markup.includes(text),text);
+  for(const text of ['Mi biblioteca','Adquiridos','Publicaciones','Acuerdos','2 solicitudes pendientes','4 acuerdos completados','Desactivada','Consultar publicación'])assert.ok(markup.includes(text),text);
   assert.doesNotMatch(markup,/recurso queda reservado/);
 });
 
@@ -109,5 +109,25 @@ test('L3 acquired cards and detail keep authorized originals after deactivation 
 for(const [screen,mode] of [['physical','personal'],['digital','owned'],['digital','acquired']])test(`${screen} ${mode}: loading and failed reads never masquerade as empty activity`,()=>{
   assert.match(renderCatalog(screen,{mode,state:'loading'}).markup,/Cargando actividad/);
   const error=renderCatalog(screen,{mode,state:'error'}).markup;assert.match(error,/Reintentar consulta/);assert.match(error,/role="alert"/);assert.doesNotMatch(error,/Aún no hay|No hay transacciones en esta página/);
-  const empty=renderCatalog(screen,{mode,state:'empty'}).markup;assert.match(empty,/Actualizar lista/);
+  const empty=renderCatalog(screen,{mode,state:'empty'}).markup;assert.match(empty,mode==='acquired'?/Explorar Biblioteca/:/Publicar recurso/);
+});
+
+
+test('shared rows keep semantic status colors for completed history, pending, accepted and rejected requests',()=>{
+ const deps={'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{},'@/components/Skeleton':{},'./CatalogUI':{CATALOG_COLORS:{primary:'#002E56',tint:'#E9F0F6'},ui:{}}};
+ const {PersonalStatus,PersonalRow,personalStatusLabel}=load('components/PersonalUI.tsx',deps);
+ const tone=status=>PersonalStatus({status}).props.style[1].backgroundColor;
+ assert.equal(tone('COMPLETADA'),tone('ADQUIRIDO'));assert.equal(tone('COMPLETADA'),tone('FINALIZADO'));
+ assert.notEqual(tone('COMPLETADA'),tone('RETIRADA'));assert.notEqual(tone('PENDIENTE'),tone('ACEPTADA'));assert.notEqual(tone('ACEPTADA'),tone('RECHAZADA'));
+ assert.equal(tone('RECHAZADA'),tone('CANCELADA'));assert.equal(personalStatusLabel('PENDIENTE_CONFIRMACION'),'Esperando confirmación');
+ const row=elements(PersonalRow({title:'Recurso',status:'COMPLETADA',helper:'Campus · fecha',keyData:'$5.000',role:'Recibiste'}));
+ assert.equal(row.find(node=>node.type===PersonalStatus).props.status,'COMPLETADA');assert.match(JSON.stringify(row),/Recibiste/);assert.match(JSON.stringify(row),/5.000/);
+});
+
+test('empty acquired and owned views expose their real explore/publish actions without affecting refresh',()=>{
+ let explored=0,published=0;const state={open:true,items:[],loading:false,page:1,hasMore:false,reload:noop,refresh:noop};
+ const {OwnedDigitalResources}=load('elibrary/components/OwnedDigitalResources.tsx',{...base,'../../hooks/useMarketplaceRefresh':{useMarketplaceRefresh:noop},'../hooks/useOwnedDigitalResources':{useOwnedDigitalResources:()=>state},'./DigitalPublicationEditor':{}});
+ const owned=elements(OwnedDigitalResources({embedded:true,onPublish:()=>published++})).find(node=>node.type==='ActivityFeedback');assert.equal(owned.props.emptyAction,'Publicar recurso');owned.props.onEmptyAction();assert.equal(published,1);
+ const {AcquiredDigitalResources}=load('elibrary/components/AcquiredDigitalResources.tsx',{...base,react:{useEffect:noop},'lucide-react-native':{},'@/components/RefreshScrollView':{useScrollRefresh:noop},'../hooks/useAcquiredDigitalResources':{useAcquiredDigitalResources:()=>state}});
+ const acquired=elements(AcquiredDigitalResources({embedded:true,onExplore:()=>explored++})).find(node=>node.type==='ActivityFeedback');assert.equal(acquired.props.emptyAction,'Explorar Biblioteca');acquired.props.onEmptyAction();assert.equal(explored,1);assert.equal(acquired.props.onReload,noop);
 });

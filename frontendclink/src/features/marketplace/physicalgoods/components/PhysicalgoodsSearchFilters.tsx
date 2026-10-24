@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { SearchableFilterSelect } from '../../components/SearchableFilterSelect';
 import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { resourceConditions } from '../types/publication';
-import { FilterChips, FilterOptions, FilterSheet, SearchInput, ui } from '../../components/CatalogUI';
+import { FilterChips, FilterSheet, SearchInput, ui } from '../../components/CatalogUI';
 
 export function PhysicalgoodsSearchFilters({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
   const [expanded, setExpanded] = useState(false);
+  const [openFilter, setOpenFilter] = useState<string | null>(null);
+  const closeFilters = () => { setExpanded(false); setOpenFilter(null); };
   const groups = [
     { key: 'categoryId', label: 'Categoría', options: r.options?.categories ?? [] },
     { key: 'condition', label: 'Condición', options: resourceConditions.map(row => ({ id: row.value, name: row.label })) },
@@ -19,9 +22,9 @@ export function PhysicalgoodsSearchFilters({ resources: r }: { resources: Return
   if (r.filters.mine) active.push({ key: 'mine', label: 'Mis publicaciones', remove: () => r.setFilter('mine', false) });
   return <View style={{ gap: 12 }}>
     <SearchInput label="Buscar recursos por nombre o descripción" value={r.filters.q} onChange={value => r.setFilter('q', value)} placeholder="Buscar libro, calculadora, apuntes…" />
-    <FilterChips modality={r.filters.modality} onModality={value => r.setFilter('modality', value)} onMore={() => setExpanded(true)} active={active} />
-    <FilterSheet visible={expanded} title="Filtros de Mercado" onClose={() => setExpanded(false)}>
-      {groups.map(group => <FilterOptions key={group.key} label={group.label} options={[...group.options]} value={r.filters[group.key]} onChange={value => r.setFilter(group.key, value)} />)}
+    <FilterChips modality={r.filters.modality} onModality={value => r.setFilter('modality', value)} onMore={() => { setOpenFilter(null); setExpanded(true); }} active={active} />
+    <FilterSheet visible={expanded} title="Filtros de Mercado" onClose={closeFilters}>
+      {groups.map(group => <SearchableFilterSelect key={group.key} label={group.label} options={group.options} value={r.filters[group.key]} onChange={value => r.setFilter(group.key, value)} expanded={openFilter === group.key} onExpandedChange={open => setOpenFilter(open ? group.key : null)} disabled={!r.options} loading={!r.options && !r.error} />)}
       {r.filters.modality !== 'DONACION' && <View style={{ gap: 8 }}><Text style={ui.label}>Precio de venta (CLP)</Text><Text style={ui.subtitle}>Un rango de precio muestra solo ventas.</Text>
         {(['minPrice', 'maxPrice'] as const).map(key => <TextInput key={key} accessibilityLabel={key === 'minPrice' ? 'Precio mínimo' : 'Precio máximo'} placeholder={key === 'minPrice' ? 'Mínimo' : 'Máximo'}
           value={r.filters[key]} onChangeText={value => r.setFilter(key, value)} inputMode="decimal" style={ui.input} />)}

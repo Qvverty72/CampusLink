@@ -26,7 +26,7 @@ const digitalRows = ['Guía de cálculo integral', 'Resumen de bases de datos', 
 }));
 
 /** Render aislado de las pantallas reales con datos sintéticos. Nunca conecta a APIs o sesiones. */
-export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available' } = {}) {
+export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '' } = {}) {
   const physical = screen === 'physical';
   const detailMode = mode === 'detail' || mode === 'request';
   const mocks = new Map();
@@ -41,7 +41,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     gallery: state === 'loading' || state === 'error' ? null : { ...physicalRows[0], status: variant === 'reserved' ? 'RESERVADO' : 'DISPONIBLE', acceptsRequests: variant !== 'reserved',
       description: 'Calculadora en buen estado, ideal para tus clases de ciencias e ingeniería. Incluye su cubierta protectora.', images: [], owner: { id: variant === 'own' ? 'qa' : 'owner', fullName: 'Camila González' } },
     reloadGallery: noop, close: noop,
-    search: noop, reload: noop, clearFilters: noop, setFilter: noop, setNumber: noop, open: noop,
+    search: noop, reload: noop, refresh: noop, clearFilters: noop, setFilter: noop, setNumber: noop, open: noop,
   }) });
   add('features/marketplace/physicalgoods/hooks/useRequestPhysicalgoods.ts', { useRequestPhysicalgoods: () => ({
     eligible: variant !== 'own', loading: false, busy: false, options: { canRequest: variant === 'available', messages: [{ code: 'INTERES', label: 'Me interesa este recurso para mis estudios.' }, { code: 'SOLICITAR', label: 'Quisiera solicitarlo.' }, { code: 'CONSULTAR', label: 'Me gustaría acordar la entrega.' }], activeRequest: variant === 'active' ? { id: 'request', status: 'PENDIENTE' } : null },
@@ -64,7 +64,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   add('features/marketplace/elibrary/hooks/useDigitalLibrary.ts', { useDigitalLibrary: () => ({
     catalog, filters: { q: state === 'empty' ? 'sin coincidencias' : '', careerId: '', subjectId: '', modality: '' },
     loading: state === 'loading', error: state === 'error' ? 'El servicio no está disponible. Inténtalo nuevamente.' : null,
-    items: state === 'empty' ? [] : digitalRows, page: 1, hasMore: true, search: noop, reload: noop, openForm: noop, openDetail: noop,
+    items: state === 'empty' ? [] : digitalRows, page: 1, hasMore: true, search: noop, reload: noop, refresh: noop, openForm: noop, openDetail: noop,
     previousPage: noop, nextPage: noop, reloadCatalog: noop,
     selectedId: detailMode ? 'digital-0' : null, detailLoading: state === 'loading',
     detail: detailMode && state !== 'loading' && state !== 'error' ? { ...digitalRows[0], campusId: 'qa', description: 'Una guía organizada para repasar integrales, con ejemplos resueltos y ejercicios para practicar antes de tus evaluaciones.',
@@ -112,14 +112,18 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     message: index ? 'Quisiera solicitarlo.' : 'Me interesa este recurso para mis estudios.', transactionId: null, transaction: null, canResolve: true,
     campus: { id: 'qa', name: 'Campus de prueba' }, publication: { ...physicalRows[0], status: variant === 'reserved' ? 'RESERVADO' : 'DISPONIBLE', canView: true, isWithdrawn: false },
   }));
+  if (mode === 'agreements') {
+    requestRows[0] = { ...requestRows[0], status: 'ACEPTADA', transactionId: 'trade-0', transactionStatus: 'PENDIENTE_CONFIRMACION' };
+    requestRows.push({ ...requestRows[1], id: 'request-2', title: 'Resumen de química orgánica', status: 'RECHAZADA' });
+  }
   const requestState = { open: true, received: variant !== 'sent', rows: state === 'empty' || state === 'error' ? [] : requestRows, number: 1, page: { data: state === 'empty' || state === 'error' ? [] : requestRows, meta: { hasMore: false } },
     loading: state === 'loading', error: state === 'error' ? 'No se pudo conectar. Revisa tu conexión e inténtalo otra vez.' : null, busy: false, selection: null, hasMore: false,
     reload: noop, mode: noop, select: noop, resolve: noop, cancel: noop, cancelSelection: noop, previous: noop, next: noop, setNumber: noop,
   };
-  if (mode === 'requests') mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx'));
+  if (mode === 'requests' || (mode === 'personal' && ['sent', 'received'].includes(variant))) mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx'));
   add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsRequests.ts', { usePhysicalgoodsRequests: () => requestState });
-  add('components/RefreshScrollView.tsx', { useScrollRefresh: noop });
-  const personalMode = ['personal', 'owned', 'acquired', 'acquired-detail', 'transactions'].includes(mode);
+  add('components/RefreshScrollView.tsx', { useScrollRefresh: noop, RefreshScrollView: ({ children, contentContainerStyle, style }) => React.createElement(native.ScrollView, { contentContainerStyle, style }, children) });
+  const personalMode = ['personal', 'owned', 'acquired', 'acquired-detail', 'transactions', 'agreements'].includes(mode);
   if (personalMode) {
     mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx'));
     mocks.delete(path.join(sourceRoot, 'features/marketplace/elibrary/components/DigitalPersonalLibrary.tsx'));
@@ -143,6 +147,10 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     selectedId: mode === 'acquired-detail' ? acquired[1].id : null, page: 1, hasMore: false, loading: state === 'loading',
     error: state === 'error' ? 'No se pudieron cargar tus materiales adquiridos.' : null, refresh: noop, show: noop, save: noop, back: noop, next: noop, previous: noop,
   }) });
+  if (mode === 'agreements') {
+    mocks.delete(path.join(sourceRoot, 'features/marketplace/elibrary/components/DigitalTradeCenter.tsx'));
+    mocks.get(path.join(sourceRoot, 'features/marketplace/elibrary/hooks/useDigitalTrades.ts')).useDigitalTradeCenter = () => ({ ...requestState, page: 1, refresh: noop, poll: noop });
+  }
   if (mode === 'transaction') {
     mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsTransaction.tsx'));
     mocks.delete(path.join(sourceRoot, 'features/marketplace/elibrary/components/DigitalTradeCenter.tsx'));
@@ -176,10 +184,11 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   }
   if (mode === 'report') add('features/reports/hooks/useContentReport.ts', { useContentReport: () => ({ busy: state === 'busy', error: state === 'error' ? 'No se pudo confirmar el envío. Si se guardó, reenviarla podría crear otra denuncia.' : null,
     receipt: variant === 'receipt' ? { id: 'receipt', status: 'PENDIENTE', reportedAt: '2026-10-24T12:35:00Z' } : null, submit: noop }) });
+  if (refreshing) mocks.delete(path.join(sourceRoot, 'components/RefreshScrollView.tsx'));
   const cache = new Map();
   const browserNative = { ...native, useWindowDimensions: () => ({ width, height: 844, scale: 1, fontScale: 1 }) };
   // SSR cannot create RN Modal portals; keep the real modal children in a local QA wrapper.
-  if (mode === 'transaction') browserNative.Modal = ({ visible, transparent, children }) => visible ? React.createElement(native.View, { style: transparent ? { position: 'fixed', inset: 0, zIndex: 1000 } : { flex: 1 } }, children) : null;
+  if (mode === 'transaction' || mode === 'filters') browserNative.Modal = ({ visible, transparent, children }) => visible ? React.createElement(native.View, { style: transparent ? mode === 'filters' ? { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } : { position: 'fixed', inset: 0, zIndex: 1000 } : { flex: 1 } }, children) : null;
   const originalLoad = Module._load;
   Module._load = function(name, parent, isMain) {
     if (name === 'react-native') return native;
@@ -200,11 +209,14 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     // All API hooks remain fixtures; no writes, sessions or browser clicks occur.
     let requestStateIndex = 0;
     vm.runInThisContext(Module.wrap(transformed), { filename })(module.exports, name => {
+      if (name === 'react' && mode === 'filters' && /(?:PhysicalgoodsSearchFilters|DigitalSearchForm)\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === false ? true : initial === null ? ['careerId', 'subjectId', 'categoryId', 'condition'].includes(variant) ? variant : null : initial) };
+      if (name === 'react' && mode === 'filters' && /SearchableFilterSelect\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === '' ? filterQuery : initial) };
       if (name === 'react' && mode === 'publish' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? 'publish' : initial) };
-      if (name === 'react' && mode === 'personal' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? 'mine' : initial) };
+      if (name === 'react' && mode === 'personal' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? ['transactions', 'sent', 'received'].includes(variant) ? variant : 'mine' : initial) };
       if (name === 'react' && mode === 'request' && /(?:PhysicalgoodsDetail|DigitalResourceDetail)\.tsx$/.test(filename)) return { ...React, useState: initial => [requestStateIndex++ === 2 ? true : initial, noop] };
       if (name === 'react' && mode === 'report' && /MarketplaceReportForm\.tsx$/.test(filename)) return { ...React, useState: initial => [requestStateIndex++ === 0 && variant !== 'empty' ? 'misleading' : initial, noop] };
       if (name === 'react' && mode === 'transaction' && variant === 'rating-confirm' && /DigitalTransactionDetail\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === false ? true : initial) };
+      if (name === 'react' && refreshing && /[\\/]components[\\/]RefreshScrollView\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(requestStateIndex++ === 0 ? { onRefresh: noop, refreshing: true, enabled: true, label: physical ? 'mi actividad' : 'mi biblioteca' } : initial === false ? true : initial) };
       if (name === 'react-native') return browserNative;
       if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) };
       if (name === 'expo-router') return { useLocalSearchParams: () => ({}), usePathname: () => physical ? '/physicalgoods' : '/elibrary', router: { replace: noop } };
@@ -219,17 +231,25 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     return module.exports;
   }
   try {
-    const target = mode === 'report' ? 'components/MarketplaceReportForm.tsx' : mode === 'transaction' ? physical ? 'physicalgoods/components/PhysicalgoodsTransaction.tsx' : 'elibrary/components/DigitalTradeCenter.tsx' : !physical && personalMode ? 'elibrary/components/DigitalPersonalLibrary.tsx' : mode === 'transactions' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'requests' ? physical ? 'physicalgoods/components/PhysicalgoodsRequests.tsx' : 'elibrary/components/DigitalRequests.tsx'
+    const target = mode === 'filters' ? physical ? 'physicalgoods/components/PhysicalgoodsSearchFilters.tsx' : 'elibrary/components/DigitalSearchForm.tsx' : mode === 'report' ? 'components/MarketplaceReportForm.tsx' : mode === 'transaction' ? physical ? 'physicalgoods/components/PhysicalgoodsTransaction.tsx' : 'elibrary/components/DigitalTradeCenter.tsx' : !physical && personalMode ? 'elibrary/components/DigitalPersonalLibrary.tsx' : mode === 'transactions' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'requests' ? physical ? 'physicalgoods/components/PhysicalgoodsRequests.tsx' : 'elibrary/components/DigitalRequests.tsx'
       : physical ? detailMode ? 'physicalgoods/components/PhysicalgoodsDetail.tsx' : 'physicalgoods/components/PublishPhysicalgoods.tsx' : 'elibrary/components/DigitalLibraryScreen.tsx';
     const exports = load(path.join(sourceRoot, 'features/marketplace', target));
-    const Screen = mode === 'report' ? () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, paddingBottom: 40, width: '100%', maxWidth: 760, alignSelf: 'center', gap: 20 } }, React.createElement(load(path.join(sourceRoot, 'features/marketplace/components/CatalogUI.tsx')).ScreenHeader, { title: physical ? 'Mercado' : 'Biblioteca', subtitle: 'Denuncia un recurso o intercambio', onBack: noop }), React.createElement(exports.MarketplaceReportForm, { target: { type: physical ? variant === 'transaction' ? 'TRANSACCION' : 'PUBLICACION_FISICA' : variant === 'transaction' ? 'TRANSACCION_DIGITAL' : 'PUBLICACION_DIGITAL', publicationId: 'publication', transactionId: 'trade', campusId: 'qa' }, title: physical ? 'Calculadora científica' : 'Guía de cálculo integral', onBack: noop })) : mode === 'transaction' ? physical ? () => React.createElement(exports.PhysicalgoodsTransaction, { target: { publicationId: 'publication', transactionId: 'trade' }, onClose: noop, onChanged: noop }) : () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, width: '100%', maxWidth: 760, alignSelf: 'center' } }, React.createElement(exports.DigitalTradeCenter, { embedded: true, onAcquired: noop }))
-      : !physical && personalMode ? () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, paddingBottom: 60, width: '100%', maxWidth: 760, alignSelf: 'center', gap: 20 } }, React.createElement(load(path.join(sourceRoot, 'features/marketplace/components/CatalogUI.tsx')).ScreenHeader, { title: 'Mi biblioteca', subtitle: 'Tus materiales, publicaciones y acuerdos', onBack: noop }), React.createElement(exports.DigitalPersonalLibrary, { initialTab: mode === 'owned' ? 'owned' : 'acquired' }))
+    const Screen = mode === 'filters' ? () => {
+      const careers = [{ id: 'career', name: 'Ingeniería en Informática', code: 'INF' }, { id: 'adm', name: 'Ingeniería en Administración', code: 'ADM' }, { id: 'design', name: 'Diseño gráfico', code: 'DIS' }, { id: 'construction', name: 'Construcción civil', code: 'CON' }, { id: 'tourism', name: 'Turismo', code: 'TUR' }];
+      const subjects = [{ id: 'subject', name: 'Cálculo integral', code: 'MAT' }, { id: 'db', name: 'Bases de datos', code: 'BD' }, { id: 'prog', name: 'Programación de aplicaciones', code: 'PROG' }, { id: 'algebra', name: 'Álgebra lineal', code: 'ALG' }];
+      const resourceState = mocks.get(path.join(sourceRoot, 'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources();
+      const content = physical ? React.createElement(exports.PhysicalgoodsSearchFilters, { resources: { ...resourceState, options: { ...resourceState.options, careers, subjects } } })
+        : React.createElement(exports.DigitalSearchForm, { catalog: { careers, subjects }, filters: { q: '', careerId: '', subjectId: '', modality: '' }, onSearch: noop, catalogLoading: false, catalogError: null, reloadCatalog: noop });
+      return React.createElement(native.View, { style: { flex: 1, padding: 20, backgroundColor: '#F4F7F9' } }, content);
+    } : mode === 'report' ? () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, paddingBottom: 40, width: '100%', maxWidth: 760, alignSelf: 'center', gap: 20 } }, React.createElement(load(path.join(sourceRoot, 'features/marketplace/components/CatalogUI.tsx')).ScreenHeader, { title: physical ? 'Mercado' : 'Biblioteca', subtitle: 'Denuncia un recurso o intercambio', onBack: noop }), React.createElement(exports.MarketplaceReportForm, { target: { type: physical ? variant === 'transaction' ? 'TRANSACCION' : 'PUBLICACION_FISICA' : variant === 'transaction' ? 'TRANSACCION_DIGITAL' : 'PUBLICACION_DIGITAL', publicationId: 'publication', transactionId: 'trade', campusId: 'qa' }, title: physical ? 'Calculadora científica' : 'Guía de cálculo integral', onBack: noop })) : mode === 'transaction' ? physical ? () => React.createElement(exports.PhysicalgoodsTransaction, { target: { publicationId: 'publication', transactionId: 'trade' }, onClose: noop, onChanged: noop }) : () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, width: '100%', maxWidth: 760, alignSelf: 'center' } }, React.createElement(exports.DigitalTradeCenter, { embedded: true, onAcquired: noop }))
+      : !physical && personalMode ? () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, paddingBottom: 60, width: '100%', maxWidth: 760, alignSelf: 'center', gap: 20 } }, React.createElement(load(path.join(sourceRoot, 'features/marketplace/components/CatalogUI.tsx')).ScreenHeader, { title: 'Mi biblioteca', subtitle: 'Tus materiales, publicaciones y acuerdos', onBack: noop }), React.createElement(exports.DigitalPersonalLibrary, { onExplore: noop, onPublish: noop, initialTab: mode === 'owned' ? 'owned' : mode === 'agreements' ? 'trades' : 'acquired' }))
       : mode === 'transactions' ? () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, width: '100%', maxWidth: 760, alignSelf: 'center' } }, React.createElement(exports.PhysicalgoodsHistory, { active: true, transactions: true, onDetail: noop, onAgreement: noop }))
       : mode === 'requests' ? () => React.createElement(native.ScrollView, { contentContainerStyle: { padding: 20, width: '100%', maxWidth: 760, alignSelf: 'center' } }, physical
       ? React.createElement(exports.PhysicalgoodsRequests, { active: true, received: requestState.received, onResolved: noop, onDetail: noop, onAgreement: noop })
       : React.createElement(exports.DigitalRequests, { state: { ...requestState, page: 1 } }))
       : physical ? detailMode ? () => React.createElement(exports.PhysicalgoodsDetail, { resources: mocks.get(path.join(sourceRoot, 'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources(), onClose: noop, onBusyChange: noop }) : exports.PhysicalGoodsScreen : exports.default;
-    native.AppRegistry.registerComponent('CatalogQA', () => Screen);
+    const Refresh = refreshing && (mode === 'requests' || (!physical && (personalMode || mode === 'transaction'))) ? load(path.join(sourceRoot, 'components/RefreshScrollView.tsx')).RefreshScrollView : null;
+    native.AppRegistry.registerComponent('CatalogQA', () => Refresh ? () => React.createElement(Refresh, { onRefresh: noop, refreshing: true, refreshLabel: mode === 'requests' ? 'las solicitudes recibidas' : mode === 'transaction' ? 'el acuerdo digital' : 'mi biblioteca' }, React.createElement(Screen)) : Screen);
     const { element, getStyleElement } = native.AppRegistry.getApplication('CatalogQA');
     const markup = renderToStaticMarkup(element);
     const css = renderToStaticMarkup(getStyleElement());

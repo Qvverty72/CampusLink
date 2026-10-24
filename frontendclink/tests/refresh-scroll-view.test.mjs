@@ -91,3 +91,11 @@ test('child registrations share the universal context, preserve modal controls a
   assert.equal(directCalls, 1); assert.equal(childCalls, 1);
   f.unmount(); assert.equal(visibility.at(-1), true);
 });
+
+test('pestaña montada pero oculta no registra refresh y al salir libera el scroll',()=>{
+ const f=fixture('ios'),onRefresh=()=>{};let active=false;
+ const child=api=>api.useScrollRefresh(onRefresh,false,true,'la pestaña visible',active);
+ let scroll=f.render({},child);scroll=f.render({},child);assert.equal(scroll.props.refreshControl.props.enabled,false);
+ active=true;f.render({},child);scroll=f.render({},child);assert.equal(scroll.props.refreshControl.props.enabled,true);
+ active=false;f.render({},child);scroll=f.render({},child);assert.equal(scroll.props.refreshControl.props.enabled,false);f.unmount();
+});

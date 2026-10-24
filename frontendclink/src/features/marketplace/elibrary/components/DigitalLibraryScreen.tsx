@@ -1,3 +1,4 @@
+import { RefreshScrollView } from '@/components/RefreshScrollView';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useEffect, useRef,useState } from 'react';
 import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
@@ -33,7 +34,7 @@ function Library() {
     onAcquired={id => { setPersonalEntry({ tab: 'acquired', resourceId: id }); setPersonal(true); library.closeDetail(); }}
     onRequests={() => { setPersonalEntry({ tab: 'trades' }); setPersonal(true); library.closeDetail(); }} />;
   return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]}>
+    <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={!personal && !library.formOpen ? library.refresh : undefined} refreshing={library.loading} refreshEnabled={!personal && !library.formOpen && !library.busy && !library.loading} refreshLabel="los recursos de Biblioteca" keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]}>
       <ScreenHeader title={personal ? 'Mi biblioteca' : library.formOpen ? 'Publicar recurso' : 'Biblioteca'}
         subtitle={personal ? 'Tus materiales, publicaciones y acuerdos' : library.formOpen ? 'Comparte material con tu comunidad académica' : 'Apuntes y guías de todos los campus'}
         action={!personal && !library.formOpen && !library.detail ? 'Mi biblioteca' : undefined} onAction={() => { setPersonalEntry({ tab: 'acquired' }); setPersonal(true); }}
@@ -42,16 +43,16 @@ function Library() {
         {!library.busy && <Pressable accessibilityRole="button" onPress={library.reload} style={styles.smallButton}><Text style={styles.link}>Reintentar</Text></Pressable>}
       </View>}
       {!library.formOpen && library.notice && <Text style={styles.notice} accessibilityLiveRegion="polite">{library.notice}</Text>}
-      {personal ? <DigitalPersonalLibrary key={`${personalEntry.tab}:${personalEntry.resourceId ?? ''}`} initialTab={personalEntry.tab} initialPublicationId={personalEntry.resourceId} /> : library.formOpen ? <DigitalPublicationForm library={library} /> : <>
+      {personal ? <DigitalPersonalLibrary key={`${personalEntry.tab}:${personalEntry.resourceId ?? ''}`} initialTab={personalEntry.tab} initialPublicationId={personalEntry.resourceId} onExplore={() => setPersonal(false)} onPublish={() => { setPersonal(false); library.openForm(); }} /> : library.formOpen ? <DigitalPublicationForm library={library} /> : <>
         <DigitalSearchForm catalog={library.catalog} filters={library.filters} onSearch={library.search} catalogLoading={library.catalogLoading} catalogError={library.catalogError} reloadCatalog={library.reloadCatalog} />
-        <DigitalRecommendations onOpen={library.openDetail} />
+        <DigitalRecommendations key={library.refreshVersion} onOpen={library.openDetail} />
         <Text accessibilityRole="header" style={ui.sectionTitle}>Todos los recursos</Text>
         {library.loading ? <CatalogSkeleton /> : library.error ? null : library.items.length ? <View style={{ gap: 10 }}>{library.items.map(item =>
           <ResourceRow key={item.id} resource={item} onOpen={() => library.openDetail(item.id)} />)}</View>
           : <EmptyState filtered={Object.values(library.filters).some(Boolean)} onClear={() => library.search(emptyDigitalFilters)} onPublish={library.openForm} />}
         <CatalogPagination page={library.page} hasMore={library.hasMore} loading={library.loading} previous={library.previousPage} next={library.nextPage} />
       </>}
-    </ScrollView>
+    </RefreshScrollView>
     {!personal && !library.formOpen && !library.detail && <PublishFAB onPress={library.openForm} />}
     <BottomNavigationBar activeItemId="elibrary" />
   </KeyboardAvoidingView>;

@@ -120,3 +120,12 @@ test('opening acquired material directly keeps the loading state until list and 
   assert.equal(state.loading, true, 'La carga de lista no debe ocultar la espera del detalle'); detail({ id: 'acquired-id', files: [] }); await opening; state = render();
   assert.equal(state.loading, false); assert.equal(state.detail.id, 'acquired-id'); h.unmount();
 });
+
+test('detalle digital reconsulta recurso tras envío confirmado y conserva fallo sin recargar formulario',async()=>{
+ const h=runtime(),reloaded=[];let success=false;
+ const resource={id:'digital',title:'Guía',status:'DISPONIBLE',careers:[],subjects:[],files:[]};
+ const library={detail:resource,isOwner:false,openDetail:id=>reloaded.push(id)},request={options:{canRequest:true,messages:[]},loading:false,code:'INTERES',submit:async()=>success};
+ const {DigitalResourceDetail}=load('elibrary/components/DigitalResourceDetail.tsx',{...baseUI(h),'lucide-react-native':{FileText:'Icon',LockKeyhole:'Icon'},'@/components/navigation/BottomNavigationBar':{BottomNavigationBar:'Nav'},'../hooks/useDigitalTrades':{useDigitalRequestAction:()=>request},'./DigitalPreview':{DigitalPreview:'Preview'},'./DigitalAcademicSelector':{DigitalAcademicSelector:'Academic'},'./DigitalPublicationEditor':{DigitalPublicationEditor:'Editor'}});
+ const render=()=>elements(h.render(()=>DigitalResourceDetail({library,onAcquired:noop,onRequests:noop})));let tree=render();tree.find(node=>node.type==='DetailActionBar').props.onPress();tree=render();tree.find(node=>node.type==='DetailActionBar').props.onPress();await setImmediate();assert.deepEqual(reloaded,[]);
+ success=true;tree.find(node=>node.type==='DetailActionBar').props.onPress();await setImmediate();assert.deepEqual(reloaded,['digital']);h.unmount();
+});

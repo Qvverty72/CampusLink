@@ -108,8 +108,9 @@ test('physical reserved and historical cards preserve detail access and prevent 
 });
 
 test('shared confirmation describes physical reservation and digital independent agreements; network errors never look empty',()=>{
-  const {RequestDecisionDialog,RequestsFeedback}=load('components/RequestsUI.tsx',{'react/jsx-runtime':jsx,'react-native':native,
-    'lucide-react-native':{Inbox:'Icon',RefreshCw:'Icon',UserRound:'Icon'},'./CatalogUI':{CATALOG_COLORS:{},StatusTag:'Status',ui:{}},'./ResourceDetailUI':{detailUI:{}}});
+  const {RequestDecisionDialog,RequestsFeedback,RequestsPager}=load('components/RequestsUI.tsx',{'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'react/jsx-runtime':jsx,'react-native':native,
+    'lucide-react-native':{Inbox:'Icon',RefreshCw:'Icon',UserRound:'Icon'},'./CatalogUI':{CATALOG_COLORS:{},StatusTag:'Status',ui:{}},'./ResourceDetailUI':{detailUI:{}},'./PersonalUI':{personalStatusLabel:value=>value,PersonalSkeleton:'Skeleton',PersonalEmpty:'Empty',personalUI:{}}});
+  assert.equal(RequestsPager({page:1,hasMore:false,disabled:false,onPrevious:noop,onNext:noop}),null);assert.ok(RequestsPager({page:2,hasMore:false,disabled:false,onPrevious:noop,onNext:noop}));
   const selection={name:'Diego',title:'Guía',decision:'ACEPTAR'};
   const physical=JSON.stringify(elements(RequestDecisionDialog({selection,physical:true,disabled:false,onConfirm:noop,onCancel:noop})));
   const digital=JSON.stringify(elements(RequestDecisionDialog({selection,disabled:false,onConfirm:noop,onCancel:noop})));

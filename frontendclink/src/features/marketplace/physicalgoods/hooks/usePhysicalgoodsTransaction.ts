@@ -15,8 +15,11 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
   const [optionsRevision,setOptionsRevision]=useState(0),[messagesRevision,setMessagesRevision]=useState(0);
   const [ratingScore,setRatingScore]=useState<number|null>(null),[ratingConfirmation,setRatingConfirmation]=useState(false);
   const pendingRating=useRef<number|null>(null);
+  const polling=useRef<AbortController|null>(null);
   const mutation=useRef<AbortController|null>(null),running=useRef(false),outcome=useRef<'confirm'|'cancel'|null>(null);
   const sent=useRef<{text:string;previousIds:string[]}|null>(null),selection=useRef({buildingId,floorId});selection.current={buildingId,floorId};
+  const latest=useRef({detail,loading,action,ratingConfirmation});latest.current={detail,loading,action,ratingConfirmation};
+  useEffect(()=>()=>{polling.current?.abort();polling.current=null;},[target.publicationId,target.transactionId,revision,busy]);
   useEffect(()=>()=>mutation.current?.abort(),[]);
   function report(reason:unknown,setMessage:(value:string)=>void) {
     if(reason instanceof AuthApiError&&[401,403].includes(reason.status))void auth.refreshIdentity();
@@ -55,10 +58,21 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
   },[detail,revision,busy,target.publicationId,target.transactionId,optionsRevision]);
   const building=options?.buildings.find(value=>value.id===buildingId),floor=building?.floors.find(value=>value.id===floorId);
   const preview=building&&floor?`Estoy en ${building.name}, en ${floor.name}.`:null;
+  async function poll(){
+    const current=latest.current;
+    if(polling.current||running.current||current.loading||current.action||current.ratingConfirmation||!current.detail||!['RESERVADA','PENDIENTE_CONFIRMACION'].includes(current.detail.status))return;
+    const abort=new AbortController();polling.current=abort;
+    try{
+      const result=await loadPhysicalgoodsTransaction(target,abort.signal);
+      if(!abort.signal.aborted&&!running.current&&!latest.current.action&&!latest.current.ratingConfirmation&&JSON.stringify(result)!==JSON.stringify(latest.current.detail))setDetail(result);
+    }catch(reason){if(!abort.signal.aborted&&reason instanceof AuthApiError&&[401,403].includes(reason.status))void auth.refreshIdentity();}
+    finally{if(polling.current===abort)polling.current=null;}
+  }
   async function perform(kind:'confirm'|'cancel'|'message'|'rating') {
     if(running.current||loading||!detail||(kind==='confirm'&&(!detail.canConfirm||action!=='confirm'))||(kind==='cancel'&&(!detail.canCancel||action!=='cancel'))||(kind==='message'&&(!detail.canCancel||!preview||optionsLoading))
       ||(kind==='rating'&&(!detail.canRate||!ratingConfirmation||ratingScore===null||!Number.isInteger(ratingScore)||ratingScore<1||ratingScore>5)))return;
     const abort=new AbortController();mutation.current=abort;running.current=true;setBusy(true);setAction(null);
+    polling.current?.abort();polling.current=null;
     setRatingConfirmation(false);
     if(kind==='message'){setMessageError(null);sent.current=null;}
     else if(kind==='rating'){setError(null);pendingRating.current=ratingScore;}
@@ -77,7 +91,7 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
     finally{if(!abort.signal.aborted){running.current=false;setBusy(false);setPage(1);setRevision(value=>value+1);if(kind!=='message')onChanged();}}
   }
   return {detail,historical:!!detail&&detail.campus.id!==auth.identity?.campusId,messages,options,buildingId,floorId,building,preview,loading,messagesLoading,optionsLoading,busy,error,messageError,optionsError,page,action,
-    ratingScore,ratingConfirmation,rate:()=>perform('rating'),
+    poll,ratingScore,ratingConfirmation,rate:()=>perform('rating'),
     selectRating:(value:number)=>{if(!running.current&&detail?.canRate&&Number.isInteger(value)&&value>=1&&value<=5){setRatingScore(value);setRatingConfirmation(false);}},
     confirmRating:()=>{if(!running.current&&detail?.canRate&&ratingScore!==null)setRatingConfirmation(true);},
     cancelRating:()=>{if(!running.current)setRatingConfirmation(false);},

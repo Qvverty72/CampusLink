@@ -328,12 +328,13 @@ test('nested history/agreement modals use universal refresh and wait for their d
   const h = hooks(), agreement = { detail: null, reload, busy: false, loading: false, messagesLoading: false, optionsLoading: false, action: null, ratingConfirmation: false };
   const { PhysicalgoodsTransaction } = load('../marketplace/physicalgoods/components/PhysicalgoodsTransaction.tsx', { ...shared, react: h.react,
     '../hooks/usePhysicalgoodsTransaction': { usePhysicalgoodsTransaction: () => agreement },
-    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 59, bottom: 34 }) },
     '../../components/RequestsUI': { RequestButton: 'Button' },
     '../../components/TransactionUI': { transactionUI: {}, TransactionHeader: 'Header', TransactionFeedback: 'Feedback', TransactionDecisionDialog: 'Dialog' },
-    './PhysicalgoodsCoordination': {}, '../../components/OwnerRating': {}, '../../components/MarketplaceReportForm': { MarketplaceReportForm: () => null } });
+    './PhysicalgoodsCoordination': {}, '../../components/OwnerRating': {}, '../../hooks/useAgreementPolling': { useAgreementPolling() {} }, '../../components/MarketplaceReportForm': { MarketplaceReportForm: () => null } });
   const render = (refreshEnabled = true) => elements(h.render(() => PhysicalgoodsTransaction({ target: {}, refreshEnabled }))).find(node => node.type === 'UniversalScroll');
   assert.equal(render().props.onRefresh, reload); assert.equal(render().props.refreshEnabled, true);
+  assert.equal(render().props.refreshIndicatorOffset, 67);
   assert.equal(render(false).props.refreshEnabled, false);
   for (const key of ['loading', 'messagesLoading', 'optionsLoading']) { agreement[key] = true;
     assert.equal(render().props.refreshing, true); assert.equal(render().props.refreshEnabled, false); agreement[key] = false; }

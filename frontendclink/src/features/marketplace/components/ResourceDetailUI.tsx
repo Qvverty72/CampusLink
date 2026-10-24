@@ -1,3 +1,4 @@
+import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArrowLeft, Check, FileText, Flag, Package, ShieldCheck, Star, UserRound } from 'lucide-react-native';
@@ -46,9 +47,9 @@ export function DetailSection({ title, children }: { title: string; children: Re
 }
 
 export function ResourceDetailSkeleton() {
-  return <View accessibilityRole="progressbar" accessibilityLabel="Cargando detalle del recurso" style={{ gap: 18 }}>
-    {[230, 26, 18, 76, 92].map((height, index) => <View key={index} style={{ height, borderRadius: 16, backgroundColor: colors.border, width: index === 2 ? '65%' : '100%' }} />)}
-  </View>;
+  return <Skeleton label="Cargando detalle del recurso" contentStyle={{ gap: 18 }}>
+    {[230, 26, 18, 76, 92].map((height, index) => <SkeletonBlock style={ui.skeletonBlock} key={index} height={height} borderRadius={16} width={index === 2 ? '65%' : '100%'} />)}
+  </Skeleton>;
 }
 
 export function OptionRow({ label, selected, disabled, onPress }: { label: string; selected: boolean; disabled: boolean; onPress: () => void }) {
@@ -64,7 +65,7 @@ export function RequestMessageForm({ title, messages, selected, onSelect, disabl
   disabled: boolean; error?: string | null; loading?: boolean; onRetry: () => void;
 }) {
   return <DetailSection title="Mensaje para el propietario"><Text style={detailUI.helper}>Elige un mensaje para expresar tu interés en {title}. Solo se enviará la opción que selecciones.</Text>
-    {loading ? <View accessibilityRole="progressbar" accessibilityLabel="Cargando mensajes disponibles" style={{ gap: 10 }}>{[0, 1, 2].map(index => <View key={index} style={{ height: 58, backgroundColor: colors.border, borderRadius: 14 }} />)}</View>
+    {loading ? <Skeleton label="Cargando mensajes disponibles" contentStyle={{ gap: 10 }}>{[0, 1, 2].map(index => <SkeletonBlock style={ui.skeletonBlock} key={index} height={58} borderRadius={14} />)}</Skeleton>
       : <View accessibilityRole="radiogroup" accessibilityLabel="Mensajes disponibles" style={{ gap: 10 }}>{messages.map(row => <OptionRow key={row.code} label={row.label} selected={row.code === selected} disabled={disabled} onPress={() => onSelect(row.code)} />)}</View>}
     {error && <Text accessibilityRole="alert" style={detailUI.error}>{error}</Text>}
     {!loading && (error || !messages.length) && <><Text style={detailUI.helper}>Si no hay opciones disponibles, vuelve a comprobar el estado del recurso.</Text><Pressable accessibilityRole="button" disabled={disabled} onPress={onRetry} style={ui.outlined}><Text style={ui.link}>Consultar estado</Text></Pressable></>}

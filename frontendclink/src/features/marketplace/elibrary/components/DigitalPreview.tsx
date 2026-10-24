@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import { LockKeyhole } from 'lucide-react-native';
 import { CATALOG_COLORS as colors, ui } from '../../components/CatalogUI';
 import { detailUI } from '../../components/ResourceDetailUI';
@@ -10,8 +11,8 @@ export function DigitalPreview({ publicationId, fileId, name, autoOpen = false }
     <View style={detailUI.inline}><LockKeyhole size={16} color={colors.secondary} /><Text style={styles.heading}>Vista previa protegida</Text></View>
     <Text numberOfLines={1} style={detailUI.helper}>{name}</Text>
     {state.open ? <>
-      {state.loading ? <View accessibilityRole="progressbar" accessibilityLabel="Cargando vista previa" style={{ gap: 12, paddingVertical: 14 }}>{[100, 90, 95, 60].map((width, index) =>
-        <View key={index} style={{ height: 12, width: `${width}%`, borderRadius: 6, backgroundColor: colors.border }} />)}</View>
+      {state.loading ? <Skeleton label="Cargando vista previa" contentStyle={{ gap: 12, paddingVertical: 14 }}>{[100, 90, 95, 60].map((width, index) =>
+        <SkeletonBlock style={ui.skeletonBlock} key={index} height={12} width={`${width}%`} />)}</Skeleton>
         : state.error ? <><Text accessibilityRole="alert" style={detailUI.error}>No pudimos cargar la muestra. Inténtalo nuevamente.</Text><Pressable accessibilityRole="button" onPress={state.show} style={ui.outlined}><Text style={ui.link}>Reintentar muestra</Text></Pressable></>
           : <>{state.result?.available && <Text selectable style={styles.fragment}>{state.result.text}…</Text>}<Text style={detailUI.helper}>{state.result?.message || 'Este archivo no dispone de vista previa. Puedes revisar sus metadatos antes de solicitarlo.'}</Text></>}
       {!autoOpen && <Pressable accessibilityRole="button" onPress={state.hide} style={ui.back}><Text style={ui.link}>Cerrar muestra</Text></Pressable>}

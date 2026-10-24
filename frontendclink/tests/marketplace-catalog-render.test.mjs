@@ -74,3 +74,13 @@ for (const screen of ['physical', 'digital']) {
     assert.match(empty, /Aún no hay solicitudes recibidas/); assert.match(empty, /Actualizar solicitudes/);
   });
 }
+
+
+for (const screen of ['physical', 'digital']) test(`${screen}: modal oculta opciones hasta abrir desplegable y busca en un solo campo`,()=>{
+ const closed=renderCatalog(screen,{mode:'filters'}).markup;
+ assert.match(closed,/Seleccionar carrera/);assert.match(closed,/Seleccionar asignatura/);assert.doesNotMatch(closed,/role="radiogroup"|Buscar por nombre o código/);
+ assert.equal((closed.match(/aria-expanded="false"/g)??[]).length,screen==='physical'?4:2);
+ const searched=renderCatalog(screen,{mode:'filters',variant:'careerId',filterQuery:'informatica'}).markup;
+ assert.match(searched,/Buscar carrera para filtrar/);assert.match(searched,/Ingeniería en Informática/);assert.match(searched,/role="radiogroup"/);assert.doesNotMatch(searched,/Ingeniería en Administración/);
+ assert.equal((searched.match(/aria-expanded="true"/g)??[]).length,1);
+});

@@ -12,12 +12,13 @@ const RefreshContext = createContext<{
 const PULL_THRESHOLD = 64;
 
 /** Registra la vista de datos visible; formularios desmontados no compiten por actualizar. */
-export function useScrollRefresh(onRefresh: () => void, refreshing: boolean, enabled: boolean, label = 'el contenido') {
+export function useScrollRefresh(onRefresh: () => void, refreshing: boolean, enabled: boolean, label = 'el contenido', active = true) {
   const register = useContext(RefreshContext)?.register;
   useLayoutEffect(() => {
+    if (!active) return;
     register?.({ onRefresh, refreshing, enabled, label });
     return () => register?.(null);
-  }, [register, onRefresh, refreshing, enabled, label]);
+  }, [register, onRefresh, refreshing, enabled, label, active]);
 }
 
 /** Restablece el scroll del modal cuando cambia la pantalla visible. */
