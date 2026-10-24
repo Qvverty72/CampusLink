@@ -79,6 +79,39 @@ test('real request details render lifecycle states and keep history independent 
 
 test('empty inboxes provide the intended recovery and received counts identify their page scope',()=>{
  const sent=renderCatalog('physical',{mode:'requests',variant:'sent',state:'empty'}).markup;assert.match(sent,/Aún no has enviado solicitudes/);assert.match(sent,/Explorar mercado/);
- const received=renderCatalog('physical',{mode:'requests'}).markup;assert.match(received,/2 pendientes en esta página/);assert.match(received,/Diego Pérez quiere/);assert.match(received,/Aceptar solicitud de Diego/);
+ const received=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'mixed',receivedOpen:'physical-0'}).markup;assert.match(received,/4 pendientes en esta página/);assert.match(received,/Diego Pérez/);assert.match(received,/Aceptar solicitud de Diego/);
  assert.match(renderCatalog('physical',{mode:'requests',state:'empty'}).markup,/No tienes solicitudes pendientes/);
+});
+
+test('received accordion renders one resource card with all ten requesters and no hidden pagination inside the group',()=>{
+ const options={mode:'requests',variant:'received',receivedScenario:'many'};
+ const closed=renderCatalog('physical',options).markup;assert.match(closed,/10 solicitudes · 10 pendientes/);assert.doesNotMatch(closed,/aria-expanded="true"|Mensaje recibido el/);
+ const open=renderCatalog('physical',{...options,receivedOpen:'physical-0'}).markup;
+ assert.equal((open.match(/Mensaje recibido el/g)||[]).length,10);assert.match(open,/Estudiante 10/);assert.match(open,/Aceptar solicitud de Estudiante 10/);
+ assert.equal((open.match(/solicitudes del recurso: Calculadora científica/g)||[]).length,1);assert.match(open,/Libro de física general/);
+ const reserved=renderCatalog('physical',{...options,receivedScenario:'reserved',receivedOpen:'physical-0'}).markup;assert.match(reserved,/Pendiente mientras se realiza otro intercambio/);assert.match(reserved,/Ver transacción/);
+ const historical=renderCatalog('physical',{...options,receivedScenario:'historical',receivedOpen:'physical-0'}).markup;assert.doesNotMatch(historical,/Aceptar solicitud de|Rechazar solicitud de/);assert.match(historical,/Publicación retirada/);
+ assert.match(renderCatalog('physical',{...options,state:'loading'}).markup,/Cargando solicitudes recibidas/);
+});
+
+test('real sent accordion shows only the selected message and preserves historical resource restrictions',()=>{
+ const accepted=renderCatalog('physical',{mode:'requests',variant:'sent',sentScenario:'mixed',sentOpen:'request-0'}).markup;
+ assert.match(accepted,/Carlos aceptó tu solicitud/);assert.match(accepted,/Monto acordado/);assert.doesNotMatch(accepted,/Solicitud enviada/);assert.match(accepted,/Tú, mensaje enviado el/);
+ assert.match(accepted,/aria-expanded="true"/);assert.match(accepted,/aria-expanded="false"/);
+ assert.doesNotMatch(accepted,/Aceptar solicitud de|Rechazar solicitud de|Tú, Carlos Soto|Ver transacción|Ver solicitud: Sushi/);
+ const collapsed=renderCatalog('physical',{mode:'requests',variant:'sent',sentScenario:'mixed',sentOpen:null}).markup;
+ assert.doesNotMatch(collapsed,/aria-expanded="true"|Me interesa este recurso para mis estudios/);assert.match(collapsed,/Bicicleta urbana/);
+ const history=renderCatalog('physical',{mode:'requests',variant:'sent',sentScenario:'historical',sentOpen:'request-0',sentResource:'historical'}).markup;
+ assert.match(history,/Recurso de la solicitud/);assert.match(history,/no están disponibles/);assert.doesNotMatch(history,/Ver transacción|Ver solicitud: Sushi/);
+ const loading=renderCatalog('physical',{mode:'requests',variant:'sent',state:'loading'}).markup;
+ assert.match(loading,/Cargando solicitudes enviadas/);assert.doesNotMatch(loading,/Aún no has enviado solicitudes/);
+});
+
+test('request resource modal reuses the product view for pending requests and keeps its loading/error states',()=>{
+ const options={mode:'requests',variant:'sent',sentScenario:'mixed',sentOpen:'request-1',sentResource:'ready'};
+ const pending=renderCatalog('physical',options).markup;
+ for(const text of ['Recurso de la solicitud','Bicicleta urbana','Bicicleta urbana en buen estado','Participantes','Comprador (tú)','Solicitud enviada el'])assert.ok(pending.includes(text),text);
+ assert.match(pending,/45\.000/);assert.doesNotMatch(pending,/Recurso de la transacción|Confirmar que se realizó|Iniciado el/);
+ assert.match(renderCatalog('physical',{...options,sentResource:'loading'}).markup,/Cargando información del recurso/);
+ assert.match(renderCatalog('physical',{...options,sentResource:'error'}).markup,/Reintentar información/);
 });

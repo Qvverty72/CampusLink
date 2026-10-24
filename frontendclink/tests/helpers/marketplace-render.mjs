@@ -26,7 +26,7 @@ const digitalRows = ['Guía de cálculo integral', 'Resumen de bases de datos', 
 }));
 
 /** Render aislado de las pantallas reales con datos sintéticos. Nunca conecta a APIs o sesiones. */
-export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null } = {}) {
+export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null, sentScenario = null, sentOpen = null, sentResource = null, receivedScenario = null, receivedOpen = null, receivedResource = false } = {}) {
   const physical = screen === 'physical';
   const detailMode = mode === 'detail' || mode === 'request';
   const mocks = new Map();
@@ -115,6 +115,25 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   if (mode === 'agreements') {
     requestRows[0] = { ...requestRows[0], status: 'ACEPTADA', transactionId: 'trade-0', transactionStatus: 'PENDIENTE_CONFIRMACION' };
     requestRows.push({ ...requestRows[1], id: 'request-2', title: 'Resumen de química orgánica', status: 'RECHAZADA' });
+  }
+  if(physical&&variant==='sent'&&sentScenario){
+    const base=requestRows[0];
+    requestRows.splice(0,requestRows.length,...[
+      {...base,status:'ACEPTADA',owner:{id:'owner',fullName:'Carlos'},requester:{id:'viewer',fullName:'Carlos Soto'},campus:{id:'qa',name:'San Andres'},publication:{...base.publication,title:sentScenario==='long'?'Material de cálculo y álgebra para ingeniería, edición completa con ejercicios resueltos':'Sushi',modality:'DONACION',price:null,status:'RESERVADO'},transaction:{id:'trade-0',status:'RESERVADA',modality:'DONACION',amount:null,currency:'CLP'}},
+      {...base,id:'request-1',owner:{id:'owner-1',fullName:'Marta'},requester:{id:'viewer',fullName:'Carlos Soto'},publication:{...base.publication,id:'physical-1',title:'Bicicleta urbana',price:45000}},
+      {...base,id:'request-2',status:'RECHAZADA',owner:{id:'owner-2',fullName:'Javiera'},requester:{id:'viewer',fullName:'Carlos Soto'},publication:{...base.publication,id:'physical-2',title:'Calculadora',modality:'DONACION',price:null}},
+    ]);
+    if(sentScenario==='reserved')requestRows[0]={...requestRows[0],status:'PENDIENTE',transaction:null};
+    if(sentScenario==='completed')requestRows[0]={...requestRows[0],transaction:{id:'trade-0',status:'COMPLETADA',modality:'VENTA',amount:15000,currency:'CLP'}};
+    if(sentScenario==='historical')requestRows[0].publication={...requestRows[0].publication,isWithdrawn:true,canView:false};
+  }
+  if(physical&&variant==='received'&&receivedScenario){
+    const base=requestRows[0],total=receivedScenario==='many'?10:3;
+    requestRows.splice(0,requestRows.length,...Array.from({length:total},(_,index)=>({...base,id:`request-${index}`,requester:{id:`user-${index}`,fullName:['Diego Pérez','Valentina Muñoz','Mateo Rojas'][index]??`Estudiante ${index+1}`},
+      publication:{...base.publication,price:15000,status:receivedScenario==='reserved'?'RESERVADO':'DISPONIBLE',canView:receivedScenario!=='historical',isWithdrawn:receivedScenario==='historical'},
+      canResolve:receivedScenario!=='historical',status:receivedScenario==='historical'?'CANCELADA':receivedScenario==='reserved'&&index===0?'ACEPTADA':'PENDIENTE',
+      transaction:receivedScenario==='reserved'&&index===0?{id:'trade-0',status:'RESERVADA',modality:'VENTA',amount:15000,currency:'CLP'}:null,
+    })),{...base,id:'request-other',publication:{...base.publication,id:'physical-1',title:'Libro de física general',modality:'DONACION',price:null}});
   }
   const requestState = { open: true, received: variant !== 'sent', rows: state === 'empty' || state === 'error' ? [] : requestRows, number: 1, page: { data: state === 'empty' || state === 'error' ? [] : requestRows, meta: { hasMore: false } },
     loading: state === 'loading', error: state === 'error' ? 'No se pudo conectar. Revisa tu conexión e inténtalo otra vez.' : null, busy: false, selection: null, hasMore: false,
@@ -239,6 +258,15 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     mocks.get(path.join(sourceRoot, 'features/marketplace/elibrary/hooks/useDigitalTrades.ts')).useDigitalTradeCenter = () => tradeState;
     add('components/RefreshScrollView.tsx', { useScrollRefresh: noop, RefreshScrollView: ({ children, contentContainerStyle, style }) => React.createElement(native.ScrollView, { contentContainerStyle, style }, children) });
   }
+  if(mode!=='transaction'&&!inlinePanel)add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementProduct.ts',{usePhysicalgoodsAgreementProduct:()=>({product:null,loading:false,error:null,unavailable:true,reload:noop})});
+  if(receivedResource)add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementProduct.ts',{usePhysicalgoodsAgreementProduct:()=>({product:{id:'physical-0',modality:'VENTA',price:15000,condition:'USADO',category:{id:'calculators',name:'Calculadoras'},description:'Calculadora científica con tapa protectora.',images:[]},loading:false,error:null,unavailable:false,reload:noop})});
+  if(sentResource){
+    const cover='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450"><rect width="600" height="450" fill="#E9F0F6"/><g stroke="#003353" stroke-width="8" fill="none" stroke-linejoin="round" stroke-linecap="round"><circle cx="150" cy="290" r="78"/><circle cx="450" cy="290" r="78"/><path d="M150 290L225 160L305 290H150L380 160H225M305 290L380 160L450 290M205 143H250M380 160L365 115H405"/></g></svg>').toString('base64');
+    add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementProduct.ts',{usePhysicalgoodsAgreementProduct:()=>({
+      product:['loading','error','historical'].includes(sentResource)?null:{id:'physical-1',modality:'VENTA',price:45000,condition:'USADO',category:{id:'other',name:'Otros recursos'},description:'Bicicleta urbana en buen estado, lista para tus recorridos.',images:[{id:'cover',principal:true,url:cover}]},
+      loading:sentResource==='loading',error:sentResource==='error'?'No se pudo cargar la información del recurso. Puedes reintentar.':null,unavailable:sentResource==='historical',reload:noop,
+    })});
+  }
   if (mode === 'report' || (inlinePanel && variant === 'report-form')) add('features/reports/hooks/useContentReport.ts', { useContentReport: () => ({ busy: state === 'busy', error: state === 'error' ? 'No se pudo confirmar el envío. Si se guardó, reenviarla podría crear otra denuncia.' : null,
     receipt: variant === 'receipt' ? { id: 'receipt', status: 'PENDIENTE', reportedAt: '2026-10-24T12:35:00Z' } : null, submit: noop }) });
   if (refreshing) mocks.delete(path.join(sourceRoot, 'components/RefreshScrollView.tsx'));
@@ -246,7 +274,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   const browserNative = { ...native, useWindowDimensions: () => ({ width, height: 844, scale: 1, fontScale: 1 }) };
   // SSR cannot create RN Modal portals. The HTML fixture moves these wrappers to body,
   // preserving stacking order and preventing nested dialogs from clipping other modals.
-  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || inlinePanel) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
+  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || inlinePanel || sentResource || receivedResource) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
   const originalLoad = Module._load;
   Module._load = function(name, parent, isMain) {
     if (name === 'react-native') return native;
@@ -272,6 +300,8 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       if (name === 'react' && mode === 'filters' && /SearchableFilterSelect\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === '' ? filterQuery : initial) };
       if (name === 'react' && mode === 'publish' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? 'publish' : initial) };
       if (name === 'react' && mode === 'personal' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? inlinePanel || variant === 'rated' ? 'transactions' : ['transactions', 'sent', 'received'].includes(variant) ? variant : variant.startsWith('transactions-') ? 'transactions' : 'mine' : initial) };
+      if (name === 'react' && sentScenario && /PhysicalgoodsSentRequests\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(requestStateIndex++===0?{key:'viewer:1',id:sentOpen}:sentResource?requestRows.find(row=>row.id===sentOpen)??requestRows[0]:initial)};
+      if (name === 'react' && receivedScenario && /PhysicalgoodsReceivedRequests\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(requestStateIndex++===0?{key:'owner:1',id:receivedOpen}:receivedResource?requestRows[0]:initial)};
       if (name === 'react' && inlinePanel && /PhysicalgoodsAgreements\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(initial===null?{publicationId:physicalTransactions[0].publication.id,transactionId:physicalTransactions[0].id,entry:inlinePanel}:initial==='active'&&agreementTab==='finished'?'finished':initial)};
       if (name === 'react' && /PhysicalgoodsAgreements\.tsx$/.test(filename) && (variant === 'finished' || agreementTab === 'finished')) return { ...React, useState: initial => React.useState(initial === 'active' ? 'finished' : initial) };
       if (name === 'react' && mode === 'transaction' && /PhysicalgoodsTransaction\.tsx$/.test(filename)) return { ...React, useState: initial => { const index=requestStateIndex++; return React.useState(initial==='overview' ? agreementPanel : index===2 && variant==='menu' ? true : initial); } };

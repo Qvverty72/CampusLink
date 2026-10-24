@@ -897,6 +897,27 @@ async function requestedPair() {
   return {saved,first,second,a,b};
 }
 
+test('received grouping paginates complete owned resources instead of cutting a group at ten requests',async()=>{
+  const {saved,first,second,a}=await requestedPair();
+  for(let index=0;index<9;index++)await requestsService.createPhysicalgoodsRequest(await otherActor(),saved.id,{messageCode:'ME_INTERESA'});
+  const next=await create(auth,input());await requestsService.createPhysicalgoodsRequest(first,next.id,{messageCode:'ME_INTERESA'});
+  const foreign=await create(first,input());await requestsService.createPhysicalgoodsRequest(second,foreign.id,{messageCode:'ME_INTERESA'});
+  await resolveRequest(saved.id,a.id);
+  const page=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'1'});
+  const last=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'1',page:'2'});
+  assert.equal(page.meta.groupBy,'publication');assert.equal(page.meta.limit,1);assert.equal(page.meta.hasMore,true);assert.equal(page.data.length,1);assert.equal(page.data[0].publication.id,next.id);
+  assert.equal(last.meta.hasMore,false);assert.equal(last.data.length,11);assert.ok(last.data.every(row=>row.publication.id===saved.id));
+  assert.equal(last.data.filter(row=>row.status==='PENDIENTE').length,10);assert.equal(last.data.filter(row=>row.status==='ACEPTADA').length,1);
+  assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',page:'3',limit:'1'})).data.length,0);
+  assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{limit:'1'})).data.length,1);
+  assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(first,{groupBy:'publication'})).data[0].publication.id,foreign.id);
+  await db.query('update publicacion_recurso set deleted_at=now() where id=$1',[saved.id]);
+  const history=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'1',page:'2'});
+  assert.equal(history.data.length,11);assert.ok(history.data.every(row=>row.publication.isWithdrawn&&!row.canResolve));
+  for(const query of [{groupBy:'request'},{groupBy:['publication']},{groupBy:'publication',ownerId:first.userId},{groupBy:'publication',limit:'0'}])await assert.rejects(requestsService.getReceivedPhysicalgoodsRequests(auth,query),{status:400});
+  await assert.rejects(requestsService.getSentPhysicalgoodsRequests(second,{groupBy:'publication'}),{status:400});
+});
+
 test('profile overview counts own physical history across campuses and rejects stale or suspended accounts', async () => {
   const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
   const { saved, first, second, a } = await requestedPair();
@@ -1377,6 +1398,11 @@ test('transaction history retains cancelled and completed agreements with origin
   assert.equal(next.data[0].id,cancelled);assert.equal(next.data[0].status,'CANCELADA');assert.equal(next.meta.hasMore,false);
   assert.deepEqual((await transactionsService.getOwnPhysicalgoodsTransactions(first,{})).data.map(row=>row.id),[cancelled]);
   assert.deepEqual((await transactionsService.getOwnPhysicalgoodsTransactions(second,{})).data.map(row=>row.id),[completed]);
+  const sent=(await requestsService.getSentPhysicalgoodsRequests(second,{})).data[0];
+  assert.equal(sent.publication.modality,'DONACION');assert.equal(sent.publication.price,null);
+  assert.deepEqual(sent.transaction,{id:completed,status:'COMPLETADA',modality:'VENTA',amount:15000,currency:'CLP'});
+  const cancelledSent=(await requestsService.getSentPhysicalgoodsRequests(first,{})).data[0];
+  assert.equal(cancelledSent.transaction?.amount,15000);assert.equal(cancelledSent.transaction?.status,'CANCELADA');
   assert.equal((await transactionsService.getOwnPhysicalgoodsTransactions(await otherActor('ADMINISTRADOR'),{})).data.length,0);
   assert.doesNotMatch(JSON.stringify(page),/solicitud_id|email|storage_path|institucion_id/);
   for(const query of [{participantId:auth.userId},{campusId:campus},{limit:'0'}])await assert.rejects(transactionsService.getOwnPhysicalgoodsTransactions(auth,query),{status:400});

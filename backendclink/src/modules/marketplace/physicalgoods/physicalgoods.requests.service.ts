@@ -7,7 +7,8 @@ import { findPhysicalgoodsMedia } from './physicalgoods.images.repository.js';
 import { physicalgoodsId, parsePhysicalgoodsRequest, parsePhysicalgoodsDecision } from './physicalgoods.validation.js';
 import type { PhysicalgoodsMediaRow, PhysicalgoodsReceivedRow, PhysicalgoodsRequestRow } from './physicalgoods.types.js';
 import { findActivePhysicalgoodsRequest, findPhysicalgoodsRequestMessage, insertPhysicalgoodsRequest, physicalgoodsRequestMessages,
-  findOwnPhysicalgoodsRequest, findPhysicalgoodsRequest, updatePhysicalgoodsRequestStatus, listPhysicalgoodsRequests } from './physicalgoods.requests.repository.js';
+  findOwnPhysicalgoodsRequest, findPhysicalgoodsRequest, updatePhysicalgoodsRequestStatus, listPhysicalgoodsRequests,
+  listReceivedRequestPublications,listReceivedRequestsForPublications } from './physicalgoods.requests.repository.js';
 import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setPhysicalgoodsPublicationStatus } from './physicalgoods.transactions.repository.js';
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
@@ -78,12 +79,23 @@ function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnecti
     owner:{id:row.propietario_id,fullName:row.propietario_nombre},requester:{id:row.solicitante_id,fullName:row.solicitante_nombre},
     message:row.mensaje,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,
     canResolve:canView&&row.propietario_id===current.userId&&row.estado_solicitud==='PENDIENTE',
-    transaction:row.transaccion_id?{id:row.transaccion_id,status:row.estado_transaccion}:null};
+    transaction:row.transaccion_id?{id:row.transaccion_id,status:row.estado_transaccion,modality:row.modalidad_acordada,amount:row.monto_acordado===null?null:Number(row.monto_acordado),currency:row.moneda_acordada}:null};
 }
 /** Historia propia completa; la disponibilidad solo determina acciones operacionales. */
 async function getPhysicalgoodsRequests(auth: VerifiedAuthConnection, query: unknown, received: boolean) {
-  const pagination=physicalgoodsHistoryPagination(query);
+  let grouped=false,source=query;
+  if(received&&typeof query==='object'&&query!==null&&!Array.isArray(query)&&'groupBy' in query){
+    const {groupBy,...rest}=query;
+    if(groupBy!=='publication')throw new ApiError(400,'VALIDATION_ERROR','Revisa la agrupación de solicitudes.');
+    grouped=true;source=rest;
+  }
+  const pagination=physicalgoodsHistoryPagination(source);
   return withPhysicalgoodsHistory(auth,async(client,current)=>{
+    if(grouped){
+      const resources=createPaginatedResult(await listReceivedRequestPublications(client,current.userId,pagination),pagination);
+      const rows=await listReceivedRequestsForPublications(client,current.userId,resources.data.map(row=>row.id));
+      return {data:rows.map(row=>ownRequestDto(row,current)),meta:{...resources.meta,groupBy:'publication' as const}};
+    }
     const result=createPaginatedResult(await listPhysicalgoodsRequests(client,current.userId,pagination,received),pagination);
     return {...result,data:result.data.map(row=>ownRequestDto(row,current))};
   });

@@ -35,7 +35,7 @@ const ownRequestProjection = `SELECT s.id,s.publicacion_id,s.solicitante_id,s.co
     to_char(s.solicitada_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS solicitada_en,
     p.titulo,p.estado_publicacion,p.deleted_at,p.modalidad,p.precio,p.campus_id,c.nombre AS campus_nombre,
     p.propietario_id,o.nombre_completo AS propietario_nombre,u.nombre_completo AS solicitante_nombre,m.descripcion AS mensaje,
-    t.id AS transaccion_id,t.estado_transaccion
+    t.id AS transaccion_id,t.estado_transaccion,t.modalidad_acordada,t.monto_acordado,t.moneda AS moneda_acordada
     FROM public.solicitud_recurso s JOIN public.publicacion_recurso p ON p.id=s.publicacion_id
     JOIN public.recurso_fisico r ON r.publicacion_id=p.id JOIN public.perfil_usuario u ON u.id=s.solicitante_id
     JOIN public.campus c ON c.id=p.campus_id JOIN public.perfil_usuario o ON o.id=p.propietario_id
@@ -51,4 +51,19 @@ export async function findOwnPhysicalgoodsRequest(client:PoolClient,userId:strin
   return (await client.query<PhysicalgoodsReceivedRow>(`${ownRequestProjection}
     WHERE (p.propietario_id=$1 OR s.solicitante_id=$1) AND p.tipo_recurso='FISICO' AND p.id=$2 AND s.id=$3`,
     [userId,publicationId,requestId])).rows[0]??null;
+}
+
+/** Pagina recursos, nunca corta las solicitudes de un mismo recurso. Incluye historia propia. */
+export async function listReceivedRequestPublications(client:PoolClient,userId:string,pagination:PaginationParams){
+  return (await client.query<{id:string}>(`SELECT p.id FROM public.publicacion_recurso p
+    JOIN public.recurso_fisico r ON r.publicacion_id=p.id
+    WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO'
+      AND EXISTS(SELECT 1 FROM public.solicitud_recurso s WHERE s.publicacion_id=p.id)
+    ORDER BY p.publicado_en DESC,p.id LIMIT $2 OFFSET $3`,[userId,pagination.limit+1,pagination.offset])).rows;
+}
+export async function listReceivedRequestsForPublications(client:PoolClient,userId:string,publicationIds:string[]){
+  if(!publicationIds.length)return [];
+  return (await client.query<PhysicalgoodsReceivedRow>(`${ownRequestProjection}
+    WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO' AND p.id=ANY($2::uuid[])
+    ORDER BY p.publicado_en DESC,p.id,s.solicitada_en,s.id`,[userId,publicationIds])).rows;
 }

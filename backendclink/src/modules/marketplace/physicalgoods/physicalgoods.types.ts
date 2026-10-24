@@ -114,6 +114,9 @@ export interface PhysicalgoodsReceivedRow extends PhysicalgoodsRequestRow {
   mensaje: string;
   transaccion_id: string | null;
   estado_transaccion: PhysicalgoodsTransactionRow['estado_transaccion'] | null;
+  modalidad_acordada: 'VENTA'|'DONACION'|null;
+  monto_acordado: string|null;
+  moneda_acordada: string|null;
 }
 export interface PhysicalgoodsTransactionDetailRow extends PhysicalgoodsTransactionRow {
   titulo: string;

@@ -5,10 +5,10 @@ import { loadOwnPhysicalgoodsDetail, loadPhysicalgoodsGallery } from '../api/phy
 import type { PhysicalgoodsGallery, PhysicalgoodsTransaction } from '../types/publication';
 import { agreementCopy as copy } from '../../utils/agreementPresentation';
 
-type Product = Pick<PhysicalgoodsGallery, 'id' | 'description' | 'condition' | 'category' | 'images' | 'expiresIn'>;
+type Product = Pick<PhysicalgoodsGallery, 'id' | 'description' | 'condition' | 'category' | 'images' | 'expiresIn' | 'modality' | 'price'>;
 
-/** Se monta al abrir Aceptada. Solo usa lecturas ya autorizadas; aborta al cerrar. */
-export function usePhysicalgoodsAgreementProduct(detail: PhysicalgoodsTransaction, historical: boolean) {
+/** Ficha de transacción o solicitud. Solo lecturas ya autorizadas; aborta al cerrar. */
+export function usePhysicalgoodsAgreementProduct(detail: Pick<PhysicalgoodsTransaction,'id'|'role'|'publication'>, historical: boolean) {
   const auth = useAuth();
   const owner = detail.role === 'PROPIETARIO';
   const allowed = owner || (!historical && !detail.publication.isWithdrawn && ['DISPONIBLE', 'RESERVADO', 'FINALIZADO'].includes(detail.publication.status));

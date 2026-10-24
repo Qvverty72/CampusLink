@@ -46,7 +46,7 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
     <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]} keyboardShouldPersistTaps="handled">
-      <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : personal ? 'Mi actividad' : 'Mercado'}
+      <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : received || sent ? 'Solicitudes' : personal ? 'Mi actividad' : 'Mercado'}
         subtitle={publishing ? 'Comparte un recurso físico con tu campus' : personal ? 'Tus publicaciones, solicitudes y transacciones' : 'Recursos físicos de tu campus'}
         action={view === 'explore' ? 'Mi actividad' : undefined} onAction={() => setView('mine')}
         onBack={view !== 'explore' ? () => setView('explore') : undefined} />

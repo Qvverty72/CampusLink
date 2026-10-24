@@ -10,14 +10,14 @@ import type { TransactionParticipant } from '../types/transaction';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 
 /** Contenedor de consulta compartido; no añade navegación ni permisos al recurso. */
-export function AgreementProductModal({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-  return <AgreementStepModal title={copy.product} closeLabel={copy.closeProduct} onClose={onClose} fillHeight contentStyle={styles.modalContent}>{children}</AgreementStepModal>;
+export function AgreementProductModal({ onClose, children, title = copy.product, closeLabel = copy.closeProduct }: { onClose: () => void; children: ReactNode; title?: string; closeLabel?: string }) {
+  return <AgreementStepModal title={title} closeLabel={closeLabel} onClose={onClose} fillHeight contentStyle={styles.modalContent}>{children}</AgreementStepModal>;
 }
 
-/** Ficha de solo lectura sin importar DTO físico: el importe proviene del acuerdo. */
-export function AgreementProductDetails({ title, modality, amount, currency, campus, startedAt, tags, description, children, loading = false }: {
+/** Ficha de solo lectura sin importar DTO físico; el consumidor elige los términos mostrados. */
+export function AgreementProductDetails({ title, modality, amount, currency, campus, startedAt, tags, description, children, loading = false, dateLabel }: {
   title: string; modality: string; amount: number | null; currency: string; campus: string; startedAt: string;
-  tags: string[]; description?: string; children: ReactNode; loading?: boolean;
+  tags: string[]; description?: string; children: ReactNode; loading?: boolean; dateLabel?: string|null;
 }) {
   const date = new Date(startedAt);
   const price = modality === 'DONACION' ? copy.donation : amount === null ? 'Precio no disponible' : `$${amount.toLocaleString('es-CL')}${currency === 'CLP' ? '' : ` ${currency}`}`;
@@ -26,7 +26,7 @@ export function AgreementProductDetails({ title, modality, amount, currency, cam
       : tags.length > 0 && <View style={styles.tags}>{tags.map((tag, index) => <View key={`${index}:${tag}`} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>)}</View>}
     <View style={styles.titleRow}><Text accessibilityRole="header" style={styles.title}>{title}</Text><Text accessibilityLabel={`${price}${modality === 'VENTA' && amount !== null && currency === 'CLP' ? ' CLP' : ''}`} style={styles.price}>{price}</Text></View>
     <View style={styles.metadataRow}><MapPin size={14} color={colors.secondary} /><Text style={styles.metadata}>{campus}</Text></View>
-    <View style={styles.metadataRow}><Clock size={14} color={colors.secondary} /><Text style={styles.metadata}>{copy.productStarted(date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' }), date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false }))}</Text></View>
+    {dateLabel!==null&&<View style={styles.metadataRow}><Clock size={14} color={colors.secondary} /><Text style={styles.metadata}>{dateLabel ?? copy.productStarted(date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' }), date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false }))}</Text></View>}
     {description !== undefined && <View style={styles.description}><Text accessibilityRole="header" style={styles.descriptionTitle}>{copy.description}</Text><Text style={detailUI.body}>{description}</Text></View>}
     {loading && description === undefined && <View style={styles.description}><SkeletonBlock width={90} height={20} /><SkeletonBlock height={18} /><SkeletonBlock width="75%" height={18} /></View>}
   </View></View>;

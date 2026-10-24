@@ -55,7 +55,7 @@ export const requestPhysicalgoods = (id: string, messageCode: string, signal: Ab
   method:'POST',signal,headers:{ 'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{}) },body:JSON.stringify({ messageCode }),
 });
 export const loadPhysicalgoodsRequests = (page:number,received:boolean,signal:AbortSignal) => authenticatedEnvelopeRequest<PhysicalgoodsReceivedRequest[],PhysicalgoodsReceivedPage['meta']>(
-  path+(received?'/received-requests':'/sent-requests'),{signal},new URLSearchParams({page:String(page),limit:'10'}));
+  path+(received?'/received-requests':'/sent-requests'),{signal},new URLSearchParams({page:String(page),limit:'10',...(received?{groupBy:'publication'}:{})}));
 export const resolvePhysicalgoodsRequest = (id:string,requestId:string,decision:'ACEPTAR'|'RECHAZAR',signal:AbortSignal) => {
   resourcePath(requestId);
   return authenticatedRequest(resourcePath(id)+'/requests/'+requestId,{method:'PATCH',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({decision})});

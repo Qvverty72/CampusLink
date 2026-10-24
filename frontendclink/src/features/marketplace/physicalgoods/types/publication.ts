@@ -102,11 +102,11 @@ export interface PhysicalgoodsReceivedRequest {
   messageCode: string;
   status: PhysicalgoodsRequest['status'];
   requestedAt: string;
-  transaction: { id:string; status:'RESERVADA'|'PENDIENTE_CONFIRMACION'|'COMPLETADA'|'CANCELADA' } | null;
+  transaction: { id:string; status:'RESERVADA'|'PENDIENTE_CONFIRMACION'|'COMPLETADA'|'CANCELADA'; modality?:'VENTA'|'DONACION';amount?:number|null;currency?:string } | null;
 }
 export interface PhysicalgoodsReceivedPage {
   data: PhysicalgoodsReceivedRequest[];
-  meta: PhysicalgoodsPage['meta'];
+  meta: PhysicalgoodsPage['meta'] & {groupBy?:'publication'};
 }
 export interface PhysicalgoodsTransactionTarget { publicationId:string; transactionId:string }
 export interface PhysicalgoodsRating {id:string;score:number;createdAt:string}

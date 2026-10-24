@@ -299,6 +299,8 @@ test('personal modal lists register their own queries and protect confirmation a
   }
   const requests = { reload, loading: false, busy: false, selection: null, page: null, number: 1 };
   const { PhysicalgoodsRequests } = load('../marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx', { ...shared,
+    './PhysicalgoodsSentRequests':{PhysicalgoodsSentRequests:'SentRequests'},
+    './PhysicalgoodsReceivedRequests':{PhysicalgoodsReceivedRequests:'ReceivedRequests'},
     '../hooks/usePhysicalgoodsRequests': { usePhysicalgoodsRequests: () => requests },
     '../../components/CatalogUI': { StatusTag: 'Status' }, '../../components/ResourceDetailUI': { detailUI: {} },
     '../../components/RequestsUI': { requestUI: {}, RequestsHeader: 'Header', RequestsFeedback: 'Feedback', RequestsPager: 'Pager', RequestDecisionDialog: 'Dialog' } });

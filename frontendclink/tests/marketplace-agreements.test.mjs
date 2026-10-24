@@ -327,6 +327,11 @@ test('product lookup uses own history for the owner, public gallery for an eligi
  receiver.reads[0].resolve(product);await setImmediate();
 });
 
+test('product reader also accepts a pending request without transaction fields and aborts its gallery read on close',()=>{
+ const q=productFixture({id:'request-only',role:'RECEPTOR',publication:{id:'requested-product',status:'DISPONIBLE',isWithdrawn:false}});
+ q.render();assert.equal(q.reads.length,1);assert.equal(q.reads[0].source,'public');assert.equal(q.reads[0].id,'requested-product');q.h.unmount();assert.equal(q.reads[0].signal.aborted,true);
+});
+
 test('product lookup never explores another campus or withdrawn/hidden resources for the receiver',()=>{
  for(const [detail,historical]of [[agreement({role:'RECEPTOR'}),true],[agreement({role:'RECEPTOR',publication:{id:'pub',isWithdrawn:true,status:'RESERVADO'}}),false],[agreement({role:'RECEPTOR',publication:{id:'pub',isWithdrawn:false,status:'OCULTO'}}),false]]){
   const q=productFixture(detail,historical);q.render();const state=q.render();assert.equal(q.reads.length,0);assert.equal(state.unavailable,true);assert.equal(state.product,null);q.h.unmount();
