@@ -2,6 +2,9 @@ import {ActivityIndicator,Image,Modal,Pressable,StyleSheet,Text,View} from 'reac
 import {RefreshScrollView,useScrollRefresh} from '@/components/RefreshScrollView';
 import {usePhysicalgoodsHistory,usePhysicalgoodsHistoryDetail} from '../hooks/usePhysicalgoodsHistory';
 import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory';
+import { ActivityAction, ActivityCard, ActivityFeedback, ActivityHeader, ActivityPager, PublicationActivity, activityUI } from '../../components/ActivityUI';
+import { CATALOG_COLORS as colors } from '../../components/CatalogUI';
+import { ResourceDetailSkeleton, detailUI } from '../../components/ResourceDetailUI';
 import {resourceConditions} from '../types/publication';
 
 const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled}
@@ -9,35 +12,27 @@ const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibi
 const state=(value:string)=>value.toLowerCase().replaceAll('_',' ');
 const date=(value:string)=>new Date(value).toLocaleString('es-CL');
 
-export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,onDetail,onAgreement,refreshEnabled=true}:{active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;
-  onDetail:(target:PhysicalgoodsHistoryTarget)=>void;onAgreement:(publicationId:string,transactionId:string)=>void}) {
+export function PhysicalgoodsHistory({active,transactions=false,refreshVersion,onDetail,onAgreement,onRequests,refreshEnabled=true}:{active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;
+  onDetail:(target:PhysicalgoodsHistoryTarget)=>void;onAgreement:(publicationId:string,transactionId:string)=>void;onRequests?:()=>void}) {
   const h=usePhysicalgoodsHistory(active,transactions,refreshVersion);
   useScrollRefresh(h.reload,h.loading,active&&refreshEnabled&&!h.loading,transactions?'mis transacciones':'mis publicaciones');
-  return <View style={styles.section}>
-    <Text accessibilityRole="header" style={styles.title}>{transactions?'Mis transacciones':'Mis publicaciones'}</Text>
-    <Text style={styles.text}>Incluye registros cerrados y publicaciones retiradas, conservando su campus de origen.</Text>
-    {button('Actualizar '+(transactions?'mis transacciones':'mis publicaciones'),h.reload,h.loading)}
-    {h.loading&&<ActivityIndicator accessibilityLabel="Cargando historial" />}
-    {h.error&&<Text accessibilityRole="alert" style={styles.error}>{h.error}</Text>}
-    {h.page&&!h.page.data.length&&<Text style={styles.text}>No hay {transactions?'transacciones':'publicaciones'} en esta página.</Text>}
-    {h.page?.data.map(row=>{
+  return <View style={activityUI.section}>
+    <ActivityHeader title={transactions?'Mis transacciones':'Mis publicaciones'} helper="Incluye registros cerrados y publicaciones retiradas, con su campus de origen." loading={h.loading} onReload={h.reload} />
+    <ActivityFeedback loading={h.loading} error={h.error} empty={Boolean(h.page&&!h.page.data.length)} onReload={h.reload}
+      emptyTitle={transactions?'No hay transacciones en esta página':'Aún no hay publicaciones en esta página'} emptyHelper={transactions?'Tus acuerdos aparecerán aquí cuando una solicitud sea aceptada.':'Los recursos que compartas aparecerán aquí junto con su actividad.'} />
+    {!h.loading&&h.page?.data.map(row=>{
       const transaction='publication' in row,publication=transaction?row.publication:row;
-      return <View key={row.id} style={styles.card}>
-        <Text accessibilityRole="header" style={styles.label}>{publication.title}</Text>
-        <Text style={styles.text}>Campus: {row.campus.name}</Text>
-        <Text style={styles.text}>{transaction?'Transacción':'Publicación'}: {state(row.status)}</Text>
-        {publication.isWithdrawn&&<Text style={styles.text}>Publicación retirada</Text>}
-        <Text style={styles.text}>{row.modality==='DONACION'?'Donación':`Venta · ${(transaction?row.amount:row.price)?.toLocaleString('es-CL')} ${transaction?row.currency:'CLP'}`}</Text>
-        <Text style={styles.text}>{transaction?`Tu participación: ${row.role==='PROPIETARIO'?'propietario':'receptor'}`:'Publicado'} · {date(transaction?row.startedAt:row.publishedAt)}</Text>
-        {transaction?button('Ver acuerdo: '+publication.title,()=>onAgreement(publication.id,row.id)):
-          button('Ver publicación: '+publication.title,()=>onDetail({publicationId:row.id}))}
-      </View>;
+      const historical=publication.isWithdrawn||['FINALIZADO','CANCELADO','CANCELADA','COMPLETADA','OCULTO'].includes(row.status);
+      return <ActivityCard key={row.id} title={publication.title} status={publication.isWithdrawn&&!transaction?'RETIRADA':row.status} historical={historical}
+        helper={`${row.campus.name} · ${new Date(transaction?row.startedAt:row.publishedAt).toLocaleDateString('es-CL')}`}>
+        <Text style={detailUI.body}>{row.modality==='DONACION'?'Donación':`$${(transaction?row.amount:row.price)?.toLocaleString('es-CL')} ${transaction?row.currency:'CLP'}`}</Text>
+        {transaction?<Text style={detailUI.helper}>Tu participación: {row.role==='PROPIETARIO'?'propietario':'receptor'}{publication.isWithdrawn?' · Publicación retirada':''}</Text>
+          :<PublicationActivity activity={row.activity} onRequests={onRequests} />}
+        {transaction?<ActivityAction label="Ver acuerdo" accessibilityLabel={'Ver acuerdo: '+publication.title} onPress={()=>onAgreement(publication.id,row.id)} />
+          :<ActivityAction label="Ver publicación" accessibilityLabel={'Ver publicación: '+publication.title} onPress={()=>onDetail({publicationId:row.id})} />}
+      </ActivityCard>;
     })}
-    <View style={styles.choices}>
-      {button('Página anterior del historial',()=>h.setNumber(h.number-1),h.loading||h.number===1)}
-      <Text style={styles.text}>Página {h.number}</Text>
-      {button('Página siguiente del historial',()=>h.setNumber(h.number+1),h.loading||!h.page?.meta.hasMore)}
-    </View>
+    <ActivityPager page={h.number} hasMore={Boolean(h.page?.meta.hasMore)} disabled={h.loading} onPrevious={()=>h.setNumber(h.number-1)} onNext={()=>h.setNumber(h.number+1)} />
   </View>;
 }
 
@@ -45,12 +40,12 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,re
   onOpen?:(id:string)=>void;onAgreement:(publicationId:string,transactionId:string)=>void}) {
   const h=usePhysicalgoodsHistoryDetail(target),detail=h.detail;
   const request=detail&&'publication' in detail?detail:null,publication=request?.publication??(detail&&'title' in detail?detail:null);
-  return <Modal visible animationType="slide" onRequestClose={onClose}><RefreshScrollView contentContainerStyle={styles.content}
+  return <Modal visible animationType="slide" onRequestClose={onClose}><RefreshScrollView style={detailUI.page} contentContainerStyle={styles.content}
     onRefresh={h.reload} refreshing={h.loading} refreshEnabled={refreshEnabled&&!h.loading} refreshLabel="el detalle del historial">
     {button('Cerrar detalle del historial',onClose)}
     <Text accessibilityRole="header" style={styles.title}>{target.requestId?'Detalle de solicitud':'Mi publicación'}</Text>
     {button('Actualizar detalle del historial',h.reload,h.loading)}
-    {h.loading&&<ActivityIndicator accessibilityLabel="Cargando detalle del historial" />}
+    {h.loading&&<ResourceDetailSkeleton />}
     {h.error&&<Text accessibilityRole="alert" style={styles.error}>{h.error}</Text>}
     {detail&&publication&&<View style={styles.card}>
       <Text accessibilityRole="header" style={styles.label}>{publication.title}</Text>
@@ -83,8 +78,8 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,re
 }
 const styles=StyleSheet.create({
   section:{gap:14,marginTop:24},content:{padding:24,paddingTop:48,paddingBottom:60,gap:16,width:'100%',maxWidth:760,alignSelf:'center'},
-  title:{color:'#09243A',fontSize:24,fontWeight:'700'},label:{color:'#09243A',fontSize:16,fontWeight:'600'},text:{color:'#607485',fontSize:15,lineHeight:23},
-  card:{backgroundColor:'#FFFFFF',padding:20,borderRadius:18,gap:12},button:{padding:12,borderRadius:10,borderWidth:1,borderColor:'#0B6E75'},
-  action:{color:'#0B6E75',fontSize:15,fontWeight:'600'},choices:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:10},
+  title:{color:colors.ink,fontSize:24,fontWeight:'700'},label:{color:colors.ink,fontSize:16,fontWeight:'600'},text:{color:colors.muted,fontSize:15,lineHeight:23},
+  card:{backgroundColor:'#FFFFFF',padding:20,borderRadius:18,gap:12},button:{padding:12,borderRadius:10,borderWidth:1,borderColor:colors.primary},
+  action:{color:colors.primary,fontSize:15,fontWeight:'600'},choices:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:10},
   disabled:{opacity:0.5},error:{color:'#AD3029',fontSize:15},photo:{width:'100%',height:240,resizeMode:'contain',backgroundColor:'#F4F7F9',borderRadius:12},
 });

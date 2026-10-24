@@ -1,58 +1,45 @@
-import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
+﻿import { Text, View } from 'react-native';
 import { usePhysicalgoodsRequests } from '../hooks/usePhysicalgoodsRequests';
 import { useScrollRefresh } from '@/components/RefreshScrollView';
+import { StatusTag } from '../../components/CatalogUI';
+import { detailUI } from '../../components/ResourceDetailUI';
+import { RequestButton, RequestCard, RequestDecisionDialog, RequestsFeedback, RequestsHeader, RequestsPager, requestStatusLabel, requestUI } from '../../components/RequestsUI';
 
-/** Lista propia por publicación: una reserva conserva las demás solicitudes pendientes. */
-export function PhysicalgoodsRequests({active,onOpen,onResolved,onAgreement,onDetail,received=true,refreshVersion=0,refreshEnabled=true}:{active:boolean;onOpen?:(id:string)=>void;onResolved:()=>void;refreshEnabled?:boolean;
-  onDetail:(publicationId:string,requestId:string)=>void;
-  onAgreement:(publicationId:string,transactionId:string)=>void;received?:boolean;refreshVersion?:number}) {
-  const r=usePhysicalgoodsRequests(active,onResolved,received,refreshVersion);
-  useScrollRefresh(r.reload,r.loading,active&&refreshEnabled&&!r.busy&&!r.loading&&!r.selection,received?'las solicitudes recibidas':'mis solicitudes');
-  const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled}
-    onPress={action} style={[styles.button,disabled&&styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
-  return <View style={styles.section}>
-    <Text accessibilityRole="header" style={styles.title}>{received?'Solicitudes recibidas':'Mis solicitudes'}</Text>
-    <Text style={styles.text}>{received?'Consulta todas tus solicitudes recibidas. En tu campus actual puedes resolver las pendientes.':'Consulta todas tus solicitudes, incluidas rechazadas y cerradas, también de campus anteriores.'}</Text>
-    {button(received?'Actualizar solicitudes recibidas':'Actualizar mis solicitudes',r.reload,r.busy||r.loading)}
-    {(r.loading||r.busy)&&<ActivityIndicator accessibilityLabel={r.busy?'Resolviendo solicitud':'Cargando solicitudes recibidas'} />}
-    {r.error&&<Text accessibilityRole="alert" style={styles.error}>{r.error}</Text>}
-    {r.selection&&<View style={styles.card}>
-      <Text style={styles.label}>{r.selection.decision==='ACEPTAR'?'Aceptar':'Rechazar'} la solicitud de {r.selection.request.requester.fullName}</Text>
-      <Text style={styles.text}>{r.selection.request.publication.title}</Text>
-      <Text style={styles.text}>{r.selection.decision==='ACEPTAR'?'Se iniciará un acuerdo con esta persona y el recurso quedará reservado. Las otras solicitudes seguirán pendientes.':'La solicitud quedará rechazada y se conservará su registro.'}</Text>
-      {button('Confirmar '+(r.selection.decision==='ACEPTAR'?'aceptación':'rechazo'),()=>void r.resolve(),r.busy||r.loading)}
-      {button('Cancelar resolución',r.cancel,r.busy)}
-    </View>}
-    {r.page&&!r.page.data.length&&<Text style={styles.text}>No hay solicitudes en esta página.</Text>}
-    {r.page?.data.map(request=><View key={request.id} style={styles.card}>
-      <Text accessibilityRole="header" style={styles.label}>{request.publication.title}</Text>
-      <Text style={styles.text}>Campus: {request.campus.name}</Text>
-      <Text style={styles.text}>Recurso: {request.publication.status.toLowerCase()} · {request.publication.modality==='DONACION'?'Donación':`Venta · ${request.publication.price?.toLocaleString('es-CL')} CLP`}</Text>
-      {received&&<Text style={styles.label}>{request.requester.fullName}</Text>}
-      <Text style={styles.text}>{request.message}</Text>
-      <Text style={styles.text}>Solicitud: {request.status.toLowerCase()} · {new Date(request.requestedAt).toLocaleDateString('es-CL')}</Text>
-      {request.transaction&&<Text style={styles.text}>Acuerdo: {request.transaction.status.toLowerCase().replace('_',' ')}</Text>}
-      {request.transaction&&button('Ver acuerdo: '+request.publication.title,()=>onAgreement(request.publication.id,request.transaction!.id),r.busy)}
-      {request.publication.isWithdrawn&&<Text style={styles.text}>Publicación retirada. Se conserva la solicitud.</Text>}
-      {!request.publication.canView&&<Text style={styles.text}>Consulta histórica; sin interacción pública en tu campus actual.</Text>}
-      {request.publication.canView&&request.status==='PENDIENTE'&&request.publication.status==='RESERVADO'&&<Text style={styles.text}>{received?'Pendiente mientras se realiza otro intercambio. Podrás aceptarla si ese acuerdo se cancela.':'Tu solicitud sigue pendiente mientras se realiza otro intercambio. Este recurso está reservado para otra persona.'}</Text>}
-      {received&&request.canResolve&&<View style={styles.choices}>
-        {button(`Aceptar solicitud de ${request.requester.fullName}`,()=>r.select(request,'ACEPTAR'),r.busy||r.loading||request.publication.status!=='DISPONIBLE')}
-        {button(`Rechazar solicitud de ${request.requester.fullName}`,()=>r.select(request,'RECHAZAR'),r.busy||r.loading)}
+/** Lista propia: una reserva conserva las demás solicitudes pendientes. */
+export function PhysicalgoodsRequests({ active, onOpen, onResolved, onAgreement, onDetail, received = true, refreshVersion = 0, refreshEnabled = true }: {
+  active: boolean; onOpen?: (id: string) => void; onResolved: () => void; refreshEnabled?: boolean;
+  onDetail: (publicationId: string, requestId: string) => void;
+  onAgreement: (publicationId: string, transactionId: string) => void; received?: boolean; refreshVersion?: number;
+}) {
+  const r = usePhysicalgoodsRequests(active, onResolved, received, refreshVersion);
+  useScrollRefresh(r.reload, r.loading, active && refreshEnabled && !r.busy && !r.loading && !r.selection, received ? 'las solicitudes recibidas' : 'mis solicitudes');
+  const disabled = r.busy || r.loading || Boolean(r.selection);
+  return <View style={requestUI.section}>
+    <RequestsHeader received={received} helper={received ? 'Responde a quienes se interesan en tus recursos. Puedes resolver las pendientes de tu campus actual.' : 'Tu historial de solicitudes y acuerdos, incluidos los de campus anteriores.'}
+      loading={r.loading} busy={r.busy} onReload={r.reload} />
+    <RequestsFeedback loading={r.loading} error={r.error} empty={Boolean(r.page && !r.page.data.length)} received={received} onReload={r.reload} disabled={r.busy} />
+    {!r.loading && r.page?.data.map(request => <RequestCard key={request.id} title={request.publication.title} requester={received ? request.requester.fullName : undefined}
+      status={request.status} requestedAt={request.requestedAt} message={request.message}
+      historical={request.publication.isWithdrawn || ['RECHAZADA', 'CANCELADA'].includes(request.status) || ['COMPLETADA', 'CANCELADA'].includes(request.transaction?.status ?? '')}>
+      <Text style={detailUI.helper}>{request.campus.name} · {request.publication.modality === 'DONACION' ? 'Donación' : `$${request.publication.price?.toLocaleString('es-CL')} CLP`}</Text>
+      <View style={requestUI.inline}><StatusTag neutral>Recurso: {requestStatusLabel(request.publication.status)}</StatusTag>
+        {request.transaction && <StatusTag neutral>Acuerdo: {requestStatusLabel(request.transaction.status)}</StatusTag>}</View>
+      {request.publication.isWithdrawn && <Text style={detailUI.helper}>Publicación retirada. Se conserva la solicitud.</Text>}
+      {!request.publication.canView && <Text style={detailUI.helper}>Consulta histórica; sin interacción pública en tu campus actual.</Text>}
+      {request.publication.canView && request.status === 'PENDIENTE' && request.publication.status === 'RESERVADO' && <Text style={detailUI.helper}>{received ? 'Espera mientras se realiza otro intercambio. Podrás aceptarla si ese acuerdo se cancela.' : 'Tu solicitud sigue pendiente. El recurso está reservado para otra persona.'}</Text>}
+      {received && request.canResolve && request.status === 'PENDIENTE' && <View style={requestUI.inline}>
+        <RequestButton label="Rechazar" accessibilityLabel={`Rechazar solicitud de ${request.requester.fullName}`} onPress={() => r.select(request, 'RECHAZAR')} disabled={disabled} />
+        <RequestButton label="Aceptar" accessibilityLabel={`Aceptar solicitud de ${request.requester.fullName}`} onPress={() => r.select(request, 'ACEPTAR')} primary disabled={disabled || request.publication.status !== 'DISPONIBLE'} />
       </View>}
-      {button('Ver solicitud: '+request.publication.title,()=>onDetail(request.publication.id,request.id),r.busy)}
-      {onOpen&&request.publication.canView!==false&&button('Ver recurso: '+request.publication.title,()=>onOpen(request.publication.id),r.busy)}
-    </View>)}
-    <View style={styles.choices}>
-      {button('Solicitudes anteriores',()=>r.setNumber(r.number-1),r.busy||r.loading||r.number===1)}
-      <Text style={styles.text}>Página {r.number}</Text>
-      {button('Solicitudes siguientes',()=>r.setNumber(r.number+1),r.busy||r.loading||!r.page?.meta.hasMore)}
-    </View>
+      {request.transaction && <RequestButton label="Ver acuerdo" accessibilityLabel={`Ver acuerdo: ${request.publication.title}`} onPress={() => onAgreement(request.publication.id, request.transaction!.id)} disabled={disabled} />}
+      <View style={requestUI.inline}>
+        <RequestButton label="Ver solicitud" accessibilityLabel={`Ver solicitud: ${request.publication.title}`} onPress={() => onDetail(request.publication.id, request.id)} disabled={disabled} />
+        {onOpen && request.publication.canView !== false && <RequestButton label="Ver recurso" accessibilityLabel={`Ver recurso: ${request.publication.title}`} onPress={() => onOpen(request.publication.id)} disabled={disabled} />}
+      </View>
+    </RequestCard>)}
+    {received && Boolean(r.page?.data.length) && <View style={detailUI.notice}><Text style={detailUI.noticeText}>Al aceptar una, el recurso queda reservado. Las demás esperan.</Text></View>}
+    <RequestsPager page={r.number} hasMore={Boolean(r.page?.meta.hasMore)} disabled={disabled} onPrevious={() => r.setNumber(r.number - 1)} onNext={() => r.setNumber(r.number + 1)} />
+    <RequestDecisionDialog selection={r.selection ? { name: r.selection.request.requester.fullName, title: r.selection.request.publication.title, decision: r.selection.decision } : null}
+      physical disabled={r.busy || r.loading} onConfirm={() => { void r.resolve(); }} onCancel={r.cancel} />
   </View>;
 }
-const styles=StyleSheet.create({
-  section:{gap:14,marginTop:24},title:{fontSize:24,color:'#09243A',fontWeight:'700'},label:{fontSize:16,color:'#09243A',fontWeight:'600'},
-  text:{color:'#607485',fontSize:15,lineHeight:23},card:{backgroundColor:'#FFFFFF',padding:20,borderRadius:18,gap:12},
-  choices:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:10},button:{padding:12,borderRadius:10,borderWidth:1,borderColor:'#0B6E75'},
-  action:{color:'#0B6E75',fontSize:15,fontWeight:'600'},disabled:{opacity:0.5},error:{color:'#AD3029',fontSize:15},
-});

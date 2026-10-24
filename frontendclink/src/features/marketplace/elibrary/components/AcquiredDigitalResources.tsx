@@ -1,24 +1,41 @@
-import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
-import { APP_COLORS } from '@/types/colors';
+import { useEffect } from 'react';
+import { Text, View } from 'react-native';
+import { Download, FileText } from 'lucide-react-native';
 import { useAcquiredDigitalResources } from '../hooks/useAcquiredDigitalResources';
 import { useScrollRefresh } from '@/components/RefreshScrollView';
-export function AcquiredDigitalResources({embedded=false}:{embedded?:boolean}={}){const state=useAcquiredDigitalResources(embedded);
-  useScrollRefresh(state.refresh,state.loading,state.open&&!state.loading&&!state.downloading,'mis recursos');
-  return <View style={styles.box}>
-  {!embedded&&<Pressable accessibilityRole="button" onPress={state.toggle} style={styles.button}><Text style={styles.heading}>{state.open?'Cerrar materiales adquiridos':'Mis materiales adquiridos'}</Text></Pressable>}
-  {state.open&&<>
-    {state.error&&<Text style={styles.error} accessibilityLiveRegion="polite">{state.error}</Text>}
-    {state.loading?<ActivityIndicator/>:state.detail?<>
-      <Text style={styles.heading}>{state.detail.title}</Text><Text style={styles.text}>{state.detail.description}</Text>
-      <Text style={styles.text}>Condiciones de tu adquisición: {state.detail.acquisition?.modality==='DONACION'?'Donación':`${state.detail.acquisition?.amount?.toLocaleString('es-CL')} ${state.detail.acquisition?.currency}`}</Text>
-      <Text style={styles.text}>Adquirido el {state.detail.acquisition&&new Date(state.detail.acquisition.acquiredAt).toLocaleDateString('es-CL')}. Campus de origen: {state.detail.campusName}.</Text>
-      {(state.detail.isWithdrawn||state.detail.status!=='DISPONIBLE')&&<Text style={styles.text}>La publicación ya no está disponible en búsquedas. Tu adquisición conserva el acceso.</Text>}
-      <Text style={styles.text}>{[...state.detail.careers,...state.detail.subjects].map(row=>row.name).join(' · ')}</Text>
-      {state.detail.files.map(file=><Pressable key={file.id} accessibilityRole="button" accessibilityLabel={`Descargar material adquirido ${file.name}`} disabled={Boolean(state.downloading)} onPress={()=>state.save(file)} style={styles.button}>{state.downloading===file.id?<ActivityIndicator/>:<Text style={styles.link}>Descargar {file.name}</Text>}</Pressable>)}
-      <Pressable accessibilityRole="button" onPress={state.back} style={styles.button}><Text style={styles.link}>Volver a materiales adquiridos</Text></Pressable>
-    </>:state.items.length?state.items.map(row=><Pressable key={row.id} accessibilityRole="button" accessibilityLabel={`Consultar material adquirido ${row.title}`} onPress={()=>state.show(row.id)} style={styles.item}><Text style={styles.heading}>{row.title}</Text><Text style={styles.text}>{row.files.length} archivos · Adquisición completada</Text></Pressable>):<Text style={styles.text}>Aún no tienes materiales adquiridos en esta página.</Text>}
-    <Pressable accessibilityRole="button" onPress={state.reload} style={styles.button}><Text style={styles.link}>Actualizar materiales adquiridos</Text></Pressable>
-    {!state.detail&&<View style={styles.row}><Pressable accessibilityRole="button" disabled={state.loading||state.page===1} onPress={state.previous} style={styles.button}><Text style={styles.link}>Materiales anteriores</Text></Pressable><Text>{state.page}</Text><Pressable accessibilityRole="button" disabled={state.loading||!state.hasMore} onPress={state.next} style={styles.button}><Text style={styles.link}>Más materiales adquiridos</Text></Pressable></View>}
-  </>}
-</View>;}
-const styles=StyleSheet.create({box:{padding:16,gap:12,borderWidth:1,borderColor:'#E0E8ED',borderRadius:16,backgroundColor:'#FFFFFF'},button:{minHeight:44,justifyContent:'center',paddingVertical:8},heading:{fontSize:17,fontWeight:'600',color:'#09243A'},text:{fontSize:15,lineHeight:23,color:'#40596C'},link:{fontSize:15,color:APP_COLORS.PRIMARY},error:{fontSize:15,color:'#9D302A'},item:{gap:8,padding:12,borderWidth:1,borderColor:'#BDCBD5',borderRadius:12},row:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:12}});
+import { ActivityAction, ActivityCard, ActivityFeedback, ActivityHeader, ActivityPager, activityUI } from '../../components/ActivityUI';
+import { CATALOG_COLORS as colors } from '../../components/CatalogUI';
+import { detailUI } from '../../components/ResourceDetailUI';
+
+export function AcquiredDigitalResources({ embedded = false, initialPublicationId, entryVersion = 0 }: { embedded?: boolean; initialPublicationId?: string; entryVersion?: number } = {}) {
+  const state = useAcquiredDigitalResources(embedded), detail = state.detail;
+  useEffect(() => { if (initialPublicationId) void state.show(initialPublicationId); }, [initialPublicationId, state.show, entryVersion]);
+  useScrollRefresh(state.refresh, state.loading, state.open && !state.loading && !state.downloading, 'mis recursos');
+  return <View style={activityUI.section}>
+    {!embedded && <ActivityAction label={state.open ? 'Cerrar materiales adquiridos' : 'Mis materiales adquiridos'} onPress={state.toggle} disabled={Boolean(state.downloading)} />}
+    {state.open && <>
+      <ActivityHeader title={detail ? 'Tu material adquirido' : 'Materiales adquiridos'} helper={detail ? 'Los archivos completos están disponibles mediante tu adquisición.' : 'Tus materiales siguen accesibles aunque su publicación deje de estar en búsquedas.'}
+        loading={state.loading || Boolean(state.downloading)} onReload={state.refresh} />
+      <ActivityFeedback loading={state.loading} error={state.error} empty={!state.selectedId && !detail && !state.items.length} onReload={state.refresh}
+        emptyTitle="Aún no hay materiales adquiridos en esta página" emptyHelper="Cuando ambas partes completen un acuerdo digital, encontrarás aquí tus archivos autorizados." />
+      {!state.loading && (!state.selectedId || detail) && (detail ? <>
+        <ActivityCard title={detail.title} digital status="ADQUIRIDO" helper={`Campus de origen: ${detail.campusName}`}>
+          <Text style={detailUI.body}>{detail.description}</Text>
+          {detail.acquisition && <View style={detailUI.notice}><Text style={detailUI.noticeText}>Condiciones de tu adquisición: {detail.acquisition.modality === 'DONACION' ? 'Donación' : `$${detail.acquisition.amount?.toLocaleString('es-CL')} ${detail.acquisition.currency}`}{'\n'}Adquirido el {new Date(detail.acquisition.acquiredAt).toLocaleDateString('es-CL')}</Text></View>}
+          {(detail.isWithdrawn || detail.status !== 'DISPONIBLE') && <Text style={detailUI.helper}>La publicación ya no está disponible en búsquedas. Tu adquisición conserva el acceso.</Text>}
+          <Text style={detailUI.helper}>{[...detail.careers, ...detail.subjects].map(row => row.name).join(' · ')}</Text>
+        </ActivityCard>
+        {detail.files.map(file => <View key={file.id} style={detailUI.card}><View style={activityUI.inline}><FileText size={24} color={colors.primary} /><View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <Text style={activityUI.title}>{file.name}</Text><Text style={detailUI.helper}>{file.sizeBytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(file.sizeBytes / 1024))} KB` : `${(file.sizeBytes / 1024 / 1024).toLocaleString('es-CL', { maximumFractionDigits: 2 })} MB`}</Text></View><Download size={18} color={colors.secondary} /></View>
+          <ActivityAction label={state.downloading === file.id ? 'Descargando…' : 'Descargar archivo completo'} accessibilityLabel={`Descargar material adquirido ${file.name}`} disabled={Boolean(state.downloading)} onPress={() => { void state.save(file); }} primary />
+        </View>)}
+      </> : state.items.map(row => <ActivityCard key={row.id} title={row.title} digital status="ADQUIRIDO" helper={`${row.campusName} · ${row.files.length} archivo${row.files.length === 1 ? '' : 's'}`}>
+        {row.acquisition && <Text style={detailUI.helper}>Adquisición completada · {new Date(row.acquisition.acquiredAt).toLocaleDateString('es-CL')}</Text>}
+        {(row.isWithdrawn || row.status !== 'DISPONIBLE') && <Text style={detailUI.helper}>Acceso conservado tras la desactivación.</Text>}
+        <ActivityAction label="Abrir materiales" accessibilityLabel={`Consultar material adquirido ${row.title}`} onPress={() => { void state.show(row.id); }} primary />
+      </ActivityCard>))}
+      {(detail || state.selectedId) ? <ActivityAction label="Volver a materiales adquiridos" onPress={state.back} disabled={Boolean(state.downloading)} />
+        : <ActivityPager page={state.page} hasMore={state.hasMore} disabled={state.loading} onPrevious={state.previous} onNext={state.next} />}
+    </>}
+  </View>;
+}

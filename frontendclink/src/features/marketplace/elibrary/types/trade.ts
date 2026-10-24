@@ -8,3 +8,4 @@ export interface DigitalTrade {
   startedAt:string;completedAt:string|null;cancelledAt:string|null;confirmations:{userId:string;role:string;confirmedAt:string}[];canConfirm:boolean;canCancel:boolean;
   rating:{id:string;score:number;createdAt:string}|null;canRate:boolean;
 }
+export interface DigitalTradeTarget { publicationId: string; transactionId: string; title: string }

@@ -9,9 +9,10 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
   const auth=useAuth();
   const [detail,setDetail]=useState<PhysicalgoodsTransaction|null>(null),[messages,setMessages]=useState<PhysicalgoodsCoordinationPage|null>(null);
   const [options,setOptions]=useState<PhysicalgoodsCoordinationOptions|null>(null),[buildingId,setBuildingId]=useState(''),[floorId,setFloorId]=useState('');
-  const [loading,setLoading]=useState(false),[messagesLoading,setMessagesLoading]=useState(false),[optionsLoading,setOptionsLoading]=useState(false),[busy,setBusy]=useState(false);
+  const [loading,setLoading]=useState(true),[messagesLoading,setMessagesLoading]=useState(false),[optionsLoading,setOptionsLoading]=useState(false),[busy,setBusy]=useState(false);
   const [error,setError]=useState<string|null>(null),[messageError,setMessageError]=useState<string|null>(null),[optionsError,setOptionsError]=useState<string|null>(null);
   const [revision,setRevision]=useState(0),[page,setPage]=useState(1),[action,setAction]=useState<'confirm'|'cancel'|null>(null);
+  const [optionsRevision,setOptionsRevision]=useState(0),[messagesRevision,setMessagesRevision]=useState(0);
   const [ratingScore,setRatingScore]=useState<number|null>(null),[ratingConfirmation,setRatingConfirmation]=useState(false);
   const pendingRating=useRef<number|null>(null);
   const mutation=useRef<AbortController|null>(null),running=useRef(false),outcome=useRef<'confirm'|'cancel'|null>(null);
@@ -39,7 +40,7 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
       if(sent.current&&result.data.some(value=>value.senderId===auth.identity?.userId&&value.text===sent.current?.text&&!sent.current.previousIds.includes(value.id))){setMessageError(null);sent.current=null;}
     }}).catch(reason=>{if(!abort.signal.aborted)report(reason,setMessageError);}).finally(()=>{if(!abort.signal.aborted)setMessagesLoading(false);});
     return()=>abort.abort();
-  },[target.publicationId,target.transactionId,page,revision,busy]);
+  },[target.publicationId,target.transactionId,page,revision,busy,messagesRevision]);
   useEffect(()=>{
     const abort=new AbortController();
     if(!detail?.canCancel||busy){setOptions(null);setOptionsLoading(false);return;}
@@ -51,11 +52,11 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
       if(!building?.floors.some(value=>value.id===selection.current.floorId))setFloorId('');
     }}).catch(reason=>{if(!abort.signal.aborted)report(reason,setOptionsError);}).finally(()=>{if(!abort.signal.aborted)setOptionsLoading(false);});
     return()=>abort.abort();
-  },[detail,revision,busy,target.publicationId,target.transactionId]);
+  },[detail,revision,busy,target.publicationId,target.transactionId,optionsRevision]);
   const building=options?.buildings.find(value=>value.id===buildingId),floor=building?.floors.find(value=>value.id===floorId);
   const preview=building&&floor?`Estoy en ${building.name}, en ${floor.name}.`:null;
   async function perform(kind:'confirm'|'cancel'|'message'|'rating') {
-    if(running.current||!detail||(kind==='confirm'&&!detail.canConfirm)||(kind==='cancel'&&!detail.canCancel)||(kind==='message'&&(!detail.canCancel||!preview))
+    if(running.current||loading||!detail||(kind==='confirm'&&(!detail.canConfirm||action!=='confirm'))||(kind==='cancel'&&(!detail.canCancel||action!=='cancel'))||(kind==='message'&&(!detail.canCancel||!preview||optionsLoading))
       ||(kind==='rating'&&(!detail.canRate||!ratingConfirmation||ratingScore===null||!Number.isInteger(ratingScore)||ratingScore<1||ratingScore>5)))return;
     const abort=new AbortController();mutation.current=abort;running.current=true;setBusy(true);setAction(null);
     setRatingConfirmation(false);
@@ -80,9 +81,11 @@ export function usePhysicalgoodsTransaction(target:PhysicalgoodsTransactionTarge
     selectRating:(value:number)=>{if(!running.current&&detail?.canRate&&Number.isInteger(value)&&value>=1&&value<=5){setRatingScore(value);setRatingConfirmation(false);}},
     confirmRating:()=>{if(!running.current&&detail?.canRate&&ratingScore!==null)setRatingConfirmation(true);},
     cancelRating:()=>{if(!running.current)setRatingConfirmation(false);},
-    selectAction:(value:'confirm'|'cancel')=>{if(!running.current)setAction(value);},cancelAction:()=>{if(!running.current)setAction(null);},
+    selectAction:(value:'confirm'|'cancel')=>{if(!running.current&&!loading&&detail&&(value==='confirm'?detail.canConfirm:detail.canCancel))setAction(value);},cancelAction:()=>{if(!running.current)setAction(null);},
     confirm:()=>perform('confirm'),cancel:()=>perform('cancel'),send:()=>perform('message'),
     setBuilding:(value:string)=>{if(!running.current){setBuildingId(value);setFloorId('');}},setFloor:(value:string)=>{if(!running.current)setFloorId(value);},
-    setPage:(value:number)=>{if(!running.current){setMessageError(null);setPage(value);}},
+    setPage:(value:number)=>{if(!running.current&&!messagesLoading){setMessageError(null);setPage(Math.max(1,value));}},
+    reloadOptions:()=>{if(!running.current)setOptionsRevision(value=>value+1);},
+    reloadMessages:()=>{if(!running.current){setMessageError(null);setMessagesRevision(value=>value+1);}},
     reload:()=>{if(!running.current){setError(null);setMessageError(null);setAction(null);setRatingConfirmation(false);setRevision(value=>value+1);}}};
 }

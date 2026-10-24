@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import vm from 'node:vm';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
@@ -21,10 +23,11 @@ function renderForm(progress, error = null) {
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     'react-native': native,
-    'lucide-react-native': { BookOpen: () => null, FileText: () => null, Plus: () => null },
+    'lucide-react-native': { BookOpen: () => null, FileText: () => null, Plus: () => null, Tag: () => null, Gift: () => null, UploadCloud: () => null, ShieldCheck: () => null, X: () => null },
     '@/features/auth/hooks/useAuth': { useAuth: () => ({}) },
     '@/types/colors': { APP_COLORS: { PRIMARY: '#003459' } },
     '../hooks/useDigitalLibrary': { useDigitalLibrary: () => state },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
   };
   for (const [name, exports] of Object.entries({
     '@/components/navigation/BottomNavigationBar': ['BottomNavigationBar'],
@@ -33,12 +36,21 @@ function renderForm(progress, error = null) {
     './AcquiredDigitalResources': ['AcquiredDigitalResources'], './OwnedDigitalResources': ['OwnedDigitalResources'],
     './DigitalPublicationEditor': ['DigitalPublicationEditor'], './DigitalRecommendations': ['DigitalRecommendations'],
     '@/features/reports/components/ContentReportForm': ['ContentReportForm'],
+    '../../components/CatalogUI': ['ScreenHeader', 'PublishFAB', 'CatalogPagination', 'CatalogSkeleton', 'EmptyState'],
+    './DigitalPersonalLibrary': ['DigitalPersonalLibrary'], './ResourceRow': ['ResourceRow'],
+    './DigitalResourceDetail': ['DigitalResourceDetail'],
   })) mocks[name] = Object.fromEntries(exports.map(key => [key, () => null]));
-  const module = { exports: {} };
-  vm.runInNewContext(compiled, { module, exports: module.exports, require: name => {
-    assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency: ${name}`);
-    return mocks[name];
-  } });
+  mocks['../../components/CatalogUI'].CATALOG_COLORS = { primary: '#002E56', secondary: '#3F6A8E', ink: '#09243A', muted: '#607485', border: '#E0E8ED', inputBorder: '#BDCBD5', surface: '#FFF', tint: '#E9F0F6' };
+  function load(filename, code) {
+    const module = { exports: {} };
+    vm.runInNewContext(code ?? ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module, exports: module.exports, require: name => {
+      if (Object.hasOwn(mocks, name)) return mocks[name];
+      const base = path.resolve(path.dirname(filename), name);
+      const file = [base + '.tsx', base + '.ts'].find(file => fs.existsSync(file));
+      assert.ok(file, `Unexpected dependency: ${name}`); return load(file);
+    } }); return module.exports;
+  }
+  const module = { exports: load(fileURLToPath(new URL('../src/features/marketplace/elibrary/components/DigitalLibraryScreen.tsx', import.meta.url)), compiled) };
   const messages = [];
   const originalError = console.error;
   console.error = (...args) => messages.push(args.join(' '));

@@ -1,3 +1,4 @@
+import type { ResourceActivity, ResourceOwner } from '../../types/resource';
 export const DIGITAL_MAX_BYTES = 25 * 1024 * 1024;
 export interface DigitalFilters { q: string; careerId: string; subjectId: string; modality: '' | 'VENTA' | 'DONACION' }
 export interface DigitalPage { page: number; limit: number; hasMore: boolean }
@@ -17,8 +18,10 @@ export interface DigitalAcademicCatalog {
 export interface DigitalFile { name: string; uri: string; sizeBytes: number; webFile?: File }
 export interface DigitalAttachment { id: string; name: string; mimeType: string; sizeBytes: number }
 export interface DigitalPublication extends DigitalInput {
+  activity?: ResourceActivity;
   id: string;
   ownerId: string;
+  owner?: ResourceOwner;
   campusId: string;
   campusName: string;
   institutionId: string;

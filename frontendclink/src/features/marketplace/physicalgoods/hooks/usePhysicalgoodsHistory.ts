@@ -10,7 +10,7 @@ export type PhysicalgoodsHistoryTarget={publicationId:string;requestId?:string};
 export function usePhysicalgoodsHistory(active:boolean,transactions:boolean,refreshVersion:number) {
   const auth=useAuth();
   const [page,setPage]=useState<PhysicalgoodsOwnPage|PhysicalgoodsTransactionsPage|null>(null),[number,setNumber]=useState(1);
-  const [loading,setLoading]=useState(false),[error,setError]=useState<string|null>(null),[revision,setRevision]=useState(0);
+  const [loading,setLoading]=useState(active),[error,setError]=useState<string|null>(null),[revision,setRevision]=useState(0);
   useEffect(()=>{
     const abort=new AbortController();if(!active)return;
     setLoading(true);setPage(null);setError(null);

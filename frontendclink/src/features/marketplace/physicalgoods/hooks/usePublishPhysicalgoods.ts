@@ -17,6 +17,7 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
   const [price, setPrice] = useState('');
   const [careerId, setCareerId] = useState(''), [subjectId, setSubjectId] = useState('');
   const [photos, setPhotos] = useState<PublicationPhoto[]>([]);
+  const [pickingPhoto, setPickingPhoto] = useState(false);
   const photosRef = useRef(photos), picking = useRef(false); photosRef.current = photos;
   const photo = photos[0];
   const queued = useRef<PublicationPhoto[]>([]), [remaining, setRemaining] = useState(0);
@@ -48,6 +49,7 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
     if (saving.current || picking.current) return;
     setError(null);
     picking.current = true;
+    setPickingPhoto(true);
     try {
       const selected = await pickPublicationPhotos(PHYSICALGOODS_MAX_IMAGES - photosRef.current.length);
       if (mounted.current && !saving.current) {
@@ -56,7 +58,7 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
         photosRef.current = next; setPhotos(next);
       }
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : 'No se pudo seleccionar la fotografía.'); }
-    finally { picking.current = false; }
+    finally { picking.current = false; if (mounted.current) setPickingPhoto(false); }
   }
   /** Publica la primera foto y luego sube las restantes; permite reanudar la cola. */
   async function publish() {
@@ -89,13 +91,20 @@ export function usePublishPhysicalgoods(onPublished: () => void) {
     } finally { saving.current = false; if (!abort.signal.aborted) setBusy(false); }
   }
   function reset() {
+    if (saving.current || picking.current) return;
     setCreated(null); setTitle(''); setDescription(''); setCondition('BUEN_ESTADO'); setCategoryId('');
     setModality('VENTA'); setPrice(''); setCareerId(''); setSubjectId(''); setPhotos([]); queued.current = []; setRemaining(0); setError(null);
   }
   return { options, title, setTitle, description, setDescription, condition, setCondition, categoryId, setCategoryId,
     modality, setModality: (value: PublicationInput['modality']) => { setModality(value); if (value === 'DONACION') setPrice(''); },
     price, setPrice, careerId, setCareerId, subjectId, setSubjectId, photo, photos, choosePhoto, remaining,
-    removePhoto: (index: number) => setPhotos(previous => previous.filter((_, current) => current !== index)),
-    makePrincipal: (index: number) => setPhotos(previous => [previous[index], ...previous.filter((_, current) => current !== index)]),
-    loading, busy, error, created, publish, reset, reload: () => setRevision(value => value + 1) };
+    removePhoto: (index: number) => {
+      if (saving.current || picking.current) return;
+      const next = photosRef.current.filter((_, current) => current !== index); photosRef.current = next; setPhotos(next);
+    },
+    makePrincipal: (index: number) => {
+      if (saving.current || picking.current || !photosRef.current[index]) return;
+      const next = [photosRef.current[index], ...photosRef.current.filter((_, current) => current !== index)]; photosRef.current = next; setPhotos(next);
+    },
+    loading, busy, pickingPhoto, error, created, publish, reset, reload: () => { if (!saving.current && !picking.current) setRevision(value => value + 1); } };
 }

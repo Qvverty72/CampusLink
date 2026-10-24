@@ -32,7 +32,8 @@ function hookHarness(path, name, dependencies) {
       }
     },
   };
-  const hook = load(path, { ...dependencies, react })[name];
+  const debounce = load('../src/features/marketplace/hooks/useDebouncedValue.ts', { react });
+  const hook = load(path, { ...dependencies, react, '../../hooks/useDebouncedValue': debounce })[name];
   return {
     render() { cursor = 0; const result = hook(); const pending = effects; effects = []; pending.forEach(effect => effect()); return result; },
     dispose() { slots.forEach(slot => slot?.cleanup?.()); },

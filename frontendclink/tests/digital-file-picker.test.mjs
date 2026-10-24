@@ -7,7 +7,7 @@ import ts from 'typescript';
 const source = fs.readFileSync(new URL('../src/features/marketplace/elibrary/api/documentPicker.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 function picker(assets, nativeFiles = {}) {
-  const revoked = [], module = { exports: {} };
+  const revoked = [], created = [], module = { exports: {} };
   const mocks = {
     'expo-document-picker': { getDocumentAsync: async () => ({ canceled: false, assets }) },
     'expo-file-system': { File: class {
@@ -17,10 +17,10 @@ function picker(assets, nativeFiles = {}) {
     } },
     '../types/publication': { DIGITAL_MAX_BYTES: 25 * 1024 * 1024 },
   };
-  vm.runInNewContext(compiled, { module, exports: module.exports, URL: { revokeObjectURL: uri => revoked.push(uri) }, require: name => {
+  vm.runInNewContext(compiled, { module, exports: module.exports, URL: { revokeObjectURL: uri => revoked.push(uri), createObjectURL: file => { created.push(file); return `blob:${created.length}`; } }, require: name => {
     assert.ok(Object.hasOwn(mocks, name)); return mocks[name];
   } });
-  return { pick: module.exports.pickDigitalFiles, merge: module.exports.mergeUniqueDigitalFiles, revoked };
+  return { pick: module.exports.pickDigitalFiles, merge: module.exports.mergeUniqueDigitalFiles, fromWeb: module.exports.digitalFilesFromWeb, revoked, created };
 }
 for (const [name, size, mimeType, expected] of [
   ['grande.pdf', 25 * 1024 * 1024 + 1, 'application/pdf', /grande.pdf:.*supera.*25 MB/],
@@ -36,6 +36,20 @@ for (const [name, size, mimeType, expected] of [
 test('picker preserves a valid PDF selection and accepts the exact size boundary', async () => {
   const file = {}, state = picker([{ name: 'válido.pdf', size: 25 * 1024 * 1024, mimeType: 'application/pdf', uri: 'blob:valid', file }]);
   const result = await state.pick(); assert.equal(result[0].webFile, file); assert.equal(result[0].name, 'válido.pdf'); assert.deepEqual(state.revoked, []);
+});
+
+test('drop validates the whole batch before allocating local URLs', () => {
+  const state = picker([]), valid = { name: 'guia.pdf', size: 10, type: 'application/pdf' };
+  for (const invalid of [{ name: 'otro.docx', size: 10, type: '' }, { name: 'falso.pdf', size: 10, type: 'text/plain' }, { name: 'vacío.pdf', size: 0, type: '' }, { name: 'grande.pdf', size: 25 * 1024 * 1024 + 1, type: 'application/pdf' }]) {
+    assert.throws(() => state.fromWeb([valid, invalid]), /Solo se admiten|vacío|25 MB/);
+    assert.deepEqual(state.created, []);
+  }
+});
+test('drop accepts the exact limit and preserves bytes for deduplication and upload', () => {
+  const state = picker([]), file = { name: 'LÍMITE.PDF', size: 25 * 1024 * 1024, type: 'application/pdf' };
+  const result = state.fromWeb([file]);
+  assert.equal(result[0].webFile, file); assert.equal(result[0].uri, 'blob:1'); assert.equal(result[0].sizeBytes, file.size);
+  assert.deepEqual(state.fromWeb([]), []);
 });
 
 const webFile = (name, uri, bytes) => ({ name, uri, sizeBytes: bytes.length, webFile: { arrayBuffer: async () => Uint8Array.from(bytes).buffer } });

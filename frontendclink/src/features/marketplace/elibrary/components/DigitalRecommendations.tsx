@@ -1,11 +1,19 @@
-import { ActivityIndicator,Pressable,StyleSheet,Text,View } from 'react-native';
-import { APP_COLORS } from '@/types/colors';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { CATALOG_COLORS, ui } from '../../components/CatalogUI';
 import { useDigitalRecommendations } from '../hooks/useDigitalRecommendations';
-export function DigitalRecommendations({onOpen}:{onOpen:(id:string)=>void}){const state=useDigitalRecommendations();return <View style={styles.box}>
-  <Pressable accessibilityRole="button" onPress={state.toggle} style={styles.button}><Text style={styles.heading}>Recomendados para ti {state.open?'−':'+'}</Text></Pressable>
-  {state.open&&<><Text style={styles.text}>Según tu perfil académico y el interés de tu institución.</Text>
-    {state.loading?<ActivityIndicator/>:state.error?<Text style={styles.text}>No pudimos cargar las recomendaciones. Puedes seguir buscando recursos.</Text>:state.items.length?state.items.map(row=><Pressable key={row.id} accessibilityRole="button" accessibilityLabel={`Consultar recomendado ${row.title}`} onPress={()=>onOpen(row.id)} style={styles.item}><Text style={styles.heading}>{row.title}</Text><Text style={styles.text}>{row.modality==='DONACION'?'Donación':`$${row.price?.toLocaleString('es-CL')} CLP`}</Text><Text style={styles.text}>{row.recommendation.reasons.join(' · ')}</Text></Pressable>):<Text style={styles.text}>No hay recomendaciones disponibles ahora. Completa tus carreras en el perfil o explora la biblioteca.</Text>}
-    <View style={styles.row}><Pressable accessibilityRole="button" onPress={state.reload} style={styles.button}><Text style={styles.link}>Actualizar recomendaciones</Text></Pressable><Pressable accessibilityRole="button" disabled={state.loading||state.page===1} onPress={state.previous} style={styles.button}><Text style={styles.link}>Recomendaciones anteriores</Text></Pressable><Pressable accessibilityRole="button" disabled={state.loading||!state.hasMore} onPress={state.next} style={styles.button}><Text style={styles.link}>Más recomendaciones</Text></Pressable></View>
-  </>}
-</View>;}
-const styles=StyleSheet.create({box:{gap:12,padding:16,borderRadius:16,backgroundColor:'#FFFFFF',borderWidth:1,borderColor:'#E0E8ED'},button:{minHeight:44,justifyContent:'center'},heading:{fontSize:17,fontWeight:'600',color:'#09243A'},text:{fontSize:14,lineHeight:21,color:'#607485'},link:{color:APP_COLORS.PRIMARY,fontSize:15},row:{flexDirection:'row',flexWrap:'wrap',gap:16},item:{gap:6,padding:12,borderRadius:12,borderWidth:1,borderColor:'#BDCBD5'}});
+import { ResourceRow } from './ResourceRow';
+
+export function DigitalRecommendations({ onOpen }: { onOpen: (id: string) => void }) {
+  const state = useDigitalRecommendations();
+  return <View style={{ gap: 12 }}><Text accessibilityRole="header" style={ui.sectionTitle}>Recomendados para ti</Text>
+    {state.loading ? <View accessibilityLabel="Cargando recomendaciones" accessibilityRole="progressbar" style={{ flexDirection: 'row', gap: 10, overflow: 'hidden' }}>
+      {[0, 1, 2].map(value => <View key={value} style={{ width: 150, height: 196, borderRadius: 16, backgroundColor: CATALOG_COLORS.border }} />)}
+    </View> : state.error ? <View style={{ gap: 8 }}><Text style={ui.subtitle}>No pudimos cargar las recomendaciones. Puedes seguir explorando.</Text>
+      <Pressable accessibilityRole="button" onPress={state.reload} style={ui.outlined}><Text style={ui.link}>Reintentar recomendaciones</Text></Pressable></View>
+      : state.items.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, alignItems: 'stretch' }}>
+        {state.page > 1 && <Pressable accessibilityRole="button" onPress={state.previous} style={ui.outlined}><Text style={ui.link}>Anteriores</Text></Pressable>}
+        {state.items.map(row => <ResourceRow key={row.id} resource={row} recommended onOpen={() => onOpen(row.id)} />)}
+        {state.hasMore && <Pressable accessibilityRole="button" onPress={state.next} style={ui.outlined}><Text style={ui.link}>Más recomendaciones</Text></Pressable>}
+      </ScrollView> : <Text style={ui.subtitle}>Todavía no hay recomendaciones para ti. Explora todos los recursos o completa tus carreras en el Perfil.</Text>}
+  </View>;
+}

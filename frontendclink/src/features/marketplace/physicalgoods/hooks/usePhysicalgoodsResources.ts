@@ -3,6 +3,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { operationId } from '@/lib/api/operation-id';
 import { recordResourceOpening } from '../../api/resourceInteractions';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { addPhysicalgoodsPhoto, choosePhysicalgoodsPrincipal, loadPhysicalgoodsGallery, loadPhysicalgoodsResources, loadPublicationOptions, retirePhysicalgoodsPhoto, savePhysicalgoodsCategory } from '../api/physicalgoodsApi';
 import { pickPublicationPhotos } from '../api/photoPicker';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PublicationOptions, PublicationPhoto } from '../types/publication';
@@ -13,7 +14,11 @@ export function usePhysicalgoodsResources() {
   const auth = useAuth();
   const [options, setOptions] = useState<PublicationOptions | null>(null), [page, setPage] = useState<PhysicalgoodsPage | null>(null);
   const [filters, setFilters] = useState({ ...emptyPhysicalgoodsFilters }), [applied, setApplied] = useState({ ...emptyPhysicalgoodsFilters }), [number, setNumber] = useState(1);
-  const [loading, setLoading] = useState(false), [error, setError] = useState<string | null>(null), [revision, setRevision] = useState(0);
+  const debouncedFilters = useDebouncedValue(filters);
+  useEffect(() => {
+    if (JSON.stringify(debouncedFilters) !== JSON.stringify(applied)) applyFilters(debouncedFilters);
+  }, [debouncedFilters]);
+  const [loading, setLoading] = useState(true), [error, setError] = useState<string | null>(null), [revision, setRevision] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null), [gallery, setGallery] = useState<PhysicalgoodsGallery | null>(null);
   const [galleryLoading, setGalleryLoading] = useState(false), [galleryError, setGalleryError] = useState<string | null>(null), [galleryRevision, setGalleryRevision] = useState(0);
   const [editCategory, setEditCategory] = useState(''), [busy, setBusy] = useState(false), [draftImages, setDraftImages] = useState<PublicationPhoto[]>([]);
@@ -101,17 +106,18 @@ export function usePhysicalgoodsResources() {
   }
   function close() { if (running.current) return; setSelectedId(null); setGallery(null); setDraftImages([]); setGalleryError(null); }
   /** Valida límites de precio y aplica una nueva búsqueda desde la página inicial. */
-  function search() {
-    const min = filters.minPrice.trim().replace(',', '.'), max = filters.maxPrice.trim().replace(',', '.');
+  function applyFilters(value: PhysicalgoodsSearchFilters) {
+    const min = value.minPrice.trim().replace(',', '.'), max = value.maxPrice.trim().replace(',', '.');
     if ([min, max].some(value => value && (!/^\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)) || Number(value) > Number.MAX_SAFE_INTEGER))) { setError('Ingresa precios de filtro válidos, mayores o iguales que cero.'); return; }
     if (min && max && Number(min) > Number(max)) { setError('El precio máximo debe ser mayor o igual que el mínimo.'); return; }
-    setApplied({ ...filters, q: filters.q.trim(), minPrice: min, maxPrice: max }); setNumber(1); setRevision(value => value + 1);
+    setApplied({ ...value, q: value.q.trim(), minPrice: min, maxPrice: max }); setNumber(1);
   }
   function setFilter<K extends keyof PhysicalgoodsSearchFilters>(key: K, value: PhysicalgoodsSearchFilters[K]) {
+    setError(null);
     setFilters(previous => ({ ...previous, [key]: value, ...(key === 'modality' && value === 'DONACION' ? { minPrice: '', maxPrice: '' } : {}) }));
   }
-  function clearFilters() { setFilters({ ...emptyPhysicalgoodsFilters }); setApplied({ ...emptyPhysicalgoodsFilters }); setNumber(1); }
-  return { options, page, filters, setFilter, search, clearFilters, number, loading, error, selectedId, gallery, galleryLoading, galleryError, editCategory, setEditCategory, busy, draftImages, change,
+  function clearFilters() { setError(null); setFilters({ ...emptyPhysicalgoodsFilters }); setApplied({ ...emptyPhysicalgoodsFilters }); setNumber(1); }
+  return { options, page, filters, setFilter, search: () => applyFilters(filters), clearFilters, number, loading: loading || filters !== debouncedFilters, error, selectedId, gallery, galleryLoading, galleryError, editCategory, setEditCategory, busy, draftImages, change,
     remainingImageSlots: Math.max(0, PHYSICALGOODS_MAX_IMAGES - (gallery?.images.length ?? 0) - draftImages.length),
     open: (id: string) => { if (running.current) return; opening.current = {id,key:operationId(),recorded:false}; savedCategory.current = ''; setGallery(null); setDraftImages([]); setGalleryError(null); setSelectedId(id); }, close,
     setNumber,

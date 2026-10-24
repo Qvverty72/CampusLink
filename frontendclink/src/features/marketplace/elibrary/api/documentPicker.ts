@@ -2,18 +2,31 @@ import { getDocumentAsync } from 'expo-document-picker';
 import { File as LocalFile } from 'expo-file-system';
 import { DIGITAL_MAX_BYTES, type DigitalFile } from '../types/publication';
 
+function invalidFileMessage(files: { name: string; sizeBytes: number; mimeType?: string }[]) {
+  const invalid = files.find(file => !file.sizeBytes || file.sizeBytes > DIGITAL_MAX_BYTES || !/\.pdf$/i.test(file.name)
+    || (file.mimeType && file.mimeType !== 'application/pdf'));
+  if (!invalid) return null;
+  const reason = !/\.pdf$/i.test(invalid.name) || (invalid.mimeType && invalid.mimeType !== 'application/pdf')
+    ? 'Solo se admiten archivos PDF.' : !invalid.sizeBytes ? 'El archivo está vacío.' : 'El archivo supera el máximo de 25 MB.';
+  return `${invalid.name}: ${reason}`;
+}
+
+/** Arrastrar archivos usa las mismas restricciones que el selector, antes de crear URLs locales. */
+export function digitalFilesFromWeb(selected: File[]): DigitalFile[] {
+  const error = invalidFileMessage(selected.map(file => ({ name: file.name, sizeBytes: file.size, mimeType: file.type })));
+  if (error) throw new Error(error);
+  return selected.map(file => ({ name: file.name, sizeBytes: file.size, webFile: file, uri: URL.createObjectURL(file) }));
+}
+
 export async function pickDigitalFiles(): Promise<DigitalFile[]> {
   const result = await getDocumentAsync({ type: 'application/pdf', multiple: true, copyToCacheDirectory: true, base64: false });
   if (result.canceled) return [];
   const files = result.assets.map(asset => ({ name: asset.name, uri: asset.uri,
     sizeBytes: asset.size ?? asset.file?.size ?? new LocalFile(asset.uri).size, webFile: asset.file, mimeType: asset.mimeType }));
-  const invalid = files.find(file => !file.sizeBytes || file.sizeBytes > DIGITAL_MAX_BYTES || !/\.pdf$/i.test(file.name)
-    || (file.mimeType && file.mimeType !== 'application/pdf'));
-  if (invalid) {
+  const error = invalidFileMessage(files);
+  if (error) {
     files.forEach(releaseDigitalFile);
-    const reason = !/\.pdf$/i.test(invalid.name) || (invalid.mimeType && invalid.mimeType !== 'application/pdf')
-      ? 'Solo se admiten archivos PDF.' : !invalid.sizeBytes ? 'El archivo está vacío.' : 'El archivo supera el máximo de 25 MB.';
-    throw new Error(`${invalid.name}: ${reason}`);
+    throw new Error(error);
   }
   return files.map(({ mimeType: _, ...file }) => file);
 }

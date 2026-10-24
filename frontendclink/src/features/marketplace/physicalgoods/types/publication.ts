@@ -135,6 +135,7 @@ export interface PhysicalgoodsCoordinationOptions { buildings:{id:string;name:st
 export interface PhysicalgoodsCoordinationMessage { id:string;senderId:string;recipientId:string;text:string;createdAt:string }
 export interface PhysicalgoodsCoordinationPage {data:PhysicalgoodsCoordinationMessage[];meta:PhysicalgoodsPage['meta']}
 export interface PhysicalgoodsOwnPublication extends PhysicalgoodsResource {
+  activity?: import('../../types/resource').ResourceActivity;
   campus:{id:string;name:string};
   isWithdrawn:boolean;
   canView:boolean;
