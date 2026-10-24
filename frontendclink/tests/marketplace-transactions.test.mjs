@@ -36,12 +36,41 @@ const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{reso
 const stamp='2026-10-23T12:00:00Z';
 const physical={id:'trade',publication:{id:'publication',title:'Calculadora',status:'RESERVADO',isWithdrawn:false},campus:{id:'campus',name:'Origen'},owner:{id:'owner',fullName:'Camila'},receiver:{id:'receiver',fullName:'Diego'},role:'PROPIETARIO',status:'RESERVADA',modality:'VENTA',amount:12000,currency:'CLP',startedAt:stamp,completedAt:null,cancelledAt:null,confirmations:[],canConfirm:true,canCancel:true,canRate:false};
 const digital={id:'trade',publicationId:'publication',title:'Guía',campusId:'campus',ownerId:'owner',receiverId:'receiver',status:'RESERVADA',modality:'VENTA',amount:2500,currency:'CLP',startedAt:stamp,completedAt:null,cancelledAt:null,confirmations:[],canConfirm:true,canCancel:true,canRate:false};
-function physicalHook(){const h=runtime(),details=[],messages=[],options=[],writes=[],sends=[];let changed=0;
+function physicalHook(){const h=runtime(),details=[],messages=[],options=[],writes=[],sends=[],ratings=[];let changed=0;
  const pending=(rows,args)=>{const value=deferred();rows.push({...value,args});return value.promise;};
  const {usePhysicalgoodsTransaction}=load('physicalgoods/hooks/usePhysicalgoodsTransaction.ts',{react:h.react,'@/features/auth/hooks/useAuth':{useAuth:()=>({identity:{userId:'owner',campusId:'campus'},refreshIdentity:noop})},'@/lib/api/authenticated-request':{AuthApiError},
- '../api/physicalgoodsApi':{loadPhysicalgoodsTransaction:(...args)=>pending(details,args),loadPhysicalgoodsCoordinationMessages:(...args)=>{const promise=pending(messages,args);const row=messages.at(-1);args.at(-1).addEventListener('abort',()=>row.resolve({data:[],meta:{hasMore:false}}),{once:true});return promise;},loadPhysicalgoodsCoordinationOptions:(...args)=>pending(options,args),changePhysicalgoodsTransaction:(...args)=>pending(writes,args),sendPhysicalgoodsCoordination:(...args)=>pending(sends,args)}});
- return{h,details,messages,options,writes,sends,get changed(){return changed;},render:()=>h.render(()=>usePhysicalgoodsTransaction({publicationId:'publication',transactionId:'trade'},()=>changed++))};}
-async function readyPhysical(q){q.render();q.details[0].resolve(physical);q.messages[0].resolve({data:[],meta:{hasMore:false}});await setImmediate();q.render();return q.render();}
+ '../api/physicalgoodsApi':{loadPhysicalgoodsTransaction:(...args)=>pending(details,args),loadPhysicalgoodsCoordinationMessages:(...args)=>{const promise=pending(messages,args);const row=messages.at(-1);args.at(-1).addEventListener('abort',()=>row.resolve({data:[],meta:{hasMore:false}}),{once:true});return promise;},loadPhysicalgoodsCoordinationOptions:(...args)=>pending(options,args),ratePhysicalgoodsOwner:(...args)=>pending(ratings,args),changePhysicalgoodsTransaction:(...args)=>pending(writes,args),sendPhysicalgoodsCoordination:(...args)=>pending(sends,args)}});
+ return{h,details,messages,options,writes,sends,ratings,get changed(){return changed;},render:()=>h.render(()=>usePhysicalgoodsTransaction({publicationId:'publication',transactionId:'trade'},()=>changed++))};}
+async function readyPhysical(q,value=physical){q.render();q.details[0].resolve(value);q.messages[0].resolve({data:[],meta:{hasMore:false}});await setImmediate();q.render();return q.render();}
+
+test('single-step confirmation and rating block duplicates through revalidation and reconcile lost replies',async()=>{
+ const q=physicalHook();let state=await readyPhysical(q);const pending=state.confirmExchange();void state.confirmExchange();assert.equal(q.writes.length,1);assert.equal(state.action,null);
+ q.writes[0].resolve({});await pending;await state.confirmExchange();assert.equal(q.writes.length,1);q.render();state=q.render();assert.equal(state.loading,true);assert.equal(state.operation,'confirm');assert.equal(state.detail,physical);
+ const completed={...physical,status:'COMPLETADA',role:'RECEPTOR',canConfirm:false,canCancel:false,canRate:true,owner:{id:'seller',fullName:'Camila'},receiver:{id:'owner',fullName:'Diego'},rating:null};q.details.at(-1).resolve(completed);await setImmediate();state=q.render();assert.equal(state.operation,null);await state.submitRating();assert.equal(q.ratings.length,0);
+ state.selectRating(5);state=q.render();const rating=state.submitRating();void state.submitRating();assert.equal(q.ratings.length,1);assert.equal(state.ratingConfirmation,false);q.ratings[0].reject(new Error('lost response'));await rating;await state.submitRating();assert.equal(q.ratings.length,1);
+ q.render();state=q.render();assert.equal(state.loading,true);assert.equal(state.ratingScore,5);assert.equal(state.operation,'rating');q.details.at(-1).resolve({...completed,canRate:false,rating:{id:'saved',score:5,createdAt:stamp}});await setImmediate();state=q.render();assert.equal(state.error,null);assert.equal(state.ratingScore,null);assert.equal(state.detail.rating.score,5);assert.equal(state.operation,null);await state.submitRating();assert.equal(q.ratings.length,1);q.h.unmount();
+});
+
+test('confirmation pull reads only detail, keeps cached sections and guards duplicate pulls and decisions',async()=>{
+ const q=physicalHook();let state=await readyPhysical(q);q.options[0].resolve({buildings:[]});await setImmediate();state=q.render();const before={detail:state.detail,messages:state.messages,options:state.options},counts={detail:q.details.length,messages:q.messages.length,options:q.options.length};
+ assert.equal(state.detailRefreshing,false);state.refreshDetail();state.refreshDetail();state.selectAction('confirm');q.render();state=q.render();assert.equal(state.detailRefreshing,true);assert.equal(state.loading,true);assert.equal(state.detail,before.detail);assert.equal(state.messages,before.messages);assert.equal(state.options,before.options);assert.equal(state.action,null);assert.equal(q.details.length,counts.detail+1);assert.equal(q.messages.length,counts.messages);assert.equal(q.options.length,counts.options);
+ q.details.at(-1).resolve({...physical,confirmations:[{userId:'receiver',role:'RECEPTOR',confirmedAt:stamp}]});await setImmediate();state=q.render();assert.equal(state.detailRefreshing,false);assert.equal(state.detail.confirmations.length,1);assert.equal(q.changed,0);assert.equal(q.options.length,counts.options);
+ state.selectAction('confirm');state=q.render();state.refreshDetail();q.render();assert.equal(q.details.length,counts.detail+1);q.h.unmount();
+});
+
+test('physical revalidation retains detail, messages and locations and polling does not refetch unchanged map permissions',async()=>{
+ const q=physicalHook();let state=await readyPhysical(q);const places={buildings:[{id:'building',name:'Edificio',floors:[{id:'floor',name:'Piso 1'}]}]};q.options[0].resolve(places);await setImmediate();state=q.render();const messages=state.messages,detail=state.detail;
+ state.reload();q.render();state=q.render();assert.equal(state.loading,true);assert.equal(state.detail,detail);assert.equal(state.messages,messages);assert.equal(state.options,places);assert.equal(state.messagesLoading,false);assert.equal(q.options.length,2);
+ state.selectAction('confirm');assert.equal(q.render().action,null);await state.confirm();assert.equal(q.writes.length,0);
+ q.details.at(-1).resolve({...physical});q.messages.at(-1).resolve(messages);q.options.at(-1).resolve(places);await setImmediate();state=q.render();assert.equal(state.loading,false);assert.equal(q.options.length,2);
+ const poll=state.poll({messages:false});q.details.at(-1).resolve({...physical,confirmations:[{userId:'receiver',role:'RECEPTOR',confirmedAt:stamp}]});await poll;state=q.render();assert.equal(state.detail.confirmations.length,1);assert.equal(q.options.length,2);
+ state.reloadOptions();q.render();q.options.at(-1).reject(new Error('map offline'));await setImmediate();state=q.render();assert.equal(state.options,places);assert.ok(state.optionsError);state.setBuilding('building');state=q.render();state.setFloor('floor');state=q.render();assert.ok(state.preview);const count=q.messages.length,pending=state.send();assert.equal(q.messages.length,count);await pending;assert.equal(q.sends.length,0);q.h.unmount();
+});
+
+test('a failed revalidation keeps readable data but blocks writes, and forbidden detail revokes the cached view',async()=>{
+ const q=physicalHook();let state=await readyPhysical(q);q.options[0].resolve({buildings:[]});await setImmediate();state=q.render();state.reload();q.render();q.details.at(-1).reject(new Error('offline'));await setImmediate();state=q.render();assert.ok(state.detail);assert.ok(state.error);state.selectAction('confirm');state=q.render();assert.equal(state.action,null);await state.confirm();assert.equal(q.writes.length,0);
+ state.reload();q.render();const denied=new AuthApiError('Forbidden');denied.status=403;q.details.at(-1).reject(denied);await setImmediate();state=q.render();assert.equal(state.detail,null);assert.equal(state.accessDenied,true);await state.cancel();assert.equal(q.writes.length,0);q.h.unmount();
+});
 function digitalHook(viewer='owner'){const h=runtime(),details=[],lists=[],writes=[],ratings=[];const pending=(rows,args)=>{const value=deferred();rows.push({...value,args});return value.promise;};
  const {useDigitalTradeCenter}=load('elibrary/hooks/useDigitalTrades.ts',{react:h.react,'@/features/auth/hooks/useAuth':{useAuth:()=>({identity:{userId:viewer}})},'@/lib/api/authenticated-request':{AuthApiError},'@/lib/api/operation-id':{},
  '../api/digitalTradesApi':{loadDigitalRequests:(...args)=>pending(lists,args),loadDigitalTrade:(...args)=>pending(details,args),transitionDigitalTrade:(...args)=>pending(writes,args),rateDigitalOwner:(...args)=>pending(ratings,args)}});
@@ -96,7 +125,7 @@ test('physical transaction renders location choices and preview, waiting, histor
  const confirm=renderCatalog('physical',{mode:'transaction',width:320,agreementPanel:'confirm'}).markup;
  assert.match(confirm,/Confirmaciones · 0 de 2/);assert.match(confirm,/Confirmar que se realizó/);assert.doesNotMatch(confirm,/Dónde estás/);
  assert.doesNotMatch(ready,/<textarea/);
- const waiting=renderCatalog('physical',{mode:'transaction',variant:'waiting'}).markup;assert.match(waiting,/Esperando a Diego Pérez/);assert.doesNotMatch(ready,/Actualizar mensajes|Cancelar transacción/);
+ const waiting=renderCatalog('physical',{mode:'transaction',variant:'waiting',agreementPanel:'confirm'}).markup;assert.match(waiting,/Esperando a Diego Pérez/);assert.doesNotMatch(ready,/Actualizar mensajes|Cancelar transacción/);
  const historical=renderCatalog('physical',{mode:'transaction',variant:'historical',agreementPanel:'coordinate'}).markup;assert.match(historical,/Consulta histórica/);assert.match(historical,/Mensajes de coordinación/);assert.doesNotMatch(historical,/Seleccionar edificio|Confirmar que se realizó|Cancelar transacción|Confirma tu parte/);
  const mapError=renderCatalog('physical',{mode:'transaction',variant:'map-error',agreementPanel:'coordinate'}).markup;assert.match(mapError,/Reintentar ubicaciones/);
  assert.match(renderCatalog('physical',{mode:'transaction',variant:'map-error',agreementPanel:'confirm'}).markup,/Confirmar que se realizó/);
@@ -114,7 +143,7 @@ test('physical cancellation dialog preserves withdrawn resources and digital can
 });
 
 for(const screen of ['physical','digital'])test(`${screen}: opening agreement uses a skeleton and retries the same detail after a failed read`,()=>{
- const loading=renderCatalog(screen,{mode:'transaction',state:'loading'}).markup;assert.match(loading,/Cargando acuerdo/);assert.doesNotMatch(loading,/Condiciones originales del acuerdo/);
+ const loading=renderCatalog(screen,{mode:'transaction',state:'loading'}).markup;assert.match(loading,screen==='physical'?/Cargando transacción/:/Cargando acuerdo/);assert.doesNotMatch(loading,/Condiciones originales del acuerdo/);
  const error=renderCatalog(screen,{mode:'transaction',state:'error'}).markup;assert.match(error,/role="alert"/);assert.match(error,/Reintentar consulta del acuerdo/);assert.doesNotMatch(error,/No hay solicitudes/);
 });
 

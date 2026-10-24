@@ -1,26 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useScrollRefresh } from '@/components/RefreshScrollView';
-import { usePhysicalgoodsHistory } from '../hooks/usePhysicalgoodsHistory';
+import { Pagination } from '@/components/Pagination';
+import { usePhysicalgoodsTransactions, TRANSACTIONS_PAGE_SIZE } from '../hooks/usePhysicalgoodsTransactions';
 import { usePhysicalgoodsAgreementPage } from '../hooks/usePhysicalgoodsAgreementPage';
-import type { PhysicalgoodsTransactionSummary, PhysicalgoodsTransactionsPage } from '../types/publication';
-import { AgreementCard } from '../../components/AgreementUI';
-import { RequestsPager, RequestButton } from '../../components/RequestsUI';
-import { PersonalEmpty, PersonalSkeleton } from '../../components/PersonalUI';
-import { CATALOG_COLORS as colors, ui } from '../../components/CatalogUI';
+import type { PhysicalgoodsTransactionSummary } from '../types/publication';
+import { AgreementCard, AgreementCardsSkeleton, type AgreementStep } from '../../components/AgreementUI';
+import { PhysicalgoodsTransaction } from './PhysicalgoodsTransaction';
+import { RequestButton } from '../../components/RequestsUI';
+import { PersonalEmpty } from '../../components/PersonalUI';
+import { CATALOG_COLORS as colors } from '../../components/CatalogUI';
 import { detailUI } from '../../components/ResourceDetailUI';
 import { agreementCopy as copy, agreementPresentation } from '../../utils/agreementPresentation';
 
 const EMPTY: PhysicalgoodsTransactionSummary[] = [];
 
-export function PhysicalgoodsAgreements({ active, refreshVersion, onAgreement, onExplore, refreshEnabled = true, showTitle = true }: {
-  active: boolean; refreshVersion: number; onAgreement: (publicationId: string, transactionId: string) => void; onExplore?: () => void; refreshEnabled?: boolean; showTitle?: boolean;
+export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, refreshEnabled = true, showTitle = true }: {
+  active: boolean; refreshVersion: number; onExplore?: () => void; refreshEnabled?: boolean; showTitle?: boolean;
 }) {
-  const history = usePhysicalgoodsHistory(active, true, refreshVersion), page = history.page as PhysicalgoodsTransactionsPage | null;
+  const history = usePhysicalgoodsTransactions(active, refreshVersion), { page, tab, setTab } = history;
   const rows = page?.data ?? EMPTY, enriched = usePhysicalgoodsAgreementPage(rows, active && !history.loading);
-  const [tab, setTab] = useState<'active' | 'finished'>('active');
+  const [selection, setSelection] = useState<{ publicationId: string; transactionId: string; entry: AgreementStep | 'menu' } | null>(null);
   const loading = history.loading || enriched.loading || (active && rows.some(row => !enriched.details[row.id] && !enriched.failed.includes(row.id)));
-  useScrollRefresh(history.reload, loading, active && refreshEnabled && !loading, copy.title, active);
+  useScrollRefresh(history.reload, loading, active && refreshEnabled && !loading && !selection, copy.title, active);
   const items = rows.map(row => {
     const detail = enriched.details[row.id], view = detail ? agreementPresentation(detail) : null;
     const status = detail?.status ?? row.status;
@@ -33,36 +35,51 @@ export function PhysicalgoodsAgreements({ active, refreshVersion, onAgreement, o
     { label: copy.waitingGroup, items: activeItems.filter(item => item.view?.state === 'ESPERANDO_OTRO') },
     { label: copy.otherGroup, items: activeItems.filter(item => !item.view || (item.view.requiresAction && !item.actionable)) },
   ];
-  const count = tab === 'finished' ? finished.length : activeItems.length;
+  const counts = { ...(page?.meta.counts ?? { active: 0, finished: 0 }) };
+  let membershipChanged = false;
+  // Una mutación puede mover una fila antes del próximo GET de historial.
+  for (const item of items) {
+    const wasFinished = ['COMPLETADA', 'CANCELADA'].includes(item.row.status);
+    if (wasFinished !== item.terminal) { membershipChanged = true; counts[wasFinished ? 'finished' : 'active']--; counts[item.terminal ? 'finished' : 'active']++; }
+  }
+  const count = Math.max(0, counts[tab]), totalPages = Math.max(1, Math.ceil(count / TRANSACTIONS_PAGE_SIZE));
+  useEffect(() => { if (!loading && !history.error && !selection && history.number > totalPages) history.setNumber(totalPages); }, [loading, history.error, selection, history.number, totalPages]);
+  useEffect(() => { if (membershipChanged && !selection && !loading && !history.error) history.refreshCurrent(); }, [membershipChanged, selection, loading, history.error, history.refreshCurrent]);
   return <View style={styles.section}>
-    {showTitle && <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>}<Text style={detailUI.helper}>{copy.pageScope}</Text>
-    <View accessibilityRole="tablist" style={styles.tabs}>{([{ id: 'active', label: copy.active, count: activeItems.length }, { id: 'finished', label: copy.finished, count: finished.length }] as const).map(option =>
+    {showTitle && <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>}
+    <View accessibilityRole="tablist" style={styles.tabs}>{([{ id: 'active', label: copy.active, count: Math.max(0, counts.active) }, { id: 'finished', label: copy.finished, count: Math.max(0, counts.finished) }] as const).map(option =>
       <Pressable key={option.id} accessibilityRole="tab" aria-selected={tab === option.id} accessibilityState={{ selected: tab === option.id }} onPress={() => setTab(option.id)} style={[styles.tab, tab === option.id && styles.selected]}>
         <Text style={[detailUI.body, tab === option.id && { fontWeight: '700' }]}>{option.label}{!loading && !history.error ? ` · ${option.count}` : ''}</Text>
       </Pressable>)}
     </View>
     {history.error && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{history.error}</Text><RequestButton label={copy.retry} onPress={history.reload} /></View>}
-    {loading ? <PersonalSkeleton label={copy.loading} /> : !history.error && <>
+    {loading ? <AgreementCardsSkeleton /> : !history.error && <>
       {enriched.failed.length > 0 && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.helper}>{copy.partial}</Text><RequestButton label={copy.retry} onPress={enriched.reload} /></View>}
-      {!count && <PersonalEmpty title={tab === 'active' ? copy.emptyActive : copy.emptyFinished} helper={copy.pageScope}
+      {!count && <PersonalEmpty title={tab === 'active' ? copy.emptyActive : copy.emptyFinished} helper={copy.emptyHelp}
         action={onExplore ? copy.explore : copy.retry} onAction={onExplore ?? history.reload} />}
       {groups.filter(group => group.items.length).map(group => <View key={group.label} style={styles.section}>
         {Boolean(group.label) && <Text accessibilityRole="header" style={styles.groupTitle}>{group.label.toLocaleUpperCase('es-CL')}</Text>}
-        {group.items.map(({ row, detail, view, actionable }) => {
+        {group.items.map(({ row, detail, view }) => {
           const terminalState = row.status === 'COMPLETADA' ? 'FINALIZADO' : row.status === 'CANCELADA' ? 'CANCELADO' : undefined;
           const closed = detail?.completedAt ?? detail?.cancelledAt;
-          return <AgreementCard key={row.id} title={detail?.publication.title ?? row.publication.title} campus={detail?.campus.name ?? row.campus.name}
+          return <AgreementCard key={row.id} title={detail?.publication.title ?? row.publication.title}
             roleLabel={view?.roleLabel ?? (row.role === 'PROPIETARIO' ? row.modality === 'DONACION' ? copy.donor : copy.seller : row.modality === 'DONACION' ? copy.recipient : copy.buyer)}
-            price={(detail?.modality ?? row.modality) === 'DONACION' ? copy.donation : `$${(detail?.amount ?? row.amount)?.toLocaleString('es-CL')}`}
+            participants={detail ? [{ id: detail.owner.id, name: detail.owner.fullName, role: 'PROPIETARIO' }, { id: detail.receiver.id, name: detail.receiver.fullName, role: 'RECEPTOR' }] : undefined}
+            currentUserId={detail ? detail.role === 'PROPIETARIO' ? detail.owner.id : detail.receiver.id : undefined}
+            modality={detail?.modality ?? row.modality} amount={detail ? detail.amount : row.amount} currency={detail?.currency ?? row.currency}
+            ratingScore={detail?.status === 'COMPLETADA' ? detail.rating?.score : null}
             state={view?.state ?? terminalState} label={view?.label ?? (terminalState === 'FINALIZADO' ? copy.finishedStatus : terminalState === 'CANCELADO' ? copy.cancelled : copy.unknown)}
-            requiresAction={actionable} next={view && !view.terminal ? detail && !detail.canConfirm && !detail.canCancel ? copy.readOnly : view.next : undefined}
             dateLabel={closed ? copy.closed(new Date(closed).toLocaleDateString('es-CL')) : copy.initiated(new Date(row.startedAt).toLocaleDateString('es-CL'))}
-            onPress={() => onAgreement(row.publication.id, row.id)} />;
+            disabled={Boolean(selection)} onSelect={entry => setSelection({ publicationId: row.publication.id, transactionId: row.id, entry })}
+            onMenu={() => setSelection({ publicationId: row.publication.id, transactionId: row.id, entry: 'menu' })} />;
         })}
       </View>)}
-      {tab === 'active' && finished.length > 0 && <RequestButton variant="text" label={copy.viewFinished(finished.length)} onPress={() => setTab('finished')} />}
     </>}
-    <RequestsPager itemLabel={copy.title} page={history.number} hasMore={Boolean(page?.meta.hasMore)} disabled={loading} onPrevious={() => history.setNumber(history.number - 1)} onNext={() => history.setNumber(history.number + 1)} />
+    {!loading && !history.error && count >= TRANSACTIONS_PAGE_SIZE && <Pagination page={history.number} totalPages={totalPages} showSinglePage
+      label={`Paginación de transacciones ${tab === 'active' ? 'activas' : 'finalizadas'}`} onPageChange={value => { if (!selection) history.setNumber(value); }} />}
+    {selection && active && <PhysicalgoodsTransaction key={`${enriched.scope}:${selection.publicationId}:${selection.transactionId}:${selection.entry}`} target={{ publicationId: selection.publicationId, transactionId: selection.transactionId }} initialPanel={selection.entry} panelsOnly refreshEnabled={refreshEnabled}
+      initialDetail={enriched.details[selection.transactionId]} initialHistorical={enriched.details[selection.transactionId]?.campus.id !== enriched.campusId}
+      onDetailChanged={enriched.update} onAccessDenied={() => enriched.invalidate(selection.publicationId, selection.transactionId)} onChanged={() => { void enriched.refresh(selection.publicationId, selection.transactionId); }} onClose={() => setSelection(null)} />}
   </View>;
 }
 

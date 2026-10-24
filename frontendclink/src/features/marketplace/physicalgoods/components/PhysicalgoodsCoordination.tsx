@@ -14,6 +14,21 @@ export function PhysicalgoodsCoordination({ state: t, onSelectingChange }: { sta
   useEffect(() => () => onSelectingChange?.(false), [onSelectingChange]);
   const floor = t.building?.floors.find(row => row.id === t.floorId);
   const pois = floor?.pois ?? [], poi = pois.find(row => row.id === t.poiKey);
+  const buildingGroup = (name: string) => /^cabaña\b/i.test(name.trim()) ? 0 : /^edificio\b/i.test(name.trim()) ? 1 : 2;
+  const cabin = buildingGroup(t.building?.name ?? '') === 0;
+  const floorLevel = (name: string) => {
+    const number = name.match(/\bpiso\s+(-?\d+)\b/i)?.[1];
+    return number !== undefined ? Number(number) : /planta baja/i.test(name) ? 0 : null;
+  };
+  const floors = [...(t.building?.floors ?? [])].sort((a, b) => {
+    if (!cabin) return 0;
+    const left = floorLevel(a.name), right = floorLevel(b.name);
+    return left === null ? right === null ? 0 : 1 : right === null ? -1 : right - left;
+  });
+  const buildings = [...(t.options?.buildings ?? [])].sort((a, b) => {
+    const group = buildingGroup(a.name), other = buildingGroup(b.name);
+    return group - other || (group < 2 ? a.name.localeCompare(b.name, 'es', { numeric: true, sensitivity: 'base' }) : 0);
+  });
   const close = () => { if (!t.busy) { setSelecting(null); onSelectingChange?.(false); } };
   const choose = (label: string, field: 'building' | 'floor' | 'poi', value: string | undefined, disabled: boolean) => <Pressable accessibilityRole="button"
     accessibilityLabel={copy.selectLocation(label)} accessibilityState={{ disabled }} disabled={disabled}
@@ -22,19 +37,19 @@ export function PhysicalgoodsCoordination({ state: t, onSelectingChange }: { sta
   </Pressable>;
   return <View style={detailUI.card}>
     <Text accessibilityRole="header" style={ui.sectionTitle}>{copy.where}</Text><Text style={detailUI.helper}>{copy.locationHelp}</Text>
-    <TransactionFeedback loading={t.optionsLoading} error={t.optionsError} onRetry={t.reloadOptions} disabled={t.busy} compact retryLabel={copy.locationRetry} loadingLabel={copy.locationLoading} />
+    <TransactionFeedback loading={t.optionsLoading && !t.options} error={t.optionsError} onRetry={t.reloadOptions} disabled={t.busy} compact retryLabel={copy.locationRetry} loadingLabel={copy.locationLoading} />
     {!t.optionsLoading && !t.optionsError && t.options && !t.options.buildings.length && <Text style={detailUI.helper}>{copy.noLocations}</Text>}
     <View style={styles.choices}>
-      {choose(copy.building, 'building', t.building?.name, t.busy || t.loading || t.optionsLoading || !t.options?.buildings.length)}
-      {t.building && choose(copy.floor, 'floor', floor?.name, t.busy || t.loading || t.optionsLoading || !t.building.floors.length)}
-      {floor && pois.length > 0 && choose(copy.poiOptional, 'poi', poi?.name, t.busy || t.loading || t.optionsLoading)}
+      {choose(copy.building, 'building', t.building?.name, t.busy || t.loading || Boolean(t.error) || t.optionsLoading || !t.options?.buildings.length)}
+      {t.building && choose(copy.floor, 'floor', floor?.name, t.busy || t.loading || Boolean(t.error) || t.optionsLoading || !t.building.floors.length)}
+      {floor && pois.length > 0 && choose(copy.poiOptional, 'poi', poi?.name, t.busy || t.loading || Boolean(t.error) || t.optionsLoading)}
     </View>
     {t.preview && <Text accessibilityLiveRegion="polite" style={detailUI.helper}>{t.preview}</Text>}
-    <RequestButton label={copy.location} busy={t.busy && t.operation === 'message'} onPress={() => { void t.send(); }} disabled={t.busy || t.loading || !t.preview || t.optionsLoading || Boolean(t.optionsError)} primary />
+    <RequestButton label={copy.location} busy={t.busy && t.operation === 'message'} onPress={() => { void t.send(); }} disabled={t.busy || t.loading || Boolean(t.error) || !t.preview || t.optionsLoading || Boolean(t.optionsError)} primary />
     <PhysicalgoodsCoordinationMessages state={t} embedded />
     <FilterSheet compact visible={Boolean(selecting)} title={copy.selectLocation(selecting === 'poi' ? copy.poi : selecting === 'floor' ? copy.floor : copy.building)} confirmLabel={copy.back} onClose={close}>
-      <FilterOptions label={selecting === 'poi' ? copy.poi : selecting === 'floor' ? copy.floor : copy.building} allowEmpty={false}
-        options={selecting === 'poi' ? [{ id: '', name: copy.noPoi }, ...pois] : selecting === 'floor' ? t.building?.floors ?? [] : t.options?.buildings ?? []}
+      <FilterOptions key={selecting ?? 'building'} label={selecting === 'poi' ? copy.poi : selecting === 'floor' ? copy.floor : copy.building} allowEmpty={false} searchable={selecting !== 'building'} preserveOrder={selecting === 'building' || (selecting === 'floor' && cabin)}
+        options={selecting === 'poi' ? [{ id: '', name: copy.noPoi }, ...pois] : selecting === 'floor' ? floors : buildings}
         value={selecting === 'poi' ? t.poiKey : selecting === 'floor' ? t.floorId : t.buildingId}
         onChange={value => { if (!t.busy && !t.loading) { if (selecting === 'poi') t.setPoi(value); else if (selecting === 'floor') t.setFloor(value); else t.setBuilding(value); close(); } }} />
     </FilterSheet>
@@ -47,7 +62,7 @@ export function PhysicalgoodsCoordinationMessages({ state: t, embedded = false }
   const messages = [...(t.messages?.data ?? [])].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
   return <View style={embedded ? styles.thread : detailUI.card}>
     <Text accessibilityRole="header" style={ui.sectionTitle}>{copy.messages}</Text>
-    <TransactionFeedback loading={t.messagesLoading} error={t.messageError} onRetry={t.reloadMessages} disabled={t.busy} compact retryLabel={copy.messageRetry} loadingLabel={copy.messagesLoading} />
+    <TransactionFeedback loading={t.messagesLoading && !t.messages} error={t.messageError} onRetry={t.reloadMessages} disabled={t.busy} compact retryLabel={copy.messageRetry} loadingLabel={copy.messagesLoading} />
     {!t.messagesLoading && !t.messageError && t.messages && !messages.length && <Text style={detailUI.helper}>{copy.emptyMessages}</Text>}
     {!t.messagesLoading && messages.map(message => {
       const mine = message.senderId === currentId;

@@ -150,3 +150,7 @@ export interface PhysicalgoodsOwnDetail extends PhysicalgoodsOwnPublication {
 export type PhysicalgoodsTransactionSummary=Pick<PhysicalgoodsTransaction,'id'|'publication'|'campus'|'role'|'status'|'modality'|'amount'|'currency'|'startedAt'>;
 export interface PhysicalgoodsOwnPage {data:PhysicalgoodsOwnPublication[];meta:PhysicalgoodsPage['meta']}
 export interface PhysicalgoodsTransactionsPage {data:PhysicalgoodsTransactionSummary[];meta:PhysicalgoodsPage['meta']}
+export type PhysicalgoodsTransactionTab='active'|'finished';
+export interface PhysicalgoodsTransactionsTabPage extends PhysicalgoodsTransactionsPage {
+  meta:PhysicalgoodsTransactionsPage['meta']&{total:number;totalPages:number;counts:Record<PhysicalgoodsTransactionTab,number>};
+}

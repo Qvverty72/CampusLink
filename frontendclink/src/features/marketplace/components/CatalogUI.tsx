@@ -64,7 +64,7 @@ export function FilterChips({ modality, onModality, onMore, moreLabel = 'Filtros
   </View>;
 }
 
-export function FilterSheet({ visible, title, onClose, children, confirmLabel = 'Ver resultados', fillHeight = false, compact = false, preferredHeight }: { visible: boolean; title: string; onClose: () => void; children: ReactNode; confirmLabel?: string; fillHeight?: boolean; compact?: boolean; preferredHeight?: number }) {
+export function FilterSheet({ visible, title, onClose, children, confirmLabel = 'Ver resultados', fillHeight = false, compact = false, preferredHeight }: { visible: boolean; title: string; onClose: () => void; children: ReactNode; confirmLabel?: string | null; fillHeight?: boolean; compact?: boolean; preferredHeight?: number }) {
   const insets = useSafeAreaInsets();
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <KeyboardAvoidingView style={ui.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -75,30 +75,32 @@ export function FilterSheet({ visible, title, onClose, children, confirmLabel = 
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={ui.iconButton}><X color={CATALOG_COLORS.primary} size={22} /></Pressable>
         </View>
         <ScrollView style={fillHeight ? ui.sheetBody : undefined} bounces={fillHeight ? false : undefined} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={ui.sheetContent}>{children}</ScrollView>
-        <Pressable accessibilityRole="button" onPress={onClose} style={[ui.primary, compact && ui.filterConfirm]}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>
+        {confirmLabel !== null && <Pressable accessibilityRole="button" onPress={onClose} style={[ui.primary, compact && ui.filterConfirm]}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>}
       </View>
     </KeyboardAvoidingView>
   </Modal>;
 }
 
 /** Lista acotada y buscable: conserva accesibles catálogos académicos extensos. */
-export function FilterOptions({ label, options, value, onChange, allowEmpty = true }: {
-  label: string; options: { id: string; name: string; code?: string | null }[]; value: string; onChange: (id: string) => void; allowEmpty?: boolean;
+export function FilterOptions({ label, options, value, onChange, allowEmpty = true, searchable = true, preserveOrder = false }: {
+  label: string; options: { id: string; name: string; code?: string | null }[]; value: string; onChange: (id: string) => void; allowEmpty?: boolean; searchable?: boolean; preserveOrder?: boolean;
 }) {
   const [search, setSearch] = useState(''), [limit, setLimit] = useState(20);
-  const matches = options.filter(row => `${row.name} ${row.code ?? ''}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const query = searchable ? search.trim().toLocaleLowerCase() : '';
+  const matches = options.filter(row => `${row.name} ${row.code ?? ''}`.toLocaleLowerCase().includes(query));
   const selected = options.find(row => row.id === value);
-  const rows = [ ...(selected ? [selected] : []), ...matches.filter(row => row.id !== value).slice(0, limit) ];
+  const remaining = preserveOrder ? matches : matches.filter(row => row.id !== value);
+  const rows = preserveOrder ? remaining.slice(0, limit) : [ ...(selected ? [selected] : []), ...remaining.slice(0, limit) ];
   return <View style={ui.optionGroup}><Text style={ui.label}>{label}</Text>
-    {options.length > 8 && <TextInput accessibilityLabel={`Buscar ${label.toLowerCase()} para filtrar`} placeholder="Nombre o código"
+    {searchable && options.length > 8 && <TextInput accessibilityLabel={`Buscar ${label.toLowerCase()} para filtrar`} placeholder="Nombre o código"
       value={search} onChangeText={text => { setSearch(text); setLimit(20); }} style={ui.input} />}
     <View style={ui.activeFilters}>{[...(allowEmpty ? [{ id: '', name: 'Cualquiera' }] : []), ...rows].map(row => <Pressable key={row.id} accessibilityRole="radio"
       accessibilityLabel={`${label}: ${row.name}`} accessibilityState={{ checked: value === row.id }} aria-checked={value === row.id}
       onPress={() => onChange(row.id)} style={[ui.option, value === row.id && ui.selectedOption]}>
       <Text style={[ui.optionText, value === row.id && ui.selectedText]}>{row.name}</Text>
     </Pressable>)}</View>
-    {!matches.length && Boolean(search) && <Text style={ui.subtitle}>No hay coincidencias.</Text>}
-    {matches.filter(row => row.id !== value).length > limit && <Pressable accessibilityRole="button" onPress={() => setLimit(count => count + 20)} style={ui.back}><Text style={ui.link}>Mostrar más opciones</Text></Pressable>}
+    {!matches.length && Boolean(query) && <Text style={ui.subtitle}>No hay coincidencias.</Text>}
+    {remaining.length > limit && <Pressable accessibilityRole="button" onPress={() => setLimit(count => count + 20)} style={ui.back}><Text style={ui.link}>Mostrar más opciones</Text></Pressable>}
   </View>;
 }
 

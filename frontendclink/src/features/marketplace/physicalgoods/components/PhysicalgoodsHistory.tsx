@@ -21,7 +21,7 @@ const date=(value:string)=>new Date(value).toLocaleString('es-CL');
 type HistoryProps = {active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;
   onDetail:(target:PhysicalgoodsHistoryTarget)=>void;onAgreement:(publicationId:string,transactionId:string)=>void;onRequests?:()=>void;onPublish?:()=>void;onExplore?:()=>void;showTitle?:boolean};
 export function PhysicalgoodsHistory(props: HistoryProps) {
-  return props.transactions ? <PhysicalgoodsAgreements active={props.active} refreshVersion={props.refreshVersion} onAgreement={props.onAgreement} onExplore={props.onExplore} refreshEnabled={props.refreshEnabled} showTitle={props.showTitle} />
+  return props.transactions ? <PhysicalgoodsAgreements active={props.active} refreshVersion={props.refreshVersion} onExplore={props.onExplore} refreshEnabled={props.refreshEnabled} showTitle={props.showTitle} />
     : <PhysicalgoodsPublicationHistory {...props} />;
 }
 function PhysicalgoodsPublicationHistory({active,refreshVersion,onDetail,onRequests,onPublish,refreshEnabled=true}:HistoryProps) {

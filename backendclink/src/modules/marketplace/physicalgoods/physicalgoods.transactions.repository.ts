@@ -41,14 +41,25 @@ export async function lockPhysicalgoodsTransactionResource(client: PoolClient, p
     FROM public.publicacion_recurso p JOIN public.recurso_fisico r ON r.publicacion_id=p.id
     WHERE p.id=$1 AND ($2::uuid IS NULL OR p.campus_id=$2) AND p.tipo_recurso='FISICO' FOR UPDATE OF p,r`,[publicationId,campusId])).rows[0] ?? null;
 }
-export async function listOwnPhysicalgoodsTransactions(client:PoolClient,userId:string,pagination:PaginationParams) {
+export async function countOwnPhysicalgoodsTransactions(client:PoolClient,userId:string) {
+  const row=(await client.query<{active:number;finished:number}>(`SELECT
+    COUNT(*) FILTER (WHERE t.estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION'))::int AS active,
+    COUNT(*) FILTER (WHERE t.estado_transaccion IN ('COMPLETADA','CANCELADA'))::int AS finished
+    FROM public.transaccion_recurso t JOIN public.publicacion_recurso p ON p.id=t.publicacion_id
+    JOIN public.recurso_fisico r ON r.publicacion_id=p.id JOIN public.campus c ON c.id=p.campus_id
+    WHERE (t.propietario_id=$1 OR t.receptor_id=$1) AND p.tipo_recurso='FISICO'`,[userId])).rows[0];
+  return {active:Number(row.active),finished:Number(row.finished)};
+}
+export async function listOwnPhysicalgoodsTransactions(client:PoolClient,userId:string,pagination:PaginationParams,tab?:'active'|'finished') {
+  const status=tab==='active'?"AND t.estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION')":tab==='finished'?"AND t.estado_transaccion IN ('COMPLETADA','CANCELADA')":'';
+  const order=tab==='finished'?'COALESCE(t.completada_en,t.cancelada_en,t.iniciada_en)':'t.iniciada_en';
   return (await client.query<PhysicalgoodsTransactionDetailRow>(`SELECT t.id,t.publicacion_id,t.propietario_id,t.receptor_id,
     t.estado_transaccion,t.modalidad_acordada,t.monto_acordado,t.moneda,p.titulo,p.estado_publicacion,p.deleted_at,p.campus_id,c.nombre AS campus_nombre,
     to_char(t.iniciada_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS iniciada_en
     FROM public.transaccion_recurso t JOIN public.publicacion_recurso p ON p.id=t.publicacion_id
     JOIN public.recurso_fisico r ON r.publicacion_id=p.id JOIN public.campus c ON c.id=p.campus_id
-    WHERE (t.propietario_id=$1 OR t.receptor_id=$1) AND p.tipo_recurso='FISICO'
-    ORDER BY t.iniciada_en DESC,t.id DESC LIMIT $2 OFFSET $3`,[userId,pagination.limit+1,pagination.offset])).rows;
+    WHERE (t.propietario_id=$1 OR t.receptor_id=$1) AND p.tipo_recurso='FISICO' ${status}
+    ORDER BY ${order} DESC,t.id DESC LIMIT $2 OFFSET $3`,[userId,pagination.limit+1,pagination.offset])).rows;
 }
 export async function findPhysicalgoodsTransaction(client: PoolClient, publicationId: string, transactionId: string) {
   return (await client.query<PhysicalgoodsTransactionRow>('SELECT * FROM public.transaccion_recurso WHERE publicacion_id=$1 AND id=$2 FOR UPDATE',

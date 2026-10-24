@@ -7,12 +7,12 @@ import { MARKETPLACE_REPORT_REASONS, type MarketplaceReportTarget } from '../typ
 import { CATALOG_COLORS as c } from './CatalogUI';
 import { PublicationFeedback, PublicationSubmit, publicationUI as f } from './PublicationFormUI';
 
-interface Props { target: MarketplaceReportTarget; title: string; onBack: () => void; onBusyChange?: (busy: boolean) => void }
+interface Props { target: MarketplaceReportTarget; title: string; onBack: () => void; onBusyChange?: (busy: boolean) => void; showHeading?: boolean; backLabel?: string | null }
 export function MarketplaceReportForm(props: Props) {
   const { identity } = useAuth();
   return <ReportFields key={JSON.stringify([identity?.userId, identity?.campusId, props.target])} {...props} />;
 }
-function ReportFields({ target, title, onBack, onBusyChange }: Props) {
+function ReportFields({ target, title, onBack, onBusyChange, showHeading = true, backLabel }: Props) {
   const [choice, setChoice] = useState(''), [customReason, setCustomReason] = useState(''), [description, setDescription] = useState('');
   const [validation, setValidation] = useState<string | null>(null);
   const report = useContentReport(target), transaction = target.type === 'TRANSACCION' || target.type === 'TRANSACCION_DIGITAL';
@@ -27,7 +27,7 @@ function ReportFields({ target, title, onBack, onBusyChange }: Props) {
   }
   return <View style={f.form}>
     <View style={f.section}>
-      <View style={styles.heading}><Flag size={20} color={c.primary} /><Text accessibilityRole="header" style={f.title}>{transaction ? 'Denunciar transacción' : 'Denunciar publicación'}</Text></View>
+      {showHeading && <View style={styles.heading}><Flag size={20} color={c.primary} /><Text accessibilityRole="header" style={f.title}>{transaction ? 'Denunciar transacción' : 'Denunciar publicación'}</Text></View>}
       <Text style={f.label}>{title}</Text>
       {report.receipt ? <>
         <Text accessibilityLiveRegion="polite" style={styles.receipt}>Denuncia enviada</Text>
@@ -51,7 +51,7 @@ function ReportFields({ target, title, onBack, onBusyChange }: Props) {
         <PublicationFeedback error={validation ?? report.error} />
         <PublicationSubmit label={report.busy ? 'Enviando denuncia…' : 'Enviar denuncia'} busy={report.busy} disabled={report.busy || !reason} onPress={send} />
       </>}
-      <Pressable accessibilityRole="button" disabled={report.busy} onPress={onBack} style={f.secondary}><Text style={f.actionText}>{transaction ? 'Volver al acuerdo' : 'Volver al detalle'}</Text></Pressable>
+      {backLabel !== null && <Pressable accessibilityRole="button" disabled={report.busy} onPress={onBack} style={f.secondary}><Text style={f.actionText}>{backLabel ?? (transaction ? 'Volver al acuerdo' : 'Volver al detalle')}</Text></Pressable>}
     </View>
   </View>;
 }

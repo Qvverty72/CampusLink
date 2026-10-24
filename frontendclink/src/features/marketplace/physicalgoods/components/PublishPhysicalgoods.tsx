@@ -52,7 +52,7 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
         onBack={view !== 'explore' ? () => setView('explore') : undefined} />
       {personal && <CatalogTabs variant="underline" selected={received || sent ? 'requests' : view === 'transactions' ? 'transactions' : 'mine'}
         onSelect={tab => { if (tab === 'requests') showRequests(requestView); else setView(tab); }} tabs={[
-          { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes' }, { id: 'transactions', label: 'Acuerdos' },
+          { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes' }, { id: 'transactions', label: agreementCopy.tabTitle },
         ]} />}
 
       <View style={publishing ? undefined : { display: 'none' }}>

@@ -22,6 +22,8 @@ export const loadOwnPhysicalgoods=(page:number,signal:AbortSignal)=>authenticate
 export const loadOwnPhysicalgoodsDetail=(id:string,signal:AbortSignal)=>authenticatedRequest<PhysicalgoodsOwnDetail>(resourcePath(id)+'/history',{signal});
 export const loadOwnPhysicalgoodsTransactions=(page:number,signal:AbortSignal)=>authenticatedEnvelopeRequest<PhysicalgoodsTransactionSummary[],PhysicalgoodsTransactionsPage['meta']>(
   path+'/transactions',{signal},new URLSearchParams({page:String(page),limit:'10'}));
+export const loadPhysicalgoodsTransactionsPage=(page:number,tab:import('../types/publication').PhysicalgoodsTransactionTab,signal:AbortSignal)=>authenticatedEnvelopeRequest<PhysicalgoodsTransactionSummary[],import('../types/publication').PhysicalgoodsTransactionsTabPage['meta']>(
+  path+'/transactions',{signal},new URLSearchParams({page:String(page),limit:'5',tab}));
 export const loadOwnPhysicalgoodsRequest=(id:string,requestId:string,signal:AbortSignal)=>{
   resourcePath(requestId);
   return authenticatedRequest<PhysicalgoodsReceivedRequest>(resourcePath(id)+'/requests/'+requestId,{signal});

@@ -337,7 +337,7 @@ test('nested history/agreement modals use universal refresh and wait for their d
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 59, bottom: 34 }) },
     '../../components/RequestsUI': { RequestButton: 'Button' },
     '../../components/TransactionUI': { transactionUI: {}, TransactionHeader: 'Header', TransactionFeedback: 'Feedback', TransactionDecisionDialog: 'Dialog' },
-    './PhysicalgoodsCoordination': {}, '../../components/OwnerRating': {}, '../../hooks/useAgreementPolling': { useAgreementPolling() {} }, '../../components/MarketplaceReportForm': { MarketplaceReportForm: () => null } });
+    './PhysicalgoodsCoordination': {}, '../../components/OwnerRating': {}, '../../components/TransactionRating': {}, 'lucide-react-native': { CheckCircle2: 'SuccessIcon' }, '../../hooks/useAgreementPolling': { useAgreementPolling() {} }, '../../components/MarketplaceReportForm': { MarketplaceReportForm: () => null } });
   const render = (refreshEnabled = true) => elements(h.render(() => PhysicalgoodsTransaction({ target: {}, refreshEnabled }))).find(node => node.type === 'UniversalScroll');
   assert.equal(render().props.onRefresh, reload); assert.equal(render().props.refreshEnabled, true);
   assert.equal(render().props.refreshIndicatorOffset, 67);

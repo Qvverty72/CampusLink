@@ -4,10 +4,10 @@ import { APP_COLORS } from '@/types/colors';
 import { CATALOG_COLORS as c } from './CatalogUI';
 import { PublicationFeedback, PublicationSubmit, publicationUI as f } from './PublicationFormUI';
 
-export function OwnerRating({ owner, rating, canRate, score, confirming, disabled, error, busy, onReload, onSelect, onPrepare, onSend, onCancel }: {
+export function OwnerRating({ owner, rating, canRate, score, confirming, disabled, error, busy, onReload, onSelect, onPrepare, onSend, onCancel, singleStep = false }: {
   owner?: string; rating?: { score: number; createdAt: string } | null; canRate: boolean; score: number | null;
   confirming: boolean; disabled: boolean; onSelect: (score: number) => void; onPrepare: () => void; onSend: () => void; onCancel: () => void;
-  error?: string | null; busy?: boolean; onReload?: () => void;
+  error?: string | null; busy?: boolean; onReload?: () => void; singleStep?: boolean;
 }) {
   return <View style={f.section}><Text accessibilityRole="header" style={f.title}>Valoración del propietario</Text>
     {error && <><PublicationFeedback error={error} />{onReload && <Pressable accessibilityRole="button" disabled={busy} onPress={onReload} style={f.secondary}><Text style={f.actionText}>Actualizar acuerdo antes de reintentar</Text></Pressable>}</>}
@@ -17,7 +17,7 @@ export function OwnerRating({ owner, rating, canRate, score, confirming, disable
     </> : canRate ? <>
       <Text style={f.hint}>{owner ? `Valora tu intercambio con ${owner}.` : 'Valora tu experiencia con el propietario del recurso.'}</Text>
       <Text style={f.notice}>Solo puedes valorar una vez por transacción. Después de enviarla, no podrás editar tu puntuación.</Text>
-      {confirming ? <>
+      {confirming && !singleStep ? <>
         <Text style={f.label}>Enviar una valoración de {score} de 5</Text>
         <PublicationSubmit label="Confirmar valoración" disabled={disabled} onPress={onSend} />
         <Pressable accessibilityRole="button" disabled={disabled} onPress={onCancel} style={f.secondary}><Text style={f.actionText}>Volver a elegir</Text></Pressable>
@@ -27,8 +27,8 @@ export function OwnerRating({ owner, rating, canRate, score, confirming, disable
           disabled={disabled} onPress={() => onSelect(value)} style={[styles.score, score === value && f.selected, disabled && f.disabled]}>
           <Star size={24} color={score && value <= score ? APP_COLORS.ACCENT : c.secondary} fill={score && value <= score ? APP_COLORS.ACCENT : 'transparent'} />
           <Text style={f.actionText}>{value}</Text></Pressable>)}</View>
-        <Text accessibilityLiveRegion="polite" style={f.hint}>{score ? `${score} de 5 seleccionados` : 'Selecciona una puntuación de 1 a 5.'}</Text>
-        <PublicationSubmit label="Enviar valoración" disabled={disabled || !score} onPress={onPrepare} />
+        {(!score || singleStep) && <Text style={f.hint}>Selecciona las estrellas para valorar.</Text>}
+        <PublicationSubmit label={singleStep && busy ? 'Enviando valoración…' : 'Enviar valoración'} busy={singleStep && busy} disabled={disabled || !score} onPress={singleStep ? onSend : onPrepare} />
       </>}
     </> : <Text style={f.hint}>Aún no se ha registrado una valoración.</Text>}
   </View>;

@@ -1,10 +1,18 @@
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ArrowLeft, Check, ChevronDown, ChevronRight, MoreHorizontal } from 'lucide-react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ArrowLeft, Check, CircleX, Flag, MoreHorizontal } from 'lucide-react-native';
 import { CATALOG_COLORS as colors, FilterSheet, ui } from './CatalogUI';
 import { DetailActionBar, detailUI } from './ResourceDetailUI';
-import { transactionDate } from './TransactionUI';
 import { agreementCopy as copy, type AgreementPresentation, type AgreementUIState } from '../utils/agreementPresentation';
+import { AgreementParticipants } from './AgreementProductUI';
+import type { TransactionParticipant } from '../types/transaction';
+import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
+import { TransactionRating } from './TransactionRating';
+
+const agreedPrice = (modality: string, amount: number | null, currency: string) => modality === 'DONACION' ? copy.donation : amount === null ? 'Precio no disponible' : `$${amount.toLocaleString('es-CL')} ${currency}`;
+
+function AgreementAmount({ modality, amount, currency }: { modality: string; amount: number | null; currency: string }) {
+  return <View style={styles.amountRow}><Text style={detailUI.helper}>{copy.agreedAmount} <Text style={styles.amount}>{agreedPrice(modality, amount, currency)}</Text></Text></View>;
+}
 
 export function AgreementStatusChip({ state, label }: { state?: AgreementUIState; label: string }) {
   const tone = state === 'FINALIZADO' ? styles.success : state === 'CANCELADO' || !state ? styles.neutral : state === 'ESPERANDO_OTRO' ? styles.info : styles.pending;
@@ -19,65 +27,93 @@ export function AgreementHeader({ title, onBack, onMenu, disabled, menuDisabled 
   </View>;
 }
 
-export function AgreementMenu({ visible, onClose, actions }: { visible: boolean; onClose: () => void; actions: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }[] }) {
-  return <FilterSheet compact visible={visible} title={copy.menu} confirmLabel={copy.back} onClose={onClose}>
-    {actions.map(action => <Pressable key={action.label} accessibilityRole="button" disabled={action.disabled} accessibilityState={{ disabled: Boolean(action.disabled) }}
-      onPress={() => { onClose(); action.onPress(); }} style={[styles.menuAction, action.disabled && ui.disabled]}>
-      <Text style={[detailUI.body, action.danger && styles.danger]}>{action.label}</Text><ChevronRight size={16} color={action.danger ? '#9D302A' : colors.secondary} />
-    </Pressable>)}
-  </FilterSheet>;
+export function AgreementMenu({ visible, onClose, onDismiss = onClose, actions, embedded = false }: { visible: boolean; onClose: () => void; onDismiss?: () => void; embedded?: boolean; actions: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }[] }) {
+  const content = <View style={styles.menuActions}>
+    {actions.map(action => <TouchableOpacity key={action.label} accessibilityRole="button" accessibilityLabel={action.label} disabled={action.disabled} accessibilityState={{ disabled: Boolean(action.disabled) }} activeOpacity={0.75}
+      onPress={() => { if (!embedded) onClose(); action.onPress(); }} style={[styles.menuAction, action.danger && styles.menuActionDanger, action.disabled && ui.disabled]}>
+      <View accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.menuIcon, action.danger && styles.menuIconDanger]}>
+        {action.danger ? <CircleX size={22} strokeWidth={1.8} color="#B91C1C" /> : <Flag size={22} strokeWidth={1.8} color={colors.primary} />}
+      </View>
+      <Text style={[styles.menuLabel, action.danger && styles.danger]}>{action.label}</Text>
+    </TouchableOpacity>)}
+  </View>;
+  return embedded ? visible ? content : null : <FilterSheet compact visible={visible} title={copy.menu} confirmLabel={null} onClose={onDismiss}>{content}</FilterSheet>;
 }
 
-export function AgreementSummary({ view, modality, amount, currency, campus, resourceStatus, startedAt, completedAt, cancelledAt }: {
-  view: AgreementPresentation; modality: string; amount: number | null; currency: string; campus: string; resourceStatus: string; startedAt: string; completedAt: string | null; cancelledAt: string | null;
+export function AgreementSummary({ participants, modality, amount, currency, currentUserId, embedded = false }: {
+  participants: TransactionParticipant[]; modality: string; amount: number | null; currency: string; currentUserId?: string; embedded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const price = modality === 'DONACION' ? copy.donation : `$${amount?.toLocaleString('es-CL')} ${currency}`;
-  return <View style={detailUI.card}>
-    <View style={styles.summaryHeading}><View style={styles.role}><Text style={styles.roleText}>{view.roleLabel}</Text></View><Text style={styles.amount}>{price}</Text></View>
-    <Text style={detailUI.helper}>{copy.resourceState(campus, resourceStatus)}</Text>
-    <AgreementStatusChip state={view.state} label={view.label} />
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} aria-expanded={expanded} onPress={() => setExpanded(value => !value)} style={styles.accordion}>
-      <Text style={[detailUI.helper, { flex: 1 }]}>{copy.original}</Text><ChevronDown size={17} color={colors.primary} />
-    </Pressable>
-    {expanded && <View style={{ gap: 6 }}><Text style={detailUI.body}>{price}</Text><Text style={detailUI.helper}>{copy.started(transactionDate(startedAt))}</Text>
-      {completedAt && <Text style={detailUI.helper}>{copy.closed(transactionDate(completedAt))}</Text>}
-      {cancelledAt && <Text style={detailUI.helper}>{copy.closed(transactionDate(cancelledAt))}</Text>}
-    </View>}
-  </View>;
+  return <AgreementParticipants participants={participants} donation={modality === 'DONACION'} currentUserId={currentUserId} embedded={embedded}>
+    <AgreementAmount modality={modality} amount={amount} currency={currency} />
+  </AgreementParticipants>;
 }
 
 export type AgreementStep = 'accepted' | 'coordinate' | 'confirm';
 
-export function AgreementStepper({ state, digital = false, selected, onSelect, disabled = false }: {
-  state: AgreementUIState; digital?: boolean; selected?: AgreementStep; onSelect?: (step: AgreementStep) => void; disabled?: boolean;
+export function AgreementStepper({ state, digital = false, selected, onSelect, disabled = false, showCancelled = false }: {
+  state: AgreementUIState; digital?: boolean; selected?: AgreementStep; onSelect?: (step: AgreementStep) => void; disabled?: boolean; showCancelled?: boolean;
 }) {
-  if (state === 'CANCELADO' && !onSelect) return null;
+  if (state === 'CANCELADO' && !onSelect && !showCancelled) return null;
   const completed = state === 'FINALIZADO', cancelled = state === 'CANCELADO';
   const steps: { id: AgreementStep; label: string }[] = [{ id: 'accepted', label: copy.acceptedStep }, ...(!digital ? [{ id: 'coordinate' as const, label: copy.coordinateStep }] : []), { id: 'confirm', label: copy.confirmStep }];
+  const currentIndex = state === 'COORDINANDO' && !digital ? 1 : steps.length - 1;
   return <View style={styles.stepper}>{steps.map(({ id, label }, index) => {
-    const current = !cancelled && !completed && index === (state === 'COORDINANDO' && !digital ? 1 : steps.length - 1);
+    const current = !cancelled && !completed && index === currentIndex;
     const done = index === 0 || completed || (!cancelled && state !== 'COORDINANDO' && index < steps.length - 1);
-    const content = <><View style={[styles.step, (done || current) && styles.stepActive]}>
-      {done ? <Check size={14} color={colors.surface} /> : <Text style={[styles.stepNumber, current && { color: colors.surface }]}>{index + 1}</Text>}
-    </View><Text style={[detailUI.helper, { textAlign: 'center' }, (current || selected === id) && { fontWeight: '700', color: colors.primary }]}>{label}</Text></>;
-    return onSelect ? <Pressable key={id} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={copy.openStep(label)}
+    const phase = done ? copy.stepReady : current ? copy.stepInProgress : cancelled ? copy.cancelled : copy.pending;
+    const content = <>
+      {index > 0 && <View pointerEvents="none" accessible={false} style={[styles.stepLine, styles.stepLineLeft, !cancelled && (completed || index <= currentIndex) && styles.stepLineDone]} />}
+      {index < steps.length - 1 && <View pointerEvents="none" accessible={false} style={[styles.stepLine, styles.stepLineRight, !cancelled && (completed || index < currentIndex) && styles.stepLineDone]} />}
+      <View style={[styles.step, done && styles.stepDone, current && styles.stepCurrent, selected === id && styles.stepChosen]}>
+        {done ? <Check size={18} color={colors.surface} /> : <Text style={[styles.stepNumber, current && { color: colors.surface }]}>{index + 1}</Text>}
+      </View>
+      <Text style={[styles.stepLabel, (current || selected === id) && styles.stepLabelCurrent]}>{label}</Text>
+      <View style={[styles.stepPhase, current && { backgroundColor: styles.pending.backgroundColor }]}>
+        <Text style={[styles.stepPhaseText, current && { color: styles.pending.color, fontWeight: '700' }]}>{phase}</Text>
+      </View>
+    </>;
+    return onSelect ? <Pressable key={id} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={`${copy.openStep(label)}. ${phase}`} accessibilityValue={{ text: phase }}
       accessibilityState={{ selected: selected === id, expanded: selected === id, disabled }} disabled={disabled} onPress={() => onSelect(id)}
-      style={[styles.stepBody, styles.stepButton, selected === id && styles.selectedStep, disabled && ui.disabled]}>{content}</Pressable>
+      style={[styles.stepBody, disabled && ui.disabled]}>{content}</Pressable>
       : <View key={id} style={styles.stepBody}>{content}</View>;
   })}</View>;
 }
 
-/** Toda la tarjeta abre el mismo acuerdo; el siguiente paso no es otro botón. */
-export function AgreementCard({ title, roleLabel, campus, price, state, label, next, requiresAction, dateLabel, onPress }: {
-  title: string; roleLabel: string; campus: string; price: string; state?: AgreementUIState; label: string; next?: string; requiresAction: boolean; dateLabel: string; onPress: () => void;
+/** Pasos y menú son destinos hermanos; el contenedor no intercepta sus toques. */
+export function AgreementCard({ title, roleLabel, participants, currentUserId, modality, amount, currency, state, label, dateLabel, ratingScore, onSelect, onMenu, disabled = false }: {
+  title: string; roleLabel: string; participants?: TransactionParticipant[]; currentUserId?: string; modality: string; amount: number | null; currency: string;
+  state?: AgreementUIState; label: string; dateLabel: string; ratingScore?: number | null; onSelect: (step: AgreementStep) => void; onMenu: () => void; disabled?: boolean;
 }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${title}. ${roleLabel}. ${label}`} onPress={onPress} style={styles.card}>
-    <View style={styles.cardHeading}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.cardPrice}>{price}</Text></View>
-    <Text style={styles.cardHelper}>{roleLabel} · {campus}</Text><AgreementStatusChip state={state} label={label} />
-    {next && <View style={requiresAction ? styles.next : undefined}><Text style={requiresAction ? styles.nextText : styles.cardHelper}>{next}</Text>{requiresAction && <ChevronRight size={17} color={colors.surface} />}</View>}
-    <Text style={detailUI.helper}>{dateLabel}</Text>
-  </Pressable>;
+  return <View style={styles.card}>
+    <View style={styles.cardHeading}><Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${copy.menu}: ${title}`} disabled={disabled} accessibilityState={{ disabled }} onPress={onMenu} style={styles.menuButton}><MoreHorizontal size={22} color={colors.primary} /></Pressable>
+    </View>
+    {participants ? <AgreementSummary embedded participants={participants} currentUserId={currentUserId} modality={modality} amount={amount} currency={currency} />
+      : <><Text style={styles.cardHelper}>{roleLabel}</Text><Text style={detailUI.helper}>{copy.participantsUnavailable}</Text><AgreementAmount modality={modality} amount={amount} currency={currency} />
+        <Pressable accessibilityRole="button" disabled={disabled} onPress={() => onSelect('accepted')} style={ui.outlined}><Text style={ui.link}>{copy.retryTransaction}</Text></Pressable></>}
+    {state && <AgreementStepper state={state} showCancelled disabled={disabled} onSelect={onSelect} />}
+    {state === 'FINALIZADO' && <TransactionRating score={ratingScore} />}
+    <View style={styles.cardFooter}><Text style={styles.cardHelper}>{label}</Text><Text style={detailUI.helper}>{dateLabel}</Text></View>
+  </View>;
+}
+
+export function AgreementCardsSkeleton() {
+  return <Skeleton label={copy.loading} contentStyle={{ gap: 14 }}>{[0, 1].map(index => <View key={index} style={styles.card}>
+    <SkeletonBlock width="70%" height={24} /><SkeletonBlock width={96} height={16} />
+    <View style={styles.skeletonPeople}>{[0, 1].map(person => <View key={person} style={styles.skeletonPerson}><SkeletonBlock width={36} height={36} borderRadius={18} /><View style={{ flex: 1, gap: 6 }}><SkeletonBlock height={16} /><SkeletonBlock width="70%" height={12} /></View></View>)}</View>
+    <View style={styles.amountRow}><SkeletonBlock width="75%" height={20} /></View>
+    <View style={styles.skeletonPeople}>{[0, 1, 2].map(step => <View key={step} style={styles.skeletonStep}><SkeletonBlock width={38} height={38} borderRadius={19} /><SkeletonBlock width="70%" height={14} /><SkeletonBlock width="55%" height={12} /></View>)}</View>
+    <SkeletonBlock width="55%" height={14} />
+  </View>)}</Skeleton>;
+}
+
+/** Mantiene la anatomía de cada panel mientras se resuelven sus primeras consultas. */
+export function AgreementPanelSkeleton({ panel }: { panel: AgreementStep | 'menu' }) {
+  return <Skeleton label={copy.loadingTransaction} contentStyle={{ gap: panel === 'menu' ? 10 : 18 }}>
+    {panel === 'accepted' ? <><SkeletonBlock height="auto" style={{ aspectRatio: 4 / 3 }} borderRadius={14} /><SkeletonBlock width="70%" height={22} /><SkeletonBlock height={28} /><SkeletonBlock width="80%" height={18} /><SkeletonBlock height={80} /></>
+      : panel === 'menu' ? <>{[0, 1].map(index => <View key={index} style={styles.menuAction}><SkeletonBlock width={40} height={40} borderRadius={12} /><View style={{ flex: 1 }}><SkeletonBlock width={index === 0 ? '82%' : '76%'} height={18} /></View></View>)}</>
+        : <><SkeletonBlock width="70%" height={24} /><SkeletonBlock height={panel === 'coordinate' ? 48 : 70} /><SkeletonBlock height={panel === 'coordinate' ? 48 : 70} /><SkeletonBlock height={52} borderRadius={16} />{panel === 'coordinate' && <><SkeletonBlock width="80%" height={24} /><SkeletonBlock height={88} borderRadius={16} /></>}</>}
+  </Skeleton>;
 }
 
 export function AgreementActionBar({ view, canConfirm, readOnly, busy, disabled, onConfirm, inline = false }: {
@@ -104,18 +140,27 @@ const styles = StyleSheet.create({
   chip: { alignSelf: 'flex-start', maxWidth: '100%', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 }, chipText: { fontSize: 13, lineHeight: 19, fontWeight: '700' },
   success: { color: '#17613F', backgroundColor: '#E5F3EB' }, pending: { color: '#805C0A', backgroundColor: '#FFF4D9' },
   info: { color: colors.primary, backgroundColor: colors.tint }, neutral: { color: colors.muted, backgroundColor: colors.background },
-  menuAction: { minHeight: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }, danger: { color: '#9D302A' },
-  summaryHeading: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
-  role: { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, maxWidth: '100%' }, roleText: { color: colors.surface, fontSize: 13, lineHeight: 19, fontWeight: '700' },
-  amount: { color: colors.primary, fontSize: 20, lineHeight: 27, fontWeight: '800', flexShrink: 1 },
-  accordion: { borderTopWidth: 1, borderColor: colors.border, paddingTop: 10, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepper: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 2 }, stepBody: { flex: 1, alignItems: 'center', gap: 7 },
-  stepButton: { minHeight: 80, paddingVertical: 10, paddingHorizontal: 4, borderRadius: 18, borderWidth: 1, borderColor: 'transparent' },
-  selectedStep: { backgroundColor: colors.tint, borderColor: colors.inputBorder },
-  step: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: colors.inputBorder, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  stepActive: { backgroundColor: colors.primary, borderColor: colors.primary }, stepNumber: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  menuActions: { gap: 10 },
+  menuAction: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
+  menuActionDanger: { backgroundColor: '#FFF7F7', borderColor: '#FECACA' },
+  menuIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EDF3F8', pointerEvents: 'none' },
+  menuIconDanger: { backgroundColor: '#FEE2E2' }, menuLabel: { flex: 1, minWidth: 0, color: colors.primary, fontSize: 14, lineHeight: 20, fontWeight: '600' }, danger: { color: '#B91C1C' },
+  amountRow: { borderTopWidth: 1, borderColor: colors.border, paddingTop: 12 },
+  amount: { color: colors.primary, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  stepper: { flexDirection: 'row', paddingVertical: 2 },
+  stepBody: { flex: 1, minWidth: 0, minHeight: 104, alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 4, position: 'relative' },
+  stepLine: { position: 'absolute', top: 26, height: 2, backgroundColor: colors.inputBorder },
+  stepLineLeft: { left: 0, right: '50%' }, stepLineRight: { left: '50%', right: 0 }, stepLineDone: { backgroundColor: colors.primary },
+  step: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.inputBorder, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, zIndex: 1 },
+  stepDone: { backgroundColor: colors.primary, borderColor: colors.primary },
+  stepCurrent: { backgroundColor: colors.primary, borderColor: colors.secondary, borderWidth: 3 }, stepChosen: { borderColor: colors.secondary, borderWidth: 3 },
+  stepNumber: { color: colors.muted, fontSize: 15, fontWeight: '700' },
+  stepLabel: { color: colors.muted, fontSize: 14, lineHeight: 20, textAlign: 'center' }, stepLabelCurrent: { fontWeight: '700', color: colors.primary },
+  stepPhase: { minHeight: 20, maxWidth: '100%', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 1, alignItems: 'center' },
+  stepPhaseText: { color: colors.muted, fontSize: 11, lineHeight: 18, textAlign: 'center' },
   card: { minHeight: 44, backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 12 },
   cardHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, cardTitle: { flex: 1, minWidth: 0, color: colors.ink, fontSize: 19, lineHeight: 26, fontWeight: '800' },
-  cardPrice: { maxWidth: '45%', flexShrink: 1, fontSize: 20, lineHeight: 27, fontWeight: '800', color: colors.primary }, cardHelper: { color: colors.muted, fontSize: 14, lineHeight: 21 },
-  next: { backgroundColor: colors.primary, borderRadius: 14, padding: 12, minHeight: 44, flexDirection: 'row', gap: 10, alignItems: 'center' }, nextText: { flex: 1, color: colors.surface, fontSize: 13, lineHeight: 20, fontWeight: '700' },
+  cardHelper: { color: colors.muted, fontSize: 13, lineHeight: 20 }, cardFooter: { gap: 4, borderTopWidth: 1, borderColor: colors.border, paddingTop: 10 },
+  skeletonPeople: { flexDirection: 'row', gap: 12 }, skeletonPerson: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }, skeletonStep: { flex: 1, alignItems: 'center', gap: 8, paddingVertical: 10 },
 });

@@ -39,7 +39,7 @@ const copy=presentation.agreementCopy;
 const agreement=(overrides={})=>({id:'trade',publication:{id:'pub',title:'Calculadora',status:'RESERVADO',isWithdrawn:false},campus:{id:'campus',name:'Campus'},role:'PROPIETARIO',modality:'VENTA',amount:1000,currency:'CLP',status:'RESERVADA',owner:{id:'owner',fullName:'Camila'},receiver:{id:'receiver',fullName:'Diego'},confirmations:[],startedAt:'2026-10-20T12:00:00Z',completedAt:null,cancelledAt:null,canConfirm:true,canCancel:true,...overrides});
 const confirmed=(userId,role)=>({userId,role,confirmedAt:'2026-10-24T12:00:00Z'});
 const native={View:'View',Text:'Text',Pressable:'Button',StyleSheet:{create:value=>value}};
-const uiDeps=h=>({react:h.react,'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{ArrowLeft:'Icon',Check:'Check',ChevronDown:'Down',ChevronRight:'Right',MoreHorizontal:'More'},'./CatalogUI':{CATALOG_COLORS:{},FilterSheet:'Sheet',ui:{}},'./ResourceDetailUI':{detailUI:{},DetailActionBar:'Footer'},'./TransactionUI':{transactionDate:value=>value},'../utils/agreementPresentation':presentation});
+const uiDeps=h=>({react:h.react,'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{ArrowLeft:'Icon',Check:'Check',ChevronDown:'Down',ChevronRight:'Right',MoreHorizontal:'More'},'./CatalogUI':{CATALOG_COLORS:{},FilterSheet:'Sheet',ui:{}},'./ResourceDetailUI':{detailUI:{},DetailActionBar:'Footer'},'./AgreementProductUI':{AgreementParticipants:'Participants'},'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'./TransactionRating':{TransactionRating:'Rating'},'./TransactionUI':{transactionDate:value=>value},'../utils/agreementPresentation':presentation});
 
 test('derived states match confirmations by ID and role and prioritize canonical terminal states',()=>{
  const view=presentation.agreementPresentation;
@@ -54,13 +54,18 @@ test('derived states match confirmations by ID and role and prioritize canonical
  assert.equal(view(agreement({modality:'DONACION'})).roleLabel,'Donas a Diego');
 });
 
-test('agreement card has one tap target; summary is collapsed and original terms expand without changing state',()=>{
- const h=runtime(),ui=load('components/AgreementUI.tsx',uiDeps(h)),calls=[];
- const nodes=elements(ui.AgreementCard({title:'Libro',roleLabel:'Vendes a Diego',campus:'Campus',price:'$1.000',state:'COORDINANDO',label:copy.coordinating,next:copy.coordinate,requiresAction:true,dateLabel:'Hoy',onPress:()=>calls.push('trade')}));
- assert.equal(nodes.filter(node=>node.type==='Button').length,1);nodes[0].props.onPress();assert.deepEqual(calls,['trade']);
- const props={...agreement(),view:presentation.agreementPresentation(agreement()),campus:'Campus',resourceStatus:'RESERVADO'};
- let tree=elements(h.render(()=>ui.AgreementSummary(props)));assert.doesNotMatch(JSON.stringify(tree),/2026-10-20/);
- tree.find(node=>node.type==='Button').props.onPress();tree=elements(h.render(()=>ui.AgreementSummary(props)));assert.match(JSON.stringify(tree),/2026-10-20/);h.unmount();
+test('agreement card exposes sibling step and options actions without a detail navigation target',()=>{
+ const h=runtime(),ui=load('components/AgreementUI.tsx',{...uiDeps(h),'./AgreementProductUI':{AgreementParticipants:'Participants'}}),calls=[];
+ const participants=[{id:'owner',name:'Camila',role:'PROPIETARIO'},{id:'receiver',name:'Diego',role:'RECEPTOR'}];
+ const nodes=elements(ui.AgreementCard({title:'Libro',roleLabel:'Vendes a Diego',participants,modality:'VENTA',amount:1000,currency:'CLP',state:'COORDINANDO',label:copy.coordinating,dateLabel:'Hoy',onSelect:step=>calls.push(step),onMenu:()=>calls.push('menu')}));
+ assert.equal(nodes[0].type,'View');assert.equal(nodes[0].props.onPress,undefined);assert.equal(nodes.filter(node=>node.type==='Button').length,1);nodes.find(node=>node.type==='Button').props.onPress();
+ const progress=nodes.find(node=>node.type===ui.AgreementStepper),steps=elements(ui.AgreementStepper(progress.props)).filter(node=>node.type==='Button');
+ assert.equal(steps.length,3);steps.forEach(step=>step.props.onPress());assert.deepEqual(calls,['menu','accepted','coordinate','confirm']);assert.ok(!nodes.some(node=>node.props.pointerEvents==='none'));
+ const props={...agreement(),participants,currentUserId:'owner'};
+ const summary=ui.AgreementSummary(props);assert.equal(summary.type,'Participants');assert.equal(summary.props.participants,participants);assert.equal(summary.props.donation,false);
+ const amount=summary.props.children.type(summary.props.children.props);
+ assert.equal(summary.props.currentUserId,'owner');assert.match(JSON.stringify(amount),/Monto acordado:.*1\.000 CLP/);assert.doesNotMatch(JSON.stringify(summary),/Vendes a|Coordinando entrega|Condiciones originales/);assert.equal(elements(summary).filter(node=>node.type==='Button').length,0);
+ const donation=ui.AgreementSummary({...props,modality:'DONACION',amount:null});assert.equal(donation.props.donation,true);assert.match(JSON.stringify(donation.props.children.type(donation.props.children.props)),/Donación/);h.unmount();
 });
 
 test('CTA preserves confirmation before sending location and disables waiting/terminal/history without new rules',()=>{
@@ -72,10 +77,27 @@ test('CTA preserves confirmation before sending location and disables waiting/te
 });
 
 function metadataFixture(){
- const h=runtime(),reads=[];let rows=Array.from({length:5},(_,i)=>({...agreement(),id:String(i)})),enabled=true,live=0,peak=0;
- const {usePhysicalgoodsAgreementPage}=load('physicalgoods/hooks/usePhysicalgoodsAgreementPage.ts',{react:h.react,'@/features/auth/hooks/useAuth':{useAuth:()=>({identity:{userId:'owner',campusId:'campus'},refreshIdentity:noop})},'@/lib/api/authenticated-request':{AuthApiError},'../api/physicalgoodsApi':{loadPhysicalgoodsTransaction:(target,signal)=>{const job=deferred();reads.push({...job,target,signal});live++;peak=Math.max(peak,live);return job.promise.finally(()=>live--);}}});
- return{h,reads,get peak(){return peak;},disable:()=>enabled=false,render:()=>h.render(()=>usePhysicalgoodsAgreementPage(rows,enabled))};
+ const h=runtime(),reads=[];let rows=Array.from({length:5},(_,i)=>({...agreement(),id:String(i)})),enabled=true,live=0,peak=0,identity={userId:'owner',campusId:'campus'};
+ const {usePhysicalgoodsAgreementPage}=load('physicalgoods/hooks/usePhysicalgoodsAgreementPage.ts',{react:h.react,'@/features/auth/hooks/useAuth':{useAuth:()=>({identity,refreshIdentity:noop})},'@/lib/api/authenticated-request':{AuthApiError},'../api/physicalgoodsApi':{loadPhysicalgoodsTransaction:(target,signal)=>{const job=deferred();reads.push({...job,target,signal});live++;peak=Math.max(peak,live);return job.promise.finally(()=>live--);}}});
+ return{h,reads,get peak(){return peak;},disable:()=>enabled=false,setIdentity:value=>identity=value,render:()=>h.render(()=>usePhysicalgoodsAgreementPage(rows,enabled))};
 }
+
+async function readyMetadata(q){q.render();for(const read of q.reads.slice(0,3))read.resolve(agreement({id:read.target.transactionId}));await setImmediate();for(const read of q.reads.slice(3))read.resolve(agreement({id:read.target.transactionId}));await setImmediate();return q.render();}
+
+test('a targeted refresh retains siblings and updates only its authorized transaction without a page loader',async()=>{
+ const q=metadataFixture();let state=await readyMetadata(q);const sibling=state.details['1'],count=q.reads.length;
+ await state.refresh('wrong','0');assert.equal(q.reads.length,count);
+ const pending=state.refresh('pub','0');state=q.render();assert.equal(state.loading,false);assert.equal(Object.keys(state.details).length,5);assert.equal(q.reads.length,count+1);
+ q.reads.at(-1).resolve(agreement({id:'0',status:'COMPLETADA',canCancel:false}));await pending;state=q.render();assert.equal(state.details['0'].status,'COMPLETADA');assert.equal(state.details['1'],sibling);
+ state.update(agreement({id:'1',confirmations:[confirmed('receiver','RECEPTOR')]}));state=q.render();assert.equal(state.details['1'].confirmations.length,1);assert.equal(q.reads.length,count+1);
+ const valid=state.details['1'];state.update(agreement({id:'1',publication:{id:'wrong'},status:'CANCELADA'}));state.update(agreement({id:'1',owner:{id:'stranger',fullName:'Ajeno'}}));assert.equal(q.render().details['1'],valid);state.invalidate('wrong','1');assert.equal(q.render().details['1'],valid);state.invalidate('pub','1');state=q.render();assert.equal(state.details['1'],undefined);assert.ok(state.failed.includes('1'));assert.ok(state.details['0']);q.h.unmount();
+});
+
+test('targeted cache reads abort on identity changes and a forbidden read removes the cached detail',async()=>{
+ const q=metadataFixture();let state=await readyMetadata(q);let pending=state.refresh('pub','0');const read=q.reads.at(-1);
+ q.setIdentity({userId:'another',campusId:'campus'});assert.equal(Object.keys(q.render().details).length,0);assert.equal(read.signal.aborted,true);read.resolve(agreement({id:'0'}));await pending;assert.equal(Object.keys(q.render().details).length,0);q.h.unmount();
+ const other=metadataFixture();state=await readyMetadata(other);pending=state.refresh('pub','0');const denied=new AuthApiError('Forbidden');denied.status=403;other.reads.at(-1).reject(denied);await pending;state=other.render();assert.equal(state.details['0'],undefined);assert.ok(state.details['1']);assert.ok(state.failed.includes('0'));other.h.unmount();
+});
 
 test('page metadata caps concurrency at three, isolates failures and aborts stale results when hidden',async()=>{
  const q=metadataFixture();q.render();assert.equal(q.reads.length,3);
@@ -92,68 +114,177 @@ test('origin request lookup paginates only own inbox and matches both transactio
 
 function listFixture(){
  const h=runtime(),opened=[],registered=[];const data=[agreement(),agreement({id:'needs',confirmations:[confirmed('receiver','RECEPTOR')]}),agreement({id:'wait',confirmations:[confirmed('owner','PROPIETARIO')]}),agreement({id:'done',status:'COMPLETADA',completedAt:'2026-10-24T12:00:00Z'}),agreement({id:'cancel',status:'CANCELADA',cancelledAt:'2026-10-23T12:00:00Z'})];
- const history={page:{data,meta:{hasMore:true}},number:2,loading:false,error:null,reload:noop,setNumber:noop};const meta={details:Object.fromEntries(data.map(row=>[row.id,row])),failed:[],loading:false,reload:noop};
- const {PhysicalgoodsAgreements}=load('physicalgoods/components/PhysicalgoodsAgreements.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':native,'@/components/RefreshScrollView':{useScrollRefresh:(...args)=>registered.push(args)},'../hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistory:()=>history},'../hooks/usePhysicalgoodsAgreementPage':{usePhysicalgoodsAgreementPage:()=>meta},'../../components/AgreementUI':{AgreementCard:'Card'},'../../components/RequestsUI':{RequestsPager:'Pager',RequestButton:'Action'},'../../components/PersonalUI':{PersonalEmpty:'Empty',PersonalSkeleton:'Skeleton'},'../../components/CatalogUI':{CATALOG_COLORS:{},ui:{}},'../../components/ResourceDetailUI':{detailUI:{}},'../../utils/agreementPresentation':presentation});
- return{h,history,meta,registered,opened,render:(refreshEnabled=true)=>elements(h.render(()=>PhysicalgoodsAgreements({active:true,refreshVersion:0,refreshEnabled,onExplore:noop,onAgreement:(...args)=>opened.push(args)})))};
+ const stats={reloads:0,refreshes:[],updates:[],invalidated:[]};
+ const history={page:{data,meta:{hasMore:false,total:3,totalPages:1,counts:{active:3,finished:2}}},number:1,tab:'active',loading:false,error:null,reload:()=>stats.reloads++,refreshCurrent:noop,setTab:value=>{history.tab=value;history.number=1;},setNumber:value=>{history.number=value;}};const meta={details:Object.fromEntries(data.map(row=>[row.id,row])),scope:'owner:campus',campusId:'campus',failed:[],loading:false,reload:noop,refresh:(...args)=>stats.refreshes.push(args),update:value=>stats.updates.push(value),invalidate:(...args)=>stats.invalidated.push(args)};
+ const {PhysicalgoodsAgreements}=load('physicalgoods/components/PhysicalgoodsAgreements.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':native,'@/components/RefreshScrollView':{useScrollRefresh:(...args)=>registered.push(args)},'../hooks/usePhysicalgoodsTransactions':{usePhysicalgoodsTransactions:()=>history,TRANSACTIONS_PAGE_SIZE:5},'@/components/Pagination':{Pagination:'Pagination'},'../hooks/usePhysicalgoodsAgreementPage':{usePhysicalgoodsAgreementPage:()=>meta},'../../components/AgreementUI':{AgreementCard:'Card',AgreementCardsSkeleton:'Skeleton'},'./PhysicalgoodsTransaction':{PhysicalgoodsTransaction:'Panels'},'../../components/RequestsUI':{RequestsPager:'Pager',RequestButton:'Action'},'../../components/PersonalUI':{PersonalEmpty:'Empty',PersonalSkeleton:'Skeleton'},'../../components/CatalogUI':{CATALOG_COLORS:{},ui:{}},'../../components/ResourceDetailUI':{detailUI:{}},'../../utils/agreementPresentation':presentation});
+ return{h,history,meta,stats,registered,opened,render:(refreshEnabled=true)=>elements(h.render(()=>PhysicalgoodsAgreements({active:true,refreshVersion:0,refreshEnabled,onExplore:noop,onAgreement:(...args)=>opened.push(args)})))};
 }
 
-test('list groups actions before waiting, counts only its page, sorts closed dates and routes the exact card',()=>{
+test('list groups and counts its page, opens exact inline panels and preserves terminal sorting',()=>{
  const q=listFixture();let nodes=q.render();assert.deepEqual(nodes.filter(row=>row.type==='Card').map(row=>row.props.state),['COORDINANDO','ESPERANDO_TU_CONFIRMACION','ESPERANDO_OTRO']);
- assert.match(JSON.stringify(nodes),/Acuerdos de esta página/);nodes.find(row=>row.type==='Card').props.onPress();assert.deepEqual(q.opened,[['pub','trade']]);
+ assert.doesNotMatch(JSON.stringify(nodes),/Acuerdos de esta página|Ver finalizados/);
+ assert.equal(nodes.find(row=>row.type==='Card').props.currentUserId,'owner');assert.deepEqual(Array.from(nodes.find(row=>row.type==='Card').props.participants,person=>person.name),['Camila','Diego']);assert.equal(nodes.find(row=>row.type==='Card').props.amount,1000);
  assert.equal(q.registered.at(-1)[0],q.history.reload);assert.equal(q.registered.at(-1)[2],true);q.render(false);assert.equal(q.registered.at(-1)[2],false);
+ for(const entry of ['accepted','coordinate','confirm','menu']){
+  nodes=q.render();const card=nodes.find(row=>row.type==='Card');if(entry==='menu')card.props.onMenu();else card.props.onSelect(entry);
+  nodes=q.render();const controller=nodes.find(row=>row.type==='Panels');assert.equal(controller.props.panelsOnly,true);assert.equal(controller.props.initialPanel,entry);assert.deepEqual({...controller.props.target},{publicationId:'pub',transactionId:'trade'});assert.equal(controller.props.initialDetail,q.meta.details.trade);assert.equal(controller.props.initialHistorical,false);assert.equal(q.registered.at(-1)[2],false);assert.ok(!nodes.some(row=>row.type==='Skeleton'));
+  if(entry==='confirm'){controller.props.onChanged();assert.deepEqual(q.stats.refreshes,[['pub','trade']]);controller.props.onDetailChanged(q.meta.details.trade);assert.equal(q.stats.updates.length,1);controller.props.onAccessDenied();assert.deepEqual(q.stats.invalidated,[['pub','trade']]);}controller.props.onClose();assert.equal(q.stats.reloads,0);
+ }
+ assert.deepEqual(q.opened,[]);nodes=q.render();
  nodes.find(row=>row.type==='Button'&&row.props.accessibilityRole==='tab'&&row.key==='finished').props.onPress();nodes=q.render();assert.deepEqual(nodes.filter(row=>row.type==='Card').map(row=>row.props.state),['FINALIZADO','CANCELADO']);
- assert.ok(nodes.filter(row=>row.type==='Card').every(row=>!row.props.next));assert.equal(nodes.find(row=>row.type==='Pager').props.page,2);q.h.unmount();
+ assert.ok(nodes.filter(row=>row.type==='Card').every(row=>!row.props.next));assert.ok(!nodes.some(row=>row.type==='Pagination'));q.h.unmount();
+});
+
+test('transaction pagination uses the selected tab total including exactly five and a partial last page',()=>{
+ const q=listFixture();q.history.page.meta.counts={active:4,finished:8};assert.ok(!q.render().some(row=>row.type==='Pagination'));
+ q.history.page.meta.counts.active=5;let nodes=q.render(),pager=nodes.find(row=>row.type==='Pagination');assert.equal(pager.props.totalPages,1);assert.equal(pager.props.showSinglePage,true);assert.match(pager.props.label,/activas/);
+ q.history.page.meta.counts.active=6;nodes=q.render();pager=nodes.find(row=>row.type==='Pagination');assert.equal(pager.props.totalPages,2);pager.props.onPageChange(2);assert.equal(q.history.number,2);
+ q.history.page.data=[q.history.page.data[0]];nodes=q.render();assert.equal(nodes.filter(row=>row.type==='Card').length,1);assert.equal(nodes.find(row=>row.type==='Pagination').props.page,2);
+ nodes.find(row=>row.type==='Button'&&row.key==='finished').props.onPress();q.history.page.meta.counts.finished=5;nodes=q.render();assert.equal(q.history.number,1);assert.match(nodes.find(row=>row.type==='Pagination').props.label,/finalizadas/);
+ q.history.loading=true;assert.ok(!q.render().some(row=>row.type==='Pagination'));q.history.loading=false;q.history.error='offline';assert.ok(!q.render().some(row=>row.type==='Pagination'));q.h.unmount();
+});
+
+test('a transaction changing tabs reconciles only after its modal closes, not after ordinary consultation',()=>{
+ const q=listFixture();let refreshes=0;q.history.refreshCurrent=()=>refreshes++;let nodes=q.render();nodes.find(row=>row.type==='Card').props.onSelect('confirm');q.render();q.meta.details.trade={...q.meta.details.trade,status:'COMPLETADA',canConfirm:false,canCancel:false};nodes=q.render();assert.equal(refreshes,0);nodes.find(row=>row.type==='Panels').props.onClose();q.render();assert.equal(refreshes,1);assert.equal(q.stats.reloads,0);q.h.unmount();
+});
+
+function transactionPagesFixture(){
+ const h=runtime(),reads=[];let identity={userId:'owner',campusId:'campus'},active=true,version=0,refreshed=0;
+ const {usePhysicalgoodsTransactions}=load('physicalgoods/hooks/usePhysicalgoodsTransactions.ts',{react:h.react,'@/features/auth/hooks/useAuth':{useAuth:()=>({identity,refreshIdentity:()=>refreshed++})},'@/lib/api/authenticated-request':{AuthApiError},'../api/physicalgoodsApi':{loadPhysicalgoodsTransactionsPage:(...args)=>{const request=deferred();reads.push({...request,args});return request.promise;}}});
+ return{h,reads,render:()=>h.render(()=>usePhysicalgoodsTransactions(active,version)),move:()=>{identity={userId:'other',campusId:'other-campus'};},setActive:value=>{active=value;},refresh:()=>version++,get refreshed(){return refreshed;}};
+}
+const transactionPage=(tab,number=1,total=6)=>({data:[agreement({id:`${tab}-${number}`,status:tab==='active'?'RESERVADA':'COMPLETADA'})],meta:{page:number,limit:5,total,totalPages:Math.max(1,Math.ceil(total/5)),hasMore:number*5<total,counts:{active:6,finished:6}}});
+test('tab pagination resets pages on tab/refresh/context changes and discards obsolete responses',async()=>{
+ const q=transactionPagesFixture();q.render();assert.deepEqual(q.reads[0].args.slice(0,2),[1,'active']);q.reads[0].resolve(transactionPage('active'));await setImmediate();let state=q.render();state.setNumber(2);q.render();state=q.render();assert.equal(state.page,null);const obsolete=q.reads.at(-1);assert.deepEqual(obsolete.args.slice(0,2),[2,'active']);
+ state.setTab('finished');q.render();assert.equal(obsolete.args[2].aborted,true);const current=q.reads.at(-1);assert.deepEqual(current.args.slice(0,2),[1,'finished']);obsolete.resolve(transactionPage('active',2));current.resolve(transactionPage('finished'));await setImmediate();state=q.render();assert.equal(state.page.data[0].id,'finished-1');
+ state.setNumber(2);q.render();q.reads.at(-1).resolve(transactionPage('finished',2));await setImmediate();state=q.render();assert.equal(state.number,2);state.reload();q.render();assert.deepEqual(q.reads.at(-1).args.slice(0,2),[1,'finished']);q.reads.at(-1).resolve(transactionPage('finished'));await setImmediate();state=q.render();
+ state.setNumber(2);q.render();const old=q.reads.at(-1);q.move();state=q.render();assert.equal(state.page,null);assert.equal(state.tab,'active');assert.equal(state.number,1);assert.equal(old.args[2].aborted,true);q.setActive(false);q.render();assert.equal(q.reads.at(-1).args[2].aborted,true);q.h.unmount();
+});
+test('tab pagination clamps removed last pages and exposes retryable errors without stale data',async()=>{
+ const q=transactionPagesFixture();q.render();q.reads[0].resolve(transactionPage('active',1,11));await setImmediate();let state=q.render();state.setNumber(3);q.render();q.reads.at(-1).resolve(transactionPage('active',3,6));await setImmediate();state=q.render();assert.equal(state.number,2);assert.equal(state.page,null);q.reads.at(-1).reject(new Error('offline'));await setImmediate();state=q.render();assert.ok(state.error);assert.equal(state.loading,false);state.reload();q.render();assert.equal(q.reads.at(-1).args[0],1);q.h.unmount();
 });
 
 test('partial metadata errors never invent a counterpart or confirmation state',()=>{
  const q=listFixture();delete q.meta.details.trade;q.meta.failed.push('trade');const nodes=q.render();const card=nodes.find(row=>row.type==='Card'&&row.props.label===copy.unknown);
- assert.ok(card);assert.equal(card.props.state,undefined);assert.equal(card.props.requiresAction,false);assert.equal(card.props.roleLabel,copy.seller);assert.match(JSON.stringify(nodes),/No pudimos consultar/);q.h.unmount();
+ assert.ok(card);assert.equal(card.props.state,undefined);assert.equal(card.props.roleLabel,copy.seller);assert.equal(card.props.participants,undefined);assert.equal(card.props.currentUserId,undefined);assert.match(JSON.stringify(nodes),/No pudimos consultar/);q.h.unmount();
 });
 
-function physicalDetailFixture(){
+function physicalDetailFixture(options={}){
  const h=runtime(),calls=[],polling=[],state={detail:agreement(),loading:false,busy:false,messagesLoading:false,optionsLoading:false,historical:false,error:null,action:null,
-  messagesRefreshing:false,refreshMessages:noop,cancelMessageRefresh:noop,cancelMessagePolling:noop,pollMessages:noop,reload:noop,poll:noop,selectAction:value=>state.action=value,cancelAction:()=>state.action=null,confirm:()=>calls.push('confirm'),cancel:()=>calls.push('cancel')};
+  detailRefreshing:false,refreshDetail:noop,messagesRefreshing:false,refreshMessages:noop,cancelMessageRefresh:noop,cancelMessagePolling:noop,pollMessages:noop,reload:noop,poll:noop,selectAction:value=>state.action=value,cancelAction:()=>state.action=null,confirmExchange:()=>calls.push('confirm'),submitRating:()=>calls.push('rating'),confirm:()=>calls.push('confirm'),cancel:()=>calls.push('cancel')};
  const origin={request:null,loading:false,error:null,open:received=>calls.push(['origin',received]),close:noop};
- const {PhysicalgoodsTransaction}=load('physicalgoods/components/PhysicalgoodsTransaction.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':{...native,Modal:'Modal'},'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:20,bottom:20})},'@/components/RefreshScrollView':{RefreshScrollView:'Scroll'},'../../hooks/useAgreementPolling':{useAgreementPolling:(...args)=>polling.push(args),COORDINATION_MESSAGES_POLL_INTERVAL:7000},'../../components/AgreementStepModal':{AgreementStepModal:'StepModal'},'../../components/OwnerRating':{},'../../components/MarketplaceReportForm':{MarketplaceReportForm:'Report'},'../hooks/usePhysicalgoodsTransaction':{usePhysicalgoodsTransaction:()=>state},'../hooks/usePhysicalgoodsAgreementRequest':{usePhysicalgoodsAgreementRequest:()=>origin},'../../components/ResourceDetailUI':{AgreementNotice:'Notice',detailUI:{}},'../../components/AgreementUI':{AgreementHeader:'Header',AgreementSummary:'Summary',AgreementMenu:'Menu',AgreementStepper:'Stepper',AgreementActionBar:'Footer'},'../../utils/agreementPresentation':presentation,'../../components/TransactionUI':{TransactionConfirmations:'People',TransactionDecisionDialog:'Dialog',TransactionFeedback:'Feedback',transactionUI:{}},'./PhysicalgoodsCoordination':{PhysicalgoodsCoordination:'Coordination',PhysicalgoodsCoordinationMessages:'Messages'},'./PhysicalgoodsHistory':{PhysicalgoodsHistoryDetail:'History'},'./PhysicalgoodsAgreementProduct':{PhysicalgoodsAgreementProduct:'ProductModal'}});
- const render=(target={publicationId:'pub',transactionId:'trade'})=>elements(h.render(()=>PhysicalgoodsTransaction({target,onClose:noop,onChanged:noop,onOpen:id=>calls.push(id)})));
+ const {PhysicalgoodsTransaction}=load('physicalgoods/components/PhysicalgoodsTransaction.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':{...native,Modal:'Modal'},'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:20,bottom:20})},'@/components/RefreshScrollView':{RefreshScrollView:'Scroll'},'../../hooks/useAgreementPolling':{useAgreementPolling:(...args)=>polling.push(args),COORDINATION_MESSAGES_POLL_INTERVAL:7000},'../../components/AgreementStepModal':{AgreementStepModal:'StepModal'},'../../components/OwnerRating':{OwnerRating:'OwnerRating'},'lucide-react-native':{CheckCircle2:'SuccessIcon'},'../../components/RequestsUI':{RequestButton:'RequestButton'},'../../components/TransactionRating':{TransactionRating:'Rating'},'../../components/MarketplaceReportForm':{MarketplaceReportForm:'Report'},'../hooks/usePhysicalgoodsTransaction':{usePhysicalgoodsTransaction:()=>state},'../hooks/usePhysicalgoodsAgreementRequest':{usePhysicalgoodsAgreementRequest:()=>origin},'../../components/ResourceDetailUI':{AgreementNotice:'Notice',detailUI:{}},'../../components/CatalogUI':{CATALOG_COLORS:{}},'../../components/AgreementUI':{AgreementHeader:'Header',AgreementSummary:'Summary',AgreementMenu:'Menu',AgreementStepper:'Stepper',AgreementActionBar:'Footer',AgreementPanelSkeleton:'PanelSkeleton'},'../../utils/agreementPresentation':presentation,'../../components/TransactionUI':{TransactionConfirmations:'People',TransactionDecisionDialog:'Dialog',TransactionFeedback:'Feedback',transactionUI:{}},'./PhysicalgoodsCoordination':{PhysicalgoodsCoordination:'Coordination',PhysicalgoodsCoordinationMessages:'Messages'},'./PhysicalgoodsHistory':{PhysicalgoodsHistoryDetail:'History'},'./PhysicalgoodsAgreementProduct':{PhysicalgoodsAgreementProduct:'ProductModal'}});
+ const render=(target={publicationId:'pub',transactionId:'trade'})=>elements(h.render(()=>PhysicalgoodsTransaction({target,onClose:noop,onChanged:noop,onOpen:id=>calls.push(id),...options})));
  return{h,calls,polling,state,origin,render};
 }
 
 test('physical detail menu keeps cancellation and reporting behind explicit decisions and exact callbacks',()=>{
  const {h,calls,state,render}=physicalDetailFixture();
- let nodes=render();const menu=nodes.find(row=>row.type==='Menu');assert.deepEqual(Array.from(menu.props.actions,row=>row.label),[copy.request,copy.resource,copy.report,copy.cancel]);
- menu.props.actions[0].onPress();menu.props.actions[1].onPress();assert.deepEqual(calls,[['origin',true],'pub']);
- menu.props.actions[3].onPress();assert.ok(!calls.includes('cancel'));nodes=render();nodes.find(row=>row.type==='Dialog').props.onCancel();assert.ok(!calls.includes('cancel'));
+ let nodes=render();const menu=nodes.find(row=>row.type==='Menu');assert.deepEqual(Array.from(menu.props.actions,row=>row.label),[copy.report,copy.cancel]);
+ menu.props.actions[0].onPress();nodes=render();assert.ok(!nodes.some(row=>row.type==='Report'));nodes.find(row=>row.type==='Dialog').props.onCancel();assert.deepEqual(calls,[]);
+ menu.props.actions[1].onPress();assert.ok(!calls.includes('cancel'));nodes=render();nodes.find(row=>row.type==='Dialog').props.onCancel();assert.ok(!calls.includes('cancel'));
  state.selectAction('confirm');nodes=render();nodes.find(row=>row.type==='Dialog').props.onConfirm();assert.ok(calls.includes('confirm'));
- state.action=null;state.historical=true;nodes=render();assert.equal(nodes.find(row=>row.type==='Menu').props.actions.length,2);assert.equal(nodes.find(row=>row.type==='Menu').props.actions[1].disabled,true);h.unmount();
+ state.action=null;state.detail.canCancel=false;nodes=render();assert.deepEqual(Array.from(nodes.find(row=>row.type==='Menu').props.actions,row=>row.label),[copy.report]);
+ state.historical=true;nodes=render();assert.equal(nodes.find(row=>row.type==='Menu').props.actions.length,0);assert.equal(nodes.find(row=>row.type==='Header').props.menuDisabled,true);h.unmount();
+});
+
+test('inline step entries render only the requested panel, preserve message refresh and close to the list',()=>{
+ for(const entry of ['accepted','coordinate','confirm']){
+  let closed=0;const q=physicalDetailFixture({panelsOnly:true,initialPanel:entry,onClose:()=>closed++});let nodes=q.render();
+  assert.ok(!nodes.some(row=>['Modal','Header','Stepper','Summary','Scroll'].includes(row.type)));
+  if(entry==='accepted'){const product=nodes.find(row=>row.type==='ProductModal');assert.equal(product.props.detail.id,'trade');product.props.onClose();}
+  else{const panel=nodes.find(row=>row.type==='StepModal');assert.equal(panel.props.title,entry==='coordinate'?copy.coordinationTitle('Calculadora'):copy.confirmStep);
+   if(entry==='coordinate'){assert.equal(panel.props.refresh.onRefresh,q.state.refreshMessages);assert.ok(q.polling.some(args=>args[0]===q.state.pollMessages&&args[1]&&args[2]===7000));}
+   else{nodes.find(row=>row.type==='Footer').props.onConfirm();nodes=q.render();assert.ok(q.calls.includes('confirm'));assert.equal(q.state.action,null);assert.equal(nodes.find(row=>row.type==='StepModal').props.overlay,undefined);}
+   q.render().find(row=>row.type==='StepModal').props.onClose();
+  }
+  assert.equal(closed,1);q.h.unmount();
+ }
+});
+
+test('inline menu protects loading and mismatched records, retries errors and enforces historical permissions',()=>{
+ let closed=0;const q=physicalDetailFixture({panelsOnly:true,initialPanel:'menu',onClose:()=>closed++});q.state.detail=null;q.state.loading=true;let nodes=q.render();
+ assert.ok(!nodes.some(row=>row.type==='Menu'));assert.equal(nodes.find(row=>row.type==='PanelSkeleton').props.panel,'menu');
+ q.state.loading=false;q.state.error='No autorizado';nodes=q.render();assert.equal(nodes.find(row=>row.type==='Feedback').props.error,'No autorizado');assert.ok(!nodes.some(row=>row.type==='Menu'));
+ q.state.error=null;q.state.detail=agreement({id:'another'});nodes=q.render();assert.equal(nodes.find(row=>row.type==='Feedback').props.error,copy.transactionUnavailable);
+ q.state.detail=agreement();q.state.historical=true;nodes=q.render();assert.ok(!nodes.some(row=>row.type==='Menu'));assert.match(JSON.stringify(nodes),/No hay acciones disponibles/);
+ nodes.find(row=>row.type==='StepModal').props.onClose();assert.equal(closed,1);q.h.unmount();
+});
+
+test('cached previews show the options skeleton with fixed bounds while revalidating and cannot authorize actions',()=>{
+ let revoked=0;const updates=[],seed=agreement(),q=physicalDetailFixture({panelsOnly:true,initialPanel:'menu',initialDetail:seed,onDetailChanged:value=>updates.push(value),onAccessDenied:()=>revoked++});
+ q.state.detail=null;q.state.loading=true;let nodes=q.render();assert.equal(nodes.find(row=>row.type==='StepModal').props.preferredHeight,420);assert.equal(nodes.find(row=>row.type==='PanelSkeleton').props.panel,'menu');assert.ok(!nodes.some(row=>row.type==='Menu'));
+ assert.doesNotMatch(JSON.stringify(nodes),/Actualizando estado de la transacción/);
+ const pending=renderCatalog('physical',{mode:'personal',inlinePanel:'menu',transactionState:'loading'}).markup;assert.match(pending,/Cargando transacción/);assert.doesNotMatch(pending,/Denunciar transacción|Cancelar transacción/);
+ const fresh=agreement({status:'CANCELADA',canCancel:false,canConfirm:false});q.state.detail=fresh;q.state.loading=false;nodes=q.render();q.render();assert.equal(updates.length,1);assert.equal(updates[0],fresh);assert.equal(nodes.find(row=>row.type==='StepModal').props.preferredHeight,420);assert.deepEqual(Array.from(nodes.find(row=>row.type==='Menu').props.actions,row=>row.label),[copy.report]);
+ q.state.accessDenied=true;q.state.detail=null;q.state.error='Forbidden';nodes=q.render();q.render();assert.ok(!nodes.some(row=>row.type==='Menu'));assert.equal(nodes.find(row=>row.type==='Feedback').props.error,'Forbidden');assert.equal(revoked,1);q.h.unmount();
+ const cold=physicalDetailFixture({panelsOnly:true,initialPanel:'confirm'});cold.state.detail=null;cold.state.loading=true;const before=cold.render().find(row=>row.type==='StepModal');cold.state.detail=agreement();cold.state.loading=false;const after=cold.render().find(row=>row.type==='StepModal');assert.equal(before.props.preferredHeight,680);assert.equal(after.props.preferredHeight,680);cold.h.unmount();
+});
+
+test('coordination waits for its first sections without partial cards and keeps data during background refresh',()=>{
+ const q=physicalDetailFixture({panelsOnly:true,initialPanel:'coordinate',initialDetail:agreement()});q.state.messages=null;q.state.options=null;q.state.messagesLoading=true;q.state.optionsLoading=true;
+ let nodes=q.render();assert.ok(nodes.some(row=>row.type==='PanelSkeleton'));assert.ok(!nodes.some(row=>row.type==='Coordination'));
+ q.state.messages={data:[],meta:{hasMore:false}};q.state.messagesLoading=false;nodes=q.render();assert.ok(nodes.some(row=>row.type==='PanelSkeleton'));
+ q.state.options={buildings:[]};q.state.optionsLoading=false;nodes=q.render();assert.ok(nodes.some(row=>row.type==='Coordination'));assert.ok(!nodes.some(row=>row.type==='PanelSkeleton'));
+ q.state.optionsLoading=true;q.state.messagesLoading=true;nodes=q.render();assert.ok(nodes.some(row=>row.type==='Coordination'));assert.ok(!nodes.some(row=>row.type==='PanelSkeleton'));q.h.unmount();
+});
+
+test('inline options retain cancellation decisions and report form without a detail page or premature writes',()=>{
+ const q=physicalDetailFixture({panelsOnly:true,initialPanel:'menu'});let nodes=q.render();let menu=nodes.find(row=>row.type==='Menu');assert.equal(menu.props.visible,true);assert.deepEqual(Array.from(menu.props.actions,row=>row.label),[copy.report,copy.cancel]);
+ menu.props.actions[1].onPress();nodes=q.render();assert.equal(nodes.find(row=>row.type==='Menu').props.visible,false);assert.ok(!q.calls.includes('cancel'));nodes.find(row=>row.type==='Dialog').props.onCancel();assert.equal(q.render().find(row=>row.type==='Menu').props.visible,true);
+ q.render().find(row=>row.type==='Menu').props.actions[1].onPress();nodes=q.render();nodes.find(row=>row.type==='Dialog').props.onConfirm();assert.ok(q.calls.includes('cancel'));
+ q.state.action=null;q.state.detail.canCancel=false;q.state.detail.status='CANCELADA';nodes=q.render();assert.deepEqual(Array.from(nodes.find(row=>row.type==='Menu').props.actions,row=>row.label),[copy.report]);
+ nodes.find(row=>row.type==='Menu').props.actions[0].onPress();nodes=q.render();assert.ok(!nodes.some(row=>row.type==='Report'));nodes.find(row=>row.type==='Dialog').props.onConfirm();nodes=q.render();
+ const form=nodes.find(row=>row.type==='Report');assert.deepEqual({...form.props.target},{type:'TRANSACCION',publicationId:'pub',transactionId:'trade'});assert.ok(!nodes.some(row=>row.type==='Modal'||row.type==='Header'));assert.equal(nodes.find(row=>row.type==='StepModal').props.title,copy.report);
+ form.props.onBusyChange(true);nodes=q.render();assert.equal(nodes.find(row=>row.type==='StepModal').props.closeDisabled,true);form.props.onBusyChange(false);q.render().find(row=>row.type==='Report').props.onBack();assert.equal(q.render().find(row=>row.type==='Menu').props.visible,true);q.h.unmount();
+});
+
+test('real inline panels keep the transaction tab behind them and expose rating, loading and recovery without overview',()=>{
+ for(const[entry,text]of [['accepted','Recurso de la transacción'],['coordinate','Coordinación para la entrega de'],['confirm','Confirmaciones · 0 de 2'],['menu','Denunciar transacción']]){
+  const markup=renderCatalog('physical',{mode:'personal',variant:'transactions',inlinePanel:entry}).markup;
+  assert.ok(markup.includes(text),text);assert.match(markup,/Mis transacciones/);assert.doesNotMatch(markup,/Transacción del recurso|Toca un paso para consultar/);assert.equal(markup.match(/data-qa-modal-portal=/g)?.length,1);
+ }
+ const loading=renderCatalog('physical',{mode:'personal',inlinePanel:'menu',state:'loading'}).markup;assert.match(loading,/Cargando transacción/);assert.doesNotMatch(loading,/Denunciar transacción|Cancelar transacción/);
+ const error=renderCatalog('physical',{mode:'personal',inlinePanel:'menu',state:'error'}).markup;assert.match(error,/role="alert"/);assert.match(error,/Reintentar consulta/);assert.doesNotMatch(error,/Transacción del recurso/);
+ const rating=renderCatalog('physical',{mode:'personal',inlinePanel:'confirm',variant:'rating',agreementTab:'finished'}).markup;assert.match(rating,/Valoración del propietario/);assert.match(rating,/Enviar valoración/);assert.doesNotMatch(rating,/Transacción del recurso/);
+ const rated=renderCatalog('physical',{mode:'personal',inlinePanel:'confirm',variant:'rated',agreementTab:'finished'}).markup;assert.doesNotMatch(rated,/Valoración del propietario|Valoración registrada|Enviar valoración/);assert.match(rated,/Valoración de la transacción: 4 de 5 estrellas/);
+ const decision=renderCatalog('physical',{mode:'personal',inlinePanel:'menu',variant:'cancel-dialog'}).markup;assert.match(decision,/Sí, cancelar/);assert.equal(decision.match(/data-qa-modal-portal=/g)?.length,1);
+ const form=renderCatalog('physical',{mode:'personal',inlinePanel:'menu',variant:'report-form'}).markup;assert.match(form,/Motivos de la denuncia/);assert.match(form,/Enviar denuncia/);assert.equal(form.match(/data-qa-modal-portal=/g)?.length,1);
 });
 
 for(const variant of ['available','needs-confirmation','waiting','completed','cancelled'])test(`real agreement detail ${variant} keeps the payment notice before coordination and no manual messages refresh`,()=>{
  const markup=renderCatalog('physical',{mode:'transaction',variant,width:390}).markup;
- assert.match(markup,/CampusLink registra el acuerdo/);assert.doesNotMatch(markup,/Actualizar mensajes/);assert.match(markup,/Vendes a Diego Pérez/);
+ assert.match(markup,/CampusLink registra el acuerdo/);assert.doesNotMatch(markup,/Actualizar mensajes|Vendes a|Coordinando entrega/);for(const text of ['Participantes','Camila González','Diego Pérez','Vendedor','Comprador'])assert.ok(markup.includes(text),text);
  if(variant==='available'){
   assert.doesNotMatch(markup,/Dónde estás|Confirmaciones ·|Confirmar que se realizó/);
   const coordination=renderCatalog('physical',{mode:'transaction',agreementPanel:'coordinate',width:390}).markup;
   assert.ok(coordination.indexOf('CampusLink registra el acuerdo')<coordination.indexOf('Dónde estás'));
  }
- if(variant==='needs-confirmation')assert.match(markup,/Falta tu confirmación/);
- if(variant==='waiting')assert.match(markup,/Esperando a Diego Pérez/);
- if(variant==='completed')assert.match(markup,/Finalizado/);
+ if(['needs-confirmation','waiting'].includes(variant)){
+  assert.match(markup,/En curso/);
+  const confirmations=renderCatalog('physical',{mode:'transaction',variant,agreementPanel:'confirm'}).markup;
+  assert.match(confirmations,/Confirmaciones · 1 de 2/);
+  assert.match(confirmations,variant==='waiting'?/Esperando a Diego Pérez/:/Confirmar que se realizó/);
+ }
+ if(variant==='completed'){assert.match(markup,/Listo/);assert.doesNotMatch(markup,/En curso/);}
  if(variant==='cancelled')assert.match(markup,/Cancelado/);
 });
 
 test('real list separates active and terminal groups and preserves no duplicate links',()=>{
  const markup=renderCatalog('physical',{mode:'transactions'}).markup;assert.match(markup,/Requiere tu acción|REQUIERE TU ACCIÓN/);assert.match(markup,/Esperando a Diego Pérez/);
- assert.doesNotMatch(markup,/Ver solicitud|Ver recurso/);assert.match(markup,/Activos/);
+ assert.doesNotMatch(markup,/Ver solicitud|Ver recurso/);assert.match(markup,/Activas/);
+ for(const text of ['Mis transacciones','Participantes','Monto acordado:','Aceptada','Coordinar','Confirmar'])assert.ok(markup.includes(text),text);
+ assert.match(markup,/<button[^>]*aria-label="(?:Aceptada|Coordinar|Confirmar)"/);assert.match(markup,/Opciones de transacción/);
+ const loading=renderCatalog('physical',{mode:'personal',variant:'transactions',state:'loading'}).markup;assert.match(loading,/Mis transacciones/);assert.match(loading,/Cargando transacciones/);assert.doesNotMatch(loading,/Mis acuerdos|Cargando acuerdos/);
  const finished=renderCatalog('physical',{mode:'transactions',variant:'finished'}).markup;assert.match(finished,/Finalizado/);assert.match(finished,/Cancelado/);assert.doesNotMatch(finished,/Coordinando entrega/);
 });
 
 test('historical active agreements remain readable without promising unavailable actions',()=>{
- const q=listFixture();q.meta.details.trade={...q.meta.details.trade,canConfirm:false,canCancel:false};const nodes=q.render();const card=nodes.find(row=>row.type==='Card'&&row.props.title==='Calculadora'&&row.props.next===copy.readOnly);
- assert.ok(card);assert.equal(card.props.requiresAction,false);card.props.onPress();assert.deepEqual(q.opened,[['pub','trade']]);q.h.unmount();
+ const q=listFixture();q.meta.details.trade={...q.meta.details.trade,canConfirm:false,canCancel:false};const nodes=q.render();const card=nodes.find(row=>row.type==='Card'&&row.props.title==='Calculadora');
+ assert.ok(card);card.props.onSelect('coordinate');const panel=q.render().find(row=>row.type==='Panels');assert.equal(panel.props.initialPanel,'coordinate');assert.deepEqual(q.opened,[]);q.h.unmount();
 });
 
-test('step buttons reveal only their panel, product modal closes cleanly, and confirm still needs a decision',()=>{
+test('step buttons reveal only their panel, product modal closes cleanly, and confirm uses one explicit submission',()=>{
  const q=physicalDetailFixture();let nodes=q.render();
  assert.ok(!nodes.some(row=>['Coordination','People','Footer','ProductModal'].includes(row.type)));
  nodes.find(row=>row.type==='Stepper').props.onSelect('coordinate');nodes=q.render();
@@ -161,8 +292,7 @@ test('step buttons reveal only their panel, product modal closes cleanly, and co
  nodes.find(row=>row.type==='Stepper').props.onSelect('confirm');nodes=q.render();
  const people=nodes.find(row=>row.type==='People'),footer=nodes.find(row=>row.type==='Footer');
  assert.ok(elements(people).includes(footer));assert.equal(footer.props.inline,true);assert.ok(!nodes.some(row=>row.type==='Coordination'));
- assert.deepEqual(q.calls,[]);footer.props.onConfirm();assert.equal(q.state.action,'confirm');assert.deepEqual(q.calls,[]);
- q.render().find(row=>row.type==='Dialog').props.onCancel();
+ assert.deepEqual(q.calls,[]);footer.props.onConfirm();assert.equal(q.state.action,null);assert.deepEqual(q.calls,['confirm']);
  nodes=q.render();nodes.find(row=>row.type==='Stepper').props.onSelect('accepted');nodes=q.render();
  assert.ok(nodes.some(row=>row.type==='ProductModal'));assert.equal(nodes.find(row=>row.type==='Scroll').props.refreshEnabled,false);
  nodes.find(row=>row.type==='ProductModal').props.onClose();nodes=q.render();assert.ok(!nodes.some(row=>row.type==='ProductModal'));assert.equal(nodes.find(row=>row.type==='Scroll').props.refreshEnabled,true);
@@ -210,8 +340,15 @@ test('product read failures retain the agreement, allow retry and reject stale d
 
 test('real product modal shows images, current description and original transaction price',()=>{
  const markup=renderCatalog('physical',{mode:'transaction',agreementPanel:'accepted',width:360}).markup;
- for(const text of ['Recurso del acuerdo','Fotografía 1 de 2','Fotografía 2 de 2','Calculadoras','Incluye tapa protectora','términos originales'])assert.ok(markup.includes(text),text);
+ for(const text of ['Recurso de la transacción','Fotografía 1 de 2','Fotografía 2 de 2','Calculadoras','Incluye tapa protectora','términos originales'])assert.ok(markup.includes(text),text);
  assert.match(markup,/12\.000/);assert.doesNotMatch(markup,/Confirmar que se realizó|Dónde estás/);
+ for(const[variant,self,other]of [['available','Vendedor','Comprador'],['participants-buyer','Comprador','Vendedor'],['participants-donation','Donante','Receptor'],['participants-same-name','Vendedor','Comprador']]){
+  const overview=renderCatalog('physical',{mode:'transaction',variant,width:360}).markup.replace(/<!--.*?-->/g,'');
+  assert.ok(overview.includes(`${self} (tú)`));assert.ok(!overview.includes(`${other} (tú)`));assert.equal(overview.match(/\(tú\)/g)?.length,1);
+  assert.ok(overview.indexOf('Monto acordado:')>overview.indexOf(other));
+  const product=renderCatalog('physical',{mode:'transaction',variant,agreementPanel:'accepted',width:360}).markup.replace(/<!--.*?-->/g,'');
+  assert.ok(product.includes(`${self} (tú)`));assert.ok(!product.includes(`${other} (tú)`));
+ }
  for(const[variant,expected]of [['product-loading',/Cargando información del recurso/],['product-error',/Reintentar información/],['product-unavailable',/no están disponibles/],['no-photos',/Sin fotografías disponibles/]]){
   assert.match(renderCatalog('physical',{mode:'transaction',agreementPanel:'accepted',variant}).markup,expected);
  }
@@ -224,7 +361,7 @@ test('real product modal shows images, current description and original transact
 
 test('product gallery selects another image and handles a broken image without losing the selector',()=>{
  const h=runtime(),{AgreementProductGallery}=load('components/AgreementProductUI.tsx',{
-  react:h.react,'react/jsx-runtime':jsx,'react-native':{...native,Image:'Image',ScrollView:'Scroll'},'./AgreementStepModal':{AgreementStepModal:'StepModal'},'lucide-react-native':{ImageIcon:'Placeholder',X:'X'},
+  react:h.react,'react/jsx-runtime':jsx,'react-native':{...native,Image:'Image',ScrollView:'Scroll'},'react-native-svg':{default:'Svg',Path:'Path'},'./AgreementStepModal':{AgreementStepModal:'StepModal'},'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'lucide-react-native':{ImageIcon:'Placeholder',X:'X'},
   'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0,bottom:0})},'./CatalogUI':{CATALOG_COLORS:{},ui:{}},'./ResourceDetailUI':{detailUI:{}},'../utils/agreementPresentation':presentation,
  });
  const images=[{id:'one',url:'one',principal:true},{id:'two',url:'two'}],render=()=>elements(h.render(()=>AgreementProductGallery({title:'Calculadora',images})));
@@ -246,23 +383,42 @@ test('coordination modal owns pull refresh and 7s polling, pauses for location s
  nodes=q.render();nodes.find(row=>row.type==='StepModal').props.onClose();nodes=q.render();assert.ok(!nodes.some(row=>row.type==='StepModal'));assert.ok(cancelled>0);assert.equal(q.polling.at(-1)[1],false);q.h.unmount();
 });
 
-test('confirmation stays in its modal during reload and embeds the final decision without a sibling native modal',()=>{
+test('confirmation stays in its modal during reload and submits once without a second decision',()=>{
  const q=physicalDetailFixture();let nodes=q.render();nodes.find(row=>row.type==='Stepper').props.onSelect('confirm');nodes=q.render();
- let modal=nodes.find(row=>row.type==='StepModal');assert.equal(modal.props.refresh,undefined);assert.ok(elements(modal).some(row=>row.type==='People'));
- nodes.find(row=>row.type==='Footer').props.onConfirm();nodes=q.render();let decision=nodes.find(row=>row.type==='Dialog');assert.equal(decision.props.embedded,true);assert.equal(nodes.filter(row=>row.type==='Dialog').length,1);assert.deepEqual(q.calls,[]);
- nodes.find(row=>row.type==='StepModal').props.onClose();nodes=q.render();assert.equal(q.state.action,null);assert.ok(nodes.some(row=>row.type==='StepModal'));
+ let modal=nodes.find(row=>row.type==='StepModal');assert.equal(modal.props.refresh.onRefresh,q.state.refreshDetail);assert.equal(modal.props.refresh.refreshing,false);assert.ok(elements(modal).some(row=>row.type==='People'));
+ nodes.find(row=>row.type==='Footer').props.onConfirm();nodes=q.render();assert.deepEqual(q.calls,['confirm']);assert.equal(nodes.find(row=>row.type==='StepModal').props.overlay,undefined);assert.equal(nodes.find(row=>row.type==='StepModal').props.preferredHeight,680);
  const detail=q.state.detail;q.state.detail=null;q.state.loading=true;nodes=q.render();assert.ok(nodes.some(row=>row.type==='StepModal'));assert.equal(nodes.find(row=>row.type==='Footer').props.disabled,true);
  q.state.loading=false;q.state.error='No se pudo consultar';nodes=q.render();assert.equal(nodes.find(row=>row.type==='Footer').props.disabled,true);
  q.state.detail=detail;q.state.error=null;nodes=q.render();nodes.find(row=>row.type==='StepModal').props.onClose();assert.ok(!q.render().some(row=>row.type==='StepModal'));
  nodes=q.render();nodes.find(row=>row.type==='Stepper').props.onSelect('confirm');q.render();nodes=q.render({publicationId:'other',transactionId:'other-trade'});assert.ok(!nodes.some(row=>row.type==='StepModal'));assert.ok(!nodes.some(row=>row.type==='Summary'));q.h.unmount();
 });
 
+test('confirmation, rating and receipt keep one modal size and change scroll only between phases',()=>{
+ const q=physicalDetailFixture({panelsOnly:true,initialPanel:'confirm'});let nodes=q.render();const modal=()=>nodes.find(row=>row.type==='StepModal');assert.equal(modal().props.contentKey,'confirm');assert.equal(modal().props.preferredHeight,680);
+ q.state.busy=true;q.state.operation='confirm';nodes=q.render();assert.equal(modal().props.contentKey,'confirm');assert.equal(nodes.find(row=>row.type==='Footer').props.busy,true);
+ q.state.busy=false;q.state.loading=true;nodes=q.render();assert.equal(nodes.find(row=>row.type==='Footer').props.busy,true);assert.ok(!nodes.some(row=>row.type==='PanelSkeleton'));
+ q.state.loading=false;q.state.operation=null;q.state.detail=agreement({status:'COMPLETADA',role:'RECEPTOR',canConfirm:false,canCancel:false,canRate:true,rating:null});nodes=q.render();assert.equal(modal().props.title,'Valorar transacción');assert.equal(modal().props.contentKey,'rating');assert.ok(!nodes.some(row=>row.type==='People'));
+ q.state.busy=true;q.state.operation='rating';nodes=q.render();assert.equal(modal().props.contentKey,'rating');assert.equal(modal().props.preferredHeight,680);assert.ok(!nodes.some(row=>row.type==='PanelSkeleton'));
+ q.state.busy=false;q.state.operation=null;q.state.detail={...q.state.detail,canRate:false,rating:{score:5}};nodes=q.render();assert.equal(modal().props.contentKey,'saved');assert.equal(modal().props.preferredHeight,680);assert.match(JSON.stringify(nodes),/Gracias por valorar/);assert.ok(!nodes.some(row=>row.type==='People'));q.h.unmount();
+});
+
+test('confirmation places the payment notice after its action, omits resource title and owns guarded pull refresh',()=>{
+ const q=physicalDetailFixture({panelsOnly:true,initialPanel:'confirm'});let nodes=q.render(),modal=nodes.find(row=>row.type==='StepModal');
+ assert.equal(modal.props.refresh.onRefresh,q.state.refreshDetail);assert.equal(modal.props.refresh.enabled,true);assert.equal(modal.props.refresh.label,copy.confirmationsRefresh);assert.ok(!nodes.some(row=>row.type==='Text'&&row.props.children==='Calculadora'));assert.doesNotMatch(JSON.stringify(nodes),/Actualizando estado de la transacción/);
+ const people=nodes.find(row=>row.type==='People'),children=elements(people);assert.ok(children.findIndex(row=>row.type==='Notice')>children.findIndex(row=>row.type==='Footer'));
+ q.state.detailRefreshing=true;q.state.loading=true;nodes=q.render();assert.equal(nodes.find(row=>row.type==='StepModal').props.refresh.refreshing,true);assert.equal(nodes.find(row=>row.type==='StepModal').props.refresh.enabled,false);
+ q.state.loading=false;q.state.detailRefreshing=false;q.state.ratingConfirmation=true;assert.equal(q.render().find(row=>row.type==='StepModal').props.refresh.enabled,false);q.state.ratingConfirmation=false;
+ q.state.selectAction('confirm');assert.equal(q.render().find(row=>row.type==='StepModal').props.refresh.enabled,false);q.h.unmount();
+ const markup=renderCatalog('physical',{mode:'personal',inlinePanel:'confirm'}).markup;assert.ok(markup.indexOf('CampusLink registra el acuerdo')>markup.indexOf('Confirmar que se realizó'));
+ for(const entry of ['accepted','coordinate','confirm','menu'])assert.doesNotMatch(renderCatalog('physical',{mode:'personal',inlinePanel:entry,transactionState:'loading'}).markup,/Actualizando estado de la transacción/);
+});
+
 test('shared modal uses the project RefreshScrollView with safe offset and blocks closing while writing',()=>{
- const {AgreementStepModal}=load('components/AgreementStepModal.tsx',{'react/jsx-runtime':jsx,'react-native':{...native,Modal:'Modal',ScrollView:'Scroll'},'lucide-react-native':{X:'X'},'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:59,bottom:34})},'@/components/RefreshScrollView':{RefreshScrollView:'Refresh'},'./CatalogUI':{CATALOG_COLORS:{},ui:{}}});
+ const {AgreementStepModal}=load('components/AgreementStepModal.tsx',{'react/jsx-runtime':jsx,'react-native':{...native,Modal:'Modal',ScrollView:'Scroll',KeyboardAvoidingView:'Keyboard',Platform:{OS:'ios'}},'lucide-react-native':{X:'X'},'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:59,bottom:34})},'@/components/RefreshScrollView':{RefreshScrollView:'Refresh'},'./CatalogUI':{CATALOG_COLORS:{},ui:{}}});
  let closed=0;const refresh={onRefresh:noop,refreshing:true,enabled:false,label:'los mensajes'};
  let tree=AgreementStepModal({title:'Coordinar',closeLabel:'Cerrar coordinar',onClose:()=>closed++,refresh,fillHeight:true,children:'Contenido'}),nodes=elements(tree),scroll=nodes.find(row=>row.type==='Refresh');
  assert.equal(scroll.props.onRefresh,refresh.onRefresh);assert.equal(scroll.props.refreshing,true);assert.equal(scroll.props.refreshEnabled,false);assert.equal(scroll.props.refreshIndicatorOffset,8);tree.props.onRequestClose();assert.equal(closed,1);
- tree=AgreementStepModal({title:'Confirmar',closeLabel:'Cerrar confirmar',onClose:()=>closed++,closeDisabled:true,children:'Confirmaciones'});tree.props.onRequestClose();assert.equal(closed,1);assert.ok(elements(tree).some(row=>row.type==='Scroll'));assert.ok(!elements(tree).some(row=>row.type==='Refresh'));
+ tree=AgreementStepModal({title:'Confirmar',closeLabel:'Cerrar confirmar',onClose:()=>closed++,closeDisabled:true,keyboardAvoiding:true,children:'Confirmaciones'});tree.props.onRequestClose();assert.equal(closed,1);assert.ok(elements(tree).some(row=>row.type==='Scroll'));assert.ok(!elements(tree).some(row=>row.type==='Refresh'));assert.equal(elements(tree).find(row=>row.type==='Keyboard').props.enabled,true);assert.equal(elements(tree).find(row=>row.type==='Keyboard').props.behavior,'padding');
 });
 
 test('coordination header includes the resource and removes duplicated title and refresh instructions from its body',()=>{

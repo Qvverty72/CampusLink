@@ -1346,6 +1346,25 @@ test('rejected and closed requests remain visible and have private details after
   await assert.rejects(requestsService.resolvePhysicalgoodsRequest({...auth,campusId:otherCampus,profile:{...auth.profile,campus_id:otherCampus}},saved.id,a.id,{decision:'RECHAZAR'}),{status:404});
 });
 
+test('transaction tabs paginate all own states before limits and return scoped totals without changing legacy responses',async()=>{
+  const fixtures=[];for(let index=0;index<8;index++)fixtures.push(await acceptedAgreement());
+  const completed=fixtures[0]!,cancelled=fixtures[1]!;
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,completed.saved.id,completed.id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(completed.first,completed.saved.id,completed.id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,cancelled.saved.id,cancelled.id,{},'CANCELAR');
+  const first=await transactionsService.getOwnPhysicalgoodsTransactions(auth,{tab:'active',limit:'5'}),last=await transactionsService.getOwnPhysicalgoodsTransactions(auth,{tab:'active',limit:'5',page:'2'});
+  assert.equal(first.data.length,5);assert.equal(last.data.length,1);assert.equal(new Set([...first.data,...last.data].map(row=>row.id)).size,6);
+  assert.ok([...first.data,...last.data].every(row=>['RESERVADA','PENDIENTE_CONFIRMACION'].includes(row.status)));
+  assert.deepEqual(first.meta,{page:1,limit:5,hasMore:true,total:6,totalPages:2,counts:{active:6,finished:2}});
+  assert.deepEqual(last.meta,{page:2,limit:5,hasMore:false,total:6,totalPages:2,counts:{active:6,finished:2}});
+  const finished=await transactionsService.getOwnPhysicalgoodsTransactions(auth,{tab:'finished',limit:'5'});assert.deepEqual(finished.data.map(row=>row.id),[cancelled.id,completed.id]);
+  assert.deepEqual(finished.meta,{page:1,limit:5,hasMore:false,total:2,totalPages:1,counts:{active:6,finished:2}});
+  const stranger=await transactionsService.getOwnPhysicalgoodsTransactions(await otherActor('ADMINISTRADOR'),{tab:'finished',limit:'5'});assert.equal(stranger.data.length,0);assert.deepEqual(stranger.meta,{page:1,limit:5,hasMore:false,total:0,totalPages:1,counts:{active:0,finished:0}});
+  const legacy=await transactionsService.getOwnPhysicalgoodsTransactions(auth,{limit:'5'});assert.deepEqual(legacy.meta,{page:1,limit:5,hasMore:true});
+  for(const query of [{tab:'all'},{tab:['active']},{tab:'active',participantId:auth.userId},{tab:'finished',campusId:campus}])await assert.rejects(transactionsService.getOwnPhysicalgoodsTransactions(auth,query),{status:400});
+  current=auth;const response=await originalFetch(base+'/transactions?tab=active&limit=5',{headers:{Authorization:'Bearer '+token}});assert.equal(response.status,200);assert.deepEqual((await response.json()).meta,first.meta);
+});
+
 test('transaction history retains cancelled and completed agreements with original terms and excludes other participants',async()=>{
   const {saved,first,second,a,b}=await requestedPair(),cancelled=(await resolveRequest(saved.id,a.id)).transaction!.id;
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,cancelled,{},'CANCELAR');

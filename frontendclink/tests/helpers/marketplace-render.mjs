@@ -26,7 +26,7 @@ const digitalRows = ['Guía de cálculo integral', 'Resumen de bases de datos', 
 }));
 
 /** Render aislado de las pantallas reales con datos sintéticos. Nunca conecta a APIs o sesiones. */
-export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview' } = {}) {
+export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null } = {}) {
   const physical = screen === 'physical';
   const detailMode = mode === 'detail' || mode === 'request';
   const mocks = new Map();
@@ -60,7 +60,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     ['elibrary/components/DigitalTradeCenter.tsx', ['DigitalRequestAction']],
   ]) add('features/marketplace/' + file, Object.fromEntries(names.map(name => [name, nil])));
   add('features/reports/components/ContentReportForm.tsx', { ContentReportForm: nil });
-  if (mode !== 'report') add('features/marketplace/components/MarketplaceReportForm.tsx', { MarketplaceReportForm: nil });
+  if (mode !== 'report' && !(inlinePanel && variant === 'report-form')) add('features/marketplace/components/MarketplaceReportForm.tsx', { MarketplaceReportForm: nil });
   add('features/marketplace/elibrary/hooks/useDigitalLibrary.ts', { useDigitalLibrary: () => ({
     catalog, filters: { q: state === 'empty' ? 'sin coincidencias' : '', careerId: '', subjectId: '', modality: '' },
     loading: state === 'loading', error: state === 'error' ? 'El servicio no está disponible. Inténtalo nuevamente.' : null,
@@ -135,11 +135,24 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   const physicalTransactions = physicalOwn.map((row, index) => ({ id: `trade-${index}`, publication: row, campus: row.campus, role: index ? 'RECEPTOR' : 'PROPIETARIO',
     status: index === 1 ? 'COMPLETADA' : index === 2 ? 'CANCELADA' : 'PENDIENTE_CONFIRMACION', modality: row.modality, amount: row.price, currency: 'CLP', startedAt: row.publishedAt }));
   physicalTransactions.push(...['needs-confirmation','waiting'].map((kind,index)=>({...physicalTransactions[0],id:kind,status:'PENDIENTE_CONFIRMACION',publication:{...physicalOwn[0],title:index?'Libro de física':'Calculadora Casio'}})));
-  add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementPage.ts', { usePhysicalgoodsAgreementPage: rows => ({
-    details: Object.fromEntries(rows.map(row=>[row.id,{...row,owner:{id:'qa',fullName:'Camila González'},receiver:{id:'receiver',fullName:'Diego Pérez'},
+  if(transactionCounts){
+    const sample=physicalTransactions[0];physicalTransactions.splice(0);
+    for(const [tab,total]of Object.entries(transactionCounts))for(let index=0;index<total;index++)physicalTransactions.push({...sample,id:`${tab}-${index}`,publication:{...sample.publication,id:`pub-${tab}-${index}`,title:`Recurso ${index+1}`},status:tab==='active'?'RESERVADA':index%2?'CANCELADA':'COMPLETADA'});
+  }
+  add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsTransactions.ts',{TRANSACTIONS_PAGE_SIZE:5,usePhysicalgoodsTransactions:active=>{
+    const all=empty||!active?[]:physicalTransactions,terminal=row=>['COMPLETADA','CANCELADA'].includes(row.status);
+    const counts={active:all.filter(row=>!terminal(row)).length,finished:all.filter(terminal).length};
+    const selectedTab=variant==='finished'?'finished':agreementTab;
+    const rows=all.filter(row=>selectedTab==='finished'?terminal(row):!terminal(row));
+    return {tab:selectedTab,setTab:noop,number:agreementPage,page:{data:rows.slice((agreementPage-1)*5,agreementPage*5),meta:{page:agreementPage,limit:5,total:counts[selectedTab],totalPages:Math.max(1,Math.ceil(counts[selectedTab]/5)),counts,hasMore:rows.length>agreementPage*5}},loading:state==='loading',error:state==='error'?'No se pudo cargar tu actividad.':null,reload:noop,refreshCurrent:noop,setNumber:noop};
+  }});
+  if(variant==='transactions-donation')Object.assign(physicalTransactions[0],{modality:'DONACION',amount:null});
+  add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementPage.ts', { usePhysicalgoodsAgreementPage: (rows,enabled) => ({
+    scope:'qa:qa',campusId:'qa',update:noop,refresh:noop,details: Object.fromEntries(rows.filter((_,index)=>enabled&&(variant!=='transactions-partial'||index!==0)).map(row=>[row.id,{...row,owner:{id:'qa',fullName:variant==='transactions-long'?'Camila Alejandra González Sepúlveda':'Camila González'},receiver:{id:'receiver',fullName:variant==='transactions-long'?'Diego Alejandro Pérez Muñoz':'Diego Pérez'},
       completedAt:row.status==='COMPLETADA'?'2026-10-24T12:00:00Z':null,cancelledAt:row.status==='CANCELADA'?'2026-10-24T11:00:00Z':null,
+      rating:row.status==='COMPLETADA'&&variant==='rated'?{id:'rating',score:ratingScore,createdAt:'2026-10-24T12:35:00Z'}:null,
       canConfirm:!['COMPLETADA','CANCELADA'].includes(row.status)&&row.id!=='waiting',canCancel:!['COMPLETADA','CANCELADA'].includes(row.status),
-      confirmations:row.status==='COMPLETADA'?[{userId:'qa',role:'PROPIETARIO',confirmedAt:'2026-10-24T12:00:00Z'},{userId:'receiver',role:'RECEPTOR',confirmedAt:'2026-10-24T12:00:00Z'}]:row.id==='needs-confirmation'?[{userId:'receiver',role:'RECEPTOR',confirmedAt:'2026-10-24T12:00:00Z'}]:row.id==='waiting'?[{userId:'qa',role:'PROPIETARIO',confirmedAt:'2026-10-24T12:00:00Z'}]:[]}])),failed:[],loading:false,reload:noop,
+      confirmations:row.status==='COMPLETADA'?[{userId:'qa',role:'PROPIETARIO',confirmedAt:'2026-10-24T12:00:00Z'},{userId:'receiver',role:'RECEPTOR',confirmedAt:'2026-10-24T12:00:00Z'}]:row.id==='needs-confirmation'?[{userId:'receiver',role:'RECEPTOR',confirmedAt:'2026-10-24T12:00:00Z'}]:row.id==='waiting'?[{userId:'qa',role:'PROPIETARIO',confirmedAt:'2026-10-24T12:00:00Z'}]:[]}])),failed:variant==='transactions-partial'&&rows.length?[rows[0].id]:[],loading:false,reload:noop,
   }) });
   add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementRequest.ts', { usePhysicalgoodsAgreementRequest: () => ({request:null,loading:false,error:null,open:noop,close:noop}) });
   const empty = state === 'empty' || state === 'error';
@@ -160,7 +173,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     mocks.delete(path.join(sourceRoot, 'features/marketplace/elibrary/components/DigitalTradeCenter.tsx'));
     mocks.get(path.join(sourceRoot, 'features/marketplace/elibrary/hooks/useDigitalTrades.ts')).useDigitalTradeCenter = () => ({ ...requestState, page: 1, refresh: noop, poll: noop });
   }
-  if (mode === 'transaction') {
+  if (mode === 'transaction' || inlinePanel) {
     mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsTransaction.tsx'));
     mocks.delete(path.join(sourceRoot, 'features/marketplace/elibrary/components/DigitalTradeCenter.tsx'));
     const terminal = ['completed', 'cancelled'].includes(variant);
@@ -176,16 +189,24 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       ownerId: 'owner', receiverId: 'qa', role: 'RECEPTOR', owner: { id: 'owner', fullName: 'Camila González' }, receiver: { id: 'qa', fullName: 'Diego Pérez' },
       confirmations: [{ userId: 'owner', role: 'PROPIETARIO', confirmedAt: '2026-10-24T12:00:00Z' }, { userId: 'qa', role: 'RECEPTOR', confirmedAt: '2026-10-24T12:30:00Z' }],
       publication: { ...data.publication, status: physical ? 'FINALIZADO' : 'DISPONIBLE' },
-      canRate: variant !== 'rated', rating: variant === 'rated' ? { id: 'rating', score: 4, createdAt: '2026-10-24T12:35:00Z' } : null });
+      canRate: variant !== 'rated', rating: variant === 'rated' ? { id: 'rating', score: ratingScore, createdAt: '2026-10-24T12:35:00Z' } : null });
+    if (variant === 'participants-donation') Object.assign(data, { modality: 'DONACION', amount: null });
+    if (variant === 'participants-buyer') Object.assign(data, { role: 'RECEPTOR', ownerId: 'owner', receiverId: 'qa', owner: { ...data.owner, id: 'owner' }, receiver: { ...data.receiver, id: 'qa' } });
+    if (variant === 'participants-same-name') data.receiver.fullName = data.owner.fullName;
+    if (variant === 'participants-long') {
+      data.owner.fullName = 'Camila Alejandra González Sepúlveda';
+      data.receiver.fullName = 'Diego Alejandro Pérez Muñoz';
+    }
+    if(inlinePanel){data.id=physicalTransactions[0].id;data.publication={...data.publication,id:physicalTransactions[0].publication.id,title:physicalTransactions[0].publication.title};Object.assign(physicalTransactions[0],{status:data.status,role:data.role,modality:data.modality,amount:data.amount,currency:data.currency,startedAt:data.startedAt});}
     const building = { id: 'building', name: 'Edificio Central', floors: [{ id: 'floor', name: 'Piso 1' }, { id: 'ground', name: 'Planta Baja' }] };
-    const tradeState = { detail: state === 'loading' || state === 'error' ? null : data, trade: state === 'loading' || state === 'error' ? null : data,
-      tradeTarget: { publicationId: 'publication', transactionId: 'trade', title: data.title }, viewerId: !physical && variant === 'completed' ? 'receiver' : 'qa', open: true, loading: state === 'loading', busy: false, error: state === 'error' ? 'No se pudo cargar el acuerdo. Reintenta la consulta.' : null,
-      messagesRefreshing: variant === 'messages-refreshing',refreshMessages:noop,cancelMessageRefresh:noop,cancelMessagePolling:noop,pollMessages:noop,historical: variant === 'historical', messagesLoading: false, optionsLoading: false, messages: { data: [{ id: 'message', senderId: 'receiver', text: 'Estoy en Biblioteca, en Planta Baja.', createdAt: '2026-10-23T11:00:00Z' }], meta: { hasMore: false } },
+    const tradeState = { detail: transactionState === 'loading' || transactionState === 'error' ? null : data, trade: transactionState === 'loading' || transactionState === 'error' ? null : data,
+      tradeTarget: { publicationId: 'publication', transactionId: 'trade', title: data.title }, viewerId: !physical && variant === 'completed' ? 'receiver' : 'qa', open: true, loading: transactionState === 'loading' || rechecking, busy: Boolean(submitting) && !rechecking, operation: submitting, error: transactionState === 'error' ? 'No se pudo cargar el acuerdo. Reintenta la consulta.' : null,
+      detailRefreshing:false,refreshDetail:noop,messagesRefreshing: variant === 'messages-refreshing',refreshMessages:noop,cancelMessageRefresh:noop,cancelMessagePolling:noop,pollMessages:noop,historical: variant === 'historical', messagesLoading: false, optionsLoading: false, messages: { data: [{ id: 'message', senderId: 'receiver', text: 'Estoy en Biblioteca, en Planta Baja.', createdAt: '2026-10-23T11:00:00Z' }], meta: { hasMore: false } },
       options: variant === 'map-error' ? null : { buildings: [building] }, optionsError: variant === 'map-error' ? 'No se pudieron consultar las ubicaciones del campus.' : null,
       building, buildingId: 'building', floorId: 'floor', preview: variant === 'map-error' ? null : 'Estoy en Edificio Central, en Piso 1.',
       action: ['cancel-dialog', 'withdrawn-cancel'].includes(variant) ? 'cancel' : variant === 'confirm-dialog' ? 'confirm' : null, score: 4, ratingScore: 4, ratingConfirmation: variant === 'rating-confirm', page: 1,
       setScore: noop, selectRating: noop, confirmRating: noop, cancelRating: noop, rate: noop,
-      reload: noop, closeTrade: noop, toggle: noop, mode: noop, selectAction: noop, selectTransition: noop, cancelTransition: noop, transition: async () => {}, confirm: async () => {}, cancel: async () => {}, cancelAction: noop, send: async () => {},
+      reload: noop, closeTrade: noop, toggle: noop, mode: noop, selectAction: noop, selectTransition: noop, cancelTransition: noop, transition: async () => {}, confirmExchange:async()=>{},submitRating:async()=>{},confirm: async () => {}, cancel: async () => {}, cancelAction: noop, send: async () => {},
       poiKey:'',setPoi:noop,setBuilding: noop, setFloor: noop, setPage: noop, reloadOptions: noop, reloadMessages: noop,
     };
     if(variant.startsWith('coord-')){
@@ -196,8 +217,19 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       if(variant==='coord-no-poi')Object.assign(tradeState,{floorId:'ground',preview:'Estoy en Edificio Central, en Planta Baja.'});
       if(variant==='coord-long-title')data.publication.title='Guía impresa de álgebra lineal y cálculo para primer año de Ingeniería';
       if(variant==='coord-refresh')tradeState.messagesRefreshing=true;
+      if(['coord-building-menu','coord-building-selected-menu'].includes(variant)){
+        const places=['Cabaña C','Cabaña B','Cabaña A','Edificio D','Edificio E','Edificio F','Edificio G','Edificio H','CTI','Gimnasio'].map((name,index)=>({id:'place-'+index,name,floors:[{id:'floor-'+index,name:'Planta Baja',pois:[]}]}));
+        Object.assign(tradeState,{options:{buildings:places},building:variant==='coord-building-selected-menu'?places[5]:undefined,buildingId:variant==='coord-building-selected-menu'?places[5].id:'',floorId:'',preview:null});
+      }
+      if(['coord-cabin-floors','coord-cabin-floor-selected'].includes(variant)){
+        const cabin={id:'cabin03',name:'Cabaña A',floors:[{id:'cabin03_floor-3',name:'Cabaña A - Piso -3',pois:[]},{id:'cabin03_floor1',name:'Cabaña A - Piso -2',pois:[]},{id:'cabin03_floor2',name:'Cabaña A - Piso -1',pois:[]},{id:'cabin03_floor3',name:'Cabaña A - Piso 1',pois:[]}]};
+        Object.assign(tradeState,{building:cabin,options:{buildings:[cabin]},buildingId:cabin.id,floorId:variant==='coord-cabin-floor-selected'?'cabin03_floor-3':'',preview:variant==='coord-cabin-floor-selected'?'Estoy en Cabaña A, en Cabaña A - Piso -3.':null});
+      }
     }
     if(variant==='new-message')tradeState.messages.data.push({id:'message-new',senderId:'qa',text:'Estoy en Edificio Central, en Piso 1.',createdAt:'2026-10-23T11:00:07Z'});
+    if(variant==='coord-delay-map'){tradeState.options=null;tradeState.optionsLoading=true;}
+    if(variant==='coord-delay-messages'){tradeState.messages=null;tradeState.messagesLoading=true;}
+    if(variant==='coord-background-map')Object.assign(tradeState,{optionsLoading:true,poiKey:'library',preview:'Estoy en Edificio Central, en Piso 1, en Biblioteca.'});
     add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsTransaction.ts', { usePhysicalgoodsTransaction: () => tradeState });
     const photo = color => 'data:image/svg+xml;base64,' + Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#E9F0F6"/><rect x="206" y="22" width="188" height="356" rx="22" fill="${color}"/><rect x="223" y="51" width="154" height="64" rx="8" fill="#DBE7D5"/><text x="358" y="93" text-anchor="end" font-size="28" font-family="sans-serif" fill="#09243A">123.45</text>${Array.from({length:30},(_,i)=>`<rect x="${225+(i%5)*30}" y="${144+Math.floor(i/5)*35}" width="21" height="23" rx="5" fill="${i<5?'#B2C8D7':'#F4F7F9'}"/>`).join('')}</svg>`).toString('base64');
     add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementProduct.ts', { usePhysicalgoodsAgreementProduct: () => ({
@@ -207,14 +239,14 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     mocks.get(path.join(sourceRoot, 'features/marketplace/elibrary/hooks/useDigitalTrades.ts')).useDigitalTradeCenter = () => tradeState;
     add('components/RefreshScrollView.tsx', { useScrollRefresh: noop, RefreshScrollView: ({ children, contentContainerStyle, style }) => React.createElement(native.ScrollView, { contentContainerStyle, style }, children) });
   }
-  if (mode === 'report') add('features/reports/hooks/useContentReport.ts', { useContentReport: () => ({ busy: state === 'busy', error: state === 'error' ? 'No se pudo confirmar el envío. Si se guardó, reenviarla podría crear otra denuncia.' : null,
+  if (mode === 'report' || (inlinePanel && variant === 'report-form')) add('features/reports/hooks/useContentReport.ts', { useContentReport: () => ({ busy: state === 'busy', error: state === 'error' ? 'No se pudo confirmar el envío. Si se guardó, reenviarla podría crear otra denuncia.' : null,
     receipt: variant === 'receipt' ? { id: 'receipt', status: 'PENDIENTE', reportedAt: '2026-10-24T12:35:00Z' } : null, submit: noop }) });
   if (refreshing) mocks.delete(path.join(sourceRoot, 'components/RefreshScrollView.tsx'));
   const cache = new Map();
   const browserNative = { ...native, useWindowDimensions: () => ({ width, height: 844, scale: 1, fontScale: 1 }) };
   // SSR cannot create RN Modal portals. The HTML fixture moves these wrappers to body,
   // preserving stacking order and preventing nested dialogs from clipping other modals.
-  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail') browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
+  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || inlinePanel) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
   const originalLoad = Module._load;
   Module._load = function(name, parent, isMain) {
     if (name === 'react-native') return native;
@@ -235,13 +267,18 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     // All API hooks remain fixtures; no writes, sessions or browser clicks occur.
     let requestStateIndex = 0;
     vm.runInThisContext(Module.wrap(transformed), { filename })(module.exports, name => {
+      if (name === 'react' && ratingSent && /PhysicalgoodsTransaction\.tsx$/.test(filename)) return { ...React, useRef: initial => React.useRef(initial && typeof initial === 'object' && 'started' in initial ? { ...initial, started: true } : initial) };
       if (name === 'react' && mode === 'filters' && /(?:PhysicalgoodsSearchFilters|DigitalSearchForm)\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === false ? true : initial === null ? ['careerId', 'subjectId', 'categoryId', 'condition'].includes(variant) ? variant : null : initial) };
       if (name === 'react' && mode === 'filters' && /SearchableFilterSelect\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === '' ? filterQuery : initial) };
       if (name === 'react' && mode === 'publish' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? 'publish' : initial) };
-      if (name === 'react' && mode === 'personal' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? ['transactions', 'sent', 'received'].includes(variant) ? variant : 'mine' : initial) };
+      if (name === 'react' && mode === 'personal' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? inlinePanel || variant === 'rated' ? 'transactions' : ['transactions', 'sent', 'received'].includes(variant) ? variant : variant.startsWith('transactions-') ? 'transactions' : 'mine' : initial) };
+      if (name === 'react' && inlinePanel && /PhysicalgoodsAgreements\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(initial===null?{publicationId:physicalTransactions[0].publication.id,transactionId:physicalTransactions[0].id,entry:inlinePanel}:initial==='active'&&agreementTab==='finished'?'finished':initial)};
       if (name === 'react' && /PhysicalgoodsAgreements\.tsx$/.test(filename) && (variant === 'finished' || agreementTab === 'finished')) return { ...React, useState: initial => React.useState(initial === 'active' ? 'finished' : initial) };
       if (name === 'react' && mode === 'transaction' && /PhysicalgoodsTransaction\.tsx$/.test(filename)) return { ...React, useState: initial => { const index=requestStateIndex++; return React.useState(initial==='overview' ? agreementPanel : index===2 && variant==='menu' ? true : initial); } };
+      if (name === 'react' && inlinePanel && variant === 'report-form' && /PhysicalgoodsTransaction\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(requestStateIndex++===0?true:initial)};
       if (name === 'react' && mode === 'transaction' && /PhysicalgoodsCoordination\.tsx$/.test(filename) && variant==='coord-poi-menu') return {...React,useState:initial=>React.useState(initial===null?'poi':initial)};
+      if (name === 'react' && mode === 'transaction' && /PhysicalgoodsCoordination\.tsx$/.test(filename) && ['coord-building-menu','coord-building-selected-menu'].includes(variant)) return {...React,useState:initial=>React.useState(initial===null?'building':initial)};
+      if (name === 'react' && mode === 'transaction' && /PhysicalgoodsCoordination\.tsx$/.test(filename) && ['coord-cabin-floors','coord-cabin-floor-selected'].includes(variant)) return {...React,useState:initial=>React.useState(initial===null?'floor':initial)};
       if (name === 'react' && mode === 'request' && /(?:PhysicalgoodsDetail|DigitalResourceDetail)\.tsx$/.test(filename)) return { ...React, useState: initial => [requestStateIndex++ === 2 ? true : initial, noop] };
       if (name === 'react' && mode === 'report' && /MarketplaceReportForm\.tsx$/.test(filename)) return { ...React, useState: initial => [requestStateIndex++ === 0 && variant !== 'empty' ? 'misleading' : initial, noop] };
       if (name === 'react' && mode === 'transaction' && variant === 'rating-confirm' && /DigitalTransactionDetail\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === false ? true : initial) };

@@ -34,10 +34,15 @@ test('valoración: selector entero1..5, envío deshabilitado sin puntuación y r
  const props={canRate:true,score:null,confirming:false,disabled:false,onSelect:value=>selected.push(value),onPrepare:noop,onSend:noop,onCancel:noop};
  let nodes=elements(OwnerRating(props));assert.equal(nodes.find(node=>node.type==='Submit').props.disabled,true);const radios=nodes.filter(node=>node.props?.accessibilityRole==='radio');assert.equal(radios.length,5);radios.forEach(node=>node.props.onPress());assert.deepEqual(selected,[1,2,3,4,5]);
  nodes=elements(OwnerRating({...props,score:4,confirming:true}));assert.equal(nodes.filter(node=>node.props?.accessibilityRole==='radio').length,0);assert.equal(nodes.find(node=>node.type==='Submit').props.label,'Confirmar valoración');
+ let sent=0,prepared=0;nodes=elements(OwnerRating({...props,singleStep:true,score:5,confirming:true,onSend:()=>sent++,onPrepare:()=>prepared++}));assert.equal(nodes.filter(node=>node.props?.accessibilityRole==='radio').length,5);nodes.find(node=>node.type==='Submit').props.onPress();assert.equal(sent,1);assert.equal(prepared,0);assert.doesNotMatch(JSON.stringify(nodes),/5 de 5 seleccionados|Enviar una valoración de/);
  nodes=elements(OwnerRating({...props,rating:{score:4,createdAt:'2026-10-24T12:00:00Z'}}));assert.equal(nodes.filter(node=>node.type==='Submit'||node.props?.accessibilityRole==='radio').length,0);
+ const {TransactionRating}=load('components/TransactionRating.tsx',shared);
+ for(const score of [1,3,5]){const receipt=elements(TransactionRating({score})),stars=receipt.filter(node=>node.type==='Star');assert.equal(stars.length,5);assert.equal(stars.filter(node=>node.props.fill==='#FDBB30').length,score);assert.equal(receipt.filter(node=>node.type==='Button').length,0);assert.equal(receipt[0].props.accessibilityLabel,`Valoración de la transacción: ${score} de 5 estrellas`);}
 });
 for(const screen of ['physical','digital'])test(`${screen}: completado muestra valoración; recibo sustituye selector; denuncia accesible`,()=>{
  assert.match(renderCatalog(screen,{mode:'transaction',variant:'rating',agreementPanel:'confirm'}).markup,/Enviar valoración/);
- const rated=renderCatalog(screen,{mode:'transaction',variant:'rated',agreementPanel:'confirm'}).markup;assert.match(rated,/Valoración registrada: 4 de 5/);assert.doesNotMatch(rated,/Enviar valoración/);
+ const rated=renderCatalog(screen,{mode:'transaction',variant:'rated',agreementPanel:'confirm'}).markup;
+ if(screen==='physical'){assert.doesNotMatch(rated,/Valoración registrada|Valoración del propietario/);assert.match(rated,/Valoración de la transacción: 4 de 5 estrellas/);}else assert.match(rated,/Valoración registrada: 4 de 5/);
+ assert.doesNotMatch(rated,/Enviar valoración/);
  const html=renderCatalog(screen,{mode:'report'}).markup;assert.match(html,/radiogroup/);assert.match(html,/Enviar denuncia/);assert.match(html,/no elimina el contenido/);
 });

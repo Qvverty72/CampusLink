@@ -11,7 +11,7 @@ import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.histo
 import { closePendingPhysicalgoodsRequests, updatePhysicalgoodsRequestStatus } from './physicalgoods.requests.repository.js';
 import { findPhysicalgoodsTransaction, insertPhysicalgoodsConfirmation, lockPhysicalgoodsTransactionResource,
   physicalgoodsConfirmations,setPhysicalgoodsPublicationStatus,updatePhysicalgoodsTransactionStatus,
-  findPhysicalgoodsRating,insertPhysicalgoodsRating,listOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from './physicalgoods.transactions.repository.js';
+  findPhysicalgoodsRating,insertPhysicalgoodsRating,listOwnPhysicalgoodsTransactions,countOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from './physicalgoods.transactions.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
 import type { PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
 import { findActiveMapByCampusId } from '../../maps/map.repository.js';
@@ -99,10 +99,15 @@ export async function getPhysicalgoodsTransaction(auth:VerifiedAuthConnection,pu
   },true);
 }
 export async function getOwnPhysicalgoodsTransactions(auth:VerifiedAuthConnection,query:unknown) {
-  const pagination=physicalgoodsHistoryPagination(query);
+  if(!query||typeof query!=='object'||Array.isArray(query))throw new ApiError(400,'VALIDATION_ERROR','Revisa la paginación del historial.');
+  const {tab,...paging}=query as Record<string,unknown>;
+  if(tab!==undefined&&tab!=='active'&&tab!=='finished')throw new ApiError(400,'VALIDATION_ERROR','Selecciona una pestaña de transacciones válida.');
+  const pagination=physicalgoodsHistoryPagination(paging);
   return withPhysicalgoodsHistory(auth,async(client,current)=>{
-    const result=createPaginatedResult(await listOwnPhysicalgoodsTransactions(client,current.userId,pagination),pagination);
-    return {...result,data:result.data.map(row=>({id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at},
+    const result=createPaginatedResult(await listOwnPhysicalgoodsTransactions(client,current.userId,pagination,tab),pagination);
+    const counts=tab?await countOwnPhysicalgoodsTransactions(client,current.userId):undefined;
+    const meta=counts&&tab?{...result.meta,total:counts[tab],totalPages:Math.max(1,Math.ceil(counts[tab]/pagination.limit)),counts}:result.meta;
+    return {...result,meta,data:result.data.map(row=>({id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at},
       campus:{id:row.campus_id,name:row.campus_nombre},role:row.propietario_id===current.userId?'PROPIETARIO' as const:'RECEPTOR' as const,
       status:row.estado_transaccion,modality:row.modalidad_acordada,amount:row.monto_acordado===null?null:Number(row.monto_acordado),currency:row.moneda,startedAt:row.iniciada_en}))};
   });
