@@ -19,6 +19,7 @@ import { agreementCopy } from '../../utils/agreementPresentation';
 import { CatalogTabs, PublishFAB, ScreenHeader } from '../../components/CatalogUI';
 import { PublicationSection, PublicationModality, PublicationUpload, PublicationFeedback, PublicationSubmit, publicationUI as f } from '../../components/PublicationFormUI';
 import { SearchableFilterSelect } from '../../components/SearchableFilterSelect';
+import { orderPhysicalgoodsCategories } from '../utils/orderPhysicalgoodsCategories';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Composición de búsqueda y publicación del módulo de bienes físicos. */
@@ -104,10 +105,10 @@ function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; 
         <TextInput accessibilityLabel="Nombre del recurso" placeholder="Ej. Calculadora científica" value={form.title} onChangeText={form.setTitle} maxLength={200} editable={!disabled} style={f.input} /></View>
       <View style={f.field}><Text style={f.label}>Descripción *</Text>
         <TextInput accessibilityLabel="Descripción del recurso" placeholder="Describe el estado, lo que incluye y sus detalles" value={form.description} onChangeText={form.setDescription} maxLength={4000} multiline editable={!disabled} style={[f.input, f.textarea]} /></View>
-      <SearchableFilterSelect label="Condición *" options={resourceConditions.map(row => ({ id: row.value, name: row.label }))} value={form.condition}
+      <SearchableFilterSelect searchable={false} label="Condición *" options={resourceConditions.map(row => ({ id: row.value, name: row.label }))} value={form.condition}
         onChange={value => form.setCondition(value as typeof form.condition)} disabled={disabled} allowEmpty={false} placeholder="Selecciona una condición"
         expanded={openField === 'condition'} onExpandedChange={open => setOpenField(open ? 'condition' : null)} />
-      <SearchableFilterSelect label="Categoría *" options={options.categories} value={form.categoryId} onChange={form.setCategoryId}
+      <SearchableFilterSelect searchable={false} label="Categoría *" options={orderPhysicalgoodsCategories(options.categories)} value={form.categoryId} onChange={form.setCategoryId}
         disabled={disabled} allowEmpty={false} placeholder="Selecciona una categoría"
         expanded={openField === 'categoryId'} onExpandedChange={open => setOpenField(open ? 'categoryId' : null)} />
       {!options.categories.length && <PublicationFeedback error="No hay categorías disponibles para publicar." />}
@@ -128,7 +129,6 @@ function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; 
       <SearchableFilterSelect searchRequired label="Asignatura (opcional)" options={options.subjects} value={form.subjectId} onChange={form.setSubjectId}
         disabled={disabled} placeholder="Sin asignatura" emptyLabel="Sin asignatura" clearLabel="Quitar selección"
         expanded={openField === 'subjectId'} onExpandedChange={open => setOpenField(open ? 'subjectId' : null)} />
-      <Pressable accessibilityRole="button" disabled={disabled} style={f.secondary} onPress={() => { setOpenField(null); form.reload(); }}><Text style={f.actionText}>Actualizar opciones</Text></Pressable>
     </PublicationSection>
     <PublicationFeedback error={form.error} />
     <PublicationSubmit label={busy ? 'Publicando…' : 'Publicar recurso'} disabled={disabled || !options.categories.length || !form.photos.length} busy={busy} onPress={() => { setOpenField(null); void form.publish(); }} />

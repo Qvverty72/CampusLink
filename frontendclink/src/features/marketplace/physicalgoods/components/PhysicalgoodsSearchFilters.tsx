@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AcademicFilterFields } from '../../components/AcademicFilterFields';
 import type { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
 import { resourceConditions } from '../types/publication';
 import { FilterChips, FilterSheet, SearchInput, CATALOG_COLORS as colors, ui } from '../../components/CatalogUI';
+import { orderPhysicalgoodsCategories } from '../utils/orderPhysicalgoodsCategories';
 
 export function PhysicalgoodsSearchFilters({ resources: r }: { resources: ReturnType<typeof usePhysicalgoodsResources> }) {
   const [expanded, setExpanded] = useState(false);
   const [openFilter, setOpenFilter] = useState<'careerId' | 'subjectId' | null>(null);
   const closeFilters = () => { setExpanded(false); setOpenFilter(null); };
+  const categories = orderPhysicalgoodsCategories(r.options?.categories ?? []);
   const groups = [
-    { key: 'categoryId', label: 'Categoría', options: r.options?.categories ?? [] },
+    { key: 'categoryId', label: 'Categoría', options: categories },
     { key: 'condition', label: 'Condición', options: resourceConditions.map(row => ({ id: row.value, name: row.label })) },
     { key: 'careerId', label: 'Carrera', options: r.options?.careers ?? [] },
     { key: 'subjectId', label: 'Asignatura', options: r.options?.subjects ?? [] },
@@ -28,7 +30,7 @@ export function PhysicalgoodsSearchFilters({ resources: r }: { resources: Return
         <Text style={ui.filterLabel}>Categoría</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categories}>
           <View accessibilityRole="radiogroup" accessibilityLabel="Categoría" style={styles.categories}>
-            {[{ id: '', name: 'Todas' }, ...(r.options?.categories ?? [])].map(option => <Pressable key={option.id}
+            {[{ id: '', name: 'Todas' }, ...categories].map(option => <Pressable key={option.id}
               accessibilityRole="radio" accessibilityLabel={`Categoría: ${option.name}`} accessibilityState={{ checked: r.filters.categoryId === option.id, disabled: !r.options }}
               disabled={!r.options} onPress={() => { if (r.filters.categoryId !== option.id) r.setFilter('categoryId', option.id); }}
               style={[styles.category, r.filters.categoryId === option.id && styles.activeCategory, !r.options && ui.disabled]}>
@@ -62,11 +64,6 @@ export function PhysicalgoodsSearchFilters({ resources: r }: { resources: Return
         </View>
         <Text style={styles.hint}>Un rango de precio muestra solo ventas.</Text>
       </View>}
-      <View style={styles.mine}>
-        <Text style={styles.mineText}>Solo mis publicaciones disponibles</Text>
-        <Switch accessibilityLabel="Solo mis publicaciones disponibles" value={r.filters.mine} onValueChange={value => r.setFilter('mine', value)}
-          trackColor={{ false: colors.inputBorder, true: colors.primary }} />
-      </View>
       {r.error && <Text accessibilityRole="alert" style={{ color: '#AD3029' }}>{r.error}</Text>}
       {!r.options && <Pressable accessibilityRole="button" onPress={r.reload} style={ui.outlined}><Text style={ui.link}>Reintentar carga de filtros</Text></Pressable>}
     </FilterSheet>
@@ -84,5 +81,4 @@ const styles = StyleSheet.create({
   activeSegment: { backgroundColor: colors.surface, borderColor: colors.border },
   prices: { flexDirection: 'row', gap: 8 }, priceInput: { flex: 1, minWidth: 0, minHeight: 44, borderRadius: 10 },
   hint: { color: colors.muted, fontSize: 12, lineHeight: 18 },
-  mine: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 }, mineText: { color: colors.ink, fontSize: 13, flex: 1 },
 });

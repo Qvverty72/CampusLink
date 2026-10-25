@@ -52,7 +52,7 @@ export function PhysicalgoodsDetail({ resources: r, onClose, onBusyChange, onReq
               disabled={busy} loading={request.loading || r.galleryLoading} error={request.error} onRetry={request.reload} />}
           <AgreementNotice />
         </> : managing ? <PhysicalgoodsManagement resources={r} /> : <>
-          {r.galleryLoading && <ResourceDetailSkeleton />}
+          {r.galleryLoading && <ResourceDetailSkeleton physical />}
           {r.galleryError && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{r.galleryError}</Text><Pressable accessibilityRole="button" onPress={r.reloadGallery} style={ui.outlined}><Text style={ui.link}>Reintentar detalle</Text></Pressable></View>}
           {gallery && <>
             <View style={styles.hero}>{photo ? <Image key={photo.url} source={{ uri: photo.url }} accessibilityLabel={`Fotografía de ${gallery.title}`} style={styles.image} />
@@ -76,7 +76,7 @@ export function PhysicalgoodsDetail({ resources: r, onClose, onBusyChange, onReq
 function PhysicalgoodsManagement({ resources: r }: { resources: Resources }) {
   const button = (label: string, onPress: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={r.busy || disabled} onPress={onPress} style={ui.outlined}><Text style={ui.link}>{label}</Text></Pressable>;
   return <View style={{ gap: 20 }}>
-    {r.galleryLoading && <ResourceDetailSkeleton />}
+    {r.galleryLoading && <ResourceDetailSkeleton physical />}
     {r.galleryError && <Text accessibilityRole="alert" style={detailUI.error}>{r.galleryError}</Text>}
     {r.gallery?.canEdit && <>
       <DetailSection title="Fotografías">{r.gallery.images.map((image, index) => <View key={image.id} style={detailUI.card}>

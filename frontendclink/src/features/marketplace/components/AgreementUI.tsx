@@ -7,6 +7,7 @@ import { AgreementParticipants } from './AgreementProductUI';
 import type { TransactionParticipant } from '../types/transaction';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import { TransactionRating } from './TransactionRating';
+import type { ReactNode } from 'react';
 
 const agreedPrice = (modality: string, amount: number | null, currency: string) => modality === 'DONACION' ? copy.donation : amount === null ? 'Precio no disponible' : `$${amount.toLocaleString('es-CL')} ${currency}`;
 
@@ -50,6 +51,22 @@ export function AgreementSummary({ participants, modality, amount, currency, cur
 
 export type AgreementStep = 'accepted' | 'coordinate' | 'confirm';
 
+export function AgreementTabs({ selected, onSelect, counts, showCounts = true, disabled = false }: {
+  selected: 'active' | 'finished'; onSelect: (tab: 'active' | 'finished') => void;
+  counts?: { active: number; finished: number }; showCounts?: boolean; disabled?: boolean;
+}) {
+  return <View accessibilityRole="tablist" accessibilityLabel="Estado de las transacciones" style={styles.listTabs}>{([{ id: 'active', label: copy.active }, { id: 'finished', label: copy.finished }] as const).map(tab =>
+    <Pressable key={tab.id} accessibilityRole="tab" aria-selected={selected === tab.id} accessibilityState={{ selected: selected === tab.id, disabled }}
+      disabled={disabled} onPress={() => onSelect(tab.id)} style={[styles.listTab, selected === tab.id && styles.listTabSelected]}>
+      <Text style={[detailUI.body, selected === tab.id && { fontWeight: '700' }]}>{tab.label}{showCounts && counts ? ` · ${Math.max(0, counts[tab.id])}` : ''}</Text>
+    </Pressable>)}
+  </View>;
+}
+
+export function AgreementListSection({ label, children }: { label?: string; children: ReactNode }) {
+  return <View style={styles.listSection}>{Boolean(label) && <Text accessibilityRole="header" style={styles.listGroupTitle}>{label?.toLocaleUpperCase('es-CL')}</Text>}{children}</View>;
+}
+
 export function AgreementStepper({ state, digital = false, selected, onSelect, disabled = false, showCancelled = false }: {
   state: AgreementUIState; digital?: boolean; selected?: AgreementStep; onSelect?: (step: AgreementStep) => void; disabled?: boolean; showCancelled?: boolean;
 }) {
@@ -80,9 +97,9 @@ export function AgreementStepper({ state, digital = false, selected, onSelect, d
 }
 
 /** Pasos y menú son destinos hermanos; el contenedor no intercepta sus toques. */
-export function AgreementCard({ title, roleLabel, participants, currentUserId, modality, amount, currency, state, label, dateLabel, ratingScore, onSelect, onMenu, disabled = false }: {
+export function AgreementCard({ title, roleLabel, participants, currentUserId, modality, amount, currency, state, label, dateLabel, ratingScore, onSelect, onMenu, disabled = false, digital = false }: {
   title: string; roleLabel: string; participants?: TransactionParticipant[]; currentUserId?: string; modality: string; amount: number | null; currency: string;
-  state?: AgreementUIState; label: string; dateLabel: string; ratingScore?: number | null; onSelect: (step: AgreementStep) => void; onMenu: () => void; disabled?: boolean;
+  state?: AgreementUIState; label: string; dateLabel: string; ratingScore?: number | null; onSelect: (step: AgreementStep) => void; onMenu: () => void; disabled?: boolean; digital?:boolean;
 }) {
   return <View style={styles.card}>
     <View style={styles.cardHeading}><Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
@@ -91,26 +108,26 @@ export function AgreementCard({ title, roleLabel, participants, currentUserId, m
     {participants ? <AgreementSummary embedded participants={participants} currentUserId={currentUserId} modality={modality} amount={amount} currency={currency} />
       : <><Text style={styles.cardHelper}>{roleLabel}</Text><Text style={detailUI.helper}>{copy.participantsUnavailable}</Text><AgreementAmount modality={modality} amount={amount} currency={currency} />
         <Pressable accessibilityRole="button" disabled={disabled} onPress={() => onSelect('accepted')} style={ui.outlined}><Text style={ui.link}>{copy.retryTransaction}</Text></Pressable></>}
-    {state && <AgreementStepper state={state} showCancelled disabled={disabled} onSelect={onSelect} />}
+    {state && <AgreementStepper state={state} digital={digital} showCancelled disabled={disabled} onSelect={onSelect} />}
     {state === 'FINALIZADO' && <TransactionRating score={ratingScore} />}
     <View style={styles.cardFooter}><Text style={styles.cardHelper}>{label}</Text><Text style={detailUI.helper}>{dateLabel}</Text></View>
   </View>;
 }
 
-export function AgreementCardsSkeleton() {
+export function AgreementCardsSkeleton({digital=false}:{digital?:boolean}={}) {
   return <Skeleton label={copy.loading} contentStyle={{ gap: 14 }}>{[0, 1].map(index => <View key={index} style={styles.card}>
     <SkeletonBlock width="70%" height={24} /><SkeletonBlock width={96} height={16} />
     <View style={styles.skeletonPeople}>{[0, 1].map(person => <View key={person} style={styles.skeletonPerson}><SkeletonBlock width={36} height={36} borderRadius={18} /><View style={{ flex: 1, gap: 6 }}><SkeletonBlock height={16} /><SkeletonBlock width="70%" height={12} /></View></View>)}</View>
     <View style={styles.amountRow}><SkeletonBlock width="75%" height={20} /></View>
-    <View style={styles.skeletonPeople}>{[0, 1, 2].map(step => <View key={step} style={styles.skeletonStep}><SkeletonBlock width={38} height={38} borderRadius={19} /><SkeletonBlock width="70%" height={14} /><SkeletonBlock width="55%" height={12} /></View>)}</View>
+    <View style={styles.skeletonPeople}>{(digital?[0,1]:[0,1,2]).map(step => <View key={step} style={styles.skeletonStep}><SkeletonBlock width={38} height={38} borderRadius={19} /><SkeletonBlock width="70%" height={14} /><SkeletonBlock width="55%" height={12} /></View>)}</View>
     <SkeletonBlock width="55%" height={14} />
   </View>)}</Skeleton>;
 }
 
 /** Mantiene la anatomía de cada panel mientras se resuelven sus primeras consultas. */
-export function AgreementPanelSkeleton({ panel }: { panel: AgreementStep | 'menu' }) {
+export function AgreementPanelSkeleton({ panel, digital=false }: { panel: AgreementStep | 'menu'; digital?:boolean }) {
   return <Skeleton label={copy.loadingTransaction} contentStyle={{ gap: panel === 'menu' ? 10 : 18 }}>
-    {panel === 'accepted' ? <><SkeletonBlock height="auto" style={{ aspectRatio: 4 / 3 }} borderRadius={14} /><SkeletonBlock width="70%" height={22} /><SkeletonBlock height={28} /><SkeletonBlock width="80%" height={18} /><SkeletonBlock height={80} /></>
+    {panel === 'accepted' ? digital?<><SkeletonBlock height={80}/><SkeletonBlock width="80%" height={24}/><SkeletonBlock height={100}/><SkeletonBlock height={76}/></>:<><SkeletonBlock height="auto" style={{ aspectRatio: 4 / 3 }} borderRadius={14} /><SkeletonBlock width="70%" height={22} /><SkeletonBlock height={28} /><SkeletonBlock width="80%" height={18} /><SkeletonBlock height={80} /></>
       : panel === 'menu' ? <>{[0, 1].map(index => <View key={index} style={styles.menuAction}><SkeletonBlock width={40} height={40} borderRadius={12} /><View style={{ flex: 1 }}><SkeletonBlock width={index === 0 ? '82%' : '76%'} height={18} /></View></View>)}</>
         : <><SkeletonBlock width="70%" height={24} /><SkeletonBlock height={panel === 'coordinate' ? 48 : 70} /><SkeletonBlock height={panel === 'coordinate' ? 48 : 70} /><SkeletonBlock height={52} borderRadius={16} />{panel === 'coordinate' && <><SkeletonBlock width="80%" height={24} /><SkeletonBlock height={88} borderRadius={16} /></>}</>}
   </Skeleton>;
@@ -135,6 +152,10 @@ export function AgreementActionBar({ view, canConfirm, readOnly, busy, disabled,
 }
 
 const styles = StyleSheet.create({
+  listSection: { gap: 14 }, listGroupTitle: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+  listTabs: { flexDirection: 'row', backgroundColor: colors.tint, borderRadius: 16, padding: 4 },
+  listTab: { minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', padding: 8, borderRadius: 12 },
+  listTabSelected: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 }, headerTitle: { flex: 1, minWidth: 0, fontSize: 20, lineHeight: 27, fontWeight: '800', color: colors.ink },
   menuButton: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   chip: { alignSelf: 'flex-start', maxWidth: '100%', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 }, chipText: { fontSize: 13, lineHeight: 19, fontWeight: '700' },

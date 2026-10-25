@@ -611,7 +611,7 @@ test('physical detail exposes current description, condition, sale price, campus
   assert.equal(detail.title, 'Calculadora'); assert.equal(detail.description, 'Actual description from database');
   assert.equal(detail.condition, 'NUEVO'); assert.equal(detail.modality, 'VENTA'); assert.equal(detail.price, 15000);
   assert.deepEqual(detail.category, { id: category, name: 'Material académico' });
-  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Current public name' });
+  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Current public name', averageRating: null, ratingCount: 0, completedAgreements: 0, completedSales: 0, careers: [] });
   assert.deepEqual(detail.campus, { id: campus, name: 'Home' });
   assert.equal(detail.status, 'DISPONIBLE'); assert.equal(detail.acceptsRequests, true); assert.equal(detail.canEdit, false);
   assert.equal(detail.images.length, 2); assert.equal(detail.images[0].principal, true); assert.equal(detail.expiresIn, 60);
@@ -1768,6 +1768,81 @@ async function completedAgreement() {
   return pair;
 }
 const ratings=(id:string)=>db.query('SELECT * FROM public.valoracion WHERE transaccion_id=$1',[id]);
+
+test('received requesters expose their own received ratings in the current physical campus, including donations, without cross-domain or historical-campus leaks',async()=>{
+  const a=await completedAgreement(),b=await completedAgreement();
+  await transactionsService.ratePhysicalgoodsOwner(a.first,a.saved.id,a.id,{score:5});
+  await transactionsService.ratePhysicalgoodsOwner(b.first,b.saved.id,b.id,{score:3});
+  await db.query("UPDATE transaccion_recurso SET modalidad_acordada='DONACION',monto_acordado=NULL WHERE id=$1",[b.id]);
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[b.saved.id]);
+  const owner=await otherActor(),resource=await create(owner,input());
+  await requestsService.createPhysicalgoodsRequest(auth,resource.id,{messageCode:'ME_INTERESA'});
+  await requestsService.createPhysicalgoodsRequest(a.first,resource.id,{messageCode:'ME_INTERESA'});
+  const read=()=>requestsService.getReceivedPhysicalgoodsRequests(owner,{groupBy:'publication',publicationId:resource.id});
+  const result=await read();assert.equal(result.data.length,2);
+  assert.equal(result.data.find(row=>row.requester.id===auth.userId)!.requester.averageRating,4);
+  assert.equal(result.data.find(row=>row.requester.id===auth.userId)!.requester.ratingCount,2);
+  const noRatings=result.data.find(row=>row.requester.id===a.first.userId)!.requester;
+  assert.equal(noRatings.averageRating,null);assert.equal(noRatings.ratingCount,0); // Giving a rating does not rate the buyer.
+  const sent=await requestsService.getSentPhysicalgoodsRequests(auth,{});
+  assert.equal(sent.data[0].requester.ratingCount,undefined);
+  await db.query("DELETE FROM confirmacion_transaccion WHERE transaccion_id=$1 AND rol_confirmante='RECEPTOR'",[b.id]);
+  assert.equal((await read()).data.find(row=>row.requester.id===auth.userId)!.requester.averageRating,5);
+  await db.query('UPDATE publicacion_recurso SET campus_id=$2 WHERE id=$1',[a.saved.id,otherCampus]);
+  assert.equal((await read()).data.find(row=>row.requester.id===auth.userId)!.requester.ratingCount,0);
+  await db.query("UPDATE publicacion_recurso SET campus_id=$2,tipo_recurso='DIGITAL' WHERE id=$1",[a.saved.id,campus]);
+  assert.equal((await read()).data.find(row=>row.requester.id===auth.userId)!.requester.ratingCount,0);
+  await db.query('UPDATE publicacion_recurso SET campus_id=$2 WHERE id=$1',[resource.id,otherCampus]);
+  assert.ok((await read()).data.every(row=>row.requester.ratingCount===undefined));
+});
+
+test('physical gallery exposes real owner aggregates including unrated completions and preserves historical ratings',async()=>{
+  const publication=await create(auth,input());
+  const empty=(await imagesService.getPhysicalgoodsGallery(auth,publication.id)).owner;
+  assert.deepEqual(empty,{id:auth.userId,fullName:'User',averageRating:null,ratingCount:0,completedAgreements:0,completedSales:0,careers:[]});
+  const first=await completedAgreement(),second=await completedAgreement(),unrated=await completedAgreement();
+  await transactionsService.ratePhysicalgoodsOwner(first.first,first.saved.id,first.id,{score:5});
+  await transactionsService.ratePhysicalgoodsOwner(second.first,second.saved.id,second.id,{score:3});
+  await acceptedAgreement(); // an active exchange must not count
+  await db.query("UPDATE publicacion_recurso SET deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1",[first.saved.id]);
+  const owner=(await imagesService.getPhysicalgoodsGallery(first.first,publication.id)).owner;
+  assert.equal(owner.averageRating,4);assert.equal(owner.ratingCount,2);assert.equal(owner.completedAgreements,3);
+  assert.equal(owner.completedSales,3);assert.deepEqual(owner.careers,[]);
+  assert.deepEqual(Object.keys(owner).sort(),['averageRating','careers','completedAgreements','completedSales','fullName','id','ratingCount']);
+  await db.query("DELETE FROM confirmacion_transaccion WHERE transaccion_id=$1 AND rol_confirmante='RECEPTOR'",[unrated.id]);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,publication.id)).owner.completedAgreements,2);
+});
+
+test('physical owner reputation excludes other campuses, digital exchanges and other owners',async()=>{
+  const publication=await create(auth,input()),first=await completedAgreement(),second=await completedAgreement();
+  await transactionsService.ratePhysicalgoodsOwner(first.first,first.saved.id,first.id,{score:5});
+  await transactionsService.ratePhysicalgoodsOwner(second.first,second.saved.id,second.id,{score:3});
+  await db.query('UPDATE publicacion_recurso SET campus_id=$2 WHERE id=$1',[first.saved.id,otherCampus]);
+  let owner=(await imagesService.getPhysicalgoodsGallery(auth,publication.id)).owner;
+  assert.equal(owner.averageRating,3);assert.equal(owner.ratingCount,1);assert.equal(owner.completedAgreements,1);
+  await db.query("UPDATE publicacion_recurso SET tipo_recurso='DIGITAL' WHERE id=$1",[second.saved.id]);
+  owner=(await imagesService.getPhysicalgoodsGallery(auth,publication.id)).owner;
+  assert.equal(owner.averageRating,null);assert.equal(owner.ratingCount,0);assert.equal(owner.completedAgreements,0);
+  const other=await otherActor(),otherPublication=await create(other,input());
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,otherPublication.id)).owner.ratingCount,0);
+  await assert.rejects(imagesService.getPhysicalgoodsGallery(auth,first.saved.id),{status:404});
+});
+
+test('physical owner card metadata uses registered careers and separates donated exchanges from sales',async()=>{
+  const outsideInstitution=randomUUID(),outsideCareer=randomUUID();
+  await db.query('INSERT INTO institucion(id,nombre) VALUES($1,$2)',[outsideInstitution,'Institución externa']);
+  await db.query('INSERT INTO carrera(id,institucion_id,nombre) VALUES($1,$2,$3)',[outsideCareer,outsideInstitution,'Carrera externa']);
+  await db.query('INSERT INTO usuario_carrera(perfil_usuario_id,carrera_id) VALUES($1,$2),($1,$3),($1,$4)',[auth.userId,career,foreignCareer,outsideCareer]);
+  const sale=await completedAgreement();
+  const saved=await create(auth,input({modality:'DONACION',price:null})),receiver=await otherActor();
+  const request=await requestsService.createPhysicalgoodsRequest(receiver,saved.id,{messageCode:'ME_INTERESA'});
+  const accepted=await resolveRequest(saved.id,request.id);
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,accepted.transaction!.id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(receiver,saved.id,accepted.transaction!.id,{},'CONFIRMAR');
+  const owner=(await imagesService.getPhysicalgoodsGallery(receiver,sale.saved.id)).owner;
+  const expected=(await db.query<{nombre:string}>('SELECT nombre FROM carrera WHERE id=ANY($1::uuid[]) ORDER BY nombre,id',[[career,foreignCareer]])).rows.map(row=>row.nombre);
+  assert.deepEqual(owner.careers,expected);assert.equal(owner.completedAgreements,2);assert.equal(owner.completedSales,1);
+});
 
 test('completed physical receiver rates the persisted owner once and the agreement exposes the immutable receipt to its participants',async()=>{
   const {saved,first,id}=await completedAgreement(),before=await transactionRows(saved.id),publication=await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id]),history=await audits(saved.id);

@@ -14,7 +14,7 @@ export function useDigitalLibrary() {
   const [selectedId, setSelectedId] = useState<string | null>(null), [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [formOpen, setFormOpen] = useState(false);
   const [title, setTitle] = useState(''), [description, setDescription] = useState(''), [price, setPrice] = useState('');
-  const [modality, setModality] = useState<DigitalInput['modality']>('DONACION');
+  const [modality, setModality] = useState<DigitalInput['modality']>('VENTA');
   const [files, setFiles] = useState<DigitalFile[]>([]), [pickingFile, setPickingFile] = useState(false);
   const [attachMode, setAttachMode] = useState(false), [target, setTarget] = useState<DigitalPublication | null>(null);
   const [progress, setProgress] = useState(''), [downloading, setDownloading] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export function useDigitalLibrary() {
       currentTarget.current = publication; setTarget(publication);
       setItems(previous => [publication, ...previous.filter(item => item.id !== publication.id)]);
       setDetail(publication); setFormOpen(false); setNotice(attachMode ? 'Los archivos se adjuntaron correctamente.' : 'Tu recurso ya está publicado y disponible para tu institución.');
-      setTitle(''); setDescription(''); setPrice(''); setModality('DONACION'); setFiles([]); setCareerIds([]); setSubjectIds([]);
+      setTitle(''); setDescription(''); setPrice(''); setModality('VENTA'); setFiles([]); setCareerIds([]); setSubjectIds([]);
       currentTarget.current = null; setTarget(null); setAttachMode(false);
       setRevision(value => value + 1);
     } catch (reason) {
@@ -195,7 +195,7 @@ export function useDigitalLibrary() {
       releaseDigitalFile(localFiles.current[index]);
       localFiles.current = localFiles.current.filter((_, current) => current !== index); setFiles(localFiles.current);
     },
-    openForm: () => { detailRequest.current?.abort(); setSelectedId(null); setDetailLoading(false); setFormOpen(true); setDetail(null); setError(null); setNotice(null); setAttachMode(false); setEditingAcademics(false); setCareerIds([]); setSubjectIds([]); setCatalogRevision(value => value + 1); },
+    openForm: () => { detailRequest.current?.abort(); setSelectedId(null); setDetailLoading(false); setFormOpen(true); setModality('VENTA'); setDetail(null); setError(null); setNotice(null); setAttachMode(false); setEditingAcademics(false); setCareerIds([]); setSubjectIds([]); setCatalogRevision(value => value + 1); },
     openAttachments: () => { if (detail && !saving.current) { detailRequest.current?.abort(); setEditingAcademics(false); setAttachMode(true); setTarget(detail); currentTarget.current = detail; setFormOpen(true); setError(null); setNotice(null); } },
     closeForm,
     closeDetail: () => { if (saving.current) return; detailRequest.current?.abort(); downloadRequest.current?.abort(); downloadRequest.current = null; setSelectedId(null); setDetailLoading(false); setDownloading(null); setDetail(null); setError(null); setNotice(null); setEditingAcademics(false); },

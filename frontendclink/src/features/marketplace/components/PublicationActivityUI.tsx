@@ -1,5 +1,5 @@
 import {Pressable,ScrollView,StyleSheet,Text,View} from 'react-native';
-import {ChevronRight,Package} from 'lucide-react-native';
+import {ChevronRight,Package,FileText} from 'lucide-react-native';
 import {Skeleton,SkeletonBlock} from '@/components/Skeleton';
 import {CATALOG_COLORS as colors} from './CatalogUI';
 
@@ -10,10 +10,11 @@ export function PublicationActivityFilters<T extends string>({tabs,selected,onSe
  </ScrollView>;
 }
 
-export function PublicationActivityRow({title,amount,subtitle,status,statusTone='active',featured=false,last=false,onPress,onRequests}:{
- title:string;amount:string;subtitle:string;status:string;statusTone?:'active'|'reserved'|'finished'|'withdrawn';featured?:boolean;last?:boolean;onPress:()=>void;onRequests?:()=>void;
+export function PublicationActivityRow({title,amount,subtitle,status,statusTone='active',featured=false,last=false,onPress,onRequests,digital=false}:{
+ title:string;amount:string;subtitle:string;status:string;statusTone?:'active'|'reserved'|'finished'|'withdrawn';featured?:boolean;last?:boolean;onPress:()=>void;onRequests?:()=>void;digital?:boolean;
 }){
- const content=<View style={styles.rowContent}><View accessible={false} aria-hidden style={[styles.icon,statusTone==='withdrawn'&&styles.iconMuted]}><Package size={20} color={statusTone==='withdrawn'?colors.muted:colors.secondary}/></View>
+ const Icon=digital?FileText:Package;
+ const content=<View style={styles.rowContent}><View accessible={false} aria-hidden style={[styles.icon,statusTone==='withdrawn'&&styles.iconMuted]}><Icon size={20} color={statusTone==='withdrawn'?colors.muted:colors.secondary}/></View>
   <View style={styles.identity}><View style={styles.titleRow}><Text numberOfLines={2} style={[styles.title,featured&&styles.featuredTitle]}>{title}</Text><Text style={[styles.amount,featured&&styles.featuredTitle]}>{amount}</Text></View>
    <View style={styles.subtitleRow}>{!featured&&<><View accessible={false} aria-hidden style={[styles.dot,statusTone==='finished'&&styles.dotFinished,statusTone==='reserved'&&styles.dotReserved,statusTone==='withdrawn'&&styles.dotWithdrawn]}/><Text style={styles.subtitle}>{status} · </Text></>}<Text style={[styles.subtitle,styles.subtitleDetails]}>{subtitle}</Text></View>
   </View></View>;
@@ -23,8 +24,19 @@ export function PublicationActivityRow({title,amount,subtitle,status,statusTone=
  </View>;
 }
 
-export function PublicationActivitySkeleton(){
- return <Skeleton label="Cargando mis publicaciones" contentStyle={{gap:16}}><SkeletonBlock width={146} height={13}/><View style={[styles.row,styles.featured,{padding:16,gap:14}]}><View style={styles.rowContent}><SkeletonBlock width={44} height={44} borderRadius={12}/><View style={{flex:1,gap:8}}><SkeletonBlock width="70%" height={15}/><SkeletonBlock width="90%" height={12}/></View><SkeletonBlock width={55} height={15}/></View><SkeletonBlock width="95%" height={18}/></View><SkeletonBlock width={72} height={12}/><View style={publicationActivityUI.history}>{[0,1,2].map(index=><View key={index} style={[styles.rowContent,{padding:16}]}><SkeletonBlock width={40} height={40} borderRadius={12}/><View style={{flex:1,gap:8}}><SkeletonBlock width="65%" height={14}/><SkeletonBlock width="90%" height={12}/></View><SkeletonBlock width={54} height={14}/></View>)}</View></Skeleton>;
+export function PublicationActivitySkeleton({label='Cargando mis publicaciones',variant='publications'}:{label?:string;variant?:'publications'|'acquired'}={}){
+ return <Skeleton label={label} contentStyle={publicationActivityUI.group}>
+  {variant==='publications'&&<SkeletonBlock width={128} height={16}/>}
+  <View style={publicationActivityUI.history}>{[0,1,2].map(index=><View key={index} style={[styles.row,index<2&&styles.separator,styles.open]}>
+   <View style={styles.rowContent}>
+    <SkeletonBlock width={44} height={44} borderRadius={12}/>
+    <View style={styles.identity}>
+     <View style={styles.titleRow}><View style={{flex:1,minWidth:0}}><SkeletonBlock width={index===1?'90%':'75%'} height={20}/></View><SkeletonBlock width={56} height={20}/></View>
+     <SkeletonBlock width={index===1?'85%':'70%'} height={17}/>
+    </View>
+   </View>
+  </View>)}</View>
+ </Skeleton>;
 }
 
 export const publicationActivityUI=StyleSheet.create({

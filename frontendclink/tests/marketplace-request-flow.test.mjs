@@ -131,6 +131,20 @@ test('real sent accordion shows only the selected message and preserves historic
  assert.match(loading,/Cargando solicitudes enviadas/);assert.doesNotMatch(loading,/Aún no has enviado solicitudes/);
 });
 
+test('received requester headers show their received reputation in both domains with an honest unrated state',()=>{
+ const physical=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'reserved',receivedOpen:'physical-0'}).markup;
+ assert.match(physical,/Valoración de Diego Pérez: 5,0 de 5\. 1 valoración/);
+ assert.match(physical,/5,0 · 1 valoración/);assert.match(physical,/fill="#FDBB30"/);
+ assert.match(physical,/Sin valoraciones todavía/);assert.match(physical,/Ingeniería en Informática/);
+ assert.doesNotMatch(physical,/Aceptar solicitud de|Rechazar solicitud de/);
+ const digital=renderCatalog('digital',{mode:'agreements',receivedOpen:'digital-0',receivedScenario:'digital'}).markup;
+ assert.match(digital,/Valoración de Diego Pérez: 4,5 de 5\. 2 valoraciones/);
+ assert.match(digital,/4,5 · 2 valoraciones/);assert.match(digital,/Sin valoraciones todavía/);
+ assert.match(digital,/Me interesa este recurso para mis estudios/);
+ const loading=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'single',receivedOpen:'physical-0',receivedLoading:true}).markup;
+ assert.match(loading,/Cargando detalle de solicitudes/);assert.doesNotMatch(loading,/5,0 · 1 valoración/);
+});
+
 test('received list displays active transactions first, unanswered resources by age and completed last',()=>{
  const {markup}=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'priority'});
  const titles=['Mouse','Calculadora','Libro de física','Sushi'];

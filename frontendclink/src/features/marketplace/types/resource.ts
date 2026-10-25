@@ -5,6 +5,8 @@ export interface ResourceOwner {
   averageRating?: number | null;
   ratingCount?: number;
   completedAgreements?: number;
+  completedSales?: number;
+  careers?: string[];
 }
 
 export interface ResourceActivity { pendingRequests: number; completedAgreements?: number }

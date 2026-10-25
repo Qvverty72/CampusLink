@@ -66,6 +66,7 @@ export interface PhysicalgoodsDetailRow extends PhysicalgoodsMediaRow {
   descripcion: string;
   campus_nombre: string;
   propietario_nombre: string;
+  propietario_carreras: string[];
 }
 export interface PhysicalgoodsOwnRow extends PhysicalgoodsDetailRow {
   pending_requests: number;

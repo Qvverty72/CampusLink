@@ -50,18 +50,18 @@ test('physical personal cards retain withdrawn records and delegate transactions
 
 test('digital personal navigation opens received requests and retains previously visited panels',()=>{
   const h=runtime();const {DigitalPersonalLibrary}=load('elibrary/components/DigitalPersonalLibrary.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':native,
-    '../../components/CatalogUI':{CatalogTabs:'Tabs'},'./AcquiredDigitalResources':{AcquiredDigitalResources:'Acquired'},'./OwnedDigitalResources':{OwnedDigitalResources:'Owned'},'./DigitalTradeCenter':{DigitalTradeCenter:'Trades'}});
+    '../../components/CatalogUI':{CatalogTabs:'Tabs'},'../hooks/useDigitalActivity':{useDigitalActivityCounts:()=>({counts:null,loading:false,reload:noop})},'./DigitalAcquiredActivity':{DigitalAcquiredActivity:'Acquired'},'./DigitalPublications':{DigitalPublications:'Owned'},'./DigitalActivityRequests':{DigitalActivityRequests:'Requests'},'./DigitalActivityTransactions':{DigitalActivityTransactions:'Trades'}});
   const render=()=>elements(h.render(()=>DigitalPersonalLibrary({initialTab:'owned'})));
   let nodes=render();assert.equal(nodes.filter(n=>n.type==='Trades').length,0);nodes.find(n=>n.type==='Owned').props.onRequests();nodes=render();
-  assert.equal(nodes.find(n=>n.type==='Tabs').props.selected,'trades');assert.equal(nodes.find(n=>n.type==='Trades').props.receivedEntryVersion,1);assert.equal(nodes.filter(n=>n.type==='Owned').length,1);
-  nodes.find(n=>n.type==='Tabs').props.onSelect('owned');nodes=render();nodes.find(n=>n.type==='Owned').props.onRequests();nodes=render();assert.equal(nodes.find(n=>n.type==='Trades').props.receivedEntryVersion,2);h.unmount();
+  assert.equal(nodes.find(n=>n.type==='Tabs').props.selected,'requests');assert.equal(nodes.find(n=>n.type==='Requests').props.entryVersion,1);assert.equal(nodes.filter(n=>n.type==='Owned').length,1);
+  nodes.find(n=>n.type==='Tabs').props.onSelect('owned');nodes=render();nodes.find(n=>n.type==='Owned').props.onRequests();nodes=render();assert.equal(nodes.find(n=>n.type==='Requests').props.entryVersion,2);h.unmount();
 });
 
 test('completed agreement navigation reopens the same acquired ID on every explicit entry',()=>{
  const h=runtime();const {DigitalPersonalLibrary}=load('elibrary/components/DigitalPersonalLibrary.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':native,
- '../../components/CatalogUI':{CatalogTabs:'Tabs'},'./AcquiredDigitalResources':{AcquiredDigitalResources:'Acquired'},'./OwnedDigitalResources':{OwnedDigitalResources:'Owned'},'./DigitalTradeCenter':{DigitalTradeCenter:'Trades'}});
- const render=()=>elements(h.render(()=>DigitalPersonalLibrary({initialTab:'trades'})));let nodes=render();nodes.find(n=>n.type==='Trades').props.onAcquired('pub');nodes=render();assert.equal(nodes.find(n=>n.type==='Tabs').props.selected,'acquired');assert.equal(nodes.find(n=>n.type==='Acquired').props.initialPublicationId,'pub');assert.equal(nodes.find(n=>n.type==='Acquired').props.entryVersion,1);
- nodes.find(n=>n.type==='Tabs').props.onSelect('trades');nodes=render();nodes.find(n=>n.type==='Trades').props.onAcquired('pub');nodes=render();assert.equal(nodes.find(n=>n.type==='Acquired').props.entryVersion,2);h.unmount();
+ '../../components/CatalogUI':{CatalogTabs:'Tabs'},'../hooks/useDigitalActivity':{useDigitalActivityCounts:()=>({counts:null,loading:false,reload:noop})},'./DigitalAcquiredActivity':{DigitalAcquiredActivity:'Acquired'},'./DigitalPublications':{DigitalPublications:'Owned'},'./DigitalActivityRequests':{DigitalActivityRequests:'Requests'},'./DigitalActivityTransactions':{DigitalActivityTransactions:'Trades'}});
+ const render=()=>elements(h.render(()=>DigitalPersonalLibrary({initialTab:'transactions'})));let nodes=render();nodes.find(n=>n.type==='Trades').props.onAcquired('pub');nodes=render();assert.equal(nodes.find(n=>n.type==='Tabs').props.selected,'acquired');assert.equal(nodes.find(n=>n.type==='Acquired').props.initialPublicationId,'pub');assert.equal(nodes.find(n=>n.type==='Acquired').props.entryVersion,1);
+ nodes.find(n=>n.type==='Tabs').props.onSelect('transactions');nodes=render();nodes.find(n=>n.type==='Trades').props.onAcquired('pub');nodes=render();assert.equal(nodes.find(n=>n.type==='Acquired').props.entryVersion,2);h.unmount();
 });
 
 test('acquired material remains downloadable after withdrawal and dispatches the exact authorized file',()=>{
@@ -97,17 +97,17 @@ test('M3 renders the personal tabs, real pending counts and terminal history wit
 
 test('L3 owned cards show independent digital activity and keep deactivated publications visible',()=>{
   const {markup}=renderCatalog('digital',{mode:'owned',width:320});
-  for(const text of ['Mi biblioteca','Adquiridos','Publicaciones','Acuerdos','2 solicitudes pendientes','4 acuerdos completados','Desactivada','Consultar publicación'])assert.ok(markup.includes(text),text);
+  for(const text of ['Mis publicaciones','Adquiridos','Publicaciones','Solicitudes','Transacciones','Publicación con solicitudes pendientes.','Desactivada','Abrir publicación:'])assert.ok(markup.includes(text),text);
   assert.doesNotMatch(markup,/recurso queda reservado/);
 });
 
 test('L3 acquired cards and detail keep authorized originals after deactivation with original acquisition terms',()=>{
-  const list=renderCatalog('digital',{mode:'acquired'}).markup;assert.match(list,/Abrir materiales/);assert.match(list,/Acceso conservado tras la desactivación/);
-  const detail=renderCatalog('digital',{mode:'acquired-detail',width:320}).markup;assert.match(detail,/Descargar archivo completo/);assert.match(detail,/2.500/);assert.match(detail,/Tu adquisición conserva el acceso/);assert.doesNotMatch(detail,/Solicitar este recurso/);
+  const list=renderCatalog('digital',{mode:'acquired'}).markup;assert.match(list,/Adquirido/);assert.match(list,/Materiales adquiridos/);
+  const detail=renderCatalog('digital',{mode:'acquired-detail',width:320}).markup;assert.match(detail,/Descargar archivo completo/);assert.match(detail,/2.500/);assert.match(detail,/los accesos adquiridos se conservan/);assert.doesNotMatch(detail,/Solicitar este recurso/);
 });
 
 for(const [screen,mode] of [['physical','personal'],['digital','owned'],['digital','acquired']])test(`${screen} ${mode}: loading and failed reads never masquerade as empty activity`,()=>{
-  assert.match(renderCatalog(screen,{mode,state:'loading'}).markup,screen==='physical'?/Cargando mis publicaciones/:/Cargando actividad/);
+  assert.match(renderCatalog(screen,{mode,state:'loading'}).markup,mode==='acquired'?/Cargando materiales adquiridos/:/Cargando mis publicaciones/);
   const error=renderCatalog(screen,{mode,state:'error'}).markup;assert.match(error,/Reintentar consulta/);assert.match(error,/role="alert"/);assert.doesNotMatch(error,/Aún no hay|No hay transacciones en esta página/);
   const empty=renderCatalog(screen,{mode,state:'empty'}).markup;assert.match(empty,mode==='acquired'?/Explorar Biblioteca/:/Publicar recurso/);
 });

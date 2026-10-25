@@ -1,7 +1,8 @@
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ArrowLeft, Check, FileText, Flag, Package, ShieldCheck, Star, UserRound } from 'lucide-react-native';
+import { ArrowLeft, Check, CircleCheck, FileText, Flag, MapPin, Package, ShieldCheck, Star, UserRound } from 'lucide-react-native';
+import { APP_COLORS } from '@/types/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CATALOG_COLORS as colors, ui } from './CatalogUI';
 import type { ResourceOwner } from '../types/resource';
@@ -17,14 +18,29 @@ export function DetailHeader({ onBack, onReport, disabled = false, title = 'Deta
 }
 
 export function OwnerCard({ owner, physical = false, campus }: { owner?: ResourceOwner; physical?: boolean; campus?: string }) {
-  return <View style={detailUI.owner}><View style={detailUI.avatar}><UserRound size={22} color={colors.primary} /></View>
-    <View style={detailUI.ownerInfo}><Text style={detailUI.helper}>Publicado por</Text><Text style={detailUI.ownerName}>{owner?.fullName || 'Propietario del recurso'}</Text>
-      {physical ? <View style={{ gap: 4 }}><Text style={detailUI.helper}>Entrega en tu campus</Text>{campus && <Text style={detailUI.campusChip}>{campus}</Text>}</View> : owner && typeof owner.completedAgreements === 'number' && <>
-        <View style={detailUI.inline}><Star size={14} color={colors.primary} /><Text style={detailUI.helper}>{owner.ratingCount && owner.averageRating != null
-          ? `${owner.averageRating.toLocaleString('es-CL', { maximumFractionDigits: 1 })}/5 · ${owner.ratingCount} ${owner.ratingCount === 1 ? 'valoración' : 'valoraciones'}` : 'Sin valoraciones todavía'}</Text></View>
-        <Text style={detailUI.helper}>{owner.completedAgreements} acuerdo{owner.completedAgreements === 1 ? '' : 's'} completado{owner.completedAgreements === 1 ? '' : 's'} en Biblioteca</Text>
-      </>}
+  const average = owner?.averageRating, ratings = owner?.ratingCount ?? 0;
+  const hasRating = typeof average === 'number' && Number.isFinite(average) && ratings > 0;
+  const score = hasRating ? average.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '';
+  const completed = owner?.completedAgreements;
+  const delivery = campus ? /^campus\b/i.test(campus.trim()) ? `Entrega en ${campus}` : `Entrega en campus ${campus}` : 'Entrega en tu campus';
+  return <View style={detailUI.owner}>
+    <Text style={detailUI.ownerCaption}>PUBLICADO POR</Text>
+    <View style={detailUI.ownerBody}><View style={detailUI.avatar}><UserRound size={24} color={colors.primary} /></View>
+      <View style={detailUI.ownerInfo}><Text style={detailUI.ownerName}>{owner?.fullName || 'Propietario del recurso'}</Text>
+        {Boolean(owner?.careers?.length) && <Text style={detailUI.ownerCareer}>{owner?.careers?.join(' · ')}</Text>}
+        {typeof owner?.ratingCount === 'number' && <View style={detailUI.ownerRating} accessible
+          accessibilityLabel={hasRating ? `Valoración del propietario: ${score} de 5. ${ratings} ${ratings === 1 ? 'valoración' : 'valoraciones'}` : 'Sin valoraciones todavía'}>
+          <Star size={15} color={hasRating ? APP_COLORS.ACCENT : colors.secondary} fill={hasRating ? APP_COLORS.ACCENT : 'transparent'} aria-hidden />
+          {hasRating ? <Text style={detailUI.ownerRatingText}><Text style={detailUI.ownerRatingScore}>{score}</Text> · {ratings} {ratings === 1 ? 'valoración' : 'valoraciones'}</Text>
+            : <Text style={detailUI.helper}>Sin valoraciones todavía</Text>}
+        </View>}
+      </View>
     </View>
+    {(typeof completed === 'number' || physical) && <View style={detailUI.ownerFooter}>
+      {typeof completed === 'number' && <View style={detailUI.ownerFact}><CircleCheck size={17} color={colors.primary} />
+        <Text style={detailUI.ownerFactText}>{completed} {completed === 1 ? 'transacción completada' : 'transacciones completadas'}</Text></View>}
+      {physical && <View style={detailUI.ownerFact}><MapPin size={17} color={colors.primary} /><Text style={detailUI.ownerFactText}>{delivery}</Text></View>}
+    </View>}
   </View>;
 }
 
@@ -47,9 +63,14 @@ export function DetailSection({ title, children }: { title: string; children: Re
   return <View style={{ gap: 10 }}><Text accessibilityRole="header" style={ui.sectionTitle}>{title}</Text>{children}</View>;
 }
 
-export function ResourceDetailSkeleton() {
+export function ResourceDetailSkeleton({ physical = false }: { physical?: boolean } = {}) {
   return <Skeleton label="Cargando detalle del recurso" contentStyle={{ gap: 18 }}>
-    {[230, 26, 18, 76, 92].map((height, index) => <SkeletonBlock style={ui.skeletonBlock} key={index} height={height} borderRadius={16} width={index === 2 ? '65%' : '100%'} />)}
+    {[230, 26, 18, 76].map((height, index) => <SkeletonBlock style={ui.skeletonBlock} key={index} height={height} borderRadius={16} width={index === 2 ? '65%' : '100%'} />)}
+    <View style={detailUI.owner}><SkeletonBlock width={100} height={12}/>
+      <View style={detailUI.ownerBody}><SkeletonBlock width={48} height={48} borderRadius={24}/><View style={detailUI.ownerInfo}>
+        <SkeletonBlock width="65%" height={20}/><SkeletonBlock width="90%" height={14}/><SkeletonBlock width="70%" height={16}/>
+      </View></View><View style={detailUI.ownerFooter}><SkeletonBlock width="65%" height={18}/>{physical&&<SkeletonBlock width="85%" height={18}/>}</View>
+    </View>
   </Skeleton>;
 }
 
@@ -101,8 +122,12 @@ export const detailUI = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 }, headerTitle: { flex: 1, color: colors.muted, fontSize: 12 },
   title: { color: colors.ink, fontSize: 24, lineHeight: 31, fontWeight: '800' }, body: { color: colors.ink, fontSize: 14, lineHeight: 22 }, helper: { color: colors.muted, fontSize: 12, lineHeight: 18 },
   inline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }, card: { borderRadius: 20, backgroundColor: '#FFFFFF', padding: 16, borderWidth: 1, borderColor: colors.border, gap: 10 },
-  owner: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFFFF', padding: 16, flexDirection: 'row', gap: 12, alignItems: 'center' },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' }, ownerInfo: { flex: 1, gap: 4 }, ownerName: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  owner: { borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFFFF', padding: 16, gap: 14 },
+  ownerCaption: { color: colors.secondary, fontSize: 11, lineHeight: 16, letterSpacing: 1 }, ownerBody: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
+  ownerInfo: { flex: 1, minWidth: 0, gap: 2 }, ownerName: { color: colors.ink, fontSize: 16, lineHeight: 21, fontWeight: '700' }, ownerCareer: { color: colors.ink, fontSize: 12, lineHeight: 17 },
+  ownerRating: { flexDirection: 'row', alignItems: 'center', gap: 5 }, ownerRatingText: { color: colors.primary, fontSize: 13, lineHeight: 18, flexShrink: 1 }, ownerRatingScore: { fontWeight: '700' },
+  ownerFooter: { borderTopWidth: 1, borderColor: colors.border, paddingTop: 12, gap: 9 }, ownerFact: { flexDirection: 'row', alignItems: 'center', gap: 9 }, ownerFactText: { color: colors.primary, fontSize: 13, lineHeight: 19, flex: 1 },
   notice: { flexDirection: 'row', gap: 8, alignItems: 'center', padding: 12, borderRadius: 12, backgroundColor: colors.tint }, noticeText: { flex: 1, fontSize: 12, lineHeight: 18, color: colors.secondary },
   actionBar: { position: 'absolute', left: 0, right: 0, width: '100%', maxWidth: 760, alignSelf: 'center', marginHorizontal: 'auto', backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderColor: colors.border, gap: 8 }, actionHelper: { textAlign: 'center', color: colors.muted, fontSize: 12, lineHeight: 18 },
   error: { color: '#9D302A', fontSize: 14, lineHeight: 21 }, optionRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 14, padding: 14 },

@@ -21,7 +21,7 @@ export interface DigitalPublication extends DigitalInput {
   activity?: { pendingRequests: number; completedAgreements: number };
   id: string;
   ownerId: string;
-  owner?: { id: string; fullName: string; averageRating: number | null; ratingCount: number; completedAgreements: number };
+  owner?: { id: string; fullName: string; averageRating: number | null; ratingCount: number; completedAgreements: number; completedSales: number; careers: string[] };
   campusId: string;
   institutionId: string;
   campusName: string;
@@ -31,6 +31,7 @@ export interface DigitalPublication extends DigitalInput {
   careers: DigitalAcademicOption[];
   subjects: DigitalAcademicOption[];
   updatedAt: string;
+  publishedAt?: string;
   acquired: boolean;
   isWithdrawn: boolean;
   deletedAt: string | null;

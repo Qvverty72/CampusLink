@@ -42,7 +42,7 @@ export function DigitalPublicationForm({ library }: { library: ReturnType<typeof
       <View style={styles.privacy}><ShieldCheck size={18} color={c.secondary} /><Text style={[f.hint, styles.fileInfo]}>El original permanece privado. Solo tú y quienes adquieran el recurso podrán descargarlo.</Text></View>
     </PublicationSection>
     <PublicationFeedback error={library.error} notice={library.notice} />
-    <PublicationSubmit label={library.busy ? 'Guardando archivos…' : library.target ? library.files.length ? 'Adjuntar archivos pendientes' : 'Actualizar publicación guardada' : 'Publicar recurso'}
+    <PublicationSubmit label={library.busy ? 'Guardando archivos…' : library.target ? library.files.length ? 'Adjuntar archivos pendientes' : 'Actualizar publicación guardada' : 'Publicar recurso digital'}
       disabled={disabled || (!library.target && (!library.files.length || library.catalogLoading || Boolean(library.catalogError)))} busy={library.busy} onPress={() => void library.publish()} />
     <Pressable accessibilityRole="button" disabled={disabled} onPress={library.closeForm} style={f.secondary}><Text style={f.actionText}>{library.target ? 'Continuar con los archivos guardados' : 'Volver a la biblioteca'}</Text></Pressable>
   </View>;

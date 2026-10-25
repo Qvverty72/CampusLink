@@ -31,6 +31,7 @@ export interface DigitalPublication extends DigitalInput {
   careers: DigitalAcademicOption[];
   subjects: DigitalAcademicOption[];
   updatedAt: string;
+  publishedAt?: string;
   acquired: boolean;
   isWithdrawn: boolean;
   deletedAt: string | null;

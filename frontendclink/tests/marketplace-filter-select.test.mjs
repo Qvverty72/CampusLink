@@ -28,10 +28,11 @@ function fixture(options,value=''){
  const {useDebouncedValue}=load('hooks/useDebouncedValue.ts',{react:h.react},h.globals);
  const {SearchableFilterSelect}=load('components/SearchableFilterSelect.tsx',{react:h.react,'react/jsx-runtime':jsx,
   'react-native':{View:'View',Text:'Text',TextInput:'Input',Pressable:'Button',ScrollView:'Scroll',ActivityIndicator:'Spinner',Keyboard:{dismiss:()=>dismissed++},StyleSheet:{create:v=>v}},
-  'lucide-react-native':{Check:'Check',ChevronDown:'Down',ChevronUp:'Up',Search:'Search'},'../hooks/useDebouncedValue':{useDebouncedValue},'./CatalogUI':{CATALOG_COLORS:{},ui:{}}});
+  'lucide-react-native':{Check:'Check',ChevronDown:'Down',ChevronUp:'Up',Search:'Search',X:'X'},'../hooks/useDebouncedValue':{useDebouncedValue},'./CatalogUI':{CATALOG_COLORS:{},ui:{}}},h.globals);
  const props={label:'Carrera',options,value,expanded:false,onChange:id=>changes.push(id),onExpandedChange:open=>{props.expanded=open;expansions.push(open);}};
  const root=()=>SearchableFilterSelect(props);
- const render=()=>h.render(()=>{const menu=elements(root()).find(node=>typeof node.type==='function');return menu?menu.type(menu.props):null;});
+ const resolve=node=>Array.isArray(node)?node.map(resolve):!node||typeof node!=='object'?node:typeof node.type==='function'?resolve(node.type(node.props)):{...node,props:{...node.props,children:resolve(node.props?.children)}};
+ const render=()=>h.render(()=>{if(props.searchRequired)return resolve(root());const menu=elements(root()).find(node=>typeof node.type==='function');return menu?menu.type(menu.props):null;});
  return {h,props,root,render,changes,expansions,get dismissed(){return dismissed;}};
 }
 const options=[{id:'inf',name:'Ingeniería en Informática',code:'INF-01'},{id:'adm',name:'Administración',code:'ADM-02'},{id:'art',name:'Diseño',code:null}];
@@ -39,12 +40,10 @@ const radios=tree=>elements(tree).filter(node=>node.props?.accessibilityRole==='
 const input=tree=>elements(tree).find(node=>node.type==='Input');
 
 test('campos obligatorios no permiten limpiar y los opcionales usan una opción vacía propia del formulario',()=>{
- const f=fixture(options,'inf');f.props.expanded=true;f.props.allowEmpty=false;
- let tree=f.render();assert.equal(radios(tree).length,options.length);assert.ok(radios(tree).every(row=>row.key!==''));
- f.props.searchRequired=true;tree=f.render();assert.equal(elements(tree).filter(row=>row.type==='Button').length,0);
+ const f=fixture(options,'art');f.props.expanded=true;f.props.allowEmpty=false;f.props.searchable=false;
+ let tree=f.render();assert.equal(input(tree),undefined);assert.equal(radios(tree).length,options.length);assert.ok(radios(tree).every(row=>row.key!==''));
+ assert.equal(radios(tree).at(-1).key,'art');assert.equal(radios(tree).at(-1).props.accessibilityState.checked,true);
  f.props.allowEmpty=true;f.props.emptyLabel='Sin carrera';f.props.clearLabel='Quitar selección';tree=f.render();
- assert.match(JSON.stringify(tree),/Quitar selección de carrera/);
- input(tree).props.onChangeText('inform');f.render();f.h.tick(300);tree=f.render();
  assert.equal(radios(tree)[0].props.accessibilityLabel,'Carrera: Sin carrera');radios(tree)[0].props.onPress();
  assert.deepEqual(f.changes,['']);assert.equal(f.props.expanded,false);f.h.unmount();
 });
@@ -63,12 +62,21 @@ test('escritura rápida espera300ms, oculta opciones obsoletas y busca sin tilde
  input(tree).props.onChangeText('ADM-02');tree=f.render();f.h.tick(300);tree=f.render();assert.equal(radios(tree).length,2);radios(tree)[1].props.onPress();assert.deepEqual(f.changes,['adm']);assert.equal(f.props.expanded,false);f.h.unmount();
 });
 
-test('catálogo extenso conserva IDs homónimos/selección, pagina opciones y reinicia límite al buscar',()=>{
+test('catálogo extenso permite todas las opciones con scroll, sin Mostrar más, conservando IDs homónimos/selección',()=>{
  const rows=Array.from({length:55},(_,i)=>({id:String(i),name:'Carrera '+i,code:'COD-'+i}));rows[2].name=rows[3].name='Nombre compartido';
- const f=fixture(rows,'54');f.props.expanded=true;let tree=f.render();assert.equal(radios(tree).length,21);assert.equal(radios(tree)[1].props.accessibilityState.checked,true);
- elements(tree).find(node=>node.props?.accessibilityLabel==='Mostrar más opciones de carrera').props.onPress();tree=f.render();assert.equal(radios(tree).length,41);
+ const f=fixture(rows,'54');f.props.expanded=true;let tree=f.render();assert.equal(radios(tree).length,56);assert.equal(radios(tree)[1].props.accessibilityState.checked,true);
+ assert.doesNotMatch(JSON.stringify(tree),/Mostrar más|Ver más/);assert.equal(f.props.expanded,true);
  input(tree).props.onChangeText('nombre compartido');tree=f.render();f.h.tick(300);tree=f.render();assert.equal(radios(tree).length,3);assert.notEqual(radios(tree)[1].key,radios(tree)[2].key);
  radios(tree)[2].props.onPress();assert.deepEqual(f.changes,['3']);f.h.unmount();
+});
+
+test('búsqueda académica con55 coincidencias permite seleccionar la última sin acción intermedia',()=>{
+ const rows=Array.from({length:55},(_,i)=>({id:String(i),name:'Carrera '+i}));
+ const f=fixture(rows);f.props.searchRequired=true;let tree=f.render();input(tree).props.onFocus();tree=f.render();
+ input(tree).props.onChangeText('Carrera');f.render();f.h.tick(300);tree=f.render();
+ assert.equal(radios(tree).length,55);assert.doesNotMatch(JSON.stringify(tree),/Mostrar más|Ver más/);
+ assert.equal(f.props.expanded,true);assert.deepEqual(f.changes,[]);
+ radios(tree).find(row=>row.key==='54').props.onPress();assert.deepEqual(f.changes,['54']);assert.equal(f.props.expanded,false);f.h.unmount();
 });
 
 test('sin coincidencias permite limpiar selección y desmontar cancela debounce pendiente',()=>{
@@ -83,13 +91,45 @@ test('catálogo en carga/deshabilitado no abre menú; vacío y selección no dis
 });
 
 
-test('filtro académico exige texto, espera300ms y al borrar oculta de inmediato sin perder selección',()=>{
- const f=fixture(options,'inf');f.props.searchRequired=true;f.props.expanded=true;let tree=f.render();
- assert.equal(radios(tree).length,0);assert.match(JSON.stringify(tree),/Escribe el nombre o código/);assert.doesNotMatch(JSON.stringify(tree),/Cualquiera|Ingeniería en Informática/);
+test('campo académico permite escribir ahí mismo, espera300ms y al borrar conserva selección',()=>{
+ const f=fixture(options,'inf');f.props.searchRequired=true;let tree=f.render();
+ assert.equal(input(tree).props.value,'Ingeniería en Informática');assert.equal(elements(tree).filter(node=>node.type==='Input').length,1);
+ assert.equal(elements(tree).filter(node=>node.type==='Button').length,1); // solo limpiar; ningún trigger desplegable
+ input(tree).props.onFocus();tree=f.render();assert.equal(input(tree).props.value,'');
+ assert.equal(radios(tree).length,0);assert.doesNotMatch(JSON.stringify(tree),/Escribe el nombre o código|Buscar por nombre o código/);
  input(tree).props.onChangeText('   ');tree=f.render();f.h.tick(300);tree=f.render();assert.equal(radios(tree).length,0);
- input(tree).props.onChangeText('admin');tree=f.render();f.h.tick(299);tree=f.render();assert.equal(radios(tree).length,0);f.h.tick(1);tree=f.render();assert.equal(radios(tree).length,2);assert.match(JSON.stringify(tree),/Administración/);assert.deepEqual(f.changes,[]);
+ input(tree).props.onChangeText('admin');tree=f.render();f.h.tick(299);tree=f.render();assert.equal(radios(tree).length,0);f.h.tick(1);tree=f.render();assert.equal(radios(tree).length,1);assert.match(JSON.stringify(tree),/Administración/);assert.deepEqual(f.changes,[]);
  input(tree).props.onChangeText('');tree=f.render();assert.equal(radios(tree).length,0);assert.doesNotMatch(JSON.stringify(tree),/Administración|Buscando opciones/);f.h.tick(300);tree=f.render();assert.equal(radios(tree).length,0);assert.equal(f.props.value,'inf');
  elements(tree).find(node=>node.props?.accessibilityLabel==='Quitar filtro de carrera').props.onPress();assert.deepEqual(f.changes,['']);assert.equal(f.props.expanded,false);f.h.unmount();
+});
+
+test('selección en línea respeta IDs y permite tocar una sugerencia después del blur sin perder el toque',()=>{
+ const f=fixture(options,'inf');f.props.searchRequired=true;let tree=f.render();input(tree).props.onFocus();tree=f.render();
+ input(tree).props.onChangeText('ADM-02');f.render();f.h.tick(300);tree=f.render();
+ input(tree).props.onBlur();tree=f.render();f.h.tick(100);assert.equal(f.props.expanded,true);
+ radios(tree)[0].props.onPress();tree=f.render();assert.deepEqual(f.changes,['adm']);assert.equal(f.props.expanded,false);assert.equal(f.dismissed,1);
+ f.h.tick(300);assert.equal(f.expansions.filter(open=>open===false).length,1);f.h.unmount();
+});
+
+test('abandonar el campo cierra sugerencias; recuperar foco cancela cierre, Escape conserva selección',()=>{
+ const f=fixture(options,'inf');f.props.searchRequired=true;let tree=f.render();input(tree).props.onFocus();tree=f.render();
+ input(tree).props.onChangeText('ingenieria');f.render();f.h.tick(300);tree=f.render();assert.equal(radios(tree).length,1);
+ input(tree).props.onBlur();tree=f.render();f.h.tick(100);input(tree).props.onFocus();tree=f.render();f.h.tick(100);assert.equal(f.props.expanded,true);
+ input(tree).props.onKeyPress({nativeEvent:{key:'Escape'}});tree=f.render();assert.equal(f.props.expanded,false);assert.equal(input(tree).props.value,'Ingeniería en Informática');assert.deepEqual(f.changes,[]);
+ input(tree).props.onFocus();tree=f.render();input(tree).props.onBlur();f.render();f.h.tick(150);assert.equal(f.props.expanded,false);f.h.unmount();
+});
+
+test('campo académico bloqueado no es editable; al desmontar cancela búsqueda pendiente',()=>{
+ const f=fixture(options);f.props.searchRequired=true;f.props.disabled=true;let tree=f.render();assert.equal(input(tree).props.editable,false);assert.equal(radios(tree).length,0);
+ f.props.disabled=false;tree=f.render();input(tree).props.onFocus();tree=f.render();input(tree).props.onChangeText('admin');f.render();assert.ok(f.h.timers.size>0);f.h.unmount();assert.equal(f.h.timers.size,0);
+});
+
+test('carga de opciones permite escribir y conserva consulta al llegar el catálogo, sin resultados vacíos transitorios',()=>{
+ const f=fixture([]);f.props.searchRequired=true;f.props.optionsLoading=true;let tree=f.render();assert.equal(input(tree).props.editable,true);
+ input(tree).props.onFocus();tree=f.render();assert.doesNotMatch(JSON.stringify(tree),/Buscando opciones|Sin opciones/);
+ input(tree).props.onChangeText('informatica');f.render();f.h.tick(300);tree=f.render();assert.match(JSON.stringify(tree),/Buscando opciones/);assert.doesNotMatch(JSON.stringify(tree),/Sin opciones disponibles/);
+ f.props.options=options;f.props.optionsLoading=false;tree=f.render();assert.equal(input(tree).props.value,'informatica');assert.equal(radios(tree).length,1);
+ radios(tree)[0].props.onPress();assert.deepEqual(f.changes,['inf']);f.h.unmount();
 });
 
 test('placeholder académico conserva etiqueta accesible cuando la etiqueta visual se agrupa', () => {

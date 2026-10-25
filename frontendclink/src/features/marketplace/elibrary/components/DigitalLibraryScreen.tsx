@@ -22,6 +22,7 @@ function Library() {
   const insets = useSafeAreaInsets();
   const library = useDigitalLibrary();
   const [personal, setPersonal] = useState(false);
+  const [personalTitle,setPersonalTitle]=useState('Materiales adquiridos');
   const [personalEntry, setPersonalEntry] = useState<{ tab: 'acquired' | 'trades'; resourceId?: string }>({ tab: 'acquired' });
   const scroll = useRef<ScrollView>(null);
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [library.formOpen, library.detail?.id, library.editingAcademics, personal]);
@@ -35,15 +36,15 @@ function Library() {
     onRequests={() => { setPersonalEntry({ tab: 'trades' }); setPersonal(true); library.closeDetail(); }} />;
   return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={!personal && !library.formOpen ? library.refresh : undefined} refreshing={library.loading} refreshEnabled={!personal && !library.formOpen && !library.busy && !library.loading} refreshLabel="los recursos de Biblioteca" keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]}>
-      <ScreenHeader title={personal ? 'Mi biblioteca' : library.formOpen ? 'Publicar recurso' : 'Biblioteca'}
-        subtitle={personal ? 'Tus materiales, publicaciones y acuerdos' : library.formOpen ? 'Comparte material con tu comunidad académica' : 'Apuntes y guías de todos los campus'}
+      <ScreenHeader title={personal ? personalTitle : library.formOpen ? 'Publicar recurso digital' : 'Biblioteca'}
+        subtitle={personal ? 'Tus materiales, publicaciones y transacciones' : library.formOpen ? 'Comparte material con tu comunidad académica' : 'Apuntes y guías de todos los campus'}
         action={!personal && !library.formOpen && !library.detail ? 'Mi biblioteca' : undefined} onAction={() => { setPersonalEntry({ tab: 'acquired' }); setPersonal(true); }}
         onBack={personal ? () => { setPersonal(false); library.reload(); } : library.formOpen ? library.closeForm : library.detail ? library.closeDetail : undefined} />
       {!library.formOpen && library.error && <View style={styles.errorBox} accessibilityLiveRegion="assertive"><Text accessibilityRole="alert" style={styles.error}>{library.error}</Text>
         {!library.busy && <Pressable accessibilityRole="button" onPress={library.reload} style={styles.smallButton}><Text style={styles.link}>Reintentar</Text></Pressable>}
       </View>}
       {!library.formOpen && library.notice && <Text style={styles.notice} accessibilityLiveRegion="polite">{library.notice}</Text>}
-      {personal ? <DigitalPersonalLibrary key={`${personalEntry.tab}:${personalEntry.resourceId ?? ''}`} initialTab={personalEntry.tab} initialPublicationId={personalEntry.resourceId} onExplore={() => setPersonal(false)} onPublish={() => { setPersonal(false); library.openForm(); }} /> : library.formOpen ? <DigitalPublicationForm library={library} /> : <>
+      {personal ? <DigitalPersonalLibrary key={`${personalEntry.tab}:${personalEntry.resourceId ?? ''}`} initialTab={personalEntry.tab} initialPublicationId={personalEntry.resourceId} onTitleChange={setPersonalTitle} onOpenResource={id=>{setPersonal(false);void library.openDetail(id);}} onExplore={() => setPersonal(false)} onPublish={() => { setPersonal(false); library.openForm(); }} /> : library.formOpen ? <DigitalPublicationForm library={library} /> : <>
         <DigitalSearchForm catalog={library.catalog} filters={library.filters} onSearch={library.search} catalogLoading={library.catalogLoading} catalogError={library.catalogError} reloadCatalog={library.reloadCatalog} />
         <DigitalRecommendations key={library.refreshVersion} onOpen={library.openDetail} />
         <Text accessibilityRole="header" style={ui.sectionTitle}>Todos los recursos</Text>

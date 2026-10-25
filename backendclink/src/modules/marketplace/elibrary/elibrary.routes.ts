@@ -9,6 +9,7 @@ import { acquiredDigitalController,acquiredDigitalDetailController } from './eli
 import { ownedDigitalController,ownedDigitalDetailController,editDigitalController } from './elibrary.controller.js';
 import { recommendationsDigitalController } from './elibrary.controller.js';
 import { rateDigitalController } from './elibrary.controller.js';
+import {digitalActivityController} from './elibrary.controller.js';
 import { createDigitalRequestController, digitalRequestOptionsController, receivedDigitalRequestsController, sentDigitalRequestsController,
   resolveDigitalRequestController, detailDigitalTradeController, transitionDigitalTradeController } from './elibrary.controller.js';
 
@@ -17,6 +18,12 @@ export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
   const router = Router();
   if (diagnosticsEnabled) router.get('/health', getElibraryHealthController);
   router.post('/', requireAuthentication, createDigitalController);
+  router.get('/activity/counts',requireAuthentication,digitalActivityController('counts'));
+  router.get('/activity/requests',requireAuthentication,digitalActivityController('requests'));
+  router.get('/activity/resources',requireAuthentication,digitalActivityController('resources'));
+  router.get('/activity/transactions',requireAuthentication,digitalActivityController('transactions'));
+  router.get('/activity/publications',requireAuthentication,digitalActivityController('publications'));
+  router.get('/activity/resource/:publicationId',requireAuthentication,digitalActivityController('resource'));
   router.get('/', requireAuthentication, listDigitalController);
   router.get('/academic-options', requireAuthentication, digitalAcademicCatalogController);
   router.get('/recommendations',requireAuthentication,recommendationsDigitalController);

@@ -16,6 +16,7 @@ import { createPaginatedResult } from '../../../services/pagination.js';
 import { parseResourceOperationId, resourceOperationKey } from '../../analytics/analytics.service.js';
 import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
+import {findOwnerRatings,type OwnerRatingSummary} from '../marketplace.ratings.repository.js';
 
 /** Reutiliza el orden de bloqueos de edición: perfil primero, publicación después. */
 async function requestContext<T>(auth: VerifiedAuthConnection, id: string,
@@ -72,11 +73,11 @@ export async function createPhysicalgoodsRequest(auth: VerifiedAuthConnection, p
     return receipt(await insertPhysicalgoodsRequest(client,id,current.userId,code,requestId),resource);
   });
 }
-function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnection) {
+function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnection,rating?:OwnerRatingSummary) {
   const canView=row.campus_id===current.campusId&&!row.deleted_at&&['DISPONIBLE','RESERVADO','FINALIZADO'].includes(row.estado_publicacion);
   return {id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at,
     canView,publishedAt:row.publicado_en,modality:row.modalidad,price:row.modalidad==='VENTA'?Number(row.precio):null},campus:{id:row.campus_id,name:row.campus_nombre},
-    owner:{id:row.propietario_id,fullName:row.propietario_nombre},requester:{id:row.solicitante_id,fullName:row.solicitante_nombre,careers:row.solicitante_carreras??[]},
+    owner:{id:row.propietario_id,fullName:row.propietario_nombre},requester:{id:row.solicitante_id,fullName:row.solicitante_nombre,careers:row.solicitante_carreras??[],...rating},
     message:row.mensaje,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,
     canResolve:canView&&row.propietario_id===current.userId&&row.estado_solicitud==='PENDIENTE',
     transaction:row.transaccion_id?{id:row.transaccion_id,status:row.estado_transaccion,modality:row.modalidad_acordada,amount:row.monto_acordado===null?null:Number(row.monto_acordado),currency:row.moneda_acordada}:null};
@@ -92,18 +93,24 @@ async function getPhysicalgoodsRequests(auth: VerifiedAuthConnection, query: unk
   }
   const pagination=physicalgoodsHistoryPagination(source);
   return withPhysicalgoodsHistory(auth,async(client,current)=>{
+    const dtos=async(rows:PhysicalgoodsReceivedRow[])=>{
+      // Own history can include an old campus; it does not authorize exploring its users' reputation.
+      const ids=received?rows.filter(row=>row.campus_id===current.campusId).map(row=>row.solicitante_id):[];
+      const ratings=await findOwnerRatings(client,ids,{resourceType:'FISICO',campusId:current.campusId});
+      return rows.map(row=>ownRequestDto(row,current,row.campus_id===current.campusId?ratings.get(row.solicitante_id):undefined));
+    };
     if(grouped){
       if(selectedPublicationId){
         if(!await findOwnPhysicalgoods(client,selectedPublicationId,current.userId))throw new ApiError(404,'NOT_FOUND','No se encontró un recurso propio.');
         const rows=pagination.offset===0?await listReceivedRequestsForPublications(client,current.userId,[selectedPublicationId]):[];
-        return {data:rows.map(row=>ownRequestDto(row,current)),meta:{page:pagination.page,limit:pagination.limit,hasMore:false,groupBy:'publication' as const}};
+        return {data:await dtos(rows),meta:{page:pagination.page,limit:pagination.limit,hasMore:false,groupBy:'publication' as const}};
       }
       const resources=createPaginatedResult(await listReceivedRequestPublications(client,current.userId,pagination),pagination);
       const rows=await listReceivedRequestsForPublications(client,current.userId,resources.data.map(row=>row.id));
-      return {data:rows.map(row=>ownRequestDto(row,current)),meta:{...resources.meta,groupBy:'publication' as const}};
+      return {data:await dtos(rows),meta:{...resources.meta,groupBy:'publication' as const}};
     }
     const result=createPaginatedResult(await listPhysicalgoodsRequests(client,current.userId,pagination,received),pagination);
-    return {...result,data:result.data.map(row=>ownRequestDto(row,current))};
+    return {...result,data:await dtos(result.data)};
   });
 }
 export async function getOwnPhysicalgoodsRequest(auth:VerifiedAuthConnection,publicationId:unknown,requestId:unknown) {

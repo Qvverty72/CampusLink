@@ -673,6 +673,52 @@ async function requestAndAccept(saved:{id:string},receiver:VerifiedAuthConnectio
   const requested=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,requested.id,{decision:'ACEPTAR'});assert.ok(accepted.transactionId);return {trades,requested,accepted,tradeId:accepted.transactionId!};
 }
+test('digital activity counts and grouped resources cover all requests before pagination, with independent receiver trades',async()=>{
+ const saved=await service.createDigitalPublication(auth,input(),file()),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+ const receivers=[];
+ for(let i=0;i<11;i++){const receiver=await peer();receivers.push(receiver);await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});}
+ current=structuredClone(auth);
+ const groups=await get('/activity/resources?limit=1');assert.equal(groups.status,200);const grouped=await groups.json();assert.equal(grouped.meta.total,1);assert.equal(grouped.data[0].total,11);assert.equal(grouped.data[0].pending,11);
+ const first=await get(`/activity/requests?received=true&resourceId=${saved.id}&limit=10&order=oldest`);assert.equal(first.status,200);const page=await first.json();assert.equal(page.data.length,10);assert.equal(page.meta.total,11);assert.equal(page.meta.hasMore,true);
+ const last=await get(`/activity/requests?received=true&resourceId=${saved.id}&limit=10&page=2&order=oldest`);const tail=await last.json();assert.equal(tail.data.length,1);assert.ok(!page.data.some((row:{id:string})=>row.id===tail.data[0].id));
+ const accepted=await trades.resolveDigitalRequest(auth,saved.id,page.data[0].id,{decision:'ACEPTAR'});
+ const counts=await (await get('/activity/counts')).json();assert.equal(counts.data.pendingRequests,10);assert.equal(counts.data.receivedPending,11);assert.equal(counts.data.pendingTransactions,1);
+ const active=await (await get('/activity/transactions?tab=active&limit=5')).json();assert.equal(active.meta.total,1);assert.equal(active.data[0].id,accepted.transactionId);assert.equal(active.data[0].participants.length,2);
+ current=receivers[0];const own=await (await get('/activity/counts')).json();assert.equal(own.data.sentAccepted,1);assert.equal(own.data.pendingTransactions,1);assert.equal(own.data.receivedPending,0);
+ assert.equal((await (await get('/activity/resources')).json()).data.length,0);
+});
+test('digital activity resource reads remain private and preserve original amounts after withdrawal without granting original access',async()=>{
+ const saved=await service.createDigitalPublication(auth,input({modality:'VENTA',price:2500}),file()),receiver=await peer(),other=await peer();
+ const {trades,tradeId}=await requestAndAccept(saved,receiver);
+ await db.query('UPDATE publicacion_recurso SET precio=9000,deleted_at=now() WHERE id=$1',[saved.id]);
+ current=receiver;const detail=await get(`/activity/resource/${saved.id}`);assert.equal(detail.status,200);const body=await detail.json();assert.equal(body.data.isWithdrawn,true);assert.doesNotMatch(JSON.stringify(body),/storage_path|bucket_id|base64/);
+ const sent=await (await get('/activity/requests?received=false')).json();assert.equal(sent.data[0].amount,2500);
+ assert.equal((await original(saved.id,saved.files[0].id)).status,403);
+ current=other;assert.equal((await get(`/activity/resource/${saved.id}`)).status,404);assert.equal((await (await get('/activity/transactions')).json()).data.length,0);
+ current=structuredClone(auth);await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
+ const finished=await (await get('/activity/transactions?tab=finished')).json();assert.equal(finished.meta.total,1);assert.equal(finished.data[0].amount,2500);
+ assert.equal((await (await get('/activity/counts')).json()).data.pendingTransactions,0);
+});
+test('digital activity validates query contracts, authorization and publication filters',async()=>{
+ const saved=await service.createDigitalPublication(auth,input(),file());
+ for(const url of ['/activity/counts?userId=x','/activity/requests?received=invalid','/activity/requests?resourceId=invalid','/activity/resources?ownerId=x','/activity/transactions?tab=invalid','/activity/publications?tab=reserved'])assert.equal((await get(url)).status,400,url);
+ assert.equal((await originalFetch(base+'/activity/counts')).status,401);
+ const active=await (await get('/activity/publications?tab=active')).json();assert.equal(active.data.length,1);
+ await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[saved.id]);
+ assert.equal((await (await get('/activity/publications?tab=active')).json()).data.length,0);
+ assert.equal((await (await get('/activity/publications?tab=inactive')).json()).data.length,1);
+ current=await peer(foreignCampus,foreignInstitution);assert.equal((await get(`/activity/resource/${saved.id}`)).status,404);assert.equal((await (await get('/activity/counts')).json()).data.pendingRequests,0);
+});
+test('digital activity paginates six individual transactions and never splits a resource by historical prices',async()=>{
+ const saved=await service.createDigitalPublication(auth,input({modality:'VENTA',price:2500}),file()),ids=[];
+ for(let i=0;i<6;i++){if(i===3)await db.query('UPDATE publicacion_recurso SET precio=9000 WHERE id=$1',[saved.id]);const result=await requestAndAccept(saved,await peer());ids.push(result.tradeId);}
+ current=structuredClone(auth);
+ const first=await (await get('/activity/transactions?tab=active&limit=5')).json(),second=await (await get('/activity/transactions?tab=active&limit=5&page=2')).json();
+ assert.equal(first.data.length,5);assert.equal(first.meta.total,6);assert.equal(first.meta.hasMore,true);assert.equal(second.data.length,1);assert.equal(new Set([...first.data,...second.data].map(row=>row.id)).size,6);
+ const grouped=await (await get('/activity/resources')).json();assert.equal(grouped.data.length,1);assert.equal(grouped.data[0].total,6);assert.equal(grouped.data[0].active,6);assert.equal(grouped.data[0].amount,9000);
+ const requests=await (await get('/activity/requests?received=true')).json();assert.deepEqual([...new Set(requests.data.map((row:{amount:number})=>row.amount))].sort(),[2500,9000]);
+ assert.equal((await (await get('/activity/counts')).json()).data.pendingTransactions,6);
+});
 test('digital request, owner acceptance and both confirmations grant institutional cross-campus access for sale/donation',async()=>{
   const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
   for(const modality of ['VENTA','DONACION']) {
@@ -887,10 +933,38 @@ test('public digital detail exposes only owner name and scoped aggregate figures
   current = await peer();
   const response = await get('/' + saved.id); assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
   const detail = (await response.json()).data;
-  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Estudiante', averageRating: null, ratingCount: 0, completedAgreements: 0 });
+  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Estudiante', averageRating: null, ratingCount: 0, completedAgreements: 0, completedSales: 0, careers: [] });
   assert.doesNotMatch(JSON.stringify(detail.owner), /email|campus|receptor|storage|bucket|path|verificado|estado_cuenta/);
   assert.equal((await service.getDigitalPublications(current))[0].owner, undefined, 'No agregar agregados a cada fila del catálogo');
   current = await peer(foreignCampus, foreignInstitution); assert.equal((await get('/' + saved.id)).status, 404);
+});
+
+test('received digital requests show requester owner ratings only from completed digital exchanges in the institution',async()=>{
+  const rated=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();
+  const tradeId=await acquisition(rated.id,receiver.userId);
+  await db.query('INSERT INTO valoracion(transaccion_id,evaluador_id,evaluado_id,puntuacion) VALUES($1,$2,$3,5)',[tradeId,receiver.userId,auth.userId]);
+  await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[rated.id]);
+  const owner=await peer(),resource=await service.createDigitalPublication(owner,input(),file());
+  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  await trades.createDigitalRequest(auth,resource.id,{messageCode:'LIB_QA_INTERES'});
+  await trades.createDigitalRequest(receiver,resource.id,{messageCode:'LIB_QA_INTERES'});
+  current=owner;
+  const read=async()=>(await(await get(`/activity/requests?received=true&resourceId=${resource.id}`)).json()).data;
+  const rows=await read();assert.equal(rows.length,2);
+  assert.equal(rows.find((row:{requesterId:string})=>row.requesterId===auth.userId).averageRating,5);
+  assert.equal(rows.find((row:{requesterId:string})=>row.requesterId===auth.userId).ratingCount,1);
+  assert.equal(rows.find((row:{requesterId:string})=>row.requesterId===receiver.userId).ratingCount,0);
+  await db.query("UPDATE transaccion_recurso SET modalidad_acordada='DONACION',monto_acordado=NULL WHERE id=$1",[tradeId]);
+  assert.equal((await read()).find((row:{requesterId:string})=>row.requesterId===auth.userId).ratingCount,1);
+  await db.query('UPDATE publicacion_recurso SET campus_id=$2 WHERE id=$1',[rated.id,foreignCampus]);
+  assert.equal((await read()).find((row:{requesterId:string})=>row.requesterId===auth.userId).ratingCount,0);
+  await db.query("UPDATE publicacion_recurso SET campus_id=$2,tipo_recurso='FISICO' WHERE id=$1",[rated.id,campus]);
+  assert.equal((await read()).find((row:{requesterId:string})=>row.requesterId===auth.userId).ratingCount,0);
+  await db.query("UPDATE publicacion_recurso SET tipo_recurso='DIGITAL' WHERE id=$1",[rated.id]);
+  await db.query("DELETE FROM confirmacion_transaccion WHERE transaccion_id=$1 AND rol_confirmante='RECEPTOR'",[tradeId]);
+  assert.equal((await read()).find((row:{requesterId:string})=>row.requesterId===auth.userId).ratingCount,0);
+  current=auth;assert.equal((await(await get('/activity/requests?received=false')).json()).data[0].ratingCount,undefined);
+  current=receiver;assert.equal((await read()).length,0);
 });
 
 test('digital owner summary counts valid completed agreements including retired resources and excludes other types, institutions and partial confirmations', async () => {
@@ -911,7 +985,18 @@ test('digital owner summary counts valid completed agreements including retired 
     await db.query('INSERT INTO valoracion(transaccion_id,evaluador_id,evaluado_id,puntuacion) VALUES($1,$2,$3,1)', [trade, receiver.userId, auth.userId]);
   }
   const detail = (await service.getDigitalPublications(first, saved.id))[0];
-  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Estudiante', averageRating: 3, ratingCount: 2, completedAgreements: 3 });
+  assert.deepEqual(detail.owner, { id: auth.userId, fullName: 'Estudiante', averageRating: 3, ratingCount: 2, completedAgreements: 3, completedSales: 3, careers: [] });
+});
+
+test('digital owner card reads profile careers in institution and counts sales separately from donations',async()=>{
+  const catalog=await academicCatalog();
+  await db.query('INSERT INTO usuario_carrera(perfil_usuario_id,carrera_id) VALUES($1,$2),($1,$3)',[auth.userId,catalog.careerA,catalog.foreignCareer]);
+  const sale=await service.createDigitalPublication(auth,input(),file()),donation=await service.createDigitalPublication(auth,input({modality:'DONACION',price:null}),file());
+  const receiver=await peer();await acquisition(sale.id,receiver.userId);
+  const donated=await acquisition(donation.id,receiver.userId);
+  await db.query("UPDATE transaccion_recurso SET modalidad_acordada='DONACION',monto_acordado=null WHERE id=$1",[donated]);
+  const owner=(await service.getDigitalPublications(receiver,sale.id))[0].owner!;
+  assert.deepEqual(owner.careers,['Ingeniería']);assert.equal(owner.completedAgreements,2);assert.equal(owner.completedSales,1);
 });
 
 test('digital rating shares physical rules: completed receiver only, integer 1..5, one immutable row under concurrency',async()=>{

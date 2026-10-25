@@ -40,7 +40,34 @@ function digital({refreshFailure=false}={}){const h=runtime(),created=[],added=[
  const {useDigitalLibrary:hook}=load('elibrary/hooks/useDigitalLibrary.ts',{react:h.react,'@/features/auth/hooks/useAuth':{useAuth:()=>({refreshIdentity:noop})},'@/lib/api/authenticated-request':{AuthApiError},'../../api/resourceInteractions':{recordResourceOpening:noop},'../../hooks/useDebouncedValue':{useDebouncedValue:value=>value},'../api/saveDigitalFile':{},'../api/documentPicker':{pickDigitalFiles:async()=>refreshFailure?[files[0]]:files,mergeUniqueDigitalFiles:async(previous,chosen)=>({files:[...previous,...chosen],duplicates:[]}),releaseDigitalFile:file=>released.push(file.uri)},'../api/elibraryApi':{
  searchDigitalPublications:async()=>({data:[],meta:{hasMore:false}}),loadDigitalAcademicCatalog:async()=>({careers:[],subjects:[]}),publishDigitalPublication:async(input,file)=>{created.push({input,file});return publication;},attachDigitalFile:async(id,file)=>{added.push(file.name);if(failAttach){failAttach=false;throw new Error('network');}return{id:'b',name:file.name};},loadDigitalPublication:async()=>{if(failRead){failRead=false;throw new Error('refresh');}return publication;}}});
  return{h,created,added,released,render:()=>h.render(hook)};}
-async function readyDigital(q){q.render();await setImmediate();let state=q.render();state.setTitle('Guía');state.setDescription('Descripción');state=q.render();await state.chooseFile();return q.render();}
+async function readyDigital(q){q.render();await setImmediate();let state=q.render();state.setTitle('Guía');state.setDescription('Descripción');state.setPrice('2500');state=q.render();await state.chooseFile();return q.render();}
+
+test('publicación digital abre en venta, exige precio y vuelve a venta al reabrir o terminar',async()=>{
+ const q=digital();let state=q.render();assert.equal(state.modality,'VENTA');await setImmediate();state=await readyDigital(q);
+ state.setPrice('');state=q.render();await state.publish();assert.equal(q.created.length,0);assert.match(q.render().error,/precio de venta/);
+ state=q.render();state.setModality('DONACION');state=q.render();assert.equal(state.price,'');state.closeForm();state=q.render();state.openForm();state=q.render();assert.equal(state.modality,'VENTA');
+ await setImmediate();state=q.render();state.setModality('DONACION');state=q.render();await state.publish();state=q.render();assert.equal(q.created[0].input.modality,'DONACION');assert.equal(q.created[0].input.price,null);
+ await state.publish();state=q.render();assert.equal(state.target,null);assert.equal(state.modality,'VENTA');q.h.unmount();
+});
+
+test('clasificación digital mantiene buscadores montados y editables durante carga y reintento',()=>{
+ const h=runtime();
+ const {DigitalAcademicSelector}=load('elibrary/components/DigitalAcademicSelector.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':{Text:'Text',View:'View'},'../../components/SearchableMultiSelect':{SearchableMultiSelect:'Select'},'../../components/RequestsUI':{RequestButton:'Button'},'../../components/CatalogUI':{ui:{}}});
+ const props={catalog:null,loading:true,error:null,reload:noop,careerIds:[],subjectIds:[],onCareersChange:noop,onSubjectsChange:noop,disabled:false};
+ const nodes=node=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(4).flatMap(nodes)];
+ const fields=()=>nodes(h.render(()=>DigitalAcademicSelector(props))).filter(row=>row.type==='Select');
+ let selects=fields();assert.equal(selects.length,2);assert.ok(selects.every(row=>row.props.loading&&!row.props.disabled));
+ selects[0].props.onExpandedChange(true);selects=fields();assert.equal(selects[0].props.expanded,true);
+ props.loading=false;props.catalog={careers:[{id:'inf',name:'Informática'}],subjects:[]};selects=fields();assert.equal(selects[0].props.expanded,true);assert.equal(selects[0].props.options[0].id,'inf');
+ props.catalog=null;props.error='Sin conexión';selects=fields();assert.equal(selects.length,2);assert.ok(selects.every(row=>!row.props.disabled));h.unmount();
+});
+
+test('formulario digital muestra nuevo título y campos académicos antes de recibir opciones',()=>{
+ const initial=renderCatalog('digital',{mode:'publish',state:'loading'}).markup;
+ assert.match(initial,/Publicar recurso digital/);assert.match(initial,/aria-label="Buscar carreras para filtrar"/);assert.match(initial,/aria-label="Buscar asignaturas para filtrar"/);
+ assert.doesNotMatch(initial,/Cargando catálogo académico|Cargando opciones…|Sin opciones disponibles/);
+ const failed=renderCatalog('digital',{mode:'publish',state:'error-options'}).markup;assert.match(failed,/Buscar carreras para filtrar/);assert.match(failed,/Reintentar catálogo/);
+});
 test('PDF: fallo adicional conserva pendientes y reintenta sin publicar otro recurso',async()=>{
  const q=digital();let state=await readyDigital(q);await state.publish();state=q.render();assert.equal(state.target.id,'saved');assert.equal(state.files.length,1);assert.equal(state.files[0].name,'b.pdf');assert.match(state.notice,/guardada/);assert.equal(q.created.length,1);await state.publish();state=q.render();assert.equal(state.formOpen,false);assert.equal(state.files.length,0);assert.equal(q.created.length,1);assert.deepEqual(q.added,['b.pdf','b.pdf']);assert.deepEqual(q.released,['blob:a','blob:b']);
 });

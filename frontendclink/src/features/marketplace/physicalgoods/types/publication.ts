@@ -1,3 +1,5 @@
+import type { ResourceOwner } from '../../types/resource';
+
 export const PHYSICALGOODS_MAX_IMAGES = 3;
 
 export const resourceConditions = [
@@ -66,7 +68,7 @@ export interface PhysicalgoodsGallery extends PhysicalgoodsResource {
   updatedAt: string;
   description: string;
   campus: { id: string; name: string };
-  owner: { id: string; fullName: string };
+  owner: ResourceOwner;
   acceptsRequests: boolean;
   canEdit: boolean;
   images: { id: string; name: string; principal: boolean; url: string }[];
@@ -100,7 +102,7 @@ export interface PhysicalgoodsReceivedRequest {
   campus:{id:string;name:string};
   owner:{id:string;fullName:string};
   canResolve:boolean;
-  requester: { id:string; fullName:string;careers?:string[] };
+  requester: { id:string; fullName:string;careers?:string[];averageRating?:number|null;ratingCount?:number };
   message: string;
   messageCode: string;
   status: PhysicalgoodsRequest['status'];

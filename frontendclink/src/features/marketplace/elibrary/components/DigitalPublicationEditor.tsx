@@ -2,7 +2,8 @@ import { ActivityIndicator,Pressable,StyleSheet,Text,TextInput,View } from 'reac
 import { APP_COLORS } from '@/types/colors';
 import { useEditDigitalPublication } from '../hooks/useEditDigitalPublication';
 import type { DigitalPublication } from '../types/publication';
-export function DigitalPublicationEditor({resource,onSaved,onClose}:{resource:DigitalPublication;onSaved:(value:DigitalPublication)=>void;onClose:()=>void}){const editor=useEditDigitalPublication(resource,onSaved);return <View style={styles.box}>
+import {useEffect} from 'react';
+export function DigitalPublicationEditor({resource,onSaved,onClose,onBusyChange}:{resource:DigitalPublication;onSaved:(value:DigitalPublication)=>void;onClose:()=>void;onBusyChange?:(busy:boolean)=>void}){const editor=useEditDigitalPublication(resource,onSaved);useEffect(()=>{onBusyChange?.(editor.busy);return()=>onBusyChange?.(false);},[editor.busy,onBusyChange]);return <View style={styles.box}>
   <Text style={styles.title}>Editar publicación digital</Text>
   {editor.error&&<Text style={styles.error} accessibilityLiveRegion="assertive">{editor.error}</Text>}
   {editor.resource.isWithdrawn||editor.resource.status!=='DISPONIBLE'?<Text style={styles.text}>Esta publicación está retirada o no disponible para editar. Sus archivos y acuerdos se conservan.</Text>:<>

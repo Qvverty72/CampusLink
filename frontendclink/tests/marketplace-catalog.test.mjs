@@ -100,9 +100,10 @@ for (const kind of ['physical', 'digital']) {
     const components = { SearchInput: 'Search', FilterChips: 'Chips', FilterSheet: 'Sheet', FilterOptions: 'Options', ui: {}, CATALOG_COLORS: {} };
     const shared = { react: h.react, 'react/jsx-runtime': jsx, 'react-native': { View: 'View', Text: 'Text', TextInput: 'Input', Pressable: 'Button', ScrollView: 'Scroll', Switch: 'Switch', StyleSheet: { create: value => value } }, '../../components/CatalogUI': components, '../../components/AcademicFilterFields': { AcademicFilterFields: 'Academic' } };
     let render;
+    shared['../utils/orderPhysicalgoodsCategories']=load('physicalgoods/utils/orderPhysicalgoodsCategories.ts',{});
     if (kind === 'physical') {
       const { PhysicalgoodsSearchFilters } = load('physicalgoods/components/PhysicalgoodsSearchFilters.tsx', { ...shared, '../types/publication': { resourceConditions: [{ value: 'NUEVO', label: 'Nuevo' }, { value: 'BUEN_ESTADO', label: 'Buen estado' }, { value: 'USADO', label: 'Usado' }, { value: 'DETERIORADO', label: 'Deteriorado' }] } });
-      const resources = { filters: { ...emptyPhysicalgoodsFilters, categoryId: 'books' }, options: { categories: [{ id: 'books', name: 'Libros' }], careers: [], subjects: [] }, setFilter: (...args) => changes.push(args) };
+      const resources = { filters: { ...emptyPhysicalgoodsFilters, categoryId: 'books' }, options: { categories: [{ id:'other',name:'Otros' },{ id: 'books', name: 'Libros' },{id:'tech',name:'Tecnología'}], careers: [], subjects: [] }, setFilter: (...args) => changes.push(args) };
       render = () => PhysicalgoodsSearchFilters({ resources });
     } else {
       const { DigitalSearchForm } = load('elibrary/components/DigitalSearchForm.tsx', shared);
@@ -141,8 +142,8 @@ for (const kind of ['physical', 'digital']) {
       assert.deepEqual(changes.at(-1), ['minPrice','1000']);
       nodes.find(node => node.props?.accessibilityLabel === 'Precio máximo').props.onChangeText('5000');
       assert.deepEqual(changes.at(-1), ['maxPrice','5000']);
-      nodes.find(node => node.type === 'Switch').props.onValueChange(true);
-      assert.deepEqual(changes.at(-1), ['mine',true]);
+      assert.equal(nodes.some(node=>node.type==='Switch'),false);
+      assert.deepEqual(nodes.filter(node=>node.props?.accessibilityLabel?.startsWith('Categoría:')).map(node=>node.props.accessibilityLabel),['Categoría: Todas','Categoría: Libros','Categoría: Tecnología','Categoría: Otros']);
     } else { assert.equal(changes.at(-1).subjectId, 'subject'); assert.equal(changes.at(-1).careerId, 'career'); }
     nodes.find(node => node.type === 'Sheet').props.onClose(); nodes = elements(h.render(render));
     assert.equal(nodes.find(node => node.type === 'Sheet').props.visible, false);

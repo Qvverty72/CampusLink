@@ -11,6 +11,7 @@ import { activeDigitalRequest, confirmDigitalParticipant, digitalConfirmations, 
   digitalTradeParticipants, findDigitalRequest, findDigitalTrade, insertDigitalRequest, insertDigitalTrade, listDigitalRequests,
   lockDigitalProfiles, setDigitalRequestStatus, setDigitalTradeStatus } from './elibrary.trades.repository.js';
 import { findDigitalRating } from './elibrary.rating.repository.js';
+import { digitalParticipantNames } from './elibrary.activity.repository.js';
 import { parseResourceOperationId, resourceOperationKey } from '../../analytics/analytics.service.js';
 import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
 
@@ -50,6 +51,7 @@ export async function digitalTradeDto(client: PoolClient, resource: DigitalResou
     startedAt:new Date(trade.iniciada_en).toISOString(),completedAt:trade.completada_en?new Date(trade.completada_en).toISOString():null,
     cancelledAt:trade.cancelada_en?new Date(trade.cancelada_en).toISOString():null,
     rating:rating?{...rating,createdAt:new Date(rating.createdAt).toISOString()}:null,
+    participants:await digitalParticipantNames(client,trade.propietario_id,trade.receptor_id),
     canRate:trade.estado_transaccion==='COMPLETADA'&&current.userId===trade.receptor_id&&current.userId!==trade.propietario_id&&!rating,
     confirmations:confirmations.map(row=>({...row,confirmedAt:new Date(row.confirmedAt).toISOString()})),
     canConfirm:active&&!confirmations.some(row=>row.userId===current.userId)&&await digitalMembersEnabled(client,[trade.propietario_id,trade.receptor_id],resource.institucion_id),canCancel:active};

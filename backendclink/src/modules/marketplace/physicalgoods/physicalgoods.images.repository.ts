@@ -16,10 +16,31 @@ export async function findPhysicalgoodsMedia(client: PoolClient, publicationId: 
 }
 export async function findPhysicalgoodsDetail(client: PoolClient, publicationId: string, campusId: string) {
   return (await client.query<PhysicalgoodsDetailRow>(`SELECT ${mediaProjection},
-    campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
+    campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre,
+    ARRAY(SELECT career.nombre FROM public.usuario_carrera membership JOIN public.carrera career ON career.id=membership.carrera_id
+      WHERE membership.perfil_usuario_id=owner.id AND career.institucion_id=owner.institucion_id
+        AND career.institucion_id=campus.institucion_id ORDER BY career.nombre,career.id) AS propietario_carreras ${mediaJoins}
     JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
     WHERE p.id=$1 AND p.campus_id=$2 AND p.tipo_recurso='FISICO' AND p.deleted_at IS NULL
     AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO')`, [publicationId, campusId])).rows[0] ?? null;
+}
+/** Agregados públicos físicos del propietario, solo en el campus del detalle ya autorizado. */
+export async function findPhysicalgoodsOwnerReputation(client: PoolClient, ownerId: string, campusId: string) {
+  return (await client.query<{ averageRating: number | null; ratingCount: number; completedAgreements: number; completedSales: number }>(
+    `SELECT avg(rating.puntuacion)::float8 AS "averageRating",count(rating.id)::int AS "ratingCount",count(*)::int AS "completedAgreements",
+       count(*) FILTER(WHERE agreement.modalidad_acordada='VENTA')::int AS "completedSales"
+     FROM public.transaccion_recurso agreement
+     JOIN public.publicacion_recurso resource ON resource.id=agreement.publicacion_id
+     JOIN public.recurso_fisico physical ON physical.publicacion_id=resource.id
+     LEFT JOIN public.valoracion rating ON rating.transaccion_id=agreement.id
+       AND rating.evaluado_id=agreement.propietario_id AND rating.evaluador_id=agreement.receptor_id
+       AND rating.puntuacion BETWEEN 1 AND 5
+     WHERE agreement.propietario_id=$1 AND resource.propietario_id=$1 AND resource.campus_id=$2
+       AND resource.tipo_recurso='FISICO' AND agreement.estado_transaccion='COMPLETADA'
+       AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirmation WHERE confirmation.transaccion_id=agreement.id
+         AND confirmation.usuario_id=agreement.propietario_id AND confirmation.rol_confirmante='PROPIETARIO')
+       AND EXISTS(SELECT 1 FROM public.confirmacion_transaccion confirmation WHERE confirmation.transaccion_id=agreement.id
+         AND confirmation.usuario_id=agreement.receptor_id AND confirmation.rol_confirmante='RECEPTOR')`, [ownerId, campusId])).rows[0];
 }
 /** Historial del propietario: no filtra disponibilidad ni traslada el campus de origen. */
 export async function listOwnPhysicalgoods(client: PoolClient, userId: string, pagination: PaginationParams,tab?:'all'|'active'|'reserved'|'finished',currentCampusId?:string) {

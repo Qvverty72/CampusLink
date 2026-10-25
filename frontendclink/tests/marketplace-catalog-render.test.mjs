@@ -28,7 +28,9 @@ for (const screen of ['physical', 'digital']) {
 
 test('physical detail renders gallery fallback, current status, public owner and contextual request CTA', () => {
   const { markup } = renderCatalog('physical', { mode: 'detail' });
-  for (const text of ['Sin fotografías disponibles', 'Calculadora científica', 'Disponible', 'Buen estado', 'Camila González', 'Entrega en tu campus', 'el pago se hace entre ustedes', 'Solicitar este recurso']) assert.ok(markup.includes(text), text);
+  for (const text of ['Sin fotografías disponibles', 'Calculadora científica', 'Disponible', 'Buen estado', 'Camila González', 'Entrega en Campus de prueba', 'el pago se hace entre ustedes', 'Solicitar este recurso']) assert.ok(markup.includes(text), text);
+  assert.match(markup,/PUBLICADO POR/);assert.match(markup,/Ingeniería en Informática/);assert.match(markup,/Valoración del propietario: 4,6 de 5. 7 valoraciones/);assert.match(markup,/9 transacciones completadas/);assert.doesNotMatch(markup,/ventas completadas|acuerdos completados en Biblioteca/);
+  const unrated=renderCatalog('physical',{mode:'detail',variant:'unrated-owner'}).markup;assert.match(unrated,/Sin valoraciones todavía/);assert.match(unrated,/0 transacciones completadas/);
   assert.doesNotMatch(markup, /Retirar imagen|Guardar categoría|Editar publicación/);
   const reserved = renderCatalog('physical', { mode: 'detail', variant: 'reserved' }).markup;
   assert.match(reserved, /Reservado/); assert.match(reserved, /no admite nuevas solicitudes/); assert.match(reserved, /aria-disabled="true"/);
@@ -38,7 +40,8 @@ test('physical detail renders gallery fallback, current status, public owner and
 
 test('digital detail renders protected preview, academic metadata and real DTO owner figures without original download for a reader', () => {
   const { markup } = renderCatalog('digital', { mode: 'detail' });
-  for (const text of ['Vista previa protegida', 'Muestra limitada preparada por el servidor', 'Guía de cálculo integral', 'Ingeniería en Informática', 'Se desbloquea al completar el acuerdo', 'Camila González', '12 valoraciones', '16 acuerdos completados en Biblioteca']) assert.ok(markup.includes(text), text);
+  for (const text of ['Vista previa protegida', 'Muestra limitada preparada por el servidor', 'Guía de cálculo integral', 'Ingeniería en Informática', 'Se desbloquea al completar el acuerdo', 'Camila González', '12 valoraciones', '16 transacciones completadas']) assert.ok(markup.includes(text), text);
+  assert.doesNotMatch(markup,/Entrega en|ventas completadas/);
   assert.doesNotMatch(markup, /aria-label="Descargar/);
   const acquired = renderCatalog('digital', { mode: 'detail', variant: 'acquired' }).markup;
   assert.match(acquired, /Abrir en mis materiales/); assert.doesNotMatch(acquired, /Se desbloquea al completar/);
@@ -77,11 +80,11 @@ for (const screen of ['physical', 'digital']) {
 }
 
 
-for (const screen of ['physical', 'digital']) test(`${screen}: modal oculta opciones hasta abrir desplegable y busca en un solo campo`,()=>{
+for (const screen of ['physical', 'digital']) test(`${screen}: campos académicos editables sin segundo buscador y sugerencias solo después de escribir`,()=>{
  const closed=renderCatalog(screen,{mode:'filters'}).markup;
- assert.match(closed,/Seleccionar carrera/);assert.match(closed,/Seleccionar asignatura/);assert.doesNotMatch(closed,/Opciones de carrera|Opciones de asignatura|Buscar por nombre o código/);
+ assert.match(closed,/Buscar carrera para filtrar/);assert.match(closed,/Buscar asignatura para filtrar/);assert.doesNotMatch(closed,/Seleccionar carrera|Seleccionar asignatura|Opciones de carrera|Opciones de asignatura|Buscar por nombre o código/);
  assert.equal((closed.match(/aria-expanded="false"/g)??[]).length,2);
- const idle=renderCatalog(screen,{mode:'filters',variant:'careerId'}).markup;assert.match(idle,/Escribe el nombre o código/);assert.doesNotMatch(idle,/Opciones de carrera|Opciones de asignatura|Ingeniería en Informática|0 opciones/);
+ const idle=renderCatalog(screen,{mode:'filters',variant:'careerId'}).markup;assert.doesNotMatch(idle,/Escribe el nombre o código|Opciones de carrera|Opciones de asignatura|Ingeniería en Informática|0 opciones/);
  const searched=renderCatalog(screen,{mode:'filters',variant:'careerId',filterQuery:'informatica'}).markup;
  assert.match(searched,/Buscar carrera para filtrar/);assert.match(searched,/Ingeniería en Informática/);assert.match(searched,/role="radiogroup"/);assert.doesNotMatch(searched,/Ingeniería en Administración/);
  assert.equal((searched.match(/aria-expanded="true"/g)??[]).length,1);
@@ -89,7 +92,11 @@ for (const screen of ['physical', 'digital']) test(`${screen}: modal oculta opci
 
 test('filtros de Mercado expone categorías, condiciones reales, precios y publicaciones propias; Biblioteca solo académicos', () => {
  const physical = renderCatalog('physical', { mode: 'filters', width: 320 }).markup;
- for (const text of ['Categoría: Todas','Categoría: Apuntes','Categoría: Libros','Categoría: Calculadoras','Condición: Todas','Condición: Nuevo','Condición: Buen estado','Condición: Usado','Condición: Deteriorado','Precio mínimo','Precio máximo','Solo mis publicaciones disponibles','Carrera y asignatura','Ver resultados']) assert.ok(physical.includes(text),text);
+ for (const text of ['Categoría: Todas','Categoría: Apuntes','Categoría: Libros','Categoría: Calculadoras','Condición: Todas','Condición: Nuevo','Condición: Buen estado','Condición: Usado','Condición: Deteriorado','Precio mínimo','Precio máximo','Carrera y asignatura','Ver resultados']) assert.ok(physical.includes(text),text);
+ assert.doesNotMatch(physical,/Solo mis publicaciones disponibles|role="switch"/);
+ const filterCategories=[...physical.matchAll(/aria-label="Categoría: ([^"]+)"/g)].map(match=>match[1]);assert.equal(filterCategories.at(-1),'Otros');
+ const publication=renderCatalog('physical',{mode:'publish',variant:'categoryId'}).markup;
+ const publicationCategories=[...publication.matchAll(/aria-label="Categoría \*: ([^"]+)"/g)].map(match=>match[1]);assert.deepEqual(publicationCategories,['Material académico','Tecnología','Otros']);
  const digital = renderCatalog('digital', { mode: 'filters', width: 320 }).markup;
  assert.match(digital,/Carrera y asignatura/); assert.doesNotMatch(digital,/Categoría:|Condición:|Precio mínimo|Solo mis publicaciones/);
 });

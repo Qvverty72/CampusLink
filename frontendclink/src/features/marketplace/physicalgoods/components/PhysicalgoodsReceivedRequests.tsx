@@ -54,7 +54,7 @@ export function PhysicalgoodsReceivedResource({initialRows,onClose,onChanged,onR
     summary={`${price(rows[0]??resource)} · ${resource.campus.name}`} loading={state.loading} error={state.error} feedback={state.busy?'Guardando decisión…':state.feedback}
     blocked={state.busy} onRefresh={state.reload} onClose={close} overlay={decision}
     notice={(rows[0]??resource).publication.isWithdrawn?'Publicación retirada. Conservas las solicitudes en tu historial.':(rows[0]??resource).publication.status==='RESERVADO'?'El recurso está reservado. Las demás solicitudes siguen pendientes.':undefined}
-    requests={rows.map(row=>({id:row.id,name:row.requester.fullName,careers:row.requester.careers,message:row.message,requestedAt:row.requestedAt,...receivedStatus(row),
+    requests={rows.map(row=>({id:row.id,name:row.requester.fullName,careers:row.requester.careers,averageRating:row.requester.averageRating,ratingCount:row.requester.ratingCount,message:row.message,requestedAt:row.requestedAt,...receivedStatus(row),
       canReject:row.canResolve&&row.status==='PENDIENTE',canAccept:row.canResolve&&row.status==='PENDIENTE'&&row.publication.status==='DISPONIBLE',
       onAccept:()=>state.select(row,'ACEPTAR'),onReject:()=>state.select(row,'RECHAZAR'),
       onDetails:row.status==='ACEPTADA'||row.transaction?.status==='COMPLETADA'?undefined:()=>leave(()=>onDetail(row.publication.id,row.id)),

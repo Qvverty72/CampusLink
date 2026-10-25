@@ -10,7 +10,7 @@ import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasRefe
   signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { parsePhysicalgoodsSearch } from './physicalgoods.search.validation.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
-import { findPhysicalgoodsCategory, findPhysicalgoodsDetail, findPhysicalgoodsImages, findPhysicalgoodsMedia, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
+import { findPhysicalgoodsCategory, findPhysicalgoodsDetail, findPhysicalgoodsImages, findPhysicalgoodsMedia, findPhysicalgoodsOwnerReputation, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
   retirePhysicalgoodsImage, setPhysicalgoodsPrincipal, touchPhysicalgoods, updatePhysicalgoodsCategory } from './physicalgoods.images.repository.js';
 
 async function dependency<T>(operation: () => Promise<T>): Promise<T> {
@@ -59,7 +59,7 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
     const result = await withPhysicalgoodsTransaction(async client => {
       const row = await findPhysicalgoodsDetail(client, id, auth.campusId);
       if (!row) throw new ApiError(404, 'NOT_FOUND', 'La publicación no está disponible en tu campus.');
-      return { row, images: await findPhysicalgoodsImages(client, id) };
+      return { row, images: await findPhysicalgoodsImages(client, id), reputation: await findPhysicalgoodsOwnerReputation(client, row.propietario_id, row.campus_id) };
     });
     const images = [];
     for (const image of result.images) {
@@ -68,7 +68,7 @@ export async function getPhysicalgoodsGallery(auth: VerifiedAuthConnection, publ
     }
     return { ...mediaDto(result.row), description: result.row.descripcion,
       campus: { id: result.row.campus_id, name: result.row.campus_nombre },
-      owner: { id: result.row.propietario_id, fullName: result.row.propietario_nombre },
+      owner: { id: result.row.propietario_id, fullName: result.row.propietario_nombre, careers: result.row.propietario_carreras, ...result.reputation },
       acceptsRequests: result.row.estado_publicacion === 'DISPONIBLE', updatedAt: result.row.updated_at,
       canEdit: canEdit(auth, result.row), images, expiresIn: 60 };
   });

@@ -1,11 +1,11 @@
 import { useCallback,useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useScrollRefresh } from '@/components/RefreshScrollView';
 import { Pagination } from '@/components/Pagination';
 import { usePhysicalgoodsTransactions, TRANSACTIONS_PAGE_SIZE } from '../hooks/usePhysicalgoodsTransactions';
 import { usePhysicalgoodsAgreementPage } from '../hooks/usePhysicalgoodsAgreementPage';
 import type { PhysicalgoodsTransactionSummary } from '../types/publication';
-import { AgreementCard, AgreementCardsSkeleton, type AgreementStep } from '../../components/AgreementUI';
+import { AgreementCard, AgreementCardsSkeleton, AgreementTabs, AgreementListSection, type AgreementStep } from '../../components/AgreementUI';
 import { PhysicalgoodsTransaction } from './PhysicalgoodsTransaction';
 import { RequestButton } from '../../components/RequestsUI';
 import { PersonalEmpty } from '../../components/PersonalUI';
@@ -47,20 +47,15 @@ export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, ref
   const count = Math.max(0, counts[tab]), totalPages = Math.max(1, Math.ceil(count / TRANSACTIONS_PAGE_SIZE));
   useEffect(() => { if (!loading && !history.error && !selection && history.number > totalPages) history.setNumber(totalPages); }, [loading, history.error, selection, history.number, totalPages]);
   useEffect(() => { if (membershipChanged && !selection && !loading && !history.error) history.refreshCurrent(); }, [membershipChanged, selection, loading, history.error, history.refreshCurrent]);
-  return <View style={styles.section}>
+  return <AgreementListSection>
     {showTitle && <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>}
-    <View accessibilityRole="tablist" style={styles.tabs}>{([{ id: 'active', label: copy.active, count: Math.max(0, counts.active) }, { id: 'finished', label: copy.finished, count: Math.max(0, counts.finished) }] as const).map(option =>
-      <Pressable key={option.id} accessibilityRole="tab" aria-selected={tab === option.id} accessibilityState={{ selected: tab === option.id }} onPress={() => setTab(option.id)} style={[styles.tab, tab === option.id && styles.selected]}>
-        <Text style={[detailUI.body, tab === option.id && { fontWeight: '700' }]}>{option.label}{!loading && !history.error ? ` · ${option.count}` : ''}</Text>
-      </Pressable>)}
-    </View>
+    <AgreementTabs selected={tab} onSelect={setTab} counts={counts} showCounts={!loading && !history.error} />
     {history.error && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{history.error}</Text><RequestButton label={copy.retry} onPress={reload} /></View>}
     {loading ? <AgreementCardsSkeleton /> : !history.error && <>
       {enriched.failed.length > 0 && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.helper}>{copy.partial}</Text><RequestButton label={copy.retry} onPress={enriched.reload} /></View>}
       {!count && <PersonalEmpty title={tab === 'active' ? copy.emptyActive : copy.emptyFinished} helper={copy.emptyHelp}
         action={onExplore ? copy.explore : copy.retry} onAction={onExplore ?? reload} />}
-      {groups.filter(group => group.items.length).map(group => <View key={group.label} style={styles.section}>
-        {Boolean(group.label) && <Text accessibilityRole="header" style={styles.groupTitle}>{group.label.toLocaleUpperCase('es-CL')}</Text>}
+      {groups.filter(group => group.items.length).map(group => <AgreementListSection key={group.label} label={group.label}>
         {group.items.map(({ row, detail, view }) => {
           const terminalState = row.status === 'COMPLETADA' ? 'FINALIZADO' : row.status === 'CANCELADA' ? 'CANCELADO' : undefined;
           const closed = detail?.completedAt ?? detail?.cancelledAt;
@@ -75,18 +70,16 @@ export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, ref
             disabled={Boolean(selection)} onSelect={entry => setSelection({ publicationId: row.publication.id, transactionId: row.id, entry })}
             onMenu={() => setSelection({ publicationId: row.publication.id, transactionId: row.id, entry: 'menu' })} />;
         })}
-      </View>)}
+      </AgreementListSection>)}
     </>}
     {!loading && !history.error && count >= TRANSACTIONS_PAGE_SIZE && <Pagination page={history.number} totalPages={totalPages} showSinglePage
       label={`Paginación de transacciones ${tab === 'active' ? 'activas' : 'finalizadas'}`} onPageChange={value => { if (!selection) history.setNumber(value); }} />}
     {selection && active && <PhysicalgoodsTransaction key={`${enriched.scope}:${selection.publicationId}:${selection.transactionId}:${selection.entry}`} target={{ publicationId: selection.publicationId, transactionId: selection.transactionId }} initialPanel={selection.entry} panelsOnly refreshEnabled={refreshEnabled}
       initialDetail={enriched.details[selection.transactionId]} initialHistorical={enriched.details[selection.transactionId]?.campus.id !== enriched.campusId}
       onDetailChanged={value=>{const previous=enriched.details[value.id];enriched.update(value);if(previous?.status!==value.status)onActivityRefresh?.();}} onAccessDenied={() => enriched.invalidate(selection.publicationId, selection.transactionId)} onChanged={() => { void enriched.refresh(selection.publicationId, selection.transactionId); }} onClose={() => setSelection(null)} />}
-  </View>;
+  </AgreementListSection>;
 }
 
 const styles = StyleSheet.create({
-  section: { gap: 14 }, title: { color: colors.ink, fontSize: 26, lineHeight: 34, fontWeight: '800' },
-  tabs: { flexDirection: 'row', backgroundColor: colors.tint, borderRadius: 16, padding: 4 }, tab: { minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', padding: 8, borderRadius: 12 },
-  selected: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }, groupTitle: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+  title: { color: colors.ink, fontSize: 26, lineHeight: 34, fontWeight: '800' },
 });
