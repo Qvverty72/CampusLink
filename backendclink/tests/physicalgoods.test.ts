@@ -1036,13 +1036,14 @@ test('request counters aggregate both inboxes across pages and follow acceptance
   const two=(await resolveRequest(extra.id,c.id)).transaction!.id;
   assert.equal((await requestsService.getSentPhysicalgoodsRequests(first,{limit:'1'})).data.length,1);
   assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:2,receivedPending:0});
-  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,1);
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,3);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(second,{})).sentAccepted,0);
   await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,one,{},'CONFIRMAR');
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,2);
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,3);
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,one,{},'CONFIRMAR');
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,1);
-  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,0);
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,1);
   await transactionsService.transitionPhysicalgoodsTransaction(first,extra.id,two,{},'CANCELAR');
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,0);
   const own=await create(first,input()),request=await requestsService.createPhysicalgoodsRequest(auth,own.id,{messageCode:'ME_INTERESA'});

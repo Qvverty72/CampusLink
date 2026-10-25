@@ -2,7 +2,7 @@ import type {PhysicalgoodsReceivedRequest} from '../types/publication';
 
 type RequestState=Pick<PhysicalgoodsReceivedRequest,'status'|'transaction'>;
 
-/** El aviso es de solicitudes por responder; un acuerdo ya iniciado no vuelve a ser aviso. */
+/** Solicitudes por responder; las transacciones en curso se cuentan aparte en el agregado del servidor. */
 export function isReceivedRequestAwaitingResponse(row:RequestState){
   return row.status==='PENDIENTE'&&!row.transaction;
 }

@@ -79,7 +79,7 @@ test('real request details render lifecycle states and keep history independent 
 
 test('empty inboxes provide the intended recovery and received counts identify their page scope',()=>{
  const sent=renderCatalog('physical',{mode:'requests',variant:'sent',state:'empty'}).markup;assert.match(sent,/Aún no has enviado solicitudes/);assert.match(sent,/Explorar mercado/);
- const received=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'mixed',receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.doesNotMatch(received,/pendientes en esta página/);assert.match(received,/Recibidas, 4 solicitudes por responder/);assert.match(received,/Diego Pérez/);assert.match(received,/Aceptar solicitud de Diego/);
+ const received=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'mixed',receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.doesNotMatch(received,/pendientes en esta página/);assert.match(received,/Recibidas, 4 pendientes/);assert.match(received,/Diego Pérez/);assert.match(received,/Aceptar solicitud de Diego/);
  assert.match(renderCatalog('physical',{mode:'requests',state:'empty'}).markup,/No tienes solicitudes pendientes/);
 });
 
@@ -90,7 +90,7 @@ test('received resource list opens request modal with the shared ten-request pag
  assert.equal((open.match(/aria-label="Revisar solicitud de/g)||[]).length,10);assert.match(open,/Estudiante 10/);assert.doesNotMatch(open,/Aceptar solicitud de|Rechazar solicitud de/);assert.match(open,/Ingeniería en Informática/);assert.match(open,/Páginas de solicitudes del recurso/);
  const selected=renderCatalog('physical',{...options,receivedOpen:'physical-0',receivedSelected:'request-2'}).markup;assert.match(selected,/Aceptar solicitud de Mateo Rojas/);assert.doesNotMatch(selected,/Aceptar solicitud de Diego Pérez/);
  const second=renderCatalog('physical',{...options,receivedScenario:'eleven',receivedOpen:'physical-0',receivedPage:2}).markup;assert.match(second,/Estudiante 11/);assert.equal((second.match(/aria-label="Revisar solicitud de/g)||[]).length,1);
- const reserved=renderCatalog('physical',{...options,receivedScenario:'reserved',receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.match(reserved,/Las demás solicitudes siguen pendientes/);assert.match(reserved,/Ver transacción/);
+ const reserved=renderCatalog('physical',{...options,receivedScenario:'reserved',receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.match(reserved,/Las demás solicitudes siguen pendientes/);assert.doesNotMatch(reserved,/Ver solicitud|Ver transacción/);
  const historical=renderCatalog('physical',{...options,receivedScenario:'historical',receivedOpen:'physical-0'}).markup;assert.doesNotMatch(historical,/Aceptar solicitud de|Rechazar solicitud de/);assert.match(historical,/Publicación retirada/);
  assert.match(renderCatalog('physical',{...options,state:'loading'}).markup,/Cargando solicitudes recibidas/);
  const refreshing=renderCatalog('physical',{...options,receivedOpen:'physical-0',receivedLoading:true}).markup;assert.match(refreshing,/Cargando detalle de solicitudes/);
@@ -100,9 +100,9 @@ test('received resource list opens request modal with the shared ten-request pag
 
 test('received list distinguishes unhandled requests, accepted transactions, a single confirmation and completed exchanges',()=>{
  const options={mode:'requests',variant:'received',receivedScenario:'indicators'};
- const pending=renderCatalog('physical',options).markup;assert.match(pending,/Recibidas, 1 solicitud por responder/);assert.match(pending,/Transacción finalizada/);assert.doesNotMatch(pending,/pendiente en esta página|pendientes en esta página/);
- for(const receivedScenario of ['indicators-accepted','indicators-confirming']){const accepted=renderCatalog('physical',{...options,receivedScenario,receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.match(accepted,/Recibidas, 0 solicitudes por responder/);assert.match(accepted,/1 transacción pendiente/);assert.match(accepted,/Ver solicitud/);assert.match(accepted,/Ver transacción/);}
- const finished=renderCatalog('physical',{...options,receivedScenario:'indicators-completed'}).markup;assert.match(finished,/Recibidas, 0 solicitudes por responder/);assert.equal((finished.match(/Transacción finalizada/g)||[]).length,2);
+ const pending=renderCatalog('physical',options).markup;assert.match(pending,/Recibidas, 1 pendiente/);assert.match(pending,/Transacción finalizada/);assert.doesNotMatch(pending,/pendiente en esta página|pendientes en esta página/);
+ for(const receivedScenario of ['indicators-accepted','indicators-confirming']){const accepted=renderCatalog('physical',{...options,receivedScenario,receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.match(accepted,/Recibidas, 1 pendiente/);assert.match(accepted,/1 transacción pendiente/);assert.doesNotMatch(accepted,/Ver solicitud|Ver transacción/);}
+ const finished=renderCatalog('physical',{...options,receivedScenario:'indicators-completed'}).markup;assert.match(finished,/Recibidas, 0 pendientes/);assert.equal((finished.match(/Transacción finalizada/g)||[]).length,2);
  const expanded=renderCatalog('physical',{...options,receivedOpen:'physical-1',receivedSelected:'finished-request'}).markup;
  assert.match(expanded,/El intercambio se completó/);assert.match(expanded,/aria-expanded="true"/);
  assert.doesNotMatch(expanded,/Ver solicitud|Ver transacción/);
@@ -111,7 +111,7 @@ test('received list distinguishes unhandled requests, accepted transactions, a s
 test('both request badges are visible before the selected request list finishes loading',()=>{
  for(const variant of ['sent','received']){
    const {markup}=renderCatalog('physical',{mode:'requests',variant,state:'loading',requestCounts:{sentAccepted:3,receivedPending:12}});
-   assert.match(markup,/Enviadas, 3 solicitudes aceptadas/);assert.match(markup,/Recibidas, 12 solicitudes por responder/);
+   assert.match(markup,/Enviadas, 3 solicitudes aceptadas/);assert.match(markup,/Recibidas, 12 pendientes/);
    assert.match(markup,/Cargando solicitudes/);assert.doesNotMatch(markup,/Cargando contador de/);
  }
  const pending=renderCatalog('physical',{mode:'requests',variant:'sent',state:'loading',requestCountsLoading:true}).markup;

@@ -15,8 +15,10 @@ export async function countPhysicalgoodsRequests(client:PoolClient,userId:string
           AND t.receptor_id=$1 AND t.estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION'))) AS "sentAccepted",
     (SELECT count(*)::integer FROM public.solicitud_recurso s
       JOIN public.publicacion_recurso p ON p.id=s.publicacion_id JOIN public.recurso_fisico r ON r.publicacion_id=p.id
-      WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO' AND s.estado_solicitud='PENDIENTE'
-        AND NOT EXISTS(SELECT 1 FROM public.transaccion_recurso t WHERE t.solicitud_id=s.id AND t.publicacion_id=p.id)) AS "receivedPending"`,[userId])).rows[0];
+      WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO' AND (
+        (s.estado_solicitud='PENDIENTE' AND NOT EXISTS(SELECT 1 FROM public.transaccion_recurso t WHERE t.solicitud_id=s.id AND t.publicacion_id=p.id))
+        OR (s.estado_solicitud='ACEPTADA' AND EXISTS(SELECT 1 FROM public.transaccion_recurso t WHERE t.solicitud_id=s.id AND t.publicacion_id=p.id
+          AND t.propietario_id=$1 AND t.estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION'))))) AS "receivedPending"`,[userId])).rows[0];
 }
 
 export async function findActivePhysicalgoodsRequest(client: PoolClient, publicationId: string, userId: string) {

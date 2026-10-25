@@ -91,6 +91,7 @@ export interface PhysicalgoodsRequestOptions {
   activeRequest: PhysicalgoodsRequest | null;
   messages: { code:string; label:string }[];
 }
+/** receivedPending incluye por responder y aceptadas con transacción todavía en curso. */
 export interface PhysicalgoodsRequestCounts {sentAccepted:number;receivedPending:number}
 
 export interface PhysicalgoodsReceivedRequest {

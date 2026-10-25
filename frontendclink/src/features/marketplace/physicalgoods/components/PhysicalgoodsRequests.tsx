@@ -22,7 +22,7 @@ export function PhysicalgoodsRequests({ active, onOpen, onResolved, onAgreement,
   const disabled = r.busy || r.loading || Boolean(r.selection);
   const awaitingCount=counters.counts?.receivedPending;
   return <View style={requestUI.section}>
-    {onModeChange && <RequestSegments received={received} onChange={onModeChange} showPendingSummary={false} pendingCountLabel={awaitingCount===1?'solicitud por responder':'solicitudes por responder'} disabled={r.busy || Boolean(r.selection)} pendingCount={awaitingCount} acceptedCount={counters.counts?.sentAccepted} countsLoading={counters.loading} />}
+    {onModeChange && <RequestSegments received={received} onChange={onModeChange} showPendingSummary={false} pendingCountLabel={awaitingCount===1?'pendiente':'pendientes'} disabled={r.busy || Boolean(r.selection)} pendingCount={awaitingCount} acceptedCount={counters.counts?.sentAccepted} countsLoading={counters.loading} />}
     {r.feedback && <View accessibilityLiveRegion="polite" style={detailUI.notice}><Text style={detailUI.noticeText}>{r.feedback}</Text></View>}
     <RequestsFeedback loading={false} error={r.error} empty={!r.loading && Boolean(r.page && !r.page.data.length)} received={received} onReload={reload} disabled={r.busy} redesigned firstPage={r.number === 1} onExplore={onExplore} />
     {!received && <PhysicalgoodsSentRequests state={r}/>}

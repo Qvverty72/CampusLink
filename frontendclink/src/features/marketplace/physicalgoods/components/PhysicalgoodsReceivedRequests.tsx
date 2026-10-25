@@ -57,7 +57,7 @@ export function PhysicalgoodsReceivedResource({initialRows,onClose,onChanged,onR
     requests={rows.map(row=>({id:row.id,name:row.requester.fullName,careers:row.requester.careers,message:row.message,requestedAt:row.requestedAt,...receivedStatus(row),
       canReject:row.canResolve&&row.status==='PENDIENTE',canAccept:row.canResolve&&row.status==='PENDIENTE'&&row.publication.status==='DISPONIBLE',
       onAccept:()=>state.select(row,'ACEPTAR'),onReject:()=>state.select(row,'RECHAZAR'),
-      onDetails:row.transaction?.status==='COMPLETADA'?undefined:()=>leave(()=>onDetail(row.publication.id,row.id)),
-      onTransaction:row.transaction&&row.transaction.status!=='COMPLETADA'?()=>leave(()=>onAgreement(row.publication.id,row.transaction!.id)):undefined,
+      onDetails:row.status==='ACEPTADA'||row.transaction?.status==='COMPLETADA'?undefined:()=>leave(()=>onDetail(row.publication.id,row.id)),
+      onTransaction:row.status!=='ACEPTADA'&&row.transaction&&row.transaction.status!=='COMPLETADA'?()=>leave(()=>onAgreement(row.publication.id,row.transaction!.id)):undefined,
     }))}/>;
 }
