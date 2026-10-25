@@ -2,7 +2,7 @@ import { authenticatedEnvelopeRequest, authenticatedRequest, AuthApiError } from
 import type { PublicationCreated, PublicationInput, PublicationOptions } from '../types/publication';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, PhysicalgoodsSearchFilters, PublicationPhoto } from '../types/publication';
 import type { PhysicalgoodsRequest, PhysicalgoodsRequestOptions } from '../types/publication';
-import type { PhysicalgoodsReceivedPage, PhysicalgoodsReceivedRequest } from '../types/publication';
+import type { PhysicalgoodsReceivedPage, PhysicalgoodsReceivedRequest,PhysicalgoodsRequestCounts } from '../types/publication';
 import type { PhysicalgoodsCoordinationMessage,PhysicalgoodsCoordinationOptions,PhysicalgoodsCoordinationPage,PhysicalgoodsTransaction,PhysicalgoodsTransactionTarget } from '../types/publication';
 import type { PhysicalgoodsOwnDetail,PhysicalgoodsOwnPublication,PhysicalgoodsOwnPage,PhysicalgoodsTransactionSummary,PhysicalgoodsTransactionsPage } from '../types/publication';
 import type {PhysicalgoodsRating} from '../types/publication';
@@ -54,8 +54,9 @@ export const loadPhysicalgoodsRequestOptions = (id: string, signal: AbortSignal)
 export const requestPhysicalgoods = (id: string, messageCode: string, signal: AbortSignal, key?:string) => authenticatedRequest<PhysicalgoodsRequest>(resourcePath(id) + '/requests',{
   method:'POST',signal,headers:{ 'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{}) },body:JSON.stringify({ messageCode }),
 });
-export const loadPhysicalgoodsRequests = (page:number,received:boolean,signal:AbortSignal) => authenticatedEnvelopeRequest<PhysicalgoodsReceivedRequest[],PhysicalgoodsReceivedPage['meta']>(
-  path+(received?'/received-requests':'/sent-requests'),{signal},new URLSearchParams({page:String(page),limit:'10',...(received?{groupBy:'publication'}:{})}));
+export const loadPhysicalgoodsRequests = (page:number,received:boolean,signal:AbortSignal,publicationId?:string) => authenticatedEnvelopeRequest<PhysicalgoodsReceivedRequest[],PhysicalgoodsReceivedPage['meta']>(
+  path+(received?'/received-requests':'/sent-requests'),{signal},new URLSearchParams({page:String(page),limit:'10',...(received?{groupBy:'publication',...(publicationId?{publicationId}:{})}:{})}));
+export const loadPhysicalgoodsRequestCounts=(signal:AbortSignal)=>authenticatedRequest<PhysicalgoodsRequestCounts>(path+'/request-counts',{signal});
 export const resolvePhysicalgoodsRequest = (id:string,requestId:string,decision:'ACEPTAR'|'RECHAZAR',signal:AbortSignal) => {
   resourcePath(requestId);
   return authenticatedRequest(resourcePath(id)+'/requests/'+requestId,{method:'PATCH',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({decision})});

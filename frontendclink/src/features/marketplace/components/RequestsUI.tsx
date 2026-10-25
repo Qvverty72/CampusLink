@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import {Skeleton,SkeletonBlock} from '@/components/Skeleton';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CATALOG_COLORS as colors, ui } from './CatalogUI';
 import { ResourceSummaryRow, detailUI } from './ResourceDetailUI';
@@ -56,15 +57,18 @@ export function RequestCard({ title, requester, status, requestedAt, message, di
   </PersonalRow>;
 }
 
-export function RequestSegments({ received, onChange, pendingCount, disabled = false }: { received: boolean; onChange: (received: boolean) => void; pendingCount?: number; disabled?: boolean }) {
+export function RequestSegments({ received, onChange, pendingCount, acceptedCount, countsLoading=false, disabled = false,showPendingSummary=true,pendingCountLabel='pendientes en esta página' }: { received: boolean; onChange: (received: boolean) => void; pendingCount?: number;acceptedCount?:number;countsLoading?:boolean; disabled?: boolean;showPendingSummary?:boolean;pendingCountLabel?:string }) {
   return <View style={{ gap: 6 }}><View accessibilityRole="tablist" accessibilityLabel="Bandeja de solicitudes" style={requestUI.segments}>
-    {[{ value: false, label: 'Enviadas' }, { value: true, label: 'Recibidas' }].map(tab => <Pressable key={tab.label} accessibilityRole="tab" aria-selected={received === tab.value} accessibilityState={{ selected: received === tab.value, disabled }}
-      accessibilityLabel={tab.value && pendingCount !== undefined ? `Recibidas, ${pendingCount} pendientes en esta página` : tab.label}
+    {[{ value: false, label: 'Enviadas' }, { value: true, label: 'Recibidas' }].map(tab => {
+      const count=tab.value?pendingCount:acceptedCount;
+      const countLabel=tab.value?pendingCountLabel:count===1?'solicitud aceptada':'solicitudes aceptadas';
+      return <Pressable key={tab.label} accessibilityRole="tab" aria-selected={received === tab.value} accessibilityState={{ selected: received === tab.value, disabled }}
+      accessibilityLabel={count!==undefined?`${tab.label}, ${count} ${countLabel}`:countsLoading?`${tab.label}, cargando contador`:tab.label}
       disabled={disabled} onPress={() => onChange(tab.value)} style={[requestUI.segment, received === tab.value && requestUI.activeSegment, disabled && ui.disabled]}>
       <Text style={[detailUI.body, received === tab.value && { fontWeight: '700' }]}>{tab.label}</Text>
-      {tab.value && pendingCount !== undefined && pendingCount > 0 && <View style={requestUI.badge}><Text style={requestUI.badgeText}>{pendingCount}</Text></View>}
-    </Pressable>)}
-  </View>{pendingCount !== undefined && <Text style={detailUI.helper}>{pendingCount} pendiente{pendingCount === 1 ? '' : 's'} en esta página.</Text>}</View>;
+      {count!==undefined&&count>0?<View style={requestUI.badge}><Text style={requestUI.badgeText}>{count}</Text></View>:count===undefined&&countsLoading?<Skeleton label={`Cargando contador de ${tab.label.toLocaleLowerCase('es-CL')}`}><SkeletonBlock width={22} height={18} borderRadius={10}/></Skeleton>:null}
+    </Pressable>;})}
+  </View>{showPendingSummary&&pendingCount !== undefined && <Text style={detailUI.helper}>{pendingCount} pendiente{pendingCount === 1 ? '' : 's'} en esta página.</Text>}</View>;
 }
 
 export function RequestsPager({ page, hasMore, disabled, onPrevious, onNext, itemLabel = 'Solicitudes' }: {
@@ -76,12 +80,11 @@ export function RequestsPager({ page, hasMore, disabled, onPrevious, onNext, ite
   </View>;
 }
 
-export function RequestDecisionDialog({ selection, physical = false, disabled, onConfirm, onCancel }: {
+export function RequestDecisionDialog({ selection, physical = false, disabled, onConfirm, onCancel, embedded = false }: {
   selection: { name: string; title: string; decision: 'ACEPTAR' | 'RECHAZAR' } | null; physical?: boolean;
-  disabled: boolean; onConfirm: () => void; onCancel: () => void;
+  disabled: boolean; onConfirm: () => void; onCancel: () => void;embedded?:boolean;
 }) {
-  return <Modal visible={Boolean(selection)} transparent animationType="fade" onRequestClose={() => { if (!disabled) onCancel(); }}>
-    <View style={requestUI.overlay}><ScrollView contentContainerStyle={requestUI.dialogScroll} keyboardShouldPersistTaps="handled">
+  const content=<View style={[requestUI.overlay,embedded&&StyleSheet.absoluteFill]}><ScrollView contentContainerStyle={requestUI.dialogScroll} keyboardShouldPersistTaps="handled">
       {selection && <View accessibilityViewIsModal style={requestUI.dialog}>
         <Text accessibilityRole="header" style={ui.sectionTitle}>{selection.decision === 'ACEPTAR' ? 'Aceptar' : 'Rechazar'} solicitud</Text>
         <Text style={detailUI.body}>{selection.name} · {selection.title}</Text>
@@ -91,8 +94,8 @@ export function RequestDecisionDialog({ selection, physical = false, disabled, o
         <RequestButton label={selection.decision === 'ACEPTAR' ? 'Confirmar aceptación' : 'Confirmar rechazo'} onPress={onConfirm} primary disabled={disabled} />
         <RequestButton label="Volver sin cambios" onPress={onCancel} disabled={disabled} />
       </View>}
-    </ScrollView></View>
-  </Modal>;
+    </ScrollView></View>;
+  return embedded?selection?content:null:<Modal visible={Boolean(selection)} transparent animationType="fade" onRequestClose={() => { if (!disabled) onCancel(); }}>{content}</Modal>;
 }
 
 export const requestUI = StyleSheet.create({

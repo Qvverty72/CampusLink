@@ -299,13 +299,16 @@ test('personal modal lists register their own queries and protect confirmation a
   }
   const requests = { reload, loading: false, busy: false, selection: null, page: null, number: 1 };
   const { PhysicalgoodsRequests } = load('../marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx', { ...shared,
+    react:{useCallback:fn=>fn},
+    '../hooks/usePhysicalgoodsRequestCounts':{usePhysicalgoodsRequestCounts:()=>({counts:{sentAccepted:0,receivedPending:0},loading:false,reload})},
     './PhysicalgoodsSentRequests':{PhysicalgoodsSentRequests:'SentRequests'},
     './PhysicalgoodsReceivedRequests':{PhysicalgoodsReceivedRequests:'ReceivedRequests'},
     '../hooks/usePhysicalgoodsRequests': { usePhysicalgoodsRequests: () => requests },
+    '../utils/receivedRequestIndicators':load('../marketplace/physicalgoods/utils/receivedRequestIndicators.ts',{}),
     '../../components/CatalogUI': { StatusTag: 'Status' }, '../../components/ResourceDetailUI': { detailUI: {} },
     '../../components/RequestsUI': { requestUI: {}, RequestsHeader: 'Header', RequestsFeedback: 'Feedback', RequestsPager: 'Pager', RequestDecisionDialog: 'Dialog' } });
   for (const received of [false, true]) {
-    PhysicalgoodsRequests({ active: true, received }); assert.equal(registered.onRefresh, reload); assert.equal(registered.enabled, true);
+    PhysicalgoodsRequests({ active: true, received }); assert.equal(typeof registered.onRefresh,'function'); assert.equal(registered.enabled, true);
     requests.busy = true; PhysicalgoodsRequests({ active: true, received }); assert.equal(registered.enabled, false); requests.busy = false;
     requests.selection = { decision: 'ACEPTAR', request: { requester: {}, publication: {} } };
     PhysicalgoodsRequests({ active: true, received }); assert.equal(registered.enabled, false); requests.selection = null;

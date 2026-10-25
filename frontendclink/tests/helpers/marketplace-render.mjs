@@ -26,7 +26,7 @@ const digitalRows = ['Guía de cálculo integral', 'Resumen de bases de datos', 
 }));
 
 /** Render aislado de las pantallas reales con datos sintéticos. Nunca conecta a APIs o sesiones. */
-export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null, sentScenario = null, sentOpen = null, sentResource = null, receivedScenario = null, receivedOpen = null, receivedResource = false } = {}) {
+export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null, sentScenario = null, sentOpen = null, sentResource = null, receivedScenario = null, receivedOpen = null, receivedResource = false, receivedOrder = 'oldest', receivedPage = 1, receivedSelected = null, receivedLoading = false, receivedError = false, receivedDecision = null, requestCounts = null, requestCountsLoading = false } = {}) {
   const physical = screen === 'physical';
   const detailMode = mode === 'detail' || mode === 'request';
   const mocks = new Map();
@@ -126,21 +126,51 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     if(sentScenario==='reserved')requestRows[0]={...requestRows[0],status:'PENDIENTE',transaction:null};
     if(sentScenario==='completed')requestRows[0]={...requestRows[0],transaction:{id:'trade-0',status:'COMPLETADA',modality:'VENTA',amount:15000,currency:'CLP'}};
     if(sentScenario==='historical')requestRows[0].publication={...requestRows[0].publication,isWithdrawn:true,canView:false};
+    if(sentScenario==='ordered'){
+      // Respuesta representativa del orden global del servidor; la UI no reordena páginas aisladas.
+      const pending={...requestRows[1],requestedAt:'2026-10-24T12:00:00Z'};
+      const accepted={...requestRows[0],requestedAt:'2026-10-22T12:00:00Z',publication:{...requestRows[0].publication,title:'Hola'}};
+      const completed={...requestRows[0],id:'request-completed',requestedAt:'2026-10-25T12:00:00Z',publication:{...requestRows[0].publication,id:'completed-resource',title:'Calculadora Casio',status:'FINALIZADO'},transaction:{...requestRows[0].transaction,id:'completed-trade',status:'COMPLETADA'}};
+      const rejected={...requestRows[2],requestedAt:'2026-10-24T12:00:00Z',publication:{...requestRows[2].publication,title:'Libro de física'}};
+      requestRows.splice(0,requestRows.length,pending,accepted,completed,rejected);
+    }
   }
   if(physical&&variant==='received'&&receivedScenario){
-    const base=requestRows[0],total=receivedScenario==='many'?10:3;
-    requestRows.splice(0,requestRows.length,...Array.from({length:total},(_,index)=>({...base,id:`request-${index}`,requester:{id:`user-${index}`,fullName:['Diego Pérez','Valentina Muñoz','Mateo Rojas'][index]??`Estudiante ${index+1}`},
+    const base=requestRows[0],total=receivedScenario==='single'?1:receivedScenario==='many'?10:receivedScenario==='eleven'?11:receivedScenario==='nine'?9:3;
+    requestRows.splice(0,requestRows.length,...Array.from({length:total},(_,index)=>({...base,id:`request-${index}`,requestedAt:new Date(Date.parse(base.requestedAt)+index*3600000).toISOString(),requester:{id:`user-${index}`,fullName:['Diego Pérez','Valentina Muñoz','Mateo Rojas'][index]??`Estudiante ${index+1}`,careers:[index===1?'Diseño gráfico':'Ingeniería en Informática']},
       publication:{...base.publication,price:15000,status:receivedScenario==='reserved'?'RESERVADO':'DISPONIBLE',canView:receivedScenario!=='historical',isWithdrawn:receivedScenario==='historical'},
       canResolve:receivedScenario!=='historical',status:receivedScenario==='historical'?'CANCELADA':receivedScenario==='reserved'&&index===0?'ACEPTADA':'PENDIENTE',
       transaction:receivedScenario==='reserved'&&index===0?{id:'trade-0',status:'RESERVADA',modality:'VENTA',amount:15000,currency:'CLP'}:null,
     })),{...base,id:'request-other',publication:{...base.publication,id:'physical-1',title:'Libro de física general',modality:'DONACION',price:null}});
+    if(receivedScenario==='priority'){
+      const rows=[
+        ['completed','Sushi','2026-10-25','COMPLETADA','ACEPTADA'],
+        ['pending-old','Libro de física','2026-10-21',null,'PENDIENTE'],
+        ['active','Mouse','2026-10-18','PENDIENTE_CONFIRMACION','ACEPTADA'],
+        ['pending-new','Calculadora','2026-10-24',null,'PENDIENTE'],
+      ].map(([id,title,publishedAt,transactionStatus,status])=>({...base,id:`request-${id}`,status,canResolve:status==='PENDIENTE',
+        publication:{...base.publication,id,title,publishedAt,modality:'DONACION',price:null,status:transactionStatus==='COMPLETADA'?'FINALIZADO':transactionStatus?'RESERVADO':'DISPONIBLE'},
+        transaction:transactionStatus?{id:`tx-${id}`,status:transactionStatus}:null}));
+      requestRows.splice(0,requestRows.length,...rows);
+    }
+    if(receivedScenario==='single')Object.assign(requestRows[0],{requester:{id:'user-0',fullName:'Carlos Soto',careers:[]},publication:{...requestRows[0].publication,title:'Mouse',modality:'DONACION',price:null}});
+    if(['indicators','indicators-accepted','indicators-confirming','indicators-completed'].includes(receivedScenario)){
+      const first={...requestRows[0],publication:{...requestRows[0].publication,title:'Mouse',modality:'DONACION',price:null}};
+      if(receivedScenario!=='indicators')Object.assign(first,{status:'ACEPTADA',canResolve:false,transaction:{id:'mouse-trade',status:receivedScenario==='indicators-completed'?'COMPLETADA':receivedScenario==='indicators-confirming'?'PENDIENTE_CONFIRMACION':'RESERVADA'},publication:{...first.publication,status:receivedScenario==='indicators-completed'?'FINALIZADO':'RESERVADO'}});
+      const finished={...requestRows[1],id:'finished-request',status:'ACEPTADA',canResolve:false,publication:{...requestRows[1].publication,id:'physical-1',title:'Sushi',modality:'DONACION',price:null,status:'FINALIZADO'},transaction:{id:'sushi-trade',status:'COMPLETADA'}};
+      requestRows.splice(0,requestRows.length,first,finished);
+    }
   }
   const requestState = { open: true, received: variant !== 'sent', rows: state === 'empty' || state === 'error' ? [] : requestRows, number: 1, page: { data: state === 'empty' || state === 'error' ? [] : requestRows, meta: { hasMore: false } },
     loading: state === 'loading', error: state === 'error' ? 'No se pudo conectar. Revisa tu conexión e inténtalo otra vez.' : null, busy: false, selection: null, hasMore: false,
     reload: noop, mode: noop, select: noop, resolve: noop, cancel: noop, cancelSelection: noop, previous: noop, next: noop, setNumber: noop,
   };
   if (mode === 'requests' || (mode === 'personal' && ['sent', 'received'].includes(variant))) mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx'));
-  add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsRequests.ts', { usePhysicalgoodsRequests: () => requestState });
+  add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsRequestCounts.ts',{usePhysicalgoodsRequestCounts:()=>({counts:requestCountsLoading?undefined:requestCounts??{sentAccepted:variant==='sent'?requestRows.filter(row=>row.status==='ACEPTADA'&&['RESERVADA','PENDIENTE_CONFIRMACION'].includes(row.transaction?.status)).length:0,receivedPending:requestRows.filter(row=>row.status==='PENDIENTE'&&!row.transaction).length},loading:requestCountsLoading,reload:noop})});
+  add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsRequests.ts', { usePhysicalgoodsRequests: (_active,_onChanged,_received,_version,publicationId) => publicationId?{
+    ...requestState,loading:requestState.loading||receivedLoading,error:receivedError?'No se pudo conectar. Revisa tu conexión e inténtalo otra vez.':requestState.error,
+    selection:receivedDecision?{request:requestRows[0],decision:receivedDecision}:null,page:{data:requestState.page.data.filter(row=>row.publication.id===publicationId),meta:{hasMore:false}},
+  }:requestState });
   add('components/RefreshScrollView.tsx', { useScrollRefresh: noop, RefreshScrollView: ({ children, contentContainerStyle, style }) => React.createElement(native.ScrollView, { contentContainerStyle, style }, children) });
   const personalMode = ['personal', 'owned', 'acquired', 'acquired-detail', 'transactions', 'agreements'].includes(mode);
   if (mode === 'request-detail') mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx'));
@@ -274,7 +304,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   const browserNative = { ...native, useWindowDimensions: () => ({ width, height: 844, scale: 1, fontScale: 1 }) };
   // SSR cannot create RN Modal portals. The HTML fixture moves these wrappers to body,
   // preserving stacking order and preventing nested dialogs from clipping other modals.
-  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || inlinePanel || sentResource || receivedResource) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
+  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || inlinePanel || sentResource || receivedResource || receivedOpen) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
   const originalLoad = Module._load;
   Module._load = function(name, parent, isMain) {
     if (name === 'react-native') return native;
@@ -301,7 +331,8 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       if (name === 'react' && mode === 'publish' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? 'publish' : initial) };
       if (name === 'react' && mode === 'personal' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? inlinePanel || variant === 'rated' ? 'transactions' : ['transactions', 'sent', 'received'].includes(variant) ? variant : variant.startsWith('transactions-') ? 'transactions' : 'mine' : initial) };
       if (name === 'react' && sentScenario && /PhysicalgoodsSentRequests\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(requestStateIndex++===0?{key:'viewer:1',id:sentOpen}:sentResource?requestRows.find(row=>row.id===sentOpen)??requestRows[0]:initial)};
-      if (name === 'react' && receivedScenario && /PhysicalgoodsReceivedRequests\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(requestStateIndex++===0?{key:'owner:1',id:receivedOpen}:receivedResource?requestRows[0]:initial)};
+      if (name === 'react' && receivedScenario && /PhysicalgoodsReceivedRequests\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(receivedOpen?{id:receivedOpen,page:1,scope:'',rows:requestRows.filter(row=>row.publication.id===receivedOpen)}:initial)};
+      if (name === 'react' && receivedScenario && /ResourceRequestsModal\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(requestStateIndex++===0?receivedOrder:requestStateIndex===2?receivedPage:receivedSelected)};
       if (name === 'react' && inlinePanel && /PhysicalgoodsAgreements\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(initial===null?{publicationId:physicalTransactions[0].publication.id,transactionId:physicalTransactions[0].id,entry:inlinePanel}:initial==='active'&&agreementTab==='finished'?'finished':initial)};
       if (name === 'react' && /PhysicalgoodsAgreements\.tsx$/.test(filename) && (variant === 'finished' || agreementTab === 'finished')) return { ...React, useState: initial => React.useState(initial === 'active' ? 'finished' : initial) };
       if (name === 'react' && mode === 'transaction' && /PhysicalgoodsTransaction\.tsx$/.test(filename)) return { ...React, useState: initial => { const index=requestStateIndex++; return React.useState(initial==='overview' ? agreementPanel : index===2 && variant==='menu' ? true : initial); } };

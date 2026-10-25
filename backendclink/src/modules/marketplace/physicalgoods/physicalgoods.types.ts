@@ -101,6 +101,7 @@ export interface PhysicalgoodsTransactionRow {
   moneda: string;
 }
 export interface PhysicalgoodsReceivedRow extends PhysicalgoodsRequestRow {
+  publicado_en: string;
   campus_id: string;
   campus_nombre: string;
   propietario_id: string;
@@ -111,6 +112,7 @@ export interface PhysicalgoodsReceivedRow extends PhysicalgoodsRequestRow {
   modalidad: 'VENTA' | 'DONACION';
   precio: string | null;
   solicitante_nombre: string;
+  solicitante_carreras: string[];
   mensaje: string;
   transaccion_id: string | null;
   estado_transaccion: PhysicalgoodsTransactionRow['estado_transaccion'] | null;

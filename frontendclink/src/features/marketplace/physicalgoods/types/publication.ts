@@ -91,13 +91,15 @@ export interface PhysicalgoodsRequestOptions {
   activeRequest: PhysicalgoodsRequest | null;
   messages: { code:string; label:string }[];
 }
+export interface PhysicalgoodsRequestCounts {sentAccepted:number;receivedPending:number}
+
 export interface PhysicalgoodsReceivedRequest {
   id: string;
-  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean;isWithdrawn:boolean };
+  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean;isWithdrawn:boolean;publishedAt?:string };
   campus:{id:string;name:string};
   owner:{id:string;fullName:string};
   canResolve:boolean;
-  requester: { id:string; fullName:string };
+  requester: { id:string; fullName:string;careers?:string[] };
   message: string;
   messageCode: string;
   status: PhysicalgoodsRequest['status'];

@@ -10,7 +10,7 @@ import { updatePhysicalgoods, withdrawPhysicalgoods } from './physicalgoods.edit
 import { createPhysicalgoodsRequest, getPhysicalgoodsRequestOptions, getReceivedPhysicalgoodsRequests, getSentPhysicalgoodsRequests, resolvePhysicalgoodsRequest } from './physicalgoods.requests.service.js';
 import { getPhysicalgoodsTransaction,getPhysicalgoodsCoordinationOptions,getPhysicalgoodsCoordinationMessages,sendPhysicalgoodsCoordination,transitionPhysicalgoodsTransaction,ratePhysicalgoodsOwner } from './physicalgoods.transactions.service.js';
 import { getOwnPhysicalgoods, getOwnPhysicalgoodsDetail } from './physicalgoods.history.service.js';
-import { getOwnPhysicalgoodsRequest } from './physicalgoods.requests.service.js';
+import { getOwnPhysicalgoodsRequest,getPhysicalgoodsRequestCounts } from './physicalgoods.requests.service.js';
 import { getOwnPhysicalgoodsTransactions } from './physicalgoods.transactions.service.js';
 
 type PhysicalgoodsHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
@@ -51,6 +51,9 @@ export const getReceivedPhysicalgoodsRequestsController: PhysicalgoodsHandler = 
 export const getSentPhysicalgoodsRequestsController: PhysicalgoodsHandler = async (request,response) => {
   const result = await getSentPhysicalgoodsRequests(response.locals.auth,request.query);
   sendEnvelope(response,result.data,{ meta:result.meta });
+};
+export const getPhysicalgoodsRequestCountsController:PhysicalgoodsHandler=async(request,response)=>{
+  sendSuccess(response,await getPhysicalgoodsRequestCounts(response.locals.auth,request.query));
 };
 export const resolvePhysicalgoodsRequestController: PhysicalgoodsHandler = async (request,response) => {
   sendSuccess(response,await resolvePhysicalgoodsRequest(response.locals.auth,request.params.publicationId,request.params.requestId,request.body));

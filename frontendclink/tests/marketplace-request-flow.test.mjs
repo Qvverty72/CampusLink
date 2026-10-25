@@ -79,19 +79,43 @@ test('real request details render lifecycle states and keep history independent 
 
 test('empty inboxes provide the intended recovery and received counts identify their page scope',()=>{
  const sent=renderCatalog('physical',{mode:'requests',variant:'sent',state:'empty'}).markup;assert.match(sent,/Aún no has enviado solicitudes/);assert.match(sent,/Explorar mercado/);
- const received=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'mixed',receivedOpen:'physical-0'}).markup;assert.match(received,/4 pendientes en esta página/);assert.match(received,/Diego Pérez/);assert.match(received,/Aceptar solicitud de Diego/);
+ const received=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'mixed',receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.doesNotMatch(received,/pendientes en esta página/);assert.match(received,/Recibidas, 4 solicitudes por responder/);assert.match(received,/Diego Pérez/);assert.match(received,/Aceptar solicitud de Diego/);
  assert.match(renderCatalog('physical',{mode:'requests',state:'empty'}).markup,/No tienes solicitudes pendientes/);
 });
 
-test('received accordion renders one resource card with all ten requesters and no hidden pagination inside the group',()=>{
+test('received resource list opens request modal with the shared ten-request paginator and historical protections',()=>{
  const options={mode:'requests',variant:'received',receivedScenario:'many'};
- const closed=renderCatalog('physical',options).markup;assert.match(closed,/10 solicitudes · 10 pendientes/);assert.doesNotMatch(closed,/aria-expanded="true"|Mensaje recibido el/);
+ const closed=renderCatalog('physical',options).markup;assert.match(closed,/10 solicitudes · 0 transacciones pendientes/);assert.doesNotMatch(closed,/Revisar solicitud de|Más antiguas/);
  const open=renderCatalog('physical',{...options,receivedOpen:'physical-0'}).markup;
- assert.equal((open.match(/Mensaje recibido el/g)||[]).length,10);assert.match(open,/Estudiante 10/);assert.match(open,/Aceptar solicitud de Estudiante 10/);
- assert.equal((open.match(/solicitudes del recurso: Calculadora científica/g)||[]).length,1);assert.match(open,/Libro de física general/);
- const reserved=renderCatalog('physical',{...options,receivedScenario:'reserved',receivedOpen:'physical-0'}).markup;assert.match(reserved,/Pendiente mientras se realiza otro intercambio/);assert.match(reserved,/Ver transacción/);
+ assert.equal((open.match(/aria-label="Revisar solicitud de/g)||[]).length,10);assert.match(open,/Estudiante 10/);assert.doesNotMatch(open,/Aceptar solicitud de|Rechazar solicitud de/);assert.match(open,/Ingeniería en Informática/);assert.match(open,/Páginas de solicitudes del recurso/);
+ const selected=renderCatalog('physical',{...options,receivedOpen:'physical-0',receivedSelected:'request-2'}).markup;assert.match(selected,/Aceptar solicitud de Mateo Rojas/);assert.doesNotMatch(selected,/Aceptar solicitud de Diego Pérez/);
+ const second=renderCatalog('physical',{...options,receivedScenario:'eleven',receivedOpen:'physical-0',receivedPage:2}).markup;assert.match(second,/Estudiante 11/);assert.equal((second.match(/aria-label="Revisar solicitud de/g)||[]).length,1);
+ const reserved=renderCatalog('physical',{...options,receivedScenario:'reserved',receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.match(reserved,/Las demás solicitudes siguen pendientes/);assert.match(reserved,/Ver transacción/);
  const historical=renderCatalog('physical',{...options,receivedScenario:'historical',receivedOpen:'physical-0'}).markup;assert.doesNotMatch(historical,/Aceptar solicitud de|Rechazar solicitud de/);assert.match(historical,/Publicación retirada/);
  assert.match(renderCatalog('physical',{...options,state:'loading'}).markup,/Cargando solicitudes recibidas/);
+ const refreshing=renderCatalog('physical',{...options,receivedOpen:'physical-0',receivedLoading:true}).markup;assert.match(refreshing,/Cargando detalle de solicitudes/);
+ const decision=renderCatalog('physical',{...options,receivedOpen:'physical-0',receivedDecision:'ACEPTAR'}).markup;
+ assert.equal((decision.match(/data-qa-modal-portal="true"/g)||[]).length,1);assert.match(decision,/Confirmar aceptación/);
+});
+
+test('received list distinguishes unhandled requests, accepted transactions, a single confirmation and completed exchanges',()=>{
+ const options={mode:'requests',variant:'received',receivedScenario:'indicators'};
+ const pending=renderCatalog('physical',options).markup;assert.match(pending,/Recibidas, 1 solicitud por responder/);assert.match(pending,/Transacción finalizada/);assert.doesNotMatch(pending,/pendiente en esta página|pendientes en esta página/);
+ for(const receivedScenario of ['indicators-accepted','indicators-confirming']){const accepted=renderCatalog('physical',{...options,receivedScenario,receivedOpen:'physical-0',receivedSelected:'request-0'}).markup;assert.match(accepted,/Recibidas, 0 solicitudes por responder/);assert.match(accepted,/1 transacción pendiente/);assert.match(accepted,/Ver solicitud/);assert.match(accepted,/Ver transacción/);}
+ const finished=renderCatalog('physical',{...options,receivedScenario:'indicators-completed'}).markup;assert.match(finished,/Recibidas, 0 solicitudes por responder/);assert.equal((finished.match(/Transacción finalizada/g)||[]).length,2);
+ const expanded=renderCatalog('physical',{...options,receivedOpen:'physical-1',receivedSelected:'finished-request'}).markup;
+ assert.match(expanded,/El intercambio se completó/);assert.match(expanded,/aria-expanded="true"/);
+ assert.doesNotMatch(expanded,/Ver solicitud|Ver transacción/);
+});
+
+test('both request badges are visible before the selected request list finishes loading',()=>{
+ for(const variant of ['sent','received']){
+   const {markup}=renderCatalog('physical',{mode:'requests',variant,state:'loading',requestCounts:{sentAccepted:3,receivedPending:12}});
+   assert.match(markup,/Enviadas, 3 solicitudes aceptadas/);assert.match(markup,/Recibidas, 12 solicitudes por responder/);
+   assert.match(markup,/Cargando solicitudes/);assert.doesNotMatch(markup,/Cargando contador de/);
+ }
+ const pending=renderCatalog('physical',{mode:'requests',variant:'sent',state:'loading',requestCountsLoading:true}).markup;
+ assert.match(pending,/Cargando contador de enviadas/);assert.match(pending,/Cargando contador de recibidas/);
 });
 
 test('real sent accordion shows only the selected message and preserves historical resource restrictions',()=>{
@@ -105,6 +129,13 @@ test('real sent accordion shows only the selected message and preserves historic
  assert.match(history,/Recurso de la solicitud/);assert.match(history,/no están disponibles/);assert.doesNotMatch(history,/Ver transacción|Ver solicitud: Sushi/);
  const loading=renderCatalog('physical',{mode:'requests',variant:'sent',state:'loading'}).markup;
  assert.match(loading,/Cargando solicitudes enviadas/);assert.doesNotMatch(loading,/Aún no has enviado solicitudes/);
+});
+
+test('received list displays active transactions first, unanswered resources by age and completed last',()=>{
+ const {markup}=renderCatalog('physical',{mode:'requests',variant:'received',receivedScenario:'priority'});
+ const titles=['Mouse','Calculadora','Libro de física','Sushi'];
+ for(let i=0;i<titles.length-1;i++)assert.ok(markup.indexOf(titles[i])<markup.indexOf(titles[i+1]),titles[i]);
+ assert.match(markup,/1 transacción pendiente/);assert.match(markup,/Transacción finalizada/);
 });
 
 test('request resource modal reuses the product view for pending requests and keeps its loading/error states',()=>{

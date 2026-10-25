@@ -1,17 +1,16 @@
-import {useState} from 'react';
-import {StyleSheet,Text,View} from 'react-native';
-import {RequestAccordionCard,RequestAccordionSkeleton,RequestMessage,requestAccordionUI,type RequestTone} from '../../components/RequestAccordionCard';
-import {RequestButton,requestUI} from '../../components/RequestsUI';
-import {CATALOG_COLORS as colors} from '../../components/CatalogUI';
-import {detailUI} from '../../components/ResourceDetailUI';
-import type {usePhysicalgoodsRequests} from '../hooks/usePhysicalgoodsRequests';
+import {useEffect,useRef,useState} from 'react';
+import {View} from 'react-native';
+import {RequestAccordionSkeleton,type RequestTone} from '../../components/RequestAccordionCard';
+import {RequestDecisionDialog,requestUI} from '../../components/RequestsUI';
+import {ResourceRequestsModal,ResourceRequestsRow} from '../../components/ResourceRequestsModal';
+import {usePhysicalgoodsRequests} from '../hooks/usePhysicalgoodsRequests';
 import type {PhysicalgoodsReceivedRequest} from '../types/publication';
-import {PhysicalgoodsRequestProduct} from './PhysicalgoodsRequestProduct';
+import {compareReceivedResources,receivedTransactionLabel} from '../utils/receivedRequestIndicators';
 
 export function groupReceivedRequests(rows:PhysicalgoodsReceivedRequest[]){
   const groups=new Map<string,PhysicalgoodsReceivedRequest[]>();
   for(const row of rows){const group=groups.get(row.publication.id);if(group)group.push(row);else groups.set(row.publication.id,[row]);}
-  return [...groups.values()];
+  return [...groups.values()].sort(compareReceivedResources);
 }
 function receivedStatus(row:PhysicalgoodsReceivedRequest):{tone:RequestTone;status:string}{
   if(row.transaction?.status==='COMPLETADA')return {tone:'completed',status:'El intercambio se completó.'};
@@ -25,39 +24,40 @@ function receivedStatus(row:PhysicalgoodsReceivedRequest):{tone:RequestTone;stat
 export function PhysicalgoodsReceivedRequests({state,onDetail,onAgreement}:{state:ReturnType<typeof usePhysicalgoodsRequests>;
   onDetail:(publicationId:string,requestId:string)=>void;onAgreement:(publicationId:string,transactionId:string)=>void;
 }){
-  const groups=groupReceivedRequests(state.page?.data??[]),key=`${groups[0]?.[0].owner.id??''}:${state.number}`;
-  const [selection,setSelection]=useState<{key:string;id:string|null}|null>(null);
-  const [resource,setResource]=useState<PhysicalgoodsReceivedRequest|null>(null);
-  const selected=selection?.key===key?selection.id:null;
-  const disabled=state.busy||Boolean(state.selection);
-  return <>{state.loading?<RequestAccordionSkeleton label="Cargando solicitudes recibidas" expanded={Boolean(selection?.id)}/>:<View style={requestUI.cards}>{groups.map(rows=>{
-    const first=rows[0],publication=first.publication,pending=rows.filter(row=>row.status==='PENDIENTE').length;
-    const expanded=selected===publication.id;
-    const amount=publication.modality==='DONACION'?'Donación':publication.price===null?'Precio no disponible':`$${publication.price.toLocaleString('es-CL')}`;
-    const count=`${rows.length} solicitud${rows.length===1?'':'es'} · ${pending} pendiente${pending===1?'':'s'}`;
-    return <RequestAccordionCard key={publication.id} title={publication.title} initialName={publication.title} subtitle={count} trailing={amount} expanded={expanded}
-      label={`solicitudes del recurso: ${publication.title}`} tone={pending?'pending':'accepted'} disabled={disabled}
-      onToggle={()=>setSelection({key,id:expanded?null:publication.id})}>
-      <View style={requestAccordionUI.amountRow}><Text style={requestAccordionUI.amountLabel}>{publication.modality==='DONACION'?'Modalidad':'Precio publicado'}</Text><Text style={requestAccordionUI.amount}>{amount}</Text></View>
-      <Text style={detailUI.helper}>{first.campus.name}{publication.isWithdrawn?' · Publicación retirada':''}</Text>
-      <RequestButton primary label="Ver recurso" accessibilityLabel={`Ver recurso: ${publication.title}`} onPress={()=>setResource(first)} disabled={disabled}/>
-      {publication.status==='RESERVADO'&&pending>0&&<Text style={detailUI.helper}>El recurso está reservado. Las demás solicitudes esperan; podrás aceptarlas si se cancela la transacción.</Text>}
-      {rows.map(row=><View key={row.id} style={styles.request}>
-        <View style={styles.person}><View accessible={false} aria-hidden style={styles.avatar}><Text style={styles.initial}>{row.requester.fullName.trim().charAt(0).toLocaleUpperCase('es-CL')||'?'}</Text></View><Text style={styles.name}>{row.requester.fullName}</Text></View>
-        <RequestMessage message={row.message} caption={`Mensaje recibido el ${new Date(row.requestedAt).toLocaleString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric',hour:'numeric',minute:'2-digit'})}`} {...receivedStatus(row)}/>
-        {row.canResolve&&row.status==='PENDIENTE'&&<View style={requestUI.inline}>
-          <View style={{flex:1,minWidth:100}}><RequestButton label="Rechazar" accessibilityLabel={`Rechazar solicitud de ${row.requester.fullName}`} onPress={()=>state.select(row,'RECHAZAR')} disabled={disabled} busy={state.busy&&state.saving?.id===row.id&&state.saving.decision==='RECHAZAR'}/></View>
-          <View style={{flex:1.4,minWidth:110}}><RequestButton primary label="Aceptar" accessibilityLabel={`Aceptar solicitud de ${row.requester.fullName}`} onPress={()=>state.select(row,'ACEPTAR')} disabled={disabled||publication.status!=='DISPONIBLE'} busy={state.busy&&state.saving?.id===row.id&&state.saving.decision==='ACEPTAR'}/></View>
-        </View>}
-        <View style={styles.links}><RequestButton variant="text" label="Ver solicitud" accessibilityLabel={`Ver solicitud de ${row.requester.fullName}: ${publication.title}`} onPress={()=>onDetail(publication.id,row.id)} disabled={disabled}/>
-          {row.transaction&&<RequestButton variant="text" label="Ver transacción" onPress={()=>onAgreement(publication.id,row.transaction!.id)} disabled={disabled}/>}</View>
-      </View>)}
-    </RequestAccordionCard>;
-  })}</View>}{resource&&<PhysicalgoodsRequestProduct request={resource} viewerRole="PROPIETARIO" grouped onClose={()=>setResource(null)}/>}</>;
+  const groups=groupReceivedRequests(state.page?.data??[]),scope=state.scope??'';
+  const [opened,setOpened]=useState<{id:string;page:number;scope:string;rows:PhysicalgoodsReceivedRequest[]}|null>(null);
+  useEffect(()=>setOpened(null),[scope,state.number]);
+  const current=opened?.page===state.number&&opened.scope===scope?opened:null;
+  const disabled=state.busy||state.loading||Boolean(state.selection);
+  const price=(row:PhysicalgoodsReceivedRequest)=>row.publication.modality==='DONACION'?'Donación':row.publication.price===null?'Precio no disponible':`$${row.publication.price.toLocaleString('es-CL')}`;
+  return <>{state.loading?<RequestAccordionSkeleton label="Cargando solicitudes recibidas"/>:<View style={requestUI.cards}>{groups.map(group=>{
+    const first=group[0],publication=first.publication;
+    return <ResourceRequestsRow key={publication.id} title={publication.title} summary={`${price(first)} · ${first.campus.name}`} count={group.length} statusLabel={receivedTransactionLabel(group)} disabled={disabled}
+      onPress={()=>setOpened({id:publication.id,page:state.number,scope,rows:group})}/>;
+  })}</View>}{current&&<PhysicalgoodsReceivedResource key={`${scope}:${current.id}`} initialRows={current.rows} onClose={()=>setOpened(null)} onChanged={()=>state.changed?.()} onRowsChanged={state.receiveResourceRows} onDetail={onDetail} onAgreement={onAgreement}/>}</>;
 }
 
-const styles=StyleSheet.create({
-  request:{borderTopWidth:1,borderColor:colors.border,paddingTop:16,gap:10},person:{flexDirection:'row',alignItems:'center',gap:10},
-  avatar:{width:32,height:32,borderRadius:16,backgroundColor:colors.tint,alignItems:'center',justifyContent:'center'},initial:{color:colors.primary,fontSize:13,fontWeight:'700'},
-  name:{flex:1,color:colors.primary,fontSize:15,lineHeight:21,fontWeight:'700'},links:{flexDirection:'row',flexWrap:'wrap',gap:12},
-});
+/** Lectura/decisión independiente del recurso: no depende de su posición en el listado exterior. */
+export function PhysicalgoodsReceivedResource({initialRows,onClose,onChanged,onRowsChanged,onDetail,onAgreement}:{initialRows:PhysicalgoodsReceivedRequest[];onClose:()=>void;onChanged:()=>void;onRowsChanged?:(publicationId:string,rows:PhysicalgoodsReceivedRequest[])=>void;onDetail:(publicationId:string,requestId:string)=>void;onAgreement:(publicationId:string,transactionId:string)=>void}){
+  const state=usePhysicalgoodsRequests(true,onChanged,true,0,initialRows[0].publication.id);
+  const cache=useRef(initialRows),publicationId=initialRows[0].publication.id;
+  if(state.page)cache.current=state.page.data.filter(row=>row.publication.id===publicationId);
+  const rows=state.page?cache.current:state.loading||state.error?cache.current:[],resource=rows[0]??cache.current[0]??initialRows[0];
+  useEffect(()=>{if(state.page&&!state.loading&&!state.busy&&!state.error)onRowsChanged?.(publicationId,state.page.data.filter(row=>row.publication.id===publicationId));},[state.page,state.loading,state.busy,state.error,publicationId,onRowsChanged]);
+  const price=(row:PhysicalgoodsReceivedRequest)=>row.publication.modality==='DONACION'?'Donación':row.publication.price===null?'Precio no disponible':`$${row.publication.price.toLocaleString('es-CL')}`;
+  const disabled=state.busy||state.loading||Boolean(state.selection);
+  const close=()=>{if(state.busy)return;if(state.selection)state.cancel();else onClose();};
+  const leave=(action:()=>void)=>{if(!disabled){onClose();action();}};
+  const decision=state.selection?<RequestDecisionDialog embedded physical selection={{name:state.selection.request.requester.fullName,title:state.selection.request.publication.title,decision:state.selection.decision}}
+    disabled={state.busy||state.loading} onConfirm={()=>{void state.resolve();}} onCancel={state.cancel}/>:undefined;
+  return <ResourceRequestsModal title={resource.publication.title}
+    summary={`${price(rows[0]??resource)} · ${resource.campus.name}`} loading={state.loading} error={state.error} feedback={state.busy?'Guardando decisión…':state.feedback}
+    blocked={state.busy} onRefresh={state.reload} onClose={close} overlay={decision}
+    notice={(rows[0]??resource).publication.isWithdrawn?'Publicación retirada. Conservas las solicitudes en tu historial.':(rows[0]??resource).publication.status==='RESERVADO'?'El recurso está reservado. Las demás solicitudes siguen pendientes.':undefined}
+    requests={rows.map(row=>({id:row.id,name:row.requester.fullName,careers:row.requester.careers,message:row.message,requestedAt:row.requestedAt,...receivedStatus(row),
+      canReject:row.canResolve&&row.status==='PENDIENTE',canAccept:row.canResolve&&row.status==='PENDIENTE'&&row.publication.status==='DISPONIBLE',
+      onAccept:()=>state.select(row,'ACEPTAR'),onReject:()=>state.select(row,'RECHAZAR'),
+      onDetails:row.transaction?.status==='COMPLETADA'?undefined:()=>leave(()=>onDetail(row.publication.id,row.id)),
+      onTransaction:row.transaction&&row.transaction.status!=='COMPLETADA'?()=>leave(()=>onAgreement(row.publication.id,row.transaction!.id)):undefined,
+    }))}/>;
+}

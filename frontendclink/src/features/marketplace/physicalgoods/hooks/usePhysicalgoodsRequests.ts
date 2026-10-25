@@ -5,8 +5,9 @@ import { loadPhysicalgoodsRequests,resolvePhysicalgoodsRequest } from '../api/ph
 import type { PhysicalgoodsReceivedPage,PhysicalgoodsReceivedRequest } from '../types/publication';
 
 /** Mantiene página y confirmación; después de cualquier envío vuelve a consultar el estado real. */
-export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,received=true,refreshVersion=0) {
+export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,received=true,refreshVersion=0,publicationId?:string) {
   const auth=useAuth();
+  const scope=`${auth.identity?.userId??''}:${auth.identity?.campusId??''}`;
   const [page,setPage]=useState<PhysicalgoodsReceivedPage|null>(null),[number,setNumber]=useState(1),[revision,setRevision]=useState(0);
   const [loading,setLoading]=useState(active),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
   const [selection,setSelection]=useState<{request:PhysicalgoodsReceivedRequest;decision:'ACEPTAR'|'RECHAZAR'}|null>(null);
@@ -24,13 +25,13 @@ export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,rece
     const abort=new AbortController();
     if(!active||busy) return;
     setLoading(true);setPage(null);setSelection(null);
-    void loadPhysicalgoodsRequests(number,received,abort.signal).then(result=>{if(!abort.signal.aborted){
+    void loadPhysicalgoodsRequests(number,received,abort.signal,publicationId).then(result=>{if(!abort.signal.aborted){
       setPage(result);
       if(outcome.current&&result.data.some(row=>row.id===outcome.current?.id&&row.status===outcome.current.status)){setError(null);setFeedback(decisionFeedback(outcome.current.status));outcome.current=null;}
     }})
       .catch(reason=>{if(!abort.signal.aborted)report(reason);}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
-  },[active,number,revision,busy,received,refreshVersion]);
+  },[active,number,revision,busy,received,refreshVersion,scope,publicationId]);
   async function resolve() {
     if(!selection||!canSelect(selection.request,selection.decision)) return;
     const {request,decision}=selection,abort=new AbortController();mutation.current=abort;running.current=true;setBusy(true);setSaving({id:request.id,decision});setFeedback(null);setError(null);setSelection(null);
@@ -40,9 +41,18 @@ export function usePhysicalgoodsRequests(active:boolean,onResolved:()=>void,rece
     finally {if(!abort.signal.aborted){running.current=false;setBusy(false);setSaving(null);setRevision(value=>value+1);onResolved();}}
   }
   const reload=useCallback(()=>{if(!running.current){setFeedback(null);setError(null);setSelection(null);setRevision(value=>value+1);}},[]);
+  const receiveResourceRows=useCallback((id:string,rows:PhysicalgoodsReceivedRequest[])=>{
+    if(!received)return;
+    setPage(current=>{
+      if(!current?.data.some(row=>row.publication.id===id))return current;
+      let replaced=false;
+      const data=current.data.flatMap(row=>{if(row.publication.id!==id)return [row];if(replaced)return [];replaced=true;return rows.filter(item=>item.publication.id===id);});
+      return {...current,data};
+    });
+  },[received,scope]);
   const canSelect=(request:PhysicalgoodsReceivedRequest,decision:'ACEPTAR'|'RECHAZAR')=>active&&received&&!loading&&!running.current
     &&page?.data.some(row=>row.id===request.id&&row.canResolve&&row.status==='PENDIENTE'&&(decision==='RECHAZAR'||row.publication.status==='DISPONIBLE'));
-  return {page,number,loading,busy,error,selection,resolve,saving,feedback,
+  return {page,number,loading,busy,error,selection,resolve,saving,feedback,scope,changed:onResolved,receiveResourceRows,
     select:(request:PhysicalgoodsReceivedRequest,decision:'ACEPTAR'|'RECHAZAR')=>{if(canSelect(request,decision)){setFeedback(null);setError(null);setSelection({request,decision});}},
     cancel:()=>{if(!running.current)setSelection(null);},
     reload,

@@ -6,9 +6,9 @@ import { RefreshScrollView, type ScrollRefreshState } from '@/components/Refresh
 import { CATALOG_COLORS as colors, ui } from './CatalogUI';
 
 /** Un solo scroll por modal; refresco opcional y encabezado siempre accesible. */
-export function AgreementStepModal({ title, closeLabel, onClose, closeDisabled = false, children, refresh, fillHeight = false, preferredHeight, overlay, contentStyle, keyboardAvoiding = false, contentKey }: {
+export function AgreementStepModal({ title, closeLabel, onClose, closeDisabled = false, children, refresh, fillHeight = false, preferredHeight, overlay, footer, contentStyle, keyboardAvoiding = false, contentKey }: {
   title: string; closeLabel: string; onClose: () => void; closeDisabled?: boolean; children: ReactNode;
-  refresh?: ScrollRefreshState; fillHeight?: boolean; preferredHeight?: number; overlay?: ReactNode; contentStyle?: StyleProp<ViewStyle>; keyboardAvoiding?: boolean; contentKey?: string;
+  refresh?: ScrollRefreshState; fillHeight?: boolean; preferredHeight?: number; overlay?: ReactNode; footer?:ReactNode; contentStyle?: StyleProp<ViewStyle>; keyboardAvoiding?: boolean; contentKey?: string;
 }) {
   const insets = useSafeAreaInsets();
   const fixedHeight = fillHeight || preferredHeight !== undefined;
@@ -24,6 +24,7 @@ export function AgreementStepModal({ title, closeLabel, onClose, closeDisabled =
         {refresh ? <RefreshScrollView key={contentKey} accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} style={[styles.body, fixedHeight && { flex: 1 }]} contentContainerStyle={bodyContentStyle} keyboardShouldPersistTaps="handled"
           onRefresh={refresh.onRefresh} refreshing={refresh.refreshing} refreshEnabled={refresh.enabled} refreshLabel={refresh.label} refreshIndicatorOffset={8}>{children}</RefreshScrollView>
           : <ScrollView key={contentKey} accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} style={[styles.body, fixedHeight && { flex: 1 }]} contentContainerStyle={bodyContentStyle} keyboardShouldPersistTaps="handled">{children}</ScrollView>}
+        {footer&&<View accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay?'no-hide-descendants':'auto'} style={[styles.footer,{paddingBottom:Math.max(12,insets.bottom+8)}]}>{footer}</View>}
         {overlay}
       </View>
     </View>
@@ -36,4 +37,5 @@ const styles = StyleSheet.create({
   fullDialog: { height: '100%' }, body: { flexShrink: 1, minHeight: 0 },
   heading: { flexShrink: 0, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 1, borderColor: colors.border },
   content: { padding: 18, gap: 16 },
+  footer:{flexShrink:0,paddingHorizontal:12,paddingTop:8,borderTopWidth:1,borderColor:colors.border,backgroundColor:colors.surface},
 });

@@ -134,7 +134,7 @@ before(async () => {
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
-  for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol',
+  for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario','usuario_carrera', 'rol', 'usuario_rol',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
     'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria','interaccion_recurso','recurso_digital','acceso_recurso_digital']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
@@ -897,6 +897,19 @@ async function requestedPair() {
   return {saved,first,second,a,b};
 }
 
+test('own request details expose registered career names without duplicating requests or leaking foreign institution careers',async()=>{
+  const {first,a}=await requestedPair(),another=randomUUID(),outsideInstitution=randomUUID(),outsideCareer=randomUUID();
+  await db.query('insert into carrera(id,institucion_id,nombre) values($1,$2,$3)',[another,institution,'Otra carrera']);
+  await db.query('insert into institucion(id,nombre) values($1,$2)',[outsideInstitution,'Institución externa']);
+  await db.query('insert into carrera(id,institucion_id,nombre) values($1,$2,$3)',[outsideCareer,outsideInstitution,'Carrera externa']);
+  await db.query('insert into usuario_carrera(perfil_usuario_id,carrera_id) values($1,$2),($1,$3),($1,$4)',[first.userId,career,another,outsideCareer]);
+  const result=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication'});
+  assert.equal(result.data.length,2);
+  const expected=(await db.query<{nombre:string}>('select nombre from carrera where id=ANY($1::uuid[]) order by nombre,id',[[career,another]])).rows.map(row=>row.nombre);
+  assert.deepEqual(result.data.find(row=>row.id===a.id)?.requester.careers,expected);
+  assert.deepEqual(result.data.find(row=>row.id!==a.id)?.requester.careers,[]);
+});
+
 test('received grouping paginates complete owned resources instead of cutting a group at ten requests',async()=>{
   const {saved,first,second,a}=await requestedPair();
   for(let index=0;index<9;index++)await requestsService.createPhysicalgoodsRequest(await otherActor(),saved.id,{messageCode:'ME_INTERESA'});
@@ -905,17 +918,92 @@ test('received grouping paginates complete owned resources instead of cutting a 
   await resolveRequest(saved.id,a.id);
   const page=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'1'});
   const last=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'1',page:'2'});
-  assert.equal(page.meta.groupBy,'publication');assert.equal(page.meta.limit,1);assert.equal(page.meta.hasMore,true);assert.equal(page.data.length,1);assert.equal(page.data[0].publication.id,next.id);
-  assert.equal(last.meta.hasMore,false);assert.equal(last.data.length,11);assert.ok(last.data.every(row=>row.publication.id===saved.id));
-  assert.equal(last.data.filter(row=>row.status==='PENDIENTE').length,10);assert.equal(last.data.filter(row=>row.status==='ACEPTADA').length,1);
+  assert.equal(page.meta.groupBy,'publication');assert.equal(page.meta.limit,1);assert.equal(page.meta.hasMore,true);assert.equal(page.data.length,11);assert.ok(page.data.every(row=>row.publication.id===saved.id));
+  assert.equal(last.meta.hasMore,false);assert.equal(last.data.length,1);assert.equal(last.data[0].publication.id,next.id);
+  assert.equal(page.data.filter(row=>row.status==='PENDIENTE').length,10);assert.equal(page.data.filter(row=>row.status==='ACEPTADA').length,1);
+  const selected=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',publicationId:saved.id,limit:'1'});
+  assert.equal(selected.data.length,11);assert.equal(selected.meta.hasMore,false);assert.ok(selected.data.every(row=>row.publication.id===saved.id));
+  await assert.rejects(requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',publicationId:foreign.id}),{status:404});
+  await assert.rejects(requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',publicationId:'bad'}),{status:400});
   assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',page:'3',limit:'1'})).data.length,0);
+  assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',publicationId:saved.id,page:'2',limit:'1'})).data.length,0);
   assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(auth,{limit:'1'})).data.length,1);
   assert.equal((await requestsService.getReceivedPhysicalgoodsRequests(first,{groupBy:'publication'})).data[0].publication.id,foreign.id);
   await db.query('update publicacion_recurso set deleted_at=now() where id=$1',[saved.id]);
-  const history=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'1',page:'2'});
+  const history=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'1'});
   assert.equal(history.data.length,11);assert.ok(history.data.every(row=>row.publication.isWithdrawn&&!row.canResolve));
   for(const query of [{groupBy:'request'},{groupBy:['publication']},{groupBy:'publication',ownerId:first.userId},{groupBy:'publication',limit:'0'}])await assert.rejects(requestsService.getReceivedPhysicalgoodsRequests(auth,query),{status:400});
   await assert.rejects(requestsService.getSentPhysicalgoodsRequests(second,{groupBy:'publication'}),{status:400});
+});
+
+test('received resources prioritize active transactions, unanswered requests and recent history before completed across pages',async()=>{
+  const actor=await otherActor();
+  const resource=async(date:string,kind:'active'|'confirming'|'pending'|'rejected'|'completed')=>{
+    const saved=await create(auth,input());
+    const request=await requestsService.createPhysicalgoodsRequest(actor,saved.id,{messageCode:'ME_INTERESA'});
+    await db.query('update publicacion_recurso set publicado_en=$2 where id=$1',[saved.id,date]);
+    if(kind==='rejected')await resolveRequest(saved.id,request.id,'RECHAZAR');
+    else if(kind!=='pending'){
+      const accepted=await resolveRequest(saved.id,request.id),id=accepted.transaction!.id;
+      if(kind!=='active')await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
+      if(kind==='completed')await transactionsService.transitionPhysicalgoodsTransaction(actor,saved.id,id,{},'CONFIRMAR');
+    }
+    return saved.id;
+  };
+  const completed=await resource('2026-10-25T12:00:00Z','completed');
+  const pendingOld=await resource('2026-10-22T12:00:00Z','pending');
+  const active=await resource('2026-10-19T12:00:00Z','active');
+  const rejected=await resource('2026-10-24T12:00:00Z','rejected');
+  const pendingNew=await resource('2026-10-23T12:00:00Z','pending');
+  const confirming=await resource('2026-10-20T12:00:00Z','confirming');
+  const expected=[confirming,active,pendingNew,pendingOld,rejected,completed],actual:string[]=[];
+  for(let page=1;page<=3;page++){
+    const result=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication',limit:'2',page:String(page)});
+    actual.push(...result.data.map(row=>row.publication.id));assert.equal(result.meta.hasMore,page<3);
+    assert.ok(result.data.every(row=>Number.isFinite(Date.parse(row.publication.publishedAt))));
+  }
+  assert.deepEqual(actual,expected);
+  // La segunda consulta debe preservar la prioridad incluso al devolver toda la página.
+  const all=await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication'});
+  assert.deepEqual(all.data.map(row=>row.publication.id),expected);
+  const original=await requestsService.getReceivedPhysicalgoodsRequests(auth,{});
+  assert.deepEqual(original.data.map(row=>row.publication.id),[completed,rejected,pendingNew,pendingOld,confirming,active]);
+});
+
+test('sent requests use request dates across pages with rejected and completed last, preserving pending confirmations and own history',async()=>{
+  const requester=await otherActor(),foreign=await otherActor();
+  const make=async(date:string,kind:'pending'|'confirming'|'completed'|'rejected'|'cancelled')=>{
+    const saved=await create(auth,input()),request=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'});
+    // Fecha de publicación igual: el orden debe depender de cuándo se envió cada solicitud.
+    await db.query("update publicacion_recurso set publicado_en='2026-10-01T12:00:00Z' where id=$1",[saved.id]);
+    await db.query('update solicitud_recurso set solicitada_en=$2 where id=$1',[request.id,date]);
+    if(kind==='rejected')await resolveRequest(saved.id,request.id,'RECHAZAR');
+    else if(kind!=='pending'){
+      const result=await resolveRequest(saved.id,request.id),tx=result.transaction!.id;
+      await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,tx,{},kind==='cancelled'?'CANCELAR':'CONFIRMAR');
+      if(kind==='completed')await transactionsService.transitionPhysicalgoodsTransaction(requester,saved.id,tx,{},'CONFIRMAR');
+    }
+    return request.id;
+  };
+  const completed=await make('2026-10-25T12:00:00Z','completed');
+  const pendingOld=await make('2026-10-20T12:00:00Z','pending');
+  const rejected=await make('2026-10-24T12:00:00Z','rejected');
+  const confirming=await make('2026-10-22T12:00:00Z','confirming');
+  const pendingNew=await make('2026-10-23T12:00:00Z','pending');
+  const cancelled=await make('2026-10-21T12:00:00Z','cancelled');
+  const tied=await make('2026-10-20T12:00:00Z','pending');
+  const foreignResource=await create(auth,input());await requestsService.createPhysicalgoodsRequest(foreign,foreignResource.id,{messageCode:'ME_INTERESA'});
+  const expected=[pendingNew,confirming,cancelled,...[pendingOld,tied].sort(),completed,rejected],actual:string[]=[];
+  for(let page=1;page<=4;page++){
+    const result=await requestsService.getSentPhysicalgoodsRequests(requester,{page:String(page),limit:'2'});
+    actual.push(...result.data.map(row=>row.id));assert.equal(result.meta.hasMore,page<4);
+  }
+  assert.deepEqual(actual,expected);
+  assert.deepEqual((await requestsService.getSentPhysicalgoodsRequests(requester,{})).data.map(row=>row.id),expected);
+  assert.equal((await requestsService.getSentPhysicalgoodsRequests(requester,{page:'5',limit:'2'})).data.length,0);
+  const all=await requestsService.getSentPhysicalgoodsRequests(requester,{});
+  assert.equal(all.data.find(row=>row.id===confirming)?.transaction?.status,'PENDIENTE_CONFIRMACION');
+  assert.equal((await requestsService.getSentPhysicalgoodsRequests(foreign,{})).data.length,1);
 });
 
 test('profile overview counts own physical history across campuses and rejects stale or suspended accounts', async () => {
@@ -938,6 +1026,45 @@ test('profile overview counts own physical history across campuses and rejects s
   await assert.rejects(getProfileOverview(moved), { status: 403 });
 });
 const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',actor=auth)=>requestsService.resolvePhysicalgoodsRequest(actor,publicationId,requestId,{decision});
+
+test('request counters aggregate both inboxes across pages and follow acceptance, both confirmations and cancellation',async()=>{
+  const {saved,first,second,a}=await requestedPair(),extra=await create(auth,input());
+  const c=await requestsService.createPhysicalgoodsRequest(first,extra.id,{messageCode:'ME_INTERESA'});
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3});
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:0,receivedPending:0});
+  const one=(await resolveRequest(saved.id,a.id)).transaction!.id;
+  const two=(await resolveRequest(extra.id,c.id)).transaction!.id;
+  assert.equal((await requestsService.getSentPhysicalgoodsRequests(first,{limit:'1'})).data.length,1);
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:2,receivedPending:0});
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,1);
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(second,{})).sentAccepted,0);
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,one,{},'CONFIRMAR');
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,2);
+  await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,one,{},'CONFIRMAR');
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,1);
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,0);
+  await transactionsService.transitionPhysicalgoodsTransaction(first,extra.id,two,{},'CANCELAR');
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,0);
+  const own=await create(first,input()),request=await requestsService.createPhysicalgoodsRequest(auth,own.id,{messageCode:'ME_INTERESA'});
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).receivedPending,1);
+  await resolveRequest(own.id,request.id,'RECHAZAR',first);
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:0,receivedPending:0});
+});
+
+test('HTTP request counters are authenticated, no-store, unfiltered and revalidate current account context',async()=>{
+  const {first}=await requestedPair();current=structuredClone(auth);
+  const endpoint=base+'/request-counts',headers={Authorization:'Bearer '+token};
+  assert.equal((await originalFetch(endpoint)).status,401);
+  const response=await originalFetch(endpoint,{headers});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+  assert.deepEqual((await response.json()).data,{sentAccepted:0,receivedPending:2});
+  for(const query of ['?page=1','?ownerId='+first.userId,'?campusId='+otherCampus])assert.equal((await originalFetch(endpoint+query,{headers})).status,400);
+  await db.query('update perfil_usuario set campus_id=$2 where id=$1',[auth.userId,otherCampus]);
+  await assert.rejects(requestsService.getPhysicalgoodsRequestCounts(auth,{}),{status:409});
+  const moved={...auth,campusId:otherCampus,profile:{...auth.profile,campus_id:otherCampus}};
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(moved,{})).receivedPending,2);
+  await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[auth.userId]);
+  await assert.rejects(requestsService.getPhysicalgoodsRequestCounts(moved,{}),{status:403});
+});
 const transactionRows=(publicationId:string)=>db.query('select * from transaccion_recurso where publicacion_id=$1 order by iniciada_en,id',[publicationId]);
 
 test('physical resource openings validate campus and keep one view per operation without gallery refresh signals',async()=>{

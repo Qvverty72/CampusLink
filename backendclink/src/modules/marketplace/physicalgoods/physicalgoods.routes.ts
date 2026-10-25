@@ -7,6 +7,7 @@ import { createPhysicalgoodsRequestController, getPhysicalgoodsRequestOptionsCon
 import { getReceivedPhysicalgoodsRequestsController, getSentPhysicalgoodsRequestsController, resolvePhysicalgoodsRequestController, confirmPhysicalgoodsTransactionController, cancelPhysicalgoodsTransactionController } from './physicalgoods.controller.js';
 import { getPhysicalgoodsTransactionController,getPhysicalgoodsCoordinationOptionsController,getPhysicalgoodsCoordinationMessagesController,sendPhysicalgoodsCoordinationController,ratePhysicalgoodsOwnerController } from './physicalgoods.controller.js';
 import { getOwnPhysicalgoodsController,getOwnPhysicalgoodsDetailController,getOwnPhysicalgoodsRequestController,getOwnPhysicalgoodsTransactionsController } from './physicalgoods.controller.js';
+import {getPhysicalgoodsRequestCountsController} from './physicalgoods.controller.js';
 
 // Solo expone diagnósticos técnicos; las rutas de negocio requieren autenticación.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
@@ -17,6 +18,7 @@ export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
   router.get('/transactions',requireAuthentication,getOwnPhysicalgoodsTransactionsController);
   router.get('/received-requests', requireAuthentication, getReceivedPhysicalgoodsRequestsController);
   router.get('/sent-requests', requireAuthentication, getSentPhysicalgoodsRequestsController);
+  router.get('/request-counts',requireAuthentication,getPhysicalgoodsRequestCountsController);
   router.get('/', requireAuthentication, getPhysicalgoodsResourcesController);
   // Base64 de una foto con tamaño limitado mantiene un mismo contrato JSON para web y nativo.
   router.post('/', requireAuthentication, json({ limit: '7mb' }), createPhysicalgoodsController);

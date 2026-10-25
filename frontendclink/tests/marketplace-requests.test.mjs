@@ -53,8 +53,59 @@ function digitalHook() {
 }
 const flush=()=>setImmediate();
 
+test('request counters load independently, retain last totals on refresh and reject stale scope responses',async()=>{
+ const h=runtime(),reads=[];let active=true,version=0,identity={userId:'me',campusId:'campus'};
+ const {usePhysicalgoodsRequestCounts}=load('physicalgoods/hooks/usePhysicalgoodsRequestCounts.ts',{react:h.react,
+  '@/features/auth/hooks/useAuth':{useAuth:()=>({identity,refreshIdentity:noop})},'@/lib/api/authenticated-request':{AuthApiError},
+  '../api/physicalgoodsApi':{loadPhysicalgoodsRequestCounts:signal=>{const result=deferred();reads.push({...result,signal});return result.promise;}}});
+ const render=()=>h.render(()=>usePhysicalgoodsRequestCounts(active,version));
+ assert.equal(render().counts,undefined);assert.equal(reads.length,1);
+ reads[0].resolve({sentAccepted:2,receivedPending:14});await flush();
+ assert.equal(render().counts.receivedPending,14);assert.equal(render().loading,false);
+ render().reload();render();assert.equal(reads.length,2);assert.equal(render().counts.sentAccepted,2);assert.equal(render().loading,false);
+ version++;render();assert.equal(reads[1].signal.aborted,true);
+ reads[1].resolve({sentAccepted:999,receivedPending:999});reads[2].reject(new Error('offline'));await flush();
+ assert.equal(render().counts.sentAccepted,2);assert.ok(render().error);assert.equal(render().loading,false);
+ identity={userId:'other',campusId:'other-campus'};assert.equal(render().counts,undefined);assert.equal(reads.length,4);
+ identity={userId:'third',campusId:'campus'};render();assert.equal(reads[3].signal.aborted,true);
+ reads[3].resolve({sentAccepted:777,receivedPending:777});reads[4].resolve({sentAccepted:0,receivedPending:0});await flush();
+ assert.equal(render().counts.sentAccepted,0);assert.equal(render().counts.receivedPending,0);
+ active=false;render();assert.equal(reads.length,5);active=true;assert.equal(render().counts.receivedPending,0);assert.equal(reads.length,6);
+ h.unmount();assert.equal(reads[5].signal.aborted,true);
+});
+
 const {sentRequestPresentation}=load('physicalgoods/utils/sentRequestPresentation.ts',{});
+const indicators=load('physicalgoods/utils/receivedRequestIndicators.ts',{});
 const sentRow=(id='first')=>({...physicalRow(id),owner:{id:'owner',fullName:'Camila González'},requester:{id:'me',fullName:'Diego'},publication:{...physicalRow().publication,modality:'VENTA',price:45000},transaction:null});
+
+test('received resource priority follows transaction lifecycle and publication age without mutating requests',()=>{
+ const group=(id,date,status='PENDIENTE',transaction=null)=>[{...sentRow(id),status,transaction,publication:{...sentRow().publication,id,publishedAt:date}}];
+ const finished=group('finished','2026-10-25','ACEPTADA',{id:'tx-finished',status:'COMPLETADA'}),old=group('old','2026-10-20'),recent=group('recent','2026-10-24');
+ const active=group('active','2026-10-18','ACEPTADA',{id:'tx-active',status:'RESERVADA'}),confirming=group('confirming','2026-10-19','ACEPTADA',{id:'tx-confirming',status:'PENDIENTE_CONFIRMACION'}),rejected=group('rejected','2026-10-25','RECHAZADA');
+ active.push({...sentRow('waiting'),publication:active[0].publication});
+ const sort=groups=>groups.slice().sort(indicators.compareReceivedResources).map(rows=>rows[0].publication.id);
+ const groups=[finished,old,recent,active,confirming,rejected];
+ assert.deepEqual(sort(groups),['confirming','active','recent','old','rejected','finished']);
+ assert.equal(groups[0],finished);assert.equal(active.length,2);
+ active[0].transaction.status='COMPLETADA';active[1].status='CANCELADA';
+ assert.deepEqual(sort(groups),['confirming','recent','old','rejected','finished','active']);
+ assert.equal(indicators.receivedResourcePriority([{...sentRow(),status:'ACEPTADA',transaction:{id:'cancelled',status:'CANCELADA'}}]),2);
+ const sameDate=group('a','2026-10-24');assert.deepEqual(sort([recent,sameDate]),['a','recent']);
+ const microOld=group('a','2026-10-24T12:00:00.123001Z'),microNew=group('z','2026-10-24T12:00:00.123002Z');
+ assert.deepEqual(sort([microOld,microNew]),['z','a']);
+ delete old[0].publication.publishedAt;assert.equal(indicators.compareReceivedResources(old,recent),0);
+ old[0].publication.publishedAt='invalid';assert.equal(indicators.compareReceivedResources(old,recent),0);
+});
+
+test('received indicators separate unhandled requests from transactions through both confirmations and completion',()=>{
+ const pending=sentRow(),accepted={...sentRow('accepted'),status:'ACEPTADA',transaction:{id:'tx',status:'RESERVADA'}};
+ assert.equal(indicators.isReceivedRequestAwaitingResponse(pending),true);assert.equal(indicators.receivedTransactionLabel([pending]),'0 transacciones pendientes');
+ assert.equal(indicators.isReceivedRequestAwaitingResponse(accepted),false);assert.equal(indicators.receivedTransactionLabel([pending,accepted,accepted]),'1 transacción pendiente');
+ accepted.transaction.status='PENDIENTE_CONFIRMACION';assert.equal(indicators.receivedTransactionLabel([accepted]),'1 transacción pendiente');
+ accepted.transaction.status='COMPLETADA';assert.equal(indicators.receivedTransactionLabel([accepted]),'Transacción finalizada');assert.equal(indicators.isReceivedRequestAwaitingResponse({...accepted,status:'PENDIENTE'}),false);
+ accepted.transaction.status='CANCELADA';assert.equal(indicators.receivedTransactionLabel([accepted]),'Transacción cancelada');
+ for(const status of ['ACEPTADA','RECHAZADA','CANCELADA'])assert.equal(indicators.isReceivedRequestAwaitingResponse({...pending,status}),false);
+});
 
 test('request resource maps original terms without creating a transaction and restricts the gallery through the shared reader',()=>{
   const reads=[],state={product:null,loading:false,unavailable:true};
@@ -124,6 +175,14 @@ test('physical mode changes abort obsolete reads and sent requests never allow r
   let state=q.render();assert.equal(state.page.data[0].id,'sent');state.select(physicalRow('sent'),'RECHAZAR');state=q.render();assert.equal(state.selection,null);await state.resolve();assert.equal(q.writes.length,0);q.h.unmount();
 });
 
+test('resource modal refresh updates only its cached group without fetching the outer list again',async()=>{
+ const q=physicalHook();q.render();const other={...physicalRow('other'),publication:{...physicalRow().publication,id:'other-resource'}};
+ const meta={page:1,limit:10,hasMore:true};q.reads[0].resolve({data:[physicalRow('first'),physicalRow('second'),other],meta});await flush();
+ let state=q.render();state.receiveResourceRows('publication',[physicalRow('new'),other]);state=q.render();
+ assert.deepEqual(Array.from(state.page.data,row=>row.id),['new','other']);assert.equal(state.page.meta,meta);assert.equal(q.reads.length,1);
+ state.receiveResourceRows('not-on-this-page',[physicalRow('ignored')]);assert.deepEqual(Array.from(q.render().page.data,row=>row.id),['new','other']);q.h.unmount();
+});
+
 test('digital acceptance confirms a selected recipient and leaves another pending request actionable',async()=>{
   const q=digitalHook();let state=q.render();state.mode(true);q.render();q.reads.at(-1).resolve({data:[digitalRow(),digitalRow('second')],meta:{hasMore:false}});await flush();state=q.render();
   state.select(digitalRow(),'ACEPTAR');state=q.render();assert.equal(q.writes.length,0);state.cancelSelection();state=q.render();state.resolve();assert.equal(q.writes.length,0);
@@ -151,30 +210,54 @@ requestsUI.requestUI={};requestsUI.requestStatusLabel=value=>value;
 test('physical reserved and historical cards preserve detail access and prevent a second acceptance',()=>{
   const calls=[];const state={page:{data:[physicalRow('reserved','RESERVADO'),{...physicalRow('history'),canResolve:false,publication:{...physicalRow().publication,canView:false,isWithdrawn:true}}],meta:{}},number:1,loading:false,busy:false,reload:noop};
   const h=runtime();const {PhysicalgoodsReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'react/jsx-runtime':jsx,react:h.react,'react-native':native,
-    './PhysicalgoodsRequestProduct':{PhysicalgoodsRequestProduct:'ProductModal'},'../../components/RequestAccordionCard':{RequestAccordionCard:'Card',RequestMessage:'Message',RequestAccordionSkeleton:'Skeleton',requestAccordionUI:{}},
+    '../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},
+    '../utils/receivedRequestIndicators':indicators,
+    '../../components/ResourceRequestsModal':{ResourceRequestsModal:'ResourceModal',ResourceRequestsRow:'ResourceRow'},'../../components/RequestAccordionCard':{RequestAccordionSkeleton:'Skeleton'},
     '../../components/CatalogUI':{CATALOG_COLORS:{}},'../../components/ResourceDetailUI':{detailUI:{}},'../../components/RequestsUI':requestsUI});
-  const nodes=elements(h.render(()=>PhysicalgoodsReceivedRequests({state,onDetail:(...args)=>calls.push(args),onAgreement:noop})));
-  assert.equal(nodes.find(n=>n.type==='RequestButton'&&n.props.label==='Aceptar').props.disabled,true);
-  assert.equal(nodes.find(n=>n.type==='RequestButton'&&n.props.label==='Rechazar').props.disabled,false);
-  const details=nodes.filter(n=>n.type==='RequestButton'&&n.props.label==='Ver solicitud');assert.equal(details.length,2);details[1].props.onPress();assert.deepEqual(calls,[['publication','history']]);
-  assert.match(JSON.stringify(nodes),/Las demás solicitudes esperan/);h.unmount();
+  const render=()=>{const base=elements(h.render(()=>PhysicalgoodsReceivedRequests({state,onDetail:(...args)=>calls.push(args),onAgreement:noop})));const controller=base.find(n=>typeof n.type==='function'&&n.type.name==='PhysicalgoodsReceivedResource');return [...base,...(controller?elements(controller.type(controller.props)):[])];};
+  assert.equal(render().some(n=>n.type==='ResourceModal'),false);render().find(n=>n.type==='ResourceRow').props.onPress();
+  const modal=render().find(n=>n.type==='ResourceModal');assert.equal(modal.props.requests[0].canAccept,false);assert.equal(modal.props.requests[0].canReject,true);
+  assert.equal(modal.props.requests[1].canAccept,false);assert.equal(modal.props.requests[1].canReject,false);
+  modal.props.requests[1].onDetails();assert.deepEqual(calls,[['publication','history']]);assert.equal(render().some(n=>n.type==='ResourceModal'),false);h.unmount();
 });
 
-test('received groups use resource IDs, start closed and keep all request actions inside a single resource card',()=>{
+test('received resources open a single modal that survives refresh, preserves decisions and stays scoped to the page and user',()=>{
  const h=runtime(),calls=[],rows=Array.from({length:10},(_,index)=>physicalRow(`request-${index}`));
  rows.push({...physicalRow('different'),publication:{...physicalRow().publication,id:'different-publication'}});
- const state={page:{data:rows},number:1,loading:false,busy:false,selection:null,select:(...args)=>calls.push(args)};
+ const state={page:{data:rows},number:1,scope:'owner:campus',loading:false,busy:false,selection:null,select:(...args)=>calls.push(args),reload:()=>calls.push('reload'),resolve:()=>calls.push('resolved'),cancel:()=>{state.selection=null;}};
  const {PhysicalgoodsReceivedRequests,groupReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'react/jsx-runtime':jsx,react:h.react,'react-native':native,
-  './PhysicalgoodsRequestProduct':{PhysicalgoodsRequestProduct:'ProductModal'},'../../components/RequestAccordionCard':{RequestAccordionCard:'Card',RequestMessage:'Message',RequestAccordionSkeleton:'Skeleton',requestAccordionUI:{}},
+  '../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},
+  '../utils/receivedRequestIndicators':indicators,
+  '../../components/ResourceRequestsModal':{ResourceRequestsModal:'ResourceModal',ResourceRequestsRow:'ResourceRow'},'../../components/RequestAccordionCard':{RequestAccordionSkeleton:'Skeleton'},
   '../../components/CatalogUI':{CATALOG_COLORS:{}},'../../components/ResourceDetailUI':{detailUI:{}},'../../components/RequestsUI':requestsUI});
- const render=()=>elements(h.render(()=>PhysicalgoodsReceivedRequests({state,onDetail:noop,onAgreement:noop})));
- let cards=render().filter(n=>n.type==='Card');assert.equal(cards.length,2);assert.ok(cards.every(n=>!n.props.expanded));assert.equal(cards[0].props.subtitle,'10 solicitudes · 10 pendientes');
- assert.deepEqual(Array.from(groupReceivedRequests(rows),group=>group.length),[10,1]);cards[0].props.onToggle();cards=render().filter(n=>n.type==='Card');assert.equal(cards[0].props.expanded,true);
- const buttons=elements(cards[0]).filter(n=>n.type==='RequestButton');assert.equal(buttons.filter(n=>n.props.label==='Aceptar').length,10);
- buttons.filter(n=>n.props.label==='Aceptar')[9].props.onPress();assert.equal(calls[0][0].id,'request-9');assert.equal(calls[0][1],'ACEPTAR');
- buttons.find(n=>n.props.label==='Ver recurso').props.onPress();let modal=render().find(n=>n.type==='ProductModal');assert.equal(modal.props.viewerRole,'PROPIETARIO');assert.equal(modal.props.grouped,true);modal.props.onClose();assert.equal(render().some(n=>n.type==='ProductModal'),false);
- state.loading=true;assert.ok(render().some(n=>n.type==='Skeleton'));state.loading=false;assert.equal(render().filter(n=>n.type==='Card')[0].props.expanded,true);
- state.number=2;assert.ok(render().filter(n=>n.type==='Card').every(n=>!n.props.expanded));state.busy=true;assert.ok(render().filter(n=>n.type==='RequestButton').every(n=>n.props.disabled));h.unmount();
+ const render=()=>{const base=elements(h.render(()=>PhysicalgoodsReceivedRequests({state,onDetail:noop,onAgreement:noop})));const controller=base.find(n=>typeof n.type==='function'&&n.type.name==='PhysicalgoodsReceivedResource');return [...base,...(controller?elements(controller.type(controller.props)):[])];};
+ let resources=render().filter(n=>n.type==='ResourceRow');assert.equal(resources.length,2);assert.equal(resources[0].props.count,10);assert.equal(render().some(n=>n.type==='ResourceModal'),false);
+ assert.deepEqual(Array.from(groupReceivedRequests(rows),group=>group.length),[10,1]);resources[0].props.onPress();
+ let modal=render().find(n=>n.type==='ResourceModal');assert.equal(modal.props.requests.length,10);modal.props.requests[9].onAccept();assert.equal(calls[0][0].id,'request-9');assert.equal(calls[0][1],'ACEPTAR');
+ state.selection={request:rows[9],decision:'ACEPTAR'};modal=render().find(n=>n.type==='ResourceModal');assert.equal(modal.props.overlay.props.embedded,true);modal.props.overlay.props.onConfirm();assert.equal(calls.at(-1),'resolved');modal.props.onClose();assert.equal(state.selection,null);assert.ok(render().some(n=>n.type==='ResourceModal'));
+ state.loading=true;state.page=null;modal=render().find(n=>n.type==='ResourceModal');assert.equal(modal.props.loading,true);assert.equal(modal.props.requests.length,10);
+ state.loading=false;state.page={data:rows};modal=render().find(n=>n.type==='ResourceModal');state.busy=true;modal.props.onClose();assert.ok(render().some(n=>n.type==='ResourceModal'));state.busy=false;
+ render().find(n=>n.type==='ResourceModal').props.onClose();assert.equal(render().some(n=>n.type==='ResourceModal'),false);assert.ok(!calls.includes('reload'));
+ render().find(n=>n.type==='ResourceRow').props.onPress();state.number=2;assert.equal(render().some(n=>n.type==='ResourceModal'),false);render().find(n=>n.type==='ResourceRow').props.onPress();state.scope='other:campus';assert.equal(render().some(n=>n.type==='ResourceModal'),false);h.unmount();
+});
+
+test('resource modal paginates from exactly ten, orders dates, clamps refreshed pages and uses its refresh callback',()=>{
+ const all=Array.from({length:11},(_,index)=>({id:`id-${index}`,name:`Persona ${index}`,careers:['Informática'],requestedAt:new Date(Date.UTC(2026,9,24,10,index)).toISOString(),message:'Me interesa',status:'Esperando respuesta',tone:'pending',canAccept:true,canReject:true,onAccept:()=>{},onReject:()=>{}}));
+ for(const count of [9,10,11]){
+  const h=runtime(),calls=[];const ui=load('components/ResourceRequestsModal.tsx',{'react/jsx-runtime':jsx,react:h.react,'react-native':{...native,TouchableOpacity:'Touch'},'lucide-react-native':{Package:'Package',ChevronRight:'Chevron'},'@/components/Pagination':{Pagination:'Pagination'},'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'./AgreementStepModal':{AgreementStepModal:'StepModal'},'./CatalogUI':{CATALOG_COLORS:{}},'./RequestsUI':{RequestButton:'Action'}});
+  const props={title:'Recurso',summary:'Donación',requests:all.slice(0,count),loading:false,error:null,onClose:noop,onRefresh:()=>calls.push('refresh')};
+  const render=()=>{const nodes=elements(h.render(()=>ui.ResourceRequestsModal(props)));return [...nodes,...elements(nodes.find(n=>n.type==='StepModal').props.footer)];};
+  let nodes=render();assert.equal(nodes.some(n=>n.type==='Pagination'),count>=10);assert.equal(nodes.filter(n=>n.props?.accessibilityLabel?.startsWith('Revisar solicitud de')).length,Math.min(10,count));
+  assert.equal(nodes.filter(n=>n.props?.accessibilityLabel?.startsWith('Aceptar solicitud de')||n.props?.accessibilityLabel?.startsWith('Rechazar solicitud de')).length,0);
+  nodes.find(n=>n.props?.accessibilityLabel==='Revisar solicitud de Persona 0').props.onPress();nodes=render();assert.equal(nodes.filter(n=>n.props?.accessibilityLabel?.startsWith('Aceptar solicitud de')||n.props?.accessibilityLabel?.startsWith('Rechazar solicitud de')).length,2);
+  nodes.find(n=>n.props?.accessibilityLabel==='Revisar solicitud de Persona 0').props.onPress();nodes=render();assert.equal(nodes.some(n=>n.props?.accessibilityLabel?.startsWith('Aceptar solicitud de')),false);
+  nodes.find(n=>n.type==='StepModal').props.refresh.onRefresh();assert.deepEqual(calls,['refresh']);
+  if(count===11){nodes.find(n=>n.props?.accessibilityLabel==='Revisar solicitud de Persona 0').props.onPress();nodes=render();nodes.find(n=>n.type==='Pagination').props.onPageChange(2);nodes=render();assert.equal(nodes.filter(n=>n.props?.accessibilityLabel?.startsWith('Revisar solicitud de')).length,1);assert.ok(nodes.some(n=>n.props?.accessibilityLabel==='Revisar solicitud de Persona 10'));assert.equal(nodes.some(n=>n.props?.accessibilityLabel?.startsWith('Aceptar solicitud de')),false);
+   nodes.find(n=>n.props?.accessibilityLabel==='Revisar solicitud de Persona 10').props.onPress();nodes=render();nodes.find(n=>n.props?.accessibilityRole==='tab'&&elements(n).some(t=>t.props?.children==='Más recientes')).props.onPress();nodes=render();assert.equal(nodes.find(n=>n.type==='Pagination').props.page,1);assert.ok(nodes.some(n=>n.props?.accessibilityLabel==='Revisar solicitud de Persona 10'));assert.equal(nodes.some(n=>n.props?.accessibilityLabel?.startsWith('Aceptar solicitud de')),false);
+   nodes.find(n=>n.type==='Pagination').props.onPageChange(2);render();props.requests=all.slice(0,9);assert.equal(render().some(n=>n.type==='Pagination'),false);props.requests=all;assert.equal(render().find(n=>n.type==='Pagination').props.page,1);
+  }
+  props.loading=true;nodes=render();assert.ok(nodes.some(n=>n.type===ui.ResourceRequestsSkeleton));assert.equal(nodes.find(n=>n.type==='StepModal').props.refresh.enabled,false);h.unmount();
+ }
 });
 
 test('received API requests resource pagination while sent requests keep individual pagination',()=>{
@@ -182,10 +265,24 @@ test('received API requests resource pagination while sent requests keep individ
  const signal=new AbortController().signal;loadPhysicalgoodsRequests(2,true,signal);loadPhysicalgoodsRequests(3,false,signal);
  assert.match(calls[0][0],/received-requests$/);assert.equal(calls[0][1].signal,signal);assert.equal(calls[0][2].get('groupBy'),'publication');assert.equal(calls[0][2].get('page'),'2');
  assert.match(calls[1][0],/sent-requests$/);assert.equal(calls[1][2].has('groupBy'),false);assert.equal(calls[1][2].get('page'),'3');
+ loadPhysicalgoodsRequests(1,true,signal,'selected-publication');assert.equal(calls[2][2].get('publicationId'),'selected-publication');
+});
+
+test('physical badges use independent totals while the selected list is loading or fails',()=>{
+ const calls=[];let refresh;
+ const state={page:{data:[sentRow(),{...sentRow('accepted'),status:'ACEPTADA',transaction:{id:'tx1',status:'RESERVADA'}},{...sentRow('done'),status:'ACEPTADA',transaction:{id:'tx2',status:'COMPLETADA'}}],meta:{hasMore:false}},number:1,loading:false,busy:false,reload:noop};
+ state.reload=()=>calls.push('list');
+ const counters={counts:{sentAccepted:3,receivedPending:12},loading:false,reload:()=>calls.push('counts')};
+ const {PhysicalgoodsRequests}=load('physicalgoods/components/PhysicalgoodsRequests.tsx',{'react/jsx-runtime':jsx,react:{useCallback:fn=>fn},'react-native':native,'../hooks/usePhysicalgoodsRequestCounts':{usePhysicalgoodsRequestCounts:()=>counters},'../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},'./PhysicalgoodsReceivedRequests':{PhysicalgoodsReceivedRequests:'Received'},'./PhysicalgoodsSentRequests':{PhysicalgoodsSentRequests:'Sent'},'@/components/RefreshScrollView':{useScrollRefresh:callback=>{refresh=callback;}},'../../components/ResourceDetailUI':{detailUI:{}},'../../components/RequestsUI':requestsUI});
+ const nodes=elements(PhysicalgoodsRequests({active:true,onResolved:noop,onDetail:noop,onAgreement:noop,onModeChange:noop}));
+ const tabs=nodes.find(n=>n.type==='RequestSegments');assert.equal(tabs.props.pendingCount,12);assert.equal(tabs.props.acceptedCount,3);assert.equal(tabs.props.showPendingSummary,false);assert.equal(tabs.props.pendingCountLabel,'solicitudes por responder');
+ refresh();assert.deepEqual(calls,['counts','list']);
+ state.loading=true;state.page=null;state.error='Sin conexión';
+ for(const received of [true,false]){const button=elements(PhysicalgoodsRequests({active:true,received,onResolved:noop,onDetail:noop,onAgreement:noop,onModeChange:noop})).find(n=>n.type==='RequestSegments');assert.equal(button.props.pendingCount,12);assert.equal(button.props.acceptedCount,3);}
 });
 
 test('shared confirmation describes physical reservation and digital independent agreements; network errors never look empty',()=>{
-  const {RequestDecisionDialog,RequestsFeedback,RequestsPager}=load('components/RequestsUI.tsx',{'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'react/jsx-runtime':jsx,'react-native':native,
+  const {RequestDecisionDialog,RequestsFeedback,RequestsPager,RequestSegments}=load('components/RequestsUI.tsx',{'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'react/jsx-runtime':jsx,'react-native':native,
     'lucide-react-native':{Inbox:'Icon',RefreshCw:'Icon',UserRound:'Icon'},'./CatalogUI':{CATALOG_COLORS:{},StatusTag:'Status',ui:{}},'./ResourceDetailUI':{detailUI:{}},'./PersonalUI':{personalStatusLabel:value=>value,PersonalSkeleton:'Skeleton',PersonalEmpty:'Empty',personalUI:{}}});
   assert.equal(RequestsPager({page:1,hasMore:false,disabled:false,onPrevious:noop,onNext:noop}),null);assert.ok(RequestsPager({page:2,hasMore:false,disabled:false,onPrevious:noop,onNext:noop}));
   const selection={name:'Diego',title:'Guía',decision:'ACEPTAR'};
@@ -194,6 +291,9 @@ test('shared confirmation describes physical reservation and digital independent
   assert.match(physical,/reservado/);assert.match(digital,/seguirá disponible/);assert.doesNotMatch(digital,/reservado/);
   const error=JSON.stringify(elements(RequestsFeedback({loading:false,error:'Sin conexión',empty:true,received:true,onReload:noop})));
   assert.match(error,/Sin conexión/);assert.match(error,/Reintentar consulta/);assert.doesNotMatch(error,/Aún no hay/);
+  const tabs=JSON.stringify(elements(RequestSegments({received:true,onChange:noop,pendingCount:1,showPendingSummary:false,pendingCountLabel:'solicitudes por responder'})));assert.doesNotMatch(tabs,/en esta página/);assert.match(tabs,/1 solicitudes por responder/);
+  const both=JSON.stringify(elements(RequestSegments({received:false,onChange:noop,pendingCount:12,acceptedCount:3,showPendingSummary:false})));assert.match(both,/Enviadas, 3 solicitudes aceptadas/);assert.match(both,/Recibidas, 12/);
+  const waiting=JSON.stringify(elements(RequestSegments({received:false,onChange:noop,countsLoading:true,showPendingSummary:false})));assert.match(waiting,/Cargando contador de enviadas/);assert.match(waiting,/Cargando contador de recibidas/);
 });
 
 test('digital inbox tabs allow leaving a loading query but protect a decision being confirmed or saved',()=>{
