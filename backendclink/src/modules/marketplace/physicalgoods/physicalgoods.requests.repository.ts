@@ -7,7 +7,7 @@ const projection = `id,publicacion_id,solicitante_id,codigo_mensaje,estado_solic
 
 /** Totales propios sin paginar ni cargar mensajes, carreras o fotografías. */
 export async function countPhysicalgoodsRequests(client:PoolClient,userId:string){
-  return (await client.query<{sentAccepted:number;receivedPending:number}>(`SELECT
+  return (await client.query<{sentAccepted:number;receivedPending:number;pendingRequests:number}>(`SELECT
     (SELECT count(*)::integer FROM public.solicitud_recurso s
       JOIN public.publicacion_recurso p ON p.id=s.publicacion_id JOIN public.recurso_fisico r ON r.publicacion_id=p.id
       WHERE s.solicitante_id=$1 AND p.tipo_recurso='FISICO' AND s.estado_solicitud='ACEPTADA'
@@ -18,7 +18,11 @@ export async function countPhysicalgoodsRequests(client:PoolClient,userId:string
       WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO' AND (
         (s.estado_solicitud='PENDIENTE' AND NOT EXISTS(SELECT 1 FROM public.transaccion_recurso t WHERE t.solicitud_id=s.id AND t.publicacion_id=p.id))
         OR (s.estado_solicitud='ACEPTADA' AND EXISTS(SELECT 1 FROM public.transaccion_recurso t WHERE t.solicitud_id=s.id AND t.publicacion_id=p.id
-          AND t.propietario_id=$1 AND t.estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION'))))) AS "receivedPending"`,[userId])).rows[0];
+          AND t.propietario_id=$1 AND t.estado_transaccion IN ('RESERVADA','PENDIENTE_CONFIRMACION'))))) AS "receivedPending",
+    (SELECT count(*)::integer FROM public.solicitud_recurso s
+      JOIN public.publicacion_recurso p ON p.id=s.publicacion_id JOIN public.recurso_fisico r ON r.publicacion_id=p.id
+      WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO' AND s.estado_solicitud='PENDIENTE'
+        AND NOT EXISTS(SELECT 1 FROM public.transaccion_recurso t WHERE t.solicitud_id=s.id AND t.publicacion_id=p.id)) AS "pendingRequests"`,[userId])).rows[0];
 }
 
 export async function findActivePhysicalgoodsRequest(client: PoolClient, publicationId: string, userId: string) {

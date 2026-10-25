@@ -17,10 +17,13 @@ type Props = {
   searchRequired?: boolean;
   showLabel?: boolean;
   placeholder?: string;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
+  clearLabel?: string;
 };
 
 /** Busca en el catálogo ya cargado; escribir nunca modifica el filtro ni llama a la API. */
-export function SearchableFilterSelect({ label, options, value, onChange, expanded, onExpandedChange, disabled = false, loading = false, searchRequired = false, showLabel = true, placeholder = 'Cualquiera' }: Props) {
+export function SearchableFilterSelect({ label, options, value, onChange, expanded, onExpandedChange, disabled = false, loading = false, searchRequired = false, showLabel = true, placeholder = 'Cualquiera', allowEmpty = true, emptyLabel = 'Cualquiera', clearLabel = 'Quitar filtro' }: Props) {
   const selected = options.find(option => option.id === value);
   const unavailable = disabled || loading;
   const open = expanded && !unavailable;
@@ -33,7 +36,7 @@ export function SearchableFilterSelect({ label, options, value, onChange, expand
       <Text style={[styles.value, !selected && styles.placeholder]}>{display}</Text>
       {loading ? <ActivityIndicator size="small" color={colors.secondary} /> : open ? <ChevronUp size={19} color={colors.secondary} /> : <ChevronDown size={19} color={colors.secondary} />}
     </Pressable>
-    {open && <FilterSelectMenu searchRequired={searchRequired} label={label} options={options} value={value} onClose={() => onExpandedChange(false)} onSelect={id => {
+    {open && <FilterSelectMenu searchRequired={searchRequired} allowEmpty={allowEmpty} emptyLabel={emptyLabel} clearLabel={clearLabel} label={label} options={options} value={value} onClose={() => onExpandedChange(false)} onSelect={id => {
       if (id !== value) onChange(id);
       onExpandedChange(false);
       Keyboard.dismiss();
@@ -44,7 +47,8 @@ export function SearchableFilterSelect({ label, options, value, onChange, expand
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase();
 
 /** Al cerrar se desmonta: limpia búsqueda, paginación y temporizador de debounce. */
-function FilterSelectMenu({ label, options, value, onSelect, onClose, searchRequired }: {
+function FilterSelectMenu({ label, options, value, onSelect, onClose, searchRequired, allowEmpty, emptyLabel, clearLabel }: {
+  allowEmpty: boolean; emptyLabel: string; clearLabel: string;
   searchRequired: boolean; label: string; options: readonly FilterSelectOption[]; value: string; onSelect: (id: string) => void; onClose: () => void;
 }) {
   const [query, setQuery] = useState(''), [limit, setLimit] = useState(20);
@@ -67,8 +71,8 @@ function FilterSelectMenu({ label, options, value, onSelect, onClose, searchRequ
     </View>
     {waitingForQuery ? <View style={styles.prompt}>
       <Text style={ui.subtitle}>Escribe el nombre o código para ver las opciones.</Text>
-      {Boolean(value) && <Pressable accessibilityRole="button" accessibilityLabel={`Quitar filtro de ${label.toLowerCase()}`} onPress={() => onSelect('')} style={styles.clear}>
-        <Text style={ui.link}>Quitar filtro</Text>
+      {allowEmpty && Boolean(value) && <Pressable accessibilityRole="button" accessibilityLabel={`${clearLabel} de ${label.toLowerCase()}`} onPress={() => onSelect('')} style={styles.clear}>
+        <Text style={ui.link}>{clearLabel}</Text>
       </Pressable>}
     </View> : searching ? <View style={styles.searching} accessibilityLiveRegion="polite">
       <ActivityIndicator size="small" color={colors.primary} /><Text style={ui.subtitle}>Buscando opciones…</Text>
@@ -76,7 +80,7 @@ function FilterSelectMenu({ label, options, value, onSelect, onClose, searchRequ
       <Text accessibilityLiveRegion="polite" style={styles.count}>{matches.length} opción{matches.length === 1 ? '' : 'es'}</Text>
       <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.options}>
         <View accessibilityRole="radiogroup" accessibilityLabel={`Opciones de ${label.toLowerCase()}`}>
-          {[{ id: '', name: 'Cualquiera' }, ...matches.slice(0, limit)].map(option => <Pressable key={option.id}
+          {[...(allowEmpty ? [{ id: '', name: emptyLabel }] : []), ...matches.slice(0, limit)].map(option => <Pressable key={option.id}
             accessibilityRole="radio" accessibilityLabel={`${label}: ${option.name}${option.code ? ` (${option.code})` : ''}`}
             accessibilityState={{ checked: value === option.id }} aria-checked={value === option.id} onPress={() => onSelect(option.id)}
             style={[styles.option, value === option.id && styles.selected]}>

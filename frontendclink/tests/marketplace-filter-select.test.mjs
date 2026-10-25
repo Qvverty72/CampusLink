@@ -38,6 +38,17 @@ const options=[{id:'inf',name:'Ingeniería en Informática',code:'INF-01'},{id:'
 const radios=tree=>elements(tree).filter(node=>node.props?.accessibilityRole==='radio');
 const input=tree=>elements(tree).find(node=>node.type==='Input');
 
+test('campos obligatorios no permiten limpiar y los opcionales usan una opción vacía propia del formulario',()=>{
+ const f=fixture(options,'inf');f.props.expanded=true;f.props.allowEmpty=false;
+ let tree=f.render();assert.equal(radios(tree).length,options.length);assert.ok(radios(tree).every(row=>row.key!==''));
+ f.props.searchRequired=true;tree=f.render();assert.equal(elements(tree).filter(row=>row.type==='Button').length,0);
+ f.props.allowEmpty=true;f.props.emptyLabel='Sin carrera';f.props.clearLabel='Quitar selección';tree=f.render();
+ assert.match(JSON.stringify(tree),/Quitar selección de carrera/);
+ input(tree).props.onChangeText('inform');f.render();f.h.tick(300);tree=f.render();
+ assert.equal(radios(tree)[0].props.accessibilityLabel,'Carrera: Sin carrera');radios(tree)[0].props.onPress();
+ assert.deepEqual(f.changes,['']);assert.equal(f.props.expanded,false);f.h.unmount();
+});
+
 test('desplegable cerrado muestra selección, abre bajo demanda y elegir el mismo ID no consulta de nuevo',()=>{
  const f=fixture(options,'inf');let root=f.root();assert.equal(elements(root).some(node=>node.type==='Input'),false);
  const trigger=elements(root).find(node=>node.type==='Button');assert.equal(trigger.props.accessibilityValue.text,'Ingeniería en Informática');assert.equal(trigger.props.accessibilityState.expanded,false);

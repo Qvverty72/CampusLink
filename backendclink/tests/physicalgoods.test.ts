@@ -1006,6 +1006,32 @@ test('sent requests use request dates across pages with rejected and completed l
   assert.equal((await requestsService.getSentPhysicalgoodsRequests(foreign,{})).data.length,1);
 });
 
+test('own publication tabs filter before pagination, prioritize actionable resources and retain withdrawn history',async()=>{
+ const requester=await otherActor();
+ const make=async(date:string)=>{const resource=await create(auth,input());await db.query('update publicacion_recurso set publicado_en=$2 where id=$1',[resource.id,date]);return resource;};
+ const pending=await make('2026-10-01T12:00:00Z');await requestsService.createPhysicalgoodsRequest(requester,pending.id,{messageCode:'ME_INTERESA'});
+ const available=await make('2026-10-24T12:00:00Z');
+ const reserved=await make('2026-10-25T12:00:00Z'),request=await requestsService.createPhysicalgoodsRequest(requester,reserved.id,{messageCode:'ME_INTERESA'});await resolveRequest(reserved.id,request.id);
+ const finished=await make('2026-10-26T12:00:00Z'),done=await requestsService.createPhysicalgoodsRequest(requester,finished.id,{messageCode:'ME_INTERESA'}),tx=(await resolveRequest(finished.id,done.id)).transaction!.id;
+ await transactionsService.transitionPhysicalgoodsTransaction(auth,finished.id,tx,{},'CONFIRMAR');await transactionsService.transitionPhysicalgoodsTransaction(requester,finished.id,tx,{},'CONFIRMAR');
+ const withdrawn=await make('2026-10-27T12:00:00Z');await db.query('update publicacion_recurso set deleted_at=now() where id=$1',[withdrawn.id]);
+ await create(requester,input());
+ const ids=async(tab:string)=>(await historyService.getOwnPhysicalgoods(auth,{tab,limit:'10'})).data.map(row=>row.id);
+ assert.deepEqual(await ids('all'),[pending.id,reserved.id,available.id,withdrawn.id,finished.id]);
+ assert.deepEqual(await ids('active'),[pending.id,available.id]);assert.deepEqual(await ids('reserved'),[reserved.id]);assert.deepEqual(await ids('finished'),[finished.id]);
+ const pages:string[]=[];
+ for(let page=1;page<=5;page++){const result=await historyService.getOwnPhysicalgoods(auth,{tab:'all',page:String(page),limit:'1'});pages.push(result.data[0].id);assert.equal(result.meta.hasMore,page<5);}
+ assert.deepEqual(pages,await ids('all'));
+ const historical=(await historyService.getOwnPhysicalgoods(auth,{tab:'all'})).data.find(row=>row.id===withdrawn.id)!;assert.equal(historical.isWithdrawn,true);assert.equal(historical.canView,false);
+ assert.deepEqual((await historyService.getOwnPhysicalgoods(auth,{})).data.map(row=>row.id),[withdrawn.id,finished.id,reserved.id,available.id,pending.id]);
+ for(const query of [{tab:'bad'},{tab:['active']},{tab:'all',campusId:otherCampus},{tab:'finished',ownerId:requester.userId}])await assert.rejects(historyService.getOwnPhysicalgoods(auth,query),{status:400});
+  await db.query('update perfil_usuario set campus_id=$2 where id=$1',[auth.userId,otherCampus]);
+  const moved={...auth,campusId:otherCampus,profile:{...auth.profile,campus_id:otherCampus}};
+  const previousCampus=await historyService.getOwnPhysicalgoods(moved,{tab:'all'});
+  assert.ok(previousCampus.data.every(row=>!row.canView));
+  assert.deepEqual(previousCampus.data.map(row=>row.id),[withdrawn.id,finished.id,reserved.id,available.id,pending.id]);
+});
+
 test('profile overview counts own physical history across campuses and rejects stale or suspended accounts', async () => {
   const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
   const { saved, first, second, a } = await requestedPair();
@@ -1030,12 +1056,13 @@ const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',a
 test('request counters aggregate both inboxes across pages and follow acceptance, both confirmations and cancellation',async()=>{
   const {saved,first,second,a}=await requestedPair(),extra=await create(auth,input());
   const c=await requestsService.createPhysicalgoodsRequest(first,extra.id,{messageCode:'ME_INTERESA'});
-  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3});
-  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:0,receivedPending:0});
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3,pendingRequests:3,pendingTransactions:0});
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:0,receivedPending:0,pendingRequests:0,pendingTransactions:0});
   const one=(await resolveRequest(saved.id,a.id)).transaction!.id;
   const two=(await resolveRequest(extra.id,c.id)).transaction!.id;
   assert.equal((await requestsService.getSentPhysicalgoodsRequests(first,{limit:'1'})).data.length,1);
-  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:2,receivedPending:0});
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:2,receivedPending:0,pendingRequests:0,pendingTransactions:2});
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3,pendingRequests:1,pendingTransactions:2});
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,3);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(second,{})).sentAccepted,0);
   await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,one,{},'CONFIRMAR');
@@ -1044,12 +1071,14 @@ test('request counters aggregate both inboxes across pages and follow acceptance
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,one,{},'CONFIRMAR');
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,1);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,1);
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).pendingTransactions,1);
+  assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).pendingRequests,0);
   await transactionsService.transitionPhysicalgoodsTransaction(first,extra.id,two,{},'CANCELAR');
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,0);
   const own=await create(first,input()),request=await requestsService.createPhysicalgoodsRequest(auth,own.id,{messageCode:'ME_INTERESA'});
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).receivedPending,1);
   await resolveRequest(own.id,request.id,'RECHAZAR',first);
-  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:0,receivedPending:0});
+  assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:0,receivedPending:0,pendingRequests:0,pendingTransactions:0});
 });
 
 test('HTTP request counters are authenticated, no-store, unfiltered and revalidate current account context',async()=>{
@@ -1057,7 +1086,7 @@ test('HTTP request counters are authenticated, no-store, unfiltered and revalida
   const endpoint=base+'/request-counts',headers={Authorization:'Bearer '+token};
   assert.equal((await originalFetch(endpoint)).status,401);
   const response=await originalFetch(endpoint,{headers});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
-  assert.deepEqual((await response.json()).data,{sentAccepted:0,receivedPending:2});
+  assert.deepEqual((await response.json()).data,{sentAccepted:0,receivedPending:2,pendingRequests:2,pendingTransactions:0});
   for(const query of ['?page=1','?ownerId='+first.userId,'?campusId='+otherCampus])assert.equal((await originalFetch(endpoint+query,{headers})).status,400);
   await db.query('update perfil_usuario set campus_id=$2 where id=$1',[auth.userId,otherCampus]);
   await assert.rejects(requestsService.getPhysicalgoodsRequestCounts(auth,{}),{status:409});

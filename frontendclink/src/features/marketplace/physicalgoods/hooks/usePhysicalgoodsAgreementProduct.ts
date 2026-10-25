@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { loadOwnPhysicalgoodsDetail, loadPhysicalgoodsGallery } from '../api/physicalgoodsApi';
-import type { PhysicalgoodsGallery, PhysicalgoodsTransaction } from '../types/publication';
+import type { PhysicalgoodsGallery, PhysicalgoodsTransaction,PhysicalgoodsOwnDetail } from '../types/publication';
 import { agreementCopy as copy } from '../../utils/agreementPresentation';
 
-type Product = Pick<PhysicalgoodsGallery, 'id' | 'description' | 'condition' | 'category' | 'images' | 'expiresIn' | 'modality' | 'price'>;
+type Product = Pick<PhysicalgoodsGallery, 'id' | 'description' | 'condition' | 'category' | 'images' | 'expiresIn' | 'modality' | 'price'>
+  & Partial<Pick<PhysicalgoodsGallery,'title'|'status'>> & {canView?:boolean;isWithdrawn?:boolean;activeTransaction?:PhysicalgoodsOwnDetail['activeTransaction']};
 
 /** Ficha de transacción o solicitud. Solo lecturas ya autorizadas; aborta al cerrar. */
 export function usePhysicalgoodsAgreementProduct(detail: Pick<PhysicalgoodsTransaction,'id'|'role'|'publication'>, historical: boolean) {

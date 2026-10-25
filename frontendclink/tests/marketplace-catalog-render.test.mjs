@@ -61,11 +61,12 @@ for (const screen of ['physical', 'digital']) {
     assert.match(markup, screen === 'physical' ? /Recurso físico · Mercado/ : /Recurso digital · Biblioteca/);
     assert.doesNotMatch(markup, /<input|<textarea|Descargar archivo/);
   });
-  test(`${screen}: received inbox shows requester, status and decisions; failures do not show the empty state`, () => {
+  test(`${screen}: received inbox shows its current layout; failures do not show the empty state`, () => {
     const { markup } = renderCatalog(screen, { mode: 'requests' });
-    assert.match(markup, /Diego Pérez/); assert.match(markup, /Pendiente/); assert.match(markup, /Rechazar/); assert.match(markup, /Aceptar/);
-    if (screen === 'physical') assert.match(markup, /Las demás esperan/);
-    else { assert.match(markup, /propio acuerdo/); assert.doesNotMatch(markup, /reservado|Las demás esperan/); }
+    if (screen === 'physical') {
+      assert.match(markup, /Ver 2 solicitudes de Calculadora científica/);
+      assert.doesNotMatch(markup, /Diego Pérez|Aceptar solicitud de|Rechazar solicitud de/);
+    } else { assert.match(markup, /Diego Pérez/); assert.match(markup, /Pendiente/); assert.match(markup, /Rechazar/); assert.match(markup, /Aceptar/); assert.match(markup, /propio acuerdo/); assert.doesNotMatch(markup, /reservado|Las demás esperan/); }
     const loading = renderCatalog(screen, { mode: 'requests', state: 'loading' }).markup;
     assert.match(loading, /Cargando solicitudes/); assert.doesNotMatch(loading, /Aún no hay solicitudes/);
     const error = renderCatalog(screen, { mode: 'requests', state: 'error' }).markup;

@@ -269,16 +269,19 @@ test('received API requests resource pagination while sent requests keep individ
 });
 
 test('physical badges use independent totals while the selected list is loading or fails',()=>{
- const calls=[];let refresh;
+ const calls=[];let refresh,counterActive;
  const state={page:{data:[sentRow(),{...sentRow('accepted'),status:'ACEPTADA',transaction:{id:'tx1',status:'RESERVADA'}},{...sentRow('done'),status:'ACEPTADA',transaction:{id:'tx2',status:'COMPLETADA'}}],meta:{hasMore:false}},number:1,loading:false,busy:false,reload:noop};
  state.reload=()=>calls.push('list');
  const counters={counts:{sentAccepted:3,receivedPending:12},loading:false,reload:()=>calls.push('counts')};
- const {PhysicalgoodsRequests}=load('physicalgoods/components/PhysicalgoodsRequests.tsx',{'react/jsx-runtime':jsx,react:{useCallback:fn=>fn},'react-native':native,'../hooks/usePhysicalgoodsRequestCounts':{usePhysicalgoodsRequestCounts:()=>counters},'../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},'./PhysicalgoodsReceivedRequests':{PhysicalgoodsReceivedRequests:'Received'},'./PhysicalgoodsSentRequests':{PhysicalgoodsSentRequests:'Sent'},'@/components/RefreshScrollView':{useScrollRefresh:callback=>{refresh=callback;}},'../../components/ResourceDetailUI':{detailUI:{}},'../../components/RequestsUI':requestsUI});
+ const {PhysicalgoodsRequests}=load('physicalgoods/components/PhysicalgoodsRequests.tsx',{'react/jsx-runtime':jsx,react:{useCallback:fn=>fn},'react-native':native,'../hooks/usePhysicalgoodsRequestCounts':{usePhysicalgoodsRequestCounts:active=>{counterActive=active;return counters;}},'../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},'./PhysicalgoodsReceivedRequests':{PhysicalgoodsReceivedRequests:'Received'},'./PhysicalgoodsSentRequests':{PhysicalgoodsSentRequests:'Sent'},'@/components/RefreshScrollView':{useScrollRefresh:callback=>{refresh=callback;}},'../../components/ResourceDetailUI':{detailUI:{}},'../../components/RequestsUI':requestsUI});
  const nodes=elements(PhysicalgoodsRequests({active:true,onResolved:noop,onDetail:noop,onAgreement:noop,onModeChange:noop}));
  const tabs=nodes.find(n=>n.type==='RequestSegments');assert.equal(tabs.props.pendingCount,12);assert.equal(tabs.props.acceptedCount,3);assert.equal(tabs.props.showPendingSummary,false);assert.equal(tabs.props.pendingCountLabel,'pendientes');
  refresh();assert.deepEqual(calls,['counts','list']);
  state.loading=true;state.page=null;state.error='Sin conexión';
  for(const received of [true,false]){const button=elements(PhysicalgoodsRequests({active:true,received,onResolved:noop,onDetail:noop,onAgreement:noop,onModeChange:noop})).find(n=>n.type==='RequestSegments');assert.equal(button.props.pendingCount,12);assert.equal(button.props.acceptedCount,3);}
+ const shared={...counters,counts:{sentAccepted:7,receivedPending:2,pendingRequests:1,pendingTransactions:8}};
+ const sharedTabs=elements(PhysicalgoodsRequests({active:true,requestCounters:shared,onResolved:noop,onDetail:noop,onAgreement:noop,onModeChange:noop})).find(n=>n.type==='RequestSegments');
+ assert.equal(counterActive,false);assert.equal(sharedTabs.props.acceptedCount,7);assert.equal(sharedTabs.props.pendingCount,2);
 });
 
 test('shared confirmation describes physical reservation and digital independent agreements; network errors never look empty',()=>{

@@ -1,8 +1,7 @@
 import {Image,Modal,Pressable,StyleSheet,Text,View} from 'react-native';
-import {RefreshScrollView,useScrollRefresh} from '@/components/RefreshScrollView';
-import {usePhysicalgoodsHistory,usePhysicalgoodsHistoryDetail} from '../hooks/usePhysicalgoodsHistory';
+import {RefreshScrollView} from '@/components/RefreshScrollView';
+import {usePhysicalgoodsHistoryDetail} from '../hooks/usePhysicalgoodsHistory';
 import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory';
-import { ActivityAction, ActivityCard, ActivityFeedback, ActivityHeader, ActivityPager, PublicationActivity, activityUI } from '../../components/ActivityUI';
 import { CATALOG_COLORS as colors } from '../../components/CatalogUI';
 import { ResourceDetailSkeleton, detailUI } from '../../components/ResourceDetailUI';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,38 +9,19 @@ import { DetailActionBar, DetailHeader, RequestResourceSummary } from '../../com
 import { PersonalStatus } from '../../components/PersonalUI';
 import { RequestTimeline } from '../../components/RequestFlowUI';
 import { PhysicalgoodsAgreements } from './PhysicalgoodsAgreements';
+import {PhysicalgoodsPublications} from './PhysicalgoodsPublications';
 import {resourceConditions} from '../types/publication';
-import type {PhysicalgoodsOwnPage} from '../types/publication';
 
 const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled}
   onPress={action} style={[styles.button,disabled&&styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
 const state=(value:string)=>value.toLowerCase().replaceAll('_',' ');
 const date=(value:string)=>new Date(value).toLocaleString('es-CL');
 
-type HistoryProps = {active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;
+type HistoryProps = {active:boolean;transactions?:boolean;refreshVersion:number;refreshEnabled?:boolean;onActivityRefresh?:()=>void;onOpen?:(id:string)=>void;
   onDetail:(target:PhysicalgoodsHistoryTarget)=>void;onAgreement:(publicationId:string,transactionId:string)=>void;onRequests?:()=>void;onPublish?:()=>void;onExplore?:()=>void;showTitle?:boolean};
 export function PhysicalgoodsHistory(props: HistoryProps) {
-  return props.transactions ? <PhysicalgoodsAgreements active={props.active} refreshVersion={props.refreshVersion} onExplore={props.onExplore} refreshEnabled={props.refreshEnabled} showTitle={props.showTitle} />
-    : <PhysicalgoodsPublicationHistory {...props} />;
-}
-function PhysicalgoodsPublicationHistory({active,refreshVersion,onDetail,onRequests,onPublish,refreshEnabled=true}:HistoryProps) {
-  const h=usePhysicalgoodsHistory(active,false,refreshVersion),page=h.page as PhysicalgoodsOwnPage|null;
-  useScrollRefresh(h.reload,h.loading,active&&refreshEnabled&&!h.loading,'mis publicaciones',active);
-  return <View style={activityUI.section}>
-    <ActivityHeader compact title="Mis publicaciones" helper="Gestiona tus recursos, incluidas las publicaciones retiradas." loading={h.loading} onReload={h.reload} />
-    <ActivityFeedback loading={h.loading} error={h.error} empty={Boolean(h.page&&!h.page.data.length)} onReload={h.reload}
-      emptyTitle="Aún no hay publicaciones en esta página" emptyAction={onPublish ? 'Publicar recurso' : undefined} onEmptyAction={onPublish}
-      emptyHelper="Los recursos que compartas aparecerán aquí junto con su actividad." />
-    {!h.loading&&Boolean(page?.data.length)&&<View style={activityUI.list}>{page?.data.map(row=>{
-      const historical=row.isWithdrawn||['FINALIZADO','CANCELADO','CANCELADA','COMPLETADA','OCULTO'].includes(row.status);
-      return <ActivityCard key={row.id} title={row.title} status={row.isWithdrawn?'RETIRADA':row.status} historical={historical}
-        helper={`${row.campus.name} · ${new Date(row.publishedAt).toLocaleDateString('es-CL')}`}
-        keyData={row.modality==='DONACION'?'Donación':`$${row.price?.toLocaleString('es-CL')}`} role="Tu publicación">
-        <PublicationActivity activity={row.activity} onRequests={onRequests}><ActivityAction label="Ver publicación" accessibilityLabel={'Ver publicación: '+row.title} onPress={()=>onDetail({publicationId:row.id})} /></PublicationActivity>
-      </ActivityCard>;
-    })}</View>}
-    <ActivityPager page={h.number} hasMore={Boolean(h.page?.meta.hasMore)} disabled={h.loading} onPrevious={()=>h.setNumber(h.number-1)} onNext={()=>h.setNumber(h.number+1)} />
-  </View>;
+  return props.transactions ? <PhysicalgoodsAgreements active={props.active} refreshVersion={props.refreshVersion} onExplore={props.onExplore} refreshEnabled={props.refreshEnabled} showTitle={props.showTitle} onActivityRefresh={props.onActivityRefresh} />
+    : <PhysicalgoodsPublications {...props} />;
 }
 
 export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,refreshEnabled=true}:{target:PhysicalgoodsHistoryTarget;onClose:()=>void;refreshEnabled?:boolean;

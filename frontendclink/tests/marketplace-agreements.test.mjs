@@ -117,7 +117,7 @@ function listFixture(){
  const stats={reloads:0,refreshes:[],updates:[],invalidated:[]};
  const history={page:{data,meta:{hasMore:false,total:3,totalPages:1,counts:{active:3,finished:2}}},number:1,tab:'active',loading:false,error:null,reload:()=>stats.reloads++,refreshCurrent:noop,setTab:value=>{history.tab=value;history.number=1;},setNumber:value=>{history.number=value;}};const meta={details:Object.fromEntries(data.map(row=>[row.id,row])),scope:'owner:campus',campusId:'campus',failed:[],loading:false,reload:noop,refresh:(...args)=>stats.refreshes.push(args),update:value=>stats.updates.push(value),invalidate:(...args)=>stats.invalidated.push(args)};
  const {PhysicalgoodsAgreements}=load('physicalgoods/components/PhysicalgoodsAgreements.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':native,'@/components/RefreshScrollView':{useScrollRefresh:(...args)=>registered.push(args)},'../hooks/usePhysicalgoodsTransactions':{usePhysicalgoodsTransactions:()=>history,TRANSACTIONS_PAGE_SIZE:5},'@/components/Pagination':{Pagination:'Pagination'},'../hooks/usePhysicalgoodsAgreementPage':{usePhysicalgoodsAgreementPage:()=>meta},'../../components/AgreementUI':{AgreementCard:'Card',AgreementCardsSkeleton:'Skeleton'},'./PhysicalgoodsTransaction':{PhysicalgoodsTransaction:'Panels'},'../../components/RequestsUI':{RequestsPager:'Pager',RequestButton:'Action'},'../../components/PersonalUI':{PersonalEmpty:'Empty',PersonalSkeleton:'Skeleton'},'../../components/CatalogUI':{CATALOG_COLORS:{},ui:{}},'../../components/ResourceDetailUI':{detailUI:{}},'../../utils/agreementPresentation':presentation});
- return{h,history,meta,stats,registered,opened,render:(refreshEnabled=true)=>elements(h.render(()=>PhysicalgoodsAgreements({active:true,refreshVersion:0,refreshEnabled,onExplore:noop,onAgreement:(...args)=>opened.push(args)})))};
+ return{h,history,meta,stats,registered,opened,render:(refreshEnabled=true,extra={})=>elements(h.render(()=>PhysicalgoodsAgreements({active:true,refreshVersion:0,refreshEnabled,onExplore:noop,onAgreement:(...args)=>opened.push(args),...extra})))};
 }
 
 test('list groups and counts its page, opens exact inline panels and preserves terminal sorting',()=>{
@@ -142,6 +142,15 @@ test('transaction pagination uses the selected tab total including exactly five 
  q.history.page.data=[q.history.page.data[0]];nodes=q.render();assert.equal(nodes.filter(row=>row.type==='Card').length,1);assert.equal(nodes.find(row=>row.type==='Pagination').props.page,2);
  nodes.find(row=>row.type==='Button'&&row.key==='finished').props.onPress();q.history.page.meta.counts.finished=5;nodes=q.render();assert.equal(q.history.number,1);assert.match(nodes.find(row=>row.type==='Pagination').props.label,/finalizadas/);
  q.history.loading=true;assert.ok(!q.render().some(row=>row.type==='Pagination'));q.history.loading=false;q.history.error='offline';assert.ok(!q.render().some(row=>row.type==='Pagination'));q.h.unmount();
+});
+
+test('activity counters refresh on request, and a changed transaction detail, without reloading the list on consultation',()=>{
+ const q=listFixture();let countReads=0;const extra={onActivityRefresh:()=>countReads++};
+ let nodes=q.render(true,extra);q.registered.at(-1)[0]();assert.equal(countReads,1);assert.equal(q.stats.reloads,1);
+ nodes.find(row=>row.type==='Card').props.onSelect('confirm');nodes=q.render(true,extra);
+ const modal=nodes.find(row=>row.type==='Panels');modal.props.onDetailChanged(q.meta.details.trade);assert.equal(countReads,1);
+ modal.props.onDetailChanged({...q.meta.details.trade,status:'COMPLETADA'});assert.equal(countReads,2);assert.equal(q.stats.reloads,1);
+ modal.props.onClose();q.render(true,extra);assert.equal(q.stats.reloads,1);q.h.unmount();
 });
 
 test('a transaction changing tabs reconciles only after its modal closes, not after ordinary consultation',()=>{

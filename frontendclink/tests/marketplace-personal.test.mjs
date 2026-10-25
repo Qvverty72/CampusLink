@@ -39,12 +39,11 @@ const publication={id:'pub',title:'Guía',description:'Descripción',status:'DIS
 test('physical personal cards retain withdrawn records and delegate transactions without a detail-page callback',()=>{
   const opened=[],agreements=[],reviews=[];const own={...publication,campus:{name:'Origen'},publishedAt:'2026-10-23T12:00:00Z',isWithdrawn:true,modality:'DONACION'};
   const state={loading:false,page:{data:[own],meta:{}},number:1};
-  const {PhysicalgoodsHistory}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{...base,'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},
+  const {PhysicalgoodsHistory}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{react:{useCallback:fn=>fn},...base,'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'./PhysicalgoodsPublications':{PhysicalgoodsPublications:'Publications'},
     'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0,bottom:0})}, '../../components/PersonalUI':{PersonalStatus:'Status'}, '../../components/RequestFlowUI':{RequestTimeline:'Timeline'},'@/components/RefreshScrollView':{useScrollRefresh:noop},'../hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistory:()=>state},'../types/publication':{resourceConditions:[]}});
   const render=transactions=>{const node=PhysicalgoodsHistory({active:true,transactions,refreshVersion:0,onDetail:value=>opened.push(value),onAgreement:(...args)=>agreements.push(args),onRequests:()=>reviews.push(true)});return elements(typeof node.type==='function'?node.type(node.props):node);};
-  let nodes=render(false);assert.equal(nodes.find(n=>n.type==='ActivityCard').props.historical,true);assert.equal(nodes.find(n=>n.type==='ActivityCard').props.status,'RETIRADA');
-  const activity=nodes.find(n=>n.type==='PublicationActivity');assert.equal(activity.props.activity.pendingRequests,2);activity.props.onRequests();assert.equal(reviews.length,1);
-  nodes.find(n=>n.type==='ActivityAction').props.onPress();assert.equal(opened[0].publicationId,'pub');
+  let nodes=render(false);const publications=nodes.find(n=>n.type==='Publications');assert.equal(publications.props.active,true);
+  publications.props.onRequests();assert.equal(reviews.length,1);publications.props.onDetail({publicationId:'pub'});assert.equal(opened[0].publicationId,'pub');
   state.page.data=[{id:'agreement',publication:own,campus:own.campus,status:'COMPLETADA',startedAt:own.publishedAt,role:'RECEPTOR',modality:'VENTA',amount:1000,currency:'CLP'}];nodes=render(true);
   assert.equal(nodes.find(n=>n.type==='Agreements').props.onAgreement,undefined);assert.equal(nodes.find(n=>n.type==='Agreements').props.active,true);assert.deepEqual(agreements,[]);assert.equal(nodes.filter(n=>n.type==='PublicationActivity').length,0);
 });
@@ -92,7 +91,7 @@ test('acquired detail failure retries its authorization query instead of silentl
 
 test('M3 renders the personal tabs, real pending counts and terminal history with actions',()=>{
   const {markup}=renderCatalog('physical',{mode:'personal',width:320});
-  for(const text of ['Mi actividad','Publicaciones','Solicitudes','Transacciones','2 solicitudes pendientes','Revisar solicitudes','Tu publicación','Retirada','Ver publicación'])assert.ok(markup.includes(text),text);
+  for(const text of ['Mis publicaciones','Publicaciones','Solicitudes','Transacciones','Todas','Activas','Reservadas','Finalizadas','Publicación con solicitudes pendientes.','REQUIERE TU ACCIÓN','HISTORIAL','Retirada','Abrir publicación:'])assert.ok(markup.includes(text),text);
   const transactions=renderCatalog('physical',{mode:'transactions'}).markup;assert.match(transactions,/Mis transacciones/);assert.match(transactions,/Coordinando entrega/);assert.match(transactions,/Falta tu confirmación/);assert.match(transactions,/Participantes/);assert.match(transactions,/Monto acordado/);
 });
 
@@ -108,11 +107,22 @@ test('L3 acquired cards and detail keep authorized originals after deactivation 
 });
 
 for(const [screen,mode] of [['physical','personal'],['digital','owned'],['digital','acquired']])test(`${screen} ${mode}: loading and failed reads never masquerade as empty activity`,()=>{
-  assert.match(renderCatalog(screen,{mode,state:'loading'}).markup,/Cargando actividad/);
+  assert.match(renderCatalog(screen,{mode,state:'loading'}).markup,screen==='physical'?/Cargando mis publicaciones/:/Cargando actividad/);
   const error=renderCatalog(screen,{mode,state:'error'}).markup;assert.match(error,/Reintentar consulta/);assert.match(error,/role="alert"/);assert.doesNotMatch(error,/Aún no hay|No hay transacciones en esta página/);
   const empty=renderCatalog(screen,{mode,state:'empty'}).markup;assert.match(empty,mode==='acquired'?/Explorar Biblioteca/:/Publicar recurso/);
 });
 
+
+test('main activity tabs show independent pending badges from Publicaciones and cap large visible numbers',()=>{
+ const options={mode:'personal',variant:'mine',requestCounts:{sentAccepted:1,receivedPending:3,pendingRequests:1,pendingTransactions:2}};
+ const markup=renderCatalog('physical',options).markup;
+ assert.match(markup,/Solicitudes, 1 solicitud pendiente/);assert.match(markup,/Transacciones, 2 transacciones pendientes/);
+ assert.match(markup,/aria-selected="true"[^>]*aria-label="Publicaciones"|aria-label="Publicaciones"[^>]*aria-selected="true"/);
+ const large=renderCatalog('physical',{...options,requestCounts:{...options.requestCounts,pendingTransactions:123}}).markup;
+ assert.match(large,/Transacciones, 123 transacciones pendientes/);assert.match(large,/>99\+</);
+ const zero=renderCatalog('physical',{...options,requestCounts:{sentAccepted:0,receivedPending:0,pendingRequests:0,pendingTransactions:0}}).markup;
+ assert.match(zero,/Solicitudes, 0 solicitudes pendientes/);assert.doesNotMatch(zero,/>0<|>99\+</);
+});
 
 test('shared rows keep semantic status colors for completed history, pending, accepted and rejected requests',()=>{
  const deps={'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{},'@/components/Skeleton':{},'./CatalogUI':{CATALOG_COLORS:{primary:'#002E56',tint:'#E9F0F6'},ui:{}}};

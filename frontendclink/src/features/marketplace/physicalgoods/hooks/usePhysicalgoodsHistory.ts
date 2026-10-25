@@ -2,26 +2,26 @@ import {useCallback,useEffect,useState} from 'react';
 import {useAuth} from '@/features/auth/hooks/useAuth';
 import {AuthApiError} from '@/lib/api/authenticated-request';
 import {loadOwnPhysicalgoods,loadOwnPhysicalgoodsDetail,loadOwnPhysicalgoodsRequest,loadOwnPhysicalgoodsTransactions} from '../api/physicalgoodsApi';
-import type {PhysicalgoodsOwnDetail,PhysicalgoodsOwnPage,PhysicalgoodsReceivedRequest,PhysicalgoodsTransactionsPage} from '../types/publication';
+import type {PhysicalgoodsOwnDetail,PhysicalgoodsOwnPage,PhysicalgoodsReceivedRequest,PhysicalgoodsTransactionsPage,PhysicalgoodsPublicationsTab} from '../types/publication';
 
 export type PhysicalgoodsHistoryTarget={publicationId:string;requestId?:string};
 
 /** Comparte paginación de las dos vistas históricas sin añadir estado global. */
-export function usePhysicalgoodsHistory(active:boolean,transactions:boolean,refreshVersion:number) {
+export function usePhysicalgoodsHistory(active:boolean,transactions:boolean,refreshVersion:number,publicationTab?:PhysicalgoodsPublicationsTab) {
   const auth=useAuth();
   const [page,setPage]=useState<PhysicalgoodsOwnPage|PhysicalgoodsTransactionsPage|null>(null),[number,setNumber]=useState(1);
   const [loading,setLoading]=useState(active),[error,setError]=useState<string|null>(null),[revision,setRevision]=useState(0);
   useEffect(()=>{
     const abort=new AbortController();if(!active)return;
     setLoading(true);setPage(null);setError(null);
-    void (transactions?loadOwnPhysicalgoodsTransactions:loadOwnPhysicalgoods)(number,abort.signal)
+    void (transactions?loadOwnPhysicalgoodsTransactions(number,abort.signal):loadOwnPhysicalgoods(number,abort.signal,publicationTab))
       .then(result=>{if(!abort.signal.aborted)setPage(result);})
       .catch(reason=>{if(!abort.signal.aborted){
         if(reason instanceof AuthApiError&&[401,403].includes(reason.status))void auth.refreshIdentity();
         setError(reason instanceof AuthApiError?reason.serverMessage||'No se pudo cargar el historial.':'No se pudo cargar el historial.');
       }}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
-  },[active,transactions,number,revision,refreshVersion]);
+  },[active,transactions,number,revision,refreshVersion,publicationTab,auth.identity?.userId,auth.identity?.campusId]);
   const reload=useCallback(()=>setRevision(value=>value+1),[]);
   return {page,number,loading,error,setNumber,reload};
 }

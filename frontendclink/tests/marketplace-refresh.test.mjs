@@ -58,16 +58,22 @@ test('acuerdos digitales bloquean gesto/poll en formulario, decisión y pestaña
 
 test('Mercado usa página de catálogo para pull y desactiva gesto al entrar a publicar o actividad',()=>{
  const h=runtime(),refresh=noop,resources={refresh,loading:false,busy:false,selectedId:null};
+ const counters={counts:{sentAccepted:1,receivedPending:3,pendingRequests:2,pendingTransactions:4},loading:false,reload:noop},counterReads=[];
  const deps={react:h.react,'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text',Pressable:'Button',StyleSheet:{create:value=>value}},'expo-router':{},'@/components/RefreshScrollView':{RefreshScrollView:'Refresh'},'@/components/navigation/BottomNavigationBar':{},'@/features/auth/hooks/useAuth':{},'../hooks/usePublishPhysicalgoods':{},'../hooks/usePhysicalgoodsResources':{usePhysicalgoodsResources:()=>resources},'../types/publication':{},'../../utils/agreementPresentation':{agreementCopy:{tabTitle:'Transacciones'}},'../../components/CatalogUI':{CatalogTabs:'Tabs',PublishFAB:'Fab',ScreenHeader:'Header'},'../../components/PublicationFormUI':{},'../../components/PublicationChoices':{},'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:59,bottom:34})}};
+ deps['../../components/SearchableFilterSelect']={SearchableFilterSelect:'Select'};
  for(const name of ['PhysicalgoodsResources','PublicationImages','PhysicalgoodsRequests','PhysicalgoodsTransaction','PhysicalgoodsHistory'])deps['./'+name]={[name]:name};
+ deps['../hooks/usePhysicalgoodsRequestCounts']={usePhysicalgoodsRequestCounts:(active,version)=>{counterReads.push({active,version});return counters;}};
  const {Content}=load('physicalgoods/components/PublishPhysicalgoods.tsx',deps,{},'\nmodule.exports.Content=PhysicalgoodsContent;');const render=()=>elements(h.render(()=>Content({})));let tree=render();assert.equal(tree.find(node=>node.type==='Refresh').props.onRefresh,refresh);assert.equal(tree.find(node=>node.type==='Refresh').props.refreshIndicatorOffset,67);assert.equal(tree.find(node=>node.type==='Refresh').props.refreshEnabled,true);
  tree.find(node=>node.type==='Fab').props.onPress();tree=render();assert.equal(tree.find(node=>node.type==='Refresh').props.onRefresh,undefined);assert.equal(tree.find(node=>node.type==='Refresh').props.refreshEnabled,false);
  tree.find(node=>node.type==='Header').props.onBack();tree=render();tree.find(node=>node.type==='Header').props.onAction();tree=render();assert.equal(tree.find(node=>node.type==='Refresh').props.onRefresh,undefined);
  const main=()=>tree.find(node=>node.type==='Tabs'&&node.props.variant==='underline');
  assert.deepEqual(Array.from(main().props.tabs,tab=>tab.label),['Publicaciones','Solicitudes','Transacciones']);
+ assert.equal(counterReads.at(-1).active,true);assert.equal(main().props.tabs[1].badgeCount,2);assert.equal(main().props.tabs[2].badgeCount,4);
  main().props.onSelect('requests');tree=render();let secondary=tree.find(node=>node.type==='PhysicalgoodsRequests'&&node.props.active);assert.equal(secondary.props.received,false);
+ assert.equal(secondary.props.requestCounters,counters);
  secondary.props.onModeChange(true);tree=render();assert.equal(main().props.selected,'requests');
  assert.equal(tree.filter(node=>node.type==='PhysicalgoodsRequests'&&node.props.active).length,1);
+ counters.counts={sentAccepted:0,receivedPending:0,pendingRequests:0,pendingTransactions:0};tree=render();assert.equal(main().props.tabs[1].badgeCount,0);assert.equal(main().props.tabs[2].badgeCount,0);
  main().props.onSelect('mine');tree=render();main().props.onSelect('requests');tree=render();secondary=tree.find(node=>node.type==='PhysicalgoodsRequests'&&node.props.active);assert.notEqual(secondary.props.received,false);
 });
 test('Biblioteca desactiva refresh de catálogo al publicar y deja al panel personal registrar su consulta',()=>{

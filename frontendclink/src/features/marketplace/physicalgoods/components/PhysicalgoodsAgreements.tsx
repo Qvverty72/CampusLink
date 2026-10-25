@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback,useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useScrollRefresh } from '@/components/RefreshScrollView';
 import { Pagination } from '@/components/Pagination';
@@ -15,14 +15,16 @@ import { agreementCopy as copy, agreementPresentation } from '../../utils/agreem
 
 const EMPTY: PhysicalgoodsTransactionSummary[] = [];
 
-export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, refreshEnabled = true, showTitle = true }: {
-  active: boolean; refreshVersion: number; onExplore?: () => void; refreshEnabled?: boolean; showTitle?: boolean;
+export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, refreshEnabled = true, showTitle = true,onActivityRefresh }: {
+  active: boolean; refreshVersion: number; onExplore?: () => void; refreshEnabled?: boolean; showTitle?: boolean;onActivityRefresh?:()=>void;
 }) {
   const history = usePhysicalgoodsTransactions(active, refreshVersion), { page, tab, setTab } = history;
   const rows = page?.data ?? EMPTY, enriched = usePhysicalgoodsAgreementPage(rows, active && !history.loading);
   const [selection, setSelection] = useState<{ publicationId: string; transactionId: string; entry: AgreementStep | 'menu' } | null>(null);
   const loading = history.loading || enriched.loading || (active && rows.some(row => !enriched.details[row.id] && !enriched.failed.includes(row.id)));
-  useScrollRefresh(history.reload, loading, active && refreshEnabled && !loading && !selection, copy.title, active);
+  const refreshAll=useCallback(()=>{onActivityRefresh?.();history.reload();},[onActivityRefresh,history.reload]);
+  const reload=onActivityRefresh?refreshAll:history.reload;
+  useScrollRefresh(reload, loading, active && refreshEnabled && !loading && !selection, copy.title, active);
   const items = rows.map(row => {
     const detail = enriched.details[row.id], view = detail ? agreementPresentation(detail) : null;
     const status = detail?.status ?? row.status;
@@ -52,11 +54,11 @@ export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, ref
         <Text style={[detailUI.body, tab === option.id && { fontWeight: '700' }]}>{option.label}{!loading && !history.error ? ` · ${option.count}` : ''}</Text>
       </Pressable>)}
     </View>
-    {history.error && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{history.error}</Text><RequestButton label={copy.retry} onPress={history.reload} /></View>}
+    {history.error && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{history.error}</Text><RequestButton label={copy.retry} onPress={reload} /></View>}
     {loading ? <AgreementCardsSkeleton /> : !history.error && <>
       {enriched.failed.length > 0 && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.helper}>{copy.partial}</Text><RequestButton label={copy.retry} onPress={enriched.reload} /></View>}
       {!count && <PersonalEmpty title={tab === 'active' ? copy.emptyActive : copy.emptyFinished} helper={copy.emptyHelp}
-        action={onExplore ? copy.explore : copy.retry} onAction={onExplore ?? history.reload} />}
+        action={onExplore ? copy.explore : copy.retry} onAction={onExplore ?? reload} />}
       {groups.filter(group => group.items.length).map(group => <View key={group.label} style={styles.section}>
         {Boolean(group.label) && <Text accessibilityRole="header" style={styles.groupTitle}>{group.label.toLocaleUpperCase('es-CL')}</Text>}
         {group.items.map(({ row, detail, view }) => {
@@ -79,7 +81,7 @@ export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, ref
       label={`Paginación de transacciones ${tab === 'active' ? 'activas' : 'finalizadas'}`} onPageChange={value => { if (!selection) history.setNumber(value); }} />}
     {selection && active && <PhysicalgoodsTransaction key={`${enriched.scope}:${selection.publicationId}:${selection.transactionId}:${selection.entry}`} target={{ publicationId: selection.publicationId, transactionId: selection.transactionId }} initialPanel={selection.entry} panelsOnly refreshEnabled={refreshEnabled}
       initialDetail={enriched.details[selection.transactionId]} initialHistorical={enriched.details[selection.transactionId]?.campus.id !== enriched.campusId}
-      onDetailChanged={enriched.update} onAccessDenied={() => enriched.invalidate(selection.publicationId, selection.transactionId)} onChanged={() => { void enriched.refresh(selection.publicationId, selection.transactionId); }} onClose={() => setSelection(null)} />}
+      onDetailChanged={value=>{const previous=enriched.details[value.id];enriched.update(value);if(previous?.status!==value.status)onActivityRefresh?.();}} onAccessDenied={() => enriched.invalidate(selection.publicationId, selection.transactionId)} onChanged={() => { void enriched.refresh(selection.publicationId, selection.transactionId); }} onClose={() => setSelection(null)} />}
   </View>;
 }
 

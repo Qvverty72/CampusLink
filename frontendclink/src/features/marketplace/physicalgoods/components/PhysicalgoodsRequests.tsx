@@ -9,13 +9,15 @@ import { detailUI } from '../../components/ResourceDetailUI';
 import { RequestDecisionDialog, RequestSegments, RequestsFeedback, RequestsPager, requestUI } from '../../components/RequestsUI';
 
 /** Lista propia: una reserva conserva las demás solicitudes pendientes. */
-export function PhysicalgoodsRequests({ active, onOpen, onResolved, onAgreement, onDetail, received = true, refreshVersion = 0, refreshEnabled = true, onModeChange, onExplore }: {
+export function PhysicalgoodsRequests({ active, onOpen, onResolved, onAgreement, onDetail, received = true, refreshVersion = 0, refreshEnabled = true, onModeChange, onExplore,requestCounters }: {
+  requestCounters?:ReturnType<typeof usePhysicalgoodsRequestCounts>;
   onModeChange?: (received: boolean) => void; onExplore?: () => void;
   active: boolean; onOpen?: (id: string) => void; onResolved: () => void; refreshEnabled?: boolean;
   onDetail: (publicationId: string, requestId: string) => void;
   onAgreement: (publicationId: string, transactionId: string) => void; received?: boolean; refreshVersion?: number;
 }) {
-  const counters=usePhysicalgoodsRequestCounts(active,refreshVersion);
+  const ownCounters=usePhysicalgoodsRequestCounts(active&&!requestCounters,refreshVersion);
+  const counters=requestCounters??ownCounters;
   const r = usePhysicalgoodsRequests(active, onResolved, received, refreshVersion);
   const reload=useCallback(()=>{counters.reload();r.reload();},[counters.reload,r.reload]);
   useScrollRefresh(reload, r.loading, active && refreshEnabled && !r.busy && !r.loading && !r.selection, received ? 'las solicitudes recibidas' : 'mis solicitudes', active);

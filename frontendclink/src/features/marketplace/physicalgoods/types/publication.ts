@@ -92,7 +92,7 @@ export interface PhysicalgoodsRequestOptions {
   messages: { code:string; label:string }[];
 }
 /** receivedPending incluye por responder y aceptadas con transacción todavía en curso. */
-export interface PhysicalgoodsRequestCounts {sentAccepted:number;receivedPending:number}
+export interface PhysicalgoodsRequestCounts {sentAccepted:number;receivedPending:number;pendingRequests:number;pendingTransactions:number}
 
 export interface PhysicalgoodsReceivedRequest {
   id: string;
@@ -151,6 +151,7 @@ export interface PhysicalgoodsOwnDetail extends PhysicalgoodsOwnPublication {
   activeTransaction:{id:string;status:PhysicalgoodsTransaction['status']}|null;
 }
 export type PhysicalgoodsTransactionSummary=Pick<PhysicalgoodsTransaction,'id'|'publication'|'campus'|'role'|'status'|'modality'|'amount'|'currency'|'startedAt'>;
+export type PhysicalgoodsPublicationsTab='all'|'active'|'reserved'|'finished';
 export interface PhysicalgoodsOwnPage {data:PhysicalgoodsOwnPublication[];meta:PhysicalgoodsPage['meta']}
 export interface PhysicalgoodsTransactionsPage {data:PhysicalgoodsTransactionSummary[];meta:PhysicalgoodsPage['meta']}
 export type PhysicalgoodsTransactionTab='active'|'finished';

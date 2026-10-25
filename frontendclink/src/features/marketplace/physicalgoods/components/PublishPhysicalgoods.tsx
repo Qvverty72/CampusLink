@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { usePublishPhysicalgoods } from '../hooks/usePublishPhysicalgoods';
 import { PHYSICALGOODS_MAX_IMAGES, resourceConditions } from '../types/publication';
 import { usePhysicalgoodsResources } from '../hooks/usePhysicalgoodsResources';
+import {usePhysicalgoodsRequestCounts} from '../hooks/usePhysicalgoodsRequestCounts';
 import { PhysicalgoodsResources } from './PhysicalgoodsResources';
 import { PublicationImages } from './PublicationImages';
 import { PhysicalgoodsRequests } from './PhysicalgoodsRequests';
@@ -17,7 +18,7 @@ import type {PhysicalgoodsHistoryTarget} from '../hooks/usePhysicalgoodsHistory'
 import { agreementCopy } from '../../utils/agreementPresentation';
 import { CatalogTabs, PublishFAB, ScreenHeader } from '../../components/CatalogUI';
 import { PublicationSection, PublicationModality, PublicationUpload, PublicationFeedback, PublicationSubmit, publicationUI as f } from '../../components/PublicationFormUI';
-import { PublicationChoices } from '../../components/PublicationChoices';
+import { SearchableFilterSelect } from '../../components/SearchableFilterSelect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Composición de búsqueda y publicación del módulo de bienes físicos. */
@@ -39,6 +40,7 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const personal = view !== 'explore' && !publishing;
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [view]);
   const [agreement,setAgreement]=useState<PhysicalgoodsTransactionTarget|null>(null),[requestsVersion,setRequestsVersion]=useState(0);
+  const requestCounters=usePhysicalgoodsRequestCounts(personal,requestsVersion);
   const [historyDetail,setHistoryDetail]=useState<PhysicalgoodsHistoryTarget|null>(null);
   useEffect(()=>{if(initialPublicationId){setView('explore');resources.open(initialPublicationId);}},[initialPublicationId]);
   const refresh=()=>{resources.reload();resources.reloadGallery();setRequestsVersion(value=>value+1);};
@@ -46,24 +48,24 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
     <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]} keyboardShouldPersistTaps="handled">
-      <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : received || sent ? 'Solicitudes' : personal ? 'Mi actividad' : 'Mercado'}
+      <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : received || sent ? 'Mis Solicitudes' : personal ? 'Mis publicaciones' : 'Mercado'}
         subtitle={publishing ? 'Comparte un recurso físico con tu campus' : personal ? 'Tus publicaciones, solicitudes y transacciones' : 'Recursos físicos de tu campus'}
         action={view === 'explore' ? 'Mi actividad' : undefined} onAction={() => setView('mine')}
         onBack={view !== 'explore' ? () => setView('explore') : undefined} />
       {personal && <CatalogTabs variant="underline" selected={received || sent ? 'requests' : view === 'transactions' ? 'transactions' : 'mine'}
         onSelect={tab => { if (tab === 'requests') showRequests(requestView); else setView(tab); }} tabs={[
-          { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes' }, { id: 'transactions', label: agreementCopy.tabTitle },
+          { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes',badgeCount:requestCounters.counts?.pendingRequests,badgeLabel:requestCounters.counts?.pendingRequests===1?'solicitud pendiente':'solicitudes pendientes' }, { id: 'transactions', label: agreementCopy.tabTitle,badgeCount:requestCounters.counts?.pendingTransactions,badgeLabel:requestCounters.counts?.pendingTransactions===1?'transacción pendiente':'transacciones pendientes' },
         ]} />}
 
       <View style={publishing ? undefined : { display: 'none' }}>
         <PublicationForm onPublished={refresh} onGallery={id => { setView('explore'); resources.open(id); }} />
       </View>
-      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests onModeChange={value => showRequests(value ? 'received' : 'sent')} onExplore={() => setView('explore')} active={received} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
+      <View style={received?undefined:{display:'none'}}><PhysicalgoodsRequests requestCounters={requestCounters} onModeChange={value => showRequests(value ? 'received' : 'sent')} onExplore={() => setView('explore')} active={received} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
-      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests onModeChange={value => showRequests(value ? 'received' : 'sent')} onExplore={() => setView('explore')} active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
+      <View style={sent?undefined:{display:'none'}}><PhysicalgoodsRequests requestCounters={requestCounters} onModeChange={value => showRequests(value ? 'received' : 'sent')} onExplore={() => setView('explore')} active={sent} received={false} onResolved={refresh} onAgreement={openAgreement} onDetail={openRequest} refreshVersion={requestsVersion}
         onOpen={id=>{setView('explore');resources.open(id);}} /></View>
-      <View style={view==='mine'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='mine'} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} onRequests={() => showRequests('received')} onPublish={() => setView('publish')} /></View>
-      <View style={view==='transactions'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='transactions'} transactions showTitle={false} onExplore={() => setView('explore')} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} /></View>
+      <View style={view==='mine'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='mine'} refreshVersion={requestsVersion} onActivityRefresh={requestCounters.reload} onDetail={setHistoryDetail} onAgreement={openAgreement} onRequests={() => showRequests('received')} onPublish={() => setView('publish')} onOpen={id=>{setView('explore');resources.open(id);}} /></View>
+      <View style={view==='transactions'?undefined:{display:'none'}}><PhysicalgoodsHistory active={view==='transactions'} transactions showTitle={false} onActivityRefresh={requestCounters.reload} onExplore={() => setView('explore')} refreshVersion={requestsVersion} onDetail={setHistoryDetail} onAgreement={openAgreement} /></View>
       <View style={view!=='explore' ? { display: 'none' } : undefined}><PhysicalgoodsResources resources={resources} onPublish={() => setView('publish')}
         onRequestDetail={(publicationId, requestId) => { resources.close(); openRequest(publicationId, requestId); }} /></View>
     </RefreshScrollView>
@@ -79,6 +81,7 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
 
 function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; onGallery: (id: string) => void }) {
   const form = usePublishPhysicalgoods(onPublished);
+  const [openField, setOpenField] = useState<'condition' | 'categoryId' | 'careerId' | 'subjectId' | null>(null);
   const { options, loading, busy, created } = form;
   const disabled = busy || form.pickingPhoto;
   if (loading) return <View style={f.section}><ActivityIndicator accessibilityLabel="Cargando opciones de publicación" /><Text style={f.hint}>Preparando tu publicación…</Text></View>;
@@ -101,8 +104,12 @@ function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; 
         <TextInput accessibilityLabel="Nombre del recurso" placeholder="Ej. Calculadora científica" value={form.title} onChangeText={form.setTitle} maxLength={200} editable={!disabled} style={f.input} /></View>
       <View style={f.field}><Text style={f.label}>Descripción *</Text>
         <TextInput accessibilityLabel="Descripción del recurso" placeholder="Describe el estado, lo que incluye y sus detalles" value={form.description} onChangeText={form.setDescription} maxLength={4000} multiline editable={!disabled} style={[f.input, f.textarea]} /></View>
-      <PublicationChoices label="Condición *" options={resourceConditions.map(row => ({ id: row.value, name: row.label }))} value={form.condition} onChange={value => form.setCondition(value as typeof form.condition)} disabled={disabled} />
-      <PublicationChoices label="Categoría *" options={options.categories} value={form.categoryId} onChange={form.setCategoryId} disabled={disabled} />
+      <SearchableFilterSelect label="Condición *" options={resourceConditions.map(row => ({ id: row.value, name: row.label }))} value={form.condition}
+        onChange={value => form.setCondition(value as typeof form.condition)} disabled={disabled} allowEmpty={false} placeholder="Selecciona una condición"
+        expanded={openField === 'condition'} onExpandedChange={open => setOpenField(open ? 'condition' : null)} />
+      <SearchableFilterSelect label="Categoría *" options={options.categories} value={form.categoryId} onChange={form.setCategoryId}
+        disabled={disabled} allowEmpty={false} placeholder="Selecciona una categoría"
+        expanded={openField === 'categoryId'} onExpandedChange={open => setOpenField(open ? 'categoryId' : null)} />
       {!options.categories.length && <PublicationFeedback error="No hay categorías disponibles para publicar." />}
     </PublicationSection>
     <PublicationSection number="2" title="Modalidad">
@@ -115,13 +122,16 @@ function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; 
       <PublicationUpload label="Agregar imágenes" hint={`JPEG, PNG o WebP · Hasta 5 MB por imagen · Máximo ${PHYSICALGOODS_MAX_IMAGES}`} disabled={disabled || form.photos.length >= PHYSICALGOODS_MAX_IMAGES} busy={form.pickingPhoto} onPress={() => void form.choosePhoto()} />
     </PublicationSection>
     <PublicationSection number="4" title="Dónde se comparte" hint="Tu recurso se comparte únicamente dentro de tu campus. La clasificación académica es opcional.">
-      <View style={f.notice}><Text style={f.label}>Campus de origen</Text><Text style={f.actionText}>{options.campus.name}</Text></View>
-      <PublicationChoices label="Carrera (opcional)" options={options.careers} value={form.careerId} onChange={form.setCareerId} disabled={disabled} emptyLabel="Sin carrera" />
-      <PublicationChoices label="Asignatura (opcional)" options={options.subjects} value={form.subjectId} onChange={form.setSubjectId} disabled={disabled} emptyLabel="Sin asignatura" />
-      <Pressable accessibilityRole="button" disabled={disabled} style={f.secondary} onPress={form.reload}><Text style={f.actionText}>Actualizar opciones</Text></Pressable>
+      <SearchableFilterSelect searchRequired label="Carrera (opcional)" options={options.careers} value={form.careerId} onChange={form.setCareerId}
+        disabled={disabled} placeholder="Sin carrera" emptyLabel="Sin carrera" clearLabel="Quitar selección"
+        expanded={openField === 'careerId'} onExpandedChange={open => setOpenField(open ? 'careerId' : null)} />
+      <SearchableFilterSelect searchRequired label="Asignatura (opcional)" options={options.subjects} value={form.subjectId} onChange={form.setSubjectId}
+        disabled={disabled} placeholder="Sin asignatura" emptyLabel="Sin asignatura" clearLabel="Quitar selección"
+        expanded={openField === 'subjectId'} onExpandedChange={open => setOpenField(open ? 'subjectId' : null)} />
+      <Pressable accessibilityRole="button" disabled={disabled} style={f.secondary} onPress={() => { setOpenField(null); form.reload(); }}><Text style={f.actionText}>Actualizar opciones</Text></Pressable>
     </PublicationSection>
     <PublicationFeedback error={form.error} />
-    <PublicationSubmit label={busy ? 'Publicando…' : 'Publicar recurso'} disabled={disabled || !options.categories.length || !form.photos.length} busy={busy} onPress={() => void form.publish()} />
+    <PublicationSubmit label={busy ? 'Publicando…' : 'Publicar recurso'} disabled={disabled || !options.categories.length || !form.photos.length} busy={busy} onPress={() => { setOpenField(null); void form.publish(); }} />
   </View>;
 }
 

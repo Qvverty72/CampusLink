@@ -48,10 +48,10 @@ test('sent confirmation uses actual owner, preserves donation wording and does n
 test('history detail retains exact navigation and forbids public opening when only historical access is allowed',()=>{
  const calls=[], row={id:'request',status:'PENDIENTE',campus:{name:'Campus'},owner:{fullName:'Camila'},requester:{fullName:'Diego'},requestedAt:'2026-10-24T12:00:00Z',message:'Me interesa',publication:{id:'pub',title:'Libro',modality:'VENTA',price:1000,status:'DISPONIBLE',canView:true},transaction:null};
  const state={detail:row,loading:false,error:null,reload:noop};
- const {PhysicalgoodsHistoryDetail}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{'react/jsx-runtime':jsx,'react-native':native,'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:30,bottom:20})},
+ const {PhysicalgoodsHistoryDetail}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{react:{useCallback:fn=>fn},'react/jsx-runtime':jsx,'react-native':native,'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:30,bottom:20})},
  '@/components/RefreshScrollView':{RefreshScrollView:'Refresh',useScrollRefresh:noop},'../hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistoryDetail:()=>state},
  '../../components/CatalogUI':{CATALOG_COLORS:{}},'../../components/ResourceDetailUI':detail,'../../components/PersonalUI':{PersonalStatus:'Status'},'../../components/RequestFlowUI':{RequestTimeline:'Timeline'},
- './PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'../../components/ActivityUI':{},'../types/publication':{resourceConditions:[]}});
+ './PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'./PhysicalgoodsPublications':{PhysicalgoodsPublications:'Publications'},'../../components/ActivityUI':{},'../types/publication':{resourceConditions:[]}});
  const render=()=>elements(PhysicalgoodsHistoryDetail({target:{publicationId:'pub',requestId:'request'},onClose:()=>calls.push('close'),onOpen:id=>calls.push(id),onAgreement:(...args)=>calls.push(args)}));
  let nodes=render();nodes.find(row=>row.type==='Header').props.onBack();nodes.find(row=>row.type==='Footer').props.onPress();assert.deepEqual(calls,['close','pub']);
  assert.equal(nodes.find(row=>row.type==='Refresh').props.onRefresh,noop);assert.equal(nodes.find(row=>row.type==='Timeline').props.status,'PENDIENTE');

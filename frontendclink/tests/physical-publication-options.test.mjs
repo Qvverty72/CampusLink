@@ -1,51 +1,48 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {createRequire} from 'node:module';
 import test from 'node:test';
 import vm from 'node:vm';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import React from 'react';
+import * as jsx from 'react/jsx-runtime';
 import ts from 'typescript';
 
-const require=createRequire(import.meta.url),native=require('react-native-web');
 const source=fs.readFileSync(new URL('../src/features/marketplace/physicalgoods/components/PublishPhysicalgoods.tsx',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const elements=node=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(6).flatMap(elements)];
 function publicationForm(reverse=false){
- const selected=[],noop=()=>{};
- const options={campus:{id:'campus',name:'Campus de prueba'},categories:[{id:'category-a',name:'Libros'},{id:'category-b',name:'Libros'}],careers:[{id:'career-a',name:'Informática'},{id:'career-b',name:'Informática'}],subjects:[{id:'subject-a',name:'MACHINE LEARNING',careerIds:['career-a']},{id:'subject-b',name:'MACHINE LEARNING',careerIds:['career-b']}]};
+ const selected=[],noop=()=>{};let openField=null;
+ const options={campus:{id:'campus',name:'Campus de prueba'},categories:[{id:'category-a',name:'Libros'},{id:'category-b',name:'Libros'}],careers:[{id:'career-a',name:'Informática'},{id:'career-b',name:'Informática'}],subjects:[{id:'subject-a',name:'MACHINE LEARNING'},{id:'subject-b',name:'MACHINE LEARNING'}]};
  if(reverse)for(const key of ['categories','careers','subjects'])options[key].reverse();
- const form={options,loading:false,busy:false,created:null,title:'Borrador',description:'Descripción',condition:'BUEN_ESTADO',categoryId:'category-b',careerId:'career-b',subjectId:'subject-b',modality:'DONACION',price:'',photos:[],error:null,setCategoryId:id=>selected.push(id),setCareerId:id=>selected.push(id),setSubjectId:id=>selected.push(id),setCondition:noop,setModality:noop};
- const mocks={'../../utils/agreementPresentation':{agreementCopy:{}},react:{...React,useState:initial=>[initial,noop]},'react/jsx-runtime':require('react/jsx-runtime'),'react-native':native,'@/components/RefreshScrollView':{},'expo-router':{},'@/components/navigation/BottomNavigationBar':{},'@/features/auth/hooks/useAuth':{},'../hooks/usePublishPhysicalgoods':{usePublishPhysicalgoods:()=>form},'../hooks/usePhysicalgoodsResources':{},'../types/publication':{PHYSICALGOODS_MAX_IMAGES:3,resourceConditions:[{value:'BUEN_ESTADO',label:'Buen estado'}]}};
- mocks['../../components/CatalogUI']={CATALOG_COLORS:{primary:'#002E56'}}; mocks['lucide-react-native']={Gift:()=>null,Tag:()=>null,UploadCloud:()=>null};mocks['react-native-safe-area-context']={};
- for(const path of ['PhysicalgoodsResources','PublicationImages','PhysicalgoodsRequests','PhysicalgoodsTransaction','PhysicalgoodsHistory'])mocks['./'+path]={};
- const baseDir=fileURLToPath(new URL('../src/features/marketplace/components/',import.meta.url));
- function shared(filename){const module={exports:{}};const content=ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- vm.runInNewContext(content,{module,exports:module.exports,require:name=>name==='./CatalogUI'?mocks['../../components/CatalogUI']:Object.hasOwn(mocks,name)?mocks[name]:shared(path.resolve(path.dirname(filename),name+'.tsx'))});return module.exports;}
- mocks['../../components/PublicationFormUI']=shared(path.join(baseDir,'PublicationFormUI.tsx'));
- mocks['../../components/PublicationChoices']=shared(path.join(baseDir,'PublicationChoices.tsx'));
+ const form={options,loading:false,busy:false,created:null,title:'Borrador',description:'Descripción',condition:'BUEN_ESTADO',categoryId:'category-b',careerId:'career-b',subjectId:'subject-b',modality:'DONACION',price:'',photos:[],error:null,
+  setCategoryId:id=>selected.push(id),setCareerId:id=>selected.push(id),setSubjectId:id=>selected.push(id),setCondition:noop,setModality:noop,reload:noop,publish:noop};
+ const mocks={react:{useState:()=>[openField,value=>{openField=value;}]},'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text',TextInput:'Input',Pressable:'Button',StyleSheet:{create:v=>v}},
+  '../../utils/agreementPresentation':{agreementCopy:{}},'@/components/RefreshScrollView':{},'expo-router':{},'@/components/navigation/BottomNavigationBar':{},'@/features/auth/hooks/useAuth':{},
+  '../hooks/usePublishPhysicalgoods':{usePublishPhysicalgoods:()=>form},'../hooks/usePhysicalgoodsResources':{},'../types/publication':{PHYSICALGOODS_MAX_IMAGES:3,resourceConditions:[{value:'BUEN_ESTADO',label:'Buen estado'}]},
+  '../hooks/usePhysicalgoodsRequestCounts':{},'../../components/CatalogUI':{},'../../components/SearchableFilterSelect':{SearchableFilterSelect:'Select'},'../../components/PublicationFormUI':{publicationUI:{},PublicationSection:'Section',PublicationModality:'Modality',PublicationUpload:'Upload',PublicationSubmit:'Submit'},'react-native-safe-area-context':{}};
+ for(const name of ['PhysicalgoodsResources','PublicationImages','PhysicalgoodsRequests','PhysicalgoodsTransaction','PhysicalgoodsHistory'])mocks['./'+name]={[name]:name};
  const module={exports:{}};
- // Inspecciona el componente privado sin agregar exports a la API de producción.
  vm.runInNewContext(compiled+'\nmodule.exports.formForTest=PublicationForm;',{module,exports:module.exports,require:name=>{assert.ok(Object.hasOwn(mocks,name),name);return mocks[name];}});
- const tree=module.exports.formForTest({onPublished:noop,onGallery:noop}),radios=[];
- const visit=node=>{if(Array.isArray(node))return node.forEach(visit);if(!React.isValidElement(node))return;if(node.props.accessibilityRole==='radio')radios.push(node);if(typeof node.type==='function')visit(node.type(node.props));else visit(node.props.children);};
- visit(tree);return {radios,selected};
+ const render=()=>elements(module.exports.formForTest({onPublished:noop,onGallery:noop}));
+ return {render,selected,form,selectors:()=>render().filter(node=>node.type==='Select')};
 }
-test('opciones con el mismo nombre conservan claves distintas y seleccionan su ID propio',()=>{
- const {radios,selected}=publicationForm();
- for(const [label,ids] of [['Libros',['category-a','category-b']],['Informática',['career-a','career-b']],['MACHINE LEARNING',['subject-a','subject-b']]]){
-  const choices=radios.filter(node=>node.props.accessibilityLabel===label);
-  assert.equal(choices.length,2,'No eliminar entidades por compartir nombre');
-  assert.equal(new Set(choices.map(node=>node.key)).size,2,'Las claves React deben ser únicas');
-  assert.deepEqual(choices.map(node=>node.key),ids);
-  assert.deepEqual(choices.map(node=>node.props.accessibilityState.checked),[false,true]);
-  choices.forEach(node=>node.props.onPress());
+test('publicar conserva catálogos homónimos y sus IDs al elegir o reordenar',()=>{
+ for(const reverse of [false,true]){
+  const f=publicationForm(reverse),selectors=f.selectors().slice(1);
+  for(const [index,prefix] of ['category','career','subject'].entries()){
+   const field=selectors[index].props,ids=Array.from(field.options,row=>row.id);
+   assert.deepEqual(ids,reverse?[prefix+'-b',prefix+'-a']:[prefix+'-a',prefix+'-b']);
+   assert.equal(field.value,prefix+'-b');field.onChange(prefix+'-a');
+  }
+  assert.deepEqual(f.selected,['category-a','career-a','subject-a']);
  }
- assert.deepEqual(selected,['category-a','category-b','career-a','career-b','subject-a','subject-b']);
 });
-test('reordenar opciones no cambia la identidad React de las asignaturas homónimas',()=>{
- const normal=publicationForm().radios.filter(node=>node.props.accessibilityLabel==='MACHINE LEARNING');
- const reordered=publicationForm(true).radios.filter(node=>node.props.accessibilityLabel==='MACHINE LEARNING');
- assert.deepEqual(normal.map(node=>node.key),['subject-a','subject-b']);
- assert.deepEqual(reordered.map(node=>node.key),['subject-b','subject-a']);
+test('formulario abre un desplegable a la vez y conserva campos obligatorios y académicos opcionales',()=>{
+ const f=publicationForm();let fields=f.selectors();assert.equal(fields.length,4);assert.ok(fields.every(row=>!row.props.expanded));
+ for(let index=0;index<4;index++){
+  fields[index].props.onExpandedChange(true);fields=f.selectors();assert.equal(fields.filter(row=>row.props.expanded).length,1);assert.equal(fields[index].props.expanded,true);
+ }
+ assert.ok(fields.slice(0,2).every(row=>row.props.allowEmpty===false));
+ for(const [index,label] of [[2,'Sin carrera'],[3,'Sin asignatura']]){assert.equal(fields[index].props.searchRequired,true);assert.equal(fields[index].props.emptyLabel,label);}
+ assert.ok(f.render().some(node=>node.type==='Modality'));assert.ok(f.render().some(node=>node.type==='PublicationImages'));
+ assert.doesNotMatch(JSON.stringify(f.render()),/Campus de origen/);
+ f.form.busy=true;assert.ok(f.selectors().every(row=>row.props.disabled));
 });

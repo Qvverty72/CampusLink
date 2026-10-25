@@ -9,7 +9,7 @@ import type { PhysicalgoodsMediaRow, PhysicalgoodsReceivedRow, PhysicalgoodsRequ
 import { findActivePhysicalgoodsRequest, findPhysicalgoodsRequestMessage, insertPhysicalgoodsRequest, physicalgoodsRequestMessages,
   findOwnPhysicalgoodsRequest, findPhysicalgoodsRequest, updatePhysicalgoodsRequestStatus, listPhysicalgoodsRequests,
   listReceivedRequestPublications,listReceivedRequestsForPublications,countPhysicalgoodsRequests } from './physicalgoods.requests.repository.js';
-import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setPhysicalgoodsPublicationStatus } from './physicalgoods.transactions.repository.js';
+import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setPhysicalgoodsPublicationStatus,countOwnPhysicalgoodsTransactions } from './physicalgoods.transactions.repository.js';
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
 import { createPaginatedResult } from '../../../services/pagination.js';
@@ -118,7 +118,11 @@ export const getReceivedPhysicalgoodsRequests = (auth: VerifiedAuthConnection, q
 export const getSentPhysicalgoodsRequests = (auth: VerifiedAuthConnection, query: unknown) => getPhysicalgoodsRequests(auth,query,false);
 export async function getPhysicalgoodsRequestCounts(auth:VerifiedAuthConnection,query:unknown){
   if(typeof query!=='object'||query===null||Array.isArray(query)||Object.keys(query).length)throw new ApiError(400,'VALIDATION_ERROR','La consulta de contadores no admite filtros.');
-  return withPhysicalgoodsHistory(auth,(client,current)=>countPhysicalgoodsRequests(client,current.userId));
+  return withPhysicalgoodsHistory(auth,async(client,current)=>{
+    const counts=await countPhysicalgoodsRequests(client,current.userId);
+    const transactions=await countOwnPhysicalgoodsTransactions(client,current.userId);
+    return {...counts,pendingTransactions:transactions.active};
+  });
 }
 /** Publicación y solicitud se resuelven juntas; el lock evita reservar dos veces la misma unidad. */
 export async function resolvePhysicalgoodsRequest(auth: VerifiedAuthConnection, publicationId: unknown, requestId: unknown, body: unknown) {

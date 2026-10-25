@@ -22,14 +22,18 @@ export async function findPhysicalgoodsDetail(client: PoolClient, publicationId:
     AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO','FINALIZADO')`, [publicationId, campusId])).rows[0] ?? null;
 }
 /** Historial del propietario: no filtra disponibilidad ni traslada el campus de origen. */
-export async function listOwnPhysicalgoods(client: PoolClient, userId: string, pagination: PaginationParams) {
+export async function listOwnPhysicalgoods(client: PoolClient, userId: string, pagination: PaginationParams,tab?:'all'|'active'|'reserved'|'finished',currentCampusId?:string) {
+  const filter=tab==='active'?"AND p.deleted_at IS NULL AND p.estado_publicacion='DISPONIBLE'":tab==='reserved'?"AND p.deleted_at IS NULL AND p.estado_publicacion='RESERVADO'":tab==='finished'?"AND p.estado_publicacion='FINALIZADO'":'';
+  const priority=tab?`CASE WHEN p.campus_id=$4 AND p.deleted_at IS NULL AND p.estado_publicacion='DISPONIBLE'
+    AND EXISTS(SELECT 1 FROM public.solicitud_recurso s WHERE s.publicacion_id=p.id AND s.estado_solicitud='PENDIENTE') THEN 0
+    WHEN p.campus_id=$4 AND p.deleted_at IS NULL AND p.estado_publicacion IN ('DISPONIBLE','RESERVADO') THEN 1 ELSE 2 END,`:'';
   return (await client.query<PhysicalgoodsOwnRow>(`SELECT ${mediaProjection},p.deleted_at,
     (SELECT count(*)::int FROM public.solicitud_recurso request WHERE request.publicacion_id=p.id AND request.estado_solicitud='PENDIENTE') AS pending_requests,
     to_char(p.publicado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS publicado_en,
     campus.nombre AS campus_nombre,owner.nombre_completo AS propietario_nombre ${mediaJoins}
     JOIN public.campus campus ON campus.id=p.campus_id JOIN public.perfil_usuario owner ON owner.id=p.propietario_id
-    WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO'
-    ORDER BY p.publicado_en DESC,p.id DESC LIMIT $2 OFFSET $3`,[userId,pagination.limit+1,pagination.offset])).rows;
+    WHERE p.propietario_id=$1 AND p.tipo_recurso='FISICO' ${filter}
+    ORDER BY ${priority} p.publicado_en DESC,p.id DESC LIMIT $2 OFFSET $3`,[userId,pagination.limit+1,pagination.offset,...(tab?[currentCampusId??null]:[])])).rows;
 }
 export async function findOwnPhysicalgoods(client: PoolClient, publicationId: string, userId: string) {
   return (await client.query<PhysicalgoodsOwnRow>(`SELECT ${mediaProjection},p.deleted_at,

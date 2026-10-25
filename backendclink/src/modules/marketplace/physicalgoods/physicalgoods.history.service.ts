@@ -37,9 +37,15 @@ function ownDto(row:PhysicalgoodsOwnRow,current:VerifiedAuthConnection) {
     canView:row.campus_id===current.campusId&&!row.deleted_at&&['DISPONIBLE','RESERVADO','FINALIZADO'].includes(row.estado_publicacion)};
 }
 export async function getOwnPhysicalgoods(auth:VerifiedAuthConnection,query:unknown) {
-  const pagination=physicalgoodsHistoryPagination(query);
+  let tab:'all'|'active'|'reserved'|'finished'|undefined,source=query;
+  if(typeof query==='object'&&query!==null&&!Array.isArray(query)&&'tab' in query){
+    const {tab:value,...rest}=query as Record<string,unknown>;
+    if(value!=='all'&&value!=='active'&&value!=='reserved'&&value!=='finished')throw new ApiError(400,'VALIDATION_ERROR','Revisa el estado de las publicaciones.');
+    tab=value;source=rest;
+  }
+  const pagination=physicalgoodsHistoryPagination(source);
   return withPhysicalgoodsHistory(auth,async(client,current)=>{
-    const result=createPaginatedResult(await listOwnPhysicalgoods(client,current.userId,pagination),pagination);
+    const result=createPaginatedResult(await listOwnPhysicalgoods(client,current.userId,pagination,tab,current.campusId),pagination);
     return {...result,data:result.data.map(row=>ownDto(row,current))};
   });
 }
