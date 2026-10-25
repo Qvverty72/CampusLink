@@ -8,6 +8,7 @@ import { findOwnPhysicalgoods, findPhysicalgoodsImages, listOwnPhysicalgoods } f
 import { physicalgoodsId } from './physicalgoods.validation.js';
 import type { PhysicalgoodsOwnRow } from './physicalgoods.types.js';
 import { findActivePhysicalgoodsTransaction } from './physicalgoods.transactions.repository.js';
+import {findPhysicalgoodsOriginalTerms} from './physicalgoods.price-history.repository.js';
 
 /** Revalida cuenta y contexto vigente; cada consulta histórica debe filtrar propiedad o participación. */
 export async function withPhysicalgoodsHistory<T>(auth:VerifiedAuthConnection,operation:(client:PoolClient,current:VerifiedAuthConnection)=>Promise<T>) {
@@ -54,7 +55,7 @@ export async function getOwnPhysicalgoodsDetail(auth:VerifiedAuthConnection,publ
   const result=await withPhysicalgoodsHistory(auth,async(client,current)=>{
     const row=await findOwnPhysicalgoods(client,id,current.userId);
     if(!row)throw new ApiError(404,'NOT_FOUND','No se encontró una publicación propia.');
-    return {row,dto:ownDto(row,current),images:await findPhysicalgoodsImages(client,id),
+    return {row,dto:ownDto(row,current),originalTerms:await findPhysicalgoodsOriginalTerms(client,id),images:await findPhysicalgoodsImages(client,id),
       activeTransaction:await findActivePhysicalgoodsTransaction(client,id,current.userId)};
   });
   try {
@@ -63,7 +64,7 @@ export async function getOwnPhysicalgoodsDetail(auth:VerifiedAuthConnection,publ
       if(image.bucket_id!==PHYSICALGOODS_BUCKET||!image.storage_path.startsWith(result.row.campus_id+'/'))throw new Error('Invalid stored image');
       images.push({id:image.id,name:image.nombre_original,principal:image.orden===0,url:await signPrincipalPhoto(image.storage_path)});
     }
-    return {...result.dto,description:result.row.descripcion,images,expiresIn:60,activeTransaction:result.activeTransaction};
+    return {...result.dto,originalTerms:result.originalTerms,description:result.row.descripcion,images,expiresIn:60,activeTransaction:result.activeTransaction};
   } catch {
     throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudieron cargar las imágenes de la publicación.');
   }

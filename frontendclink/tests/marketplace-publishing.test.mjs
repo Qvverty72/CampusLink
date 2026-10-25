@@ -28,6 +28,20 @@ function physical(){const h=runtime(),choosing=deferred(),created=[],added=[];le
  loadPublicationOptions:async()=>({campus:{id:'campus',name:'Campus'},categories:[{id:'category',name:'Libros'}],careers:[],subjects:[]}),publishPhysicalgoods:async input=>{created.push(input);return{id:'saved',title:input.title};},addPhysicalgoodsPhoto:async(id,photo)=>{added.push(photo.name);if(fail){fail=false;throw new Error('network');}}}});
  return{h,choosing,created,added,render:()=>h.render(()=>hook(noop))};}
 async function readyPhysical(q){q.render();await setImmediate();let state=q.render();state.setTitle('Calculadora');state.setDescription('Descripción');state.setCategoryId('category');state.setPrice('12000');state=q.render();return state;}
+test('miniaturas: botones conservan la foto correcta al elegir portada, quitar y bloquear edición',async()=>{
+ const q=physical();let state=await readyPhysical(q);const choosing=state.choosePhoto();q.choosing.resolve(photos);await choosing;
+ const {PublicationImages}=load('physicalgoods/components/PublicationImages.tsx',{'react/jsx-runtime':jsx,'react-native':{Image:'Image',Pressable:'Button',ScrollView:'Scroll',Text:'Text',View:'View',StyleSheet:{create:value=>value}},'lucide-react-native':{Star:'Star',Trash2:'Trash'},'../../components/CatalogUI':{CATALOG_COLORS:{}}});
+ const nodes=node=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(5).flatMap(nodes)];
+ const render=(disabled=false,principal=true)=>{state=q.render();return nodes(PublicationImages({photos:state.photos,disabled,onRemove:state.removePhoto,onPrincipal:principal?state.makePrincipal:undefined}));};
+ let all=render();assert.equal(all.filter(node=>node.type==='Image').length,2);
+ assert.ok(all.find(node=>node.props?.accessibilityLabel==='Imagen 1, portada actual').props.disabled);
+ all.find(node=>node.props?.accessibilityLabel==='Usar imagen 2 como principal').props.onPress();assert.equal(q.render().photo.name,'b.jpg');
+ all=render(true);assert.ok(all.filter(node=>node.type==='Button').every(node=>node.props.disabled));
+ for(const button of all.filter(node=>node.type==='Button'))button.props.onPress();assert.equal(q.render().photo.name,'b.jpg');assert.equal(q.render().photos.length,2);
+ all=render(false,false);assert.equal(all.filter(node=>node.type==='Button').length,2);assert.ok(!all.some(node=>String(node.props?.accessibilityLabel).includes('portada')));
+ all=render();all.find(node=>node.props?.accessibilityLabel==='Quitar imagen 1').props.onPress();assert.equal(q.render().photo.name,'a.jpg');
+ all=render();assert.equal(all.filter(node=>node.type==='Image').length,1);all.find(node=>node.props?.accessibilityLabel==='Quitar imagen 1').props.onPress();assert.equal(render().length,0);q.h.unmount();
+});
 test('fotos: selección bloquea envío y edición; cambiar principal conserva fotos e ignora índices inválidos',async()=>{
  const q=physical();let state=await readyPhysical(q);const pending=state.choosePhoto();state=q.render();assert.equal(state.pickingPhoto,true);await state.publish();assert.equal(q.created.length,0);q.choosing.resolve(photos);await pending;state=q.render();state.makePrincipal(1);state=q.render();assert.equal(state.photo.name,'b.jpg');state.makePrincipal(99);state=q.render();assert.equal(state.photos.length,2);assert.equal(state.photo.name,'b.jpg');
 });

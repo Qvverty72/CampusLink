@@ -12,6 +12,7 @@ import type {RequestTone} from './RequestAccordionCard';
 export interface ResourceRequestItem{
   id:string;name:string;careers?:string[];message:string;requestedAt:string;status:string;tone:RequestTone;
   averageRating?:number|null;ratingCount?:number;
+  priceDetails?:ReactNode;
   canAccept:boolean;canReject:boolean;onAccept:()=>void;onReject:()=>void;onDetails?:()=>void;onTransaction?:()=>void;
 }
 
@@ -73,6 +74,7 @@ export function ResourceRequestsModal({title,summary,requests,loading,error,feed
         </TouchableOpacity>
         {(expanded||row.tone!=='pending')&&<Text style={[styles.status,row.tone==='rejected'&&styles.error]}>{row.status}</Text>}
         {expanded&&<>
+          {row.priceDetails}
           {(row.canAccept||row.canReject)&&<View style={styles.actions}>
             <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Rechazar solicitud de ${row.name}`} accessibilityState={{disabled:locked||!row.canReject}} disabled={locked||!row.canReject} onPress={row.onReject} activeOpacity={0.75} style={[styles.decisionButton,styles.rejectButton,(locked||!row.canReject)&&styles.decisionDisabled]}><Text style={styles.rejectText}>Rechazar</Text></TouchableOpacity>
             <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Aceptar solicitud de ${row.name}`} accessibilityState={{disabled:locked||!row.canAccept}} disabled={locked||!row.canAccept} onPress={row.onAccept} activeOpacity={0.75} style={[styles.decisionButton,styles.acceptButton,(locked||!row.canAccept)&&styles.decisionDisabled]}><Text style={styles.acceptText}>Aceptar</Text></TouchableOpacity>

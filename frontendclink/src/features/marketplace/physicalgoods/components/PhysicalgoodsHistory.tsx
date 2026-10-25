@@ -12,6 +12,8 @@ import { RequestTimeline } from '../../components/RequestFlowUI';
 import { PhysicalgoodsAgreements } from './PhysicalgoodsAgreements';
 import {PhysicalgoodsPublications} from './PhysicalgoodsPublications';
 import {resourceConditions} from '../types/publication';
+import {physicalgoodsRequestTerms} from '../utils/requestTerms';
+import {PhysicalgoodsOriginalPrice,PhysicalgoodsRequestPrices} from './PhysicalgoodsPriceHistory';
 
 const button=(label:string,action:()=>void,disabled=false)=><Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled}
   onPress={action} style={[styles.button,disabled&&styles.disabled]}><Text style={styles.action}>{label}</Text></Pressable>;
@@ -30,6 +32,7 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,re
   const h=usePhysicalgoodsHistoryDetail(target),detail=h.detail;
   const insets = useSafeAreaInsets();
   const request=detail&&'publication' in detail?detail:null,publication=request?.publication??(detail&&'title' in detail?detail:null);
+  const requestPrice=request?physicalgoodsRequestTerms(request).selected:null;
   const openResource = publication?.canView && onOpen ? () => onOpen(publication.id) : undefined;
   const openAgreement = request?.transaction && publication ? () => onAgreement(publication.id, request.transaction!.id) : undefined;
   return <Modal visible animationType="slide" onRequestClose={onClose}><View style={detailUI.page}>
@@ -41,7 +44,7 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,re
       {h.loading&&<ResourceDetailSkeleton />}
       {h.error&&<View style={detailUI.card}><Text accessibilityRole="alert" style={styles.error}>{h.error}</Text>{button('Reintentar detalle',h.reload,h.loading)}</View>}
       {request && publication && <>
-        <RequestResourceSummary title={publication.title} modality={publication.modality} price={publication.price} subtitle={`${publication.modality === 'DONACION' ? 'Donación' : 'Venta'} · ${request.campus.name}`} />
+        <RequestResourceSummary title={publication.title} modality={requestPrice?.modality??'VENTA'} price={requestPrice?.amount??null} subtitle={request.campus.name} priceContent={<PhysicalgoodsRequestPrices request={request} showSelected/>}/>
         <View style={detailUI.card}>
           <View style={styles.dataRow}><Text style={detailUI.helper}>Propietario</Text><Text style={styles.dataValue}>{request.owner.fullName}</Text></View>
           <View style={styles.dataRow}><Text style={detailUI.helper}>Solicitante</Text><Text style={styles.dataValue}>{request.requester.fullName}</Text></View>
@@ -49,14 +52,14 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,re
           <View style={styles.message}><Text style={detailUI.helper}>Mensaje de la solicitud</Text><Text style={detailUI.body}>“{request.message}”</Text></View>
         </View>
         {publication.isWithdrawn && <Text style={detailUI.helper}>Publicación retirada. Se conserva su historial.</Text>}
-        <RequestTimeline donation={publication.modality === 'DONACION'} status={request.status} transactionStatus={request.transaction?.status} />
+        <RequestTimeline donation={requestPrice?.modality === 'DONACION'} status={request.status} transactionStatus={request.transaction?.status} />
       </>}
       {detail && publication && !request && <View style={styles.card}>
         <Text accessibilityRole="header" style={styles.label}>{publication.title}</Text>
         <Text style={styles.text}>Campus de origen: {detail.campus.name}</Text>
         <Text style={styles.text}>Publicación: {state(publication.status)}</Text>
         {publication.isWithdrawn&&<Text style={styles.text}>Publicación retirada. Se conserva su historial.</Text>}
-        <Text style={styles.text}>{publication.modality==='DONACION'?'Donación':`Venta · ${publication.price?.toLocaleString('es-CL')} CLP`}</Text>
+        <PhysicalgoodsOriginalPrice original={'description' in detail?detail.originalTerms:undefined} current={{modality:publication.modality,amount:publication.price,currency:'CLP'}}/>
         {'description' in detail&&<>
           {detail.activeTransaction&&button('Ver acuerdo pendiente: '+publication.title,()=>onAgreement(publication.id,detail.activeTransaction!.id))}
           <Text style={styles.text}>{detail.description}</Text>

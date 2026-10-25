@@ -74,7 +74,8 @@ test('request counters load independently, retain last totals on refresh and rej
  h.unmount();assert.equal(reads[5].signal.aborted,true);
 });
 
-const {sentRequestPresentation}=load('physicalgoods/utils/sentRequestPresentation.ts',{});
+const requestTerms=load('physicalgoods/utils/requestTerms.ts',{});
+const {sentRequestPresentation}=load('physicalgoods/utils/sentRequestPresentation.ts',{'./requestTerms':requestTerms});
 const indicators=load('physicalgoods/utils/receivedRequestIndicators.ts',{});
 const sentRow=(id='first')=>({...physicalRow(id),owner:{id:'owner',fullName:'Camila González'},requester:{id:'me',fullName:'Diego'},publication:{...physicalRow().publication,modality:'VENTA',price:45000},transaction:null});
 
@@ -107,22 +108,53 @@ test('received indicators separate unhandled requests from transactions through 
  for(const status of ['ACEPTADA','RECHAZADA','CANCELADA'])assert.equal(indicators.isReceivedRequestAwaitingResponse({...pending,status}),false);
 });
 
-test('request resource maps original terms without creating a transaction and restricts the gallery through the shared reader',()=>{
+test('request resource distinguishes the current price and historical requested terms and restricts the shared reader',()=>{
   const reads=[],state={product:null,loading:false,unavailable:true};
   const {PhysicalgoodsRequestProduct}=load('physicalgoods/components/PhysicalgoodsRequestProduct.tsx',{'react/jsx-runtime':jsx,'react-native':{Text:'Text'},
+    '../utils/requestTerms':requestTerms,'./PhysicalgoodsPriceHistory':{PhysicalgoodsOriginalPrice:'Prices'},
     '../../components/AgreementProductUI':{AgreementProductModal:'ProductModal',AgreementParticipants:'Participants'},'../../components/ResourceDetailUI':{detailUI:{}},
     '../../utils/agreementPresentation':{agreementCopy:{}},'../hooks/usePhysicalgoodsAgreementProduct':{usePhysicalgoodsAgreementProduct:(...args)=>{reads.push(args);return state;}},
     './PhysicalgoodsAgreementProduct':{PhysicalgoodsProductCard:'ProductCard'}});
   const row=sentRow();row.publication.canView=false;
   let tree=PhysicalgoodsRequestProduct({request:row,onClose:noop});assert.equal(tree.props.title,'Recurso de la solicitud');assert.equal(reads[0][0].id,row.id);assert.equal(reads[0][1],true);
   let product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.detail.amount,45000);assert.match(product.props.dateLabel,/Solicitud enviada el/);
-  state.product={modality:'DONACION',price:null};tree=PhysicalgoodsRequestProduct({request:row,onClose:noop});product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.detail.modality,'DONACION');assert.equal(product.props.detail.amount,null);
+  row.requestedTerms={modality:'VENTA',amount:5000,currency:'CLP'};row.publication.price=8000;
+  state.product={modality:'VENTA',price:8000};tree=PhysicalgoodsRequestProduct({request:row,onClose:noop});product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.detail.amount,8000);assert.equal(product.props.priceContent.props.original.amount,5000);assert.equal(product.props.priceContent.props.caption,undefined);
+  state.product={modality:'DONACION',price:null};tree=PhysicalgoodsRequestProduct({request:row,onClose:noop});product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.detail.modality,'VENTA');assert.equal(product.props.detail.amount,8000);
   row.transaction={id:'trade',status:'COMPLETADA',modality:'VENTA',amount:1000,currency:'CLP'};
-  tree=PhysicalgoodsRequestProduct({request:row,onClose:noop});product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.detail.amount,1000);
+  tree=PhysicalgoodsRequestProduct({request:row,onClose:noop});product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.detail.amount,1000);assert.equal(product.props.priceContent.props.original.amount,5000);assert.equal(product.props.priceContent.props.caption,undefined);
   assert.equal(elements(tree).find(n=>n.type==='Participants').props.currentUserId,'me');
   tree=PhysicalgoodsRequestProduct({request:row,onClose:noop,viewerRole:'PROPIETARIO',grouped:true});
   assert.equal(reads.at(-1)[0].role,'PROPIETARIO');assert.ok(elements(tree).every(n=>n.type!=='Participants'));
   product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.dateLabel,null);assert.equal(product.props.detail.modality,'DONACION');
+  row.transaction=null;row.requestedTerms=null;tree=PhysicalgoodsRequestProduct({request:row,onClose:noop});product=elements(tree).find(n=>n.type==='ProductCard');assert.equal(product.props.detail.modality,'VENTA');assert.equal(product.props.detail.amount,8000);assert.equal(product.props.priceContent.props.original,null);
+});
+
+test('sent prices distinguish requested, current and accepted terms without rewriting historical requests',()=>{
+  const row=sentRow();row.publication.price=8000;row.requestedTerms={modality:'VENTA',amount:5000,currency:'CLP'};
+  assert.equal(sentRequestPresentation(row).amount,'$5.000');assert.equal(sentRequestPresentation(row).amountLabel,'Precio al solicitar');
+  row.transaction={id:'trade',status:'RESERVADA',modality:'VENTA',amount:8000,currency:'CLP'};
+  assert.equal(sentRequestPresentation(row).amount,'$8.000');assert.equal(requestTerms.physicalgoodsRequestTerms(row).requested.amount,5000);
+  row.publication.modality='DONACION';row.publication.price=null;
+  assert.equal(sentRequestPresentation(row).amount,'$8.000');
+  row.transaction=null;assert.equal(sentRequestPresentation(row).amount,'$5.000');
+  row.requestedTerms=null;assert.equal(sentRequestPresentation(row).amount,'Precio no disponible');
+  row.requestedTerms={modality:'DONACION',amount:null,currency:'CLP'};assert.equal(sentRequestPresentation(row).amount,'Donación');
+});
+
+test('price history renders separate labels only for verified changed terms, including an existing higher agreement',()=>{
+  const ui=load('physicalgoods/components/PhysicalgoodsPriceHistory.tsx',{'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text',StyleSheet:{create:x=>x}},'../../components/CatalogUI':{CATALOG_COLORS:{}},'../utils/requestTerms':requestTerms});
+  const original={modality:'VENTA',amount:5000,currency:'CLP'},current={...original,amount:8000};
+  const text=node=>elements(node).filter(n=>n.type==='Text').flatMap(n=>n.props.children).join('');
+  const history=ui.PhysicalgoodsOriginalPrice({original,current});assert.equal(text(history),'$8.000$5.000');
+  assert.equal(text(ui.PhysicalgoodsOriginalPrice({original:null,current})),'$8.000');assert.equal(text(ui.PhysicalgoodsOriginalPrice({original,current:original})),'$5.000');
+  const row=sentRow();row.publication.price=8000;row.requestedTerms=original;
+  const renderedPrices=()=>{const node=elements(ui.PhysicalgoodsRequestPrices({request:row,showSelected:true})).find(node=>node.type===ui.PhysicalgoodsOriginalPrice);return node.type(node.props);};
+  assert.equal(text(renderedPrices()),'$8.000$5.000');
+  row.transaction={id:'trade',status:'RESERVADA',modality:'VENTA',amount:8000,currency:'CLP'};
+  assert.equal(text(renderedPrices()),'$8.000$5.000');
+  row.requestedTerms={modality:'DONACION',amount:null,currency:'CLP'};
+  const donation=renderedPrices();assert.equal(text(donation),'$8.000Donación');assert.ok(elements(donation).filter(node=>node.type==='Text').at(-1).props.style.some(style=>style?.textDecorationLine==='line-through'));
 });
 
 test('sent summaries retain pending reservations, real terminal states and original agreement amounts',()=>{
@@ -139,11 +171,13 @@ test('sent accordion starts closed, keeps selection on refresh and opens a resou
   const h=runtime(),state={page:{data:[sentRow(),sentRow('second')]},number:1,loading:false,busy:false,selection:null};
   const {PhysicalgoodsSentRequests}=load('physicalgoods/components/PhysicalgoodsSentRequests.tsx',{'react/jsx-runtime':jsx,react:h.react,'react-native':native,
     './PhysicalgoodsRequestProduct':{PhysicalgoodsRequestProduct:'ResourceModal'},
+    './PhysicalgoodsPriceHistory':{PhysicalgoodsRequestPrices:'Prices'},
     '../../components/SentRequestCard':{SentRequestCard:'Card',SentRequestsSkeleton:'Skeleton'},'../../components/RequestsUI':requestsUI,
     '../../components/ResourceDetailUI':{detailUI:{}},'../utils/sentRequestPresentation':{sentRequestPresentation}});
   const render=()=>elements(h.render(()=>PhysicalgoodsSentRequests({state})));
   const cards=()=>render().filter(n=>n.type==='Card');
   assert.deepEqual(cards().map(n=>n.props.expanded),[false,false]);cards()[1].props.onToggle();assert.deepEqual(cards().map(n=>n.props.expanded),[false,true]);
+  assert.equal(cards()[0].props.amountContent.type,'Prices');assert.equal(cards()[0].props.amountContent.props.showSelected,true);assert.equal(cards()[0].props.collapsedPriceContent.props.compact,true);
   state.loading=true;assert.ok(render().some(n=>n.type==='Skeleton'));state.loading=false;assert.equal(cards()[1].props.expanded,true);
   cards()[1].props.onToggle();assert.ok(cards().every(n=>!n.props.expanded));state.number=2;assert.ok(cards().every(n=>!n.props.expanded));
   cards()[0].props.onToggle();const first=cards()[0];assert.equal(first.props.onDetails,undefined);
@@ -209,7 +243,7 @@ const requestsUI=Object.fromEntries(['RequestButton','RequestCard','RequestDecis
 requestsUI.requestUI={};requestsUI.requestStatusLabel=value=>value;
 test('physical reserved and historical cards preserve detail access and prevent a second acceptance',()=>{
   const calls=[];const state={page:{data:[physicalRow('reserved','RESERVADO'),{...physicalRow('history'),canResolve:false,publication:{...physicalRow().publication,canView:false,isWithdrawn:true}}],meta:{}},number:1,loading:false,busy:false,reload:noop};
-  const h=runtime();const {PhysicalgoodsReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'react/jsx-runtime':jsx,react:h.react,'react-native':native,
+  const h=runtime();const {PhysicalgoodsReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'../utils/requestTerms':requestTerms,'./PhysicalgoodsPriceHistory':{PhysicalgoodsRequestPrices:'Prices'},'react/jsx-runtime':jsx,react:h.react,'react-native':native,
     '../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},
     '../utils/receivedRequestIndicators':indicators,
     '../../components/ResourceRequestsModal':{ResourceRequestsModal:'ResourceModal',ResourceRequestsRow:'ResourceRow'},'../../components/RequestAccordionCard':{RequestAccordionSkeleton:'Skeleton'},
@@ -225,7 +259,7 @@ test('received resources open a single modal that survives refresh, preserves de
  const h=runtime(),calls=[],rows=Array.from({length:10},(_,index)=>physicalRow(`request-${index}`));
  rows.push({...physicalRow('different'),publication:{...physicalRow().publication,id:'different-publication'}});
  const state={page:{data:rows},number:1,scope:'owner:campus',loading:false,busy:false,selection:null,select:(...args)=>calls.push(args),reload:()=>calls.push('reload'),resolve:()=>calls.push('resolved'),cancel:()=>{state.selection=null;}};
- const {PhysicalgoodsReceivedRequests,groupReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'react/jsx-runtime':jsx,react:h.react,'react-native':native,
+ const {PhysicalgoodsReceivedRequests,groupReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'../utils/requestTerms':requestTerms,'./PhysicalgoodsPriceHistory':{PhysicalgoodsRequestPrices:'Prices'},'react/jsx-runtime':jsx,react:h.react,'react-native':native,
   '../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},
   '../utils/receivedRequestIndicators':indicators,
   '../../components/ResourceRequestsModal':{ResourceRequestsModal:'ResourceModal',ResourceRequestsRow:'ResourceRow'},'../../components/RequestAccordionCard':{RequestAccordionSkeleton:'Skeleton'},

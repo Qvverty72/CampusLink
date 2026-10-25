@@ -50,7 +50,7 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const openAgreement=(publicationId:string,transactionId:string)=>{setHistoryDetail(null);setAgreement({publicationId,transactionId});};
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
-    <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: safeAreaInset('top', insets.top, { min: 24, offset: 16 }) }]} keyboardShouldPersistTaps="handled">
+    <RefreshScrollView ref={scroll} automaticallyAdjustKeyboardInsets refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: safeAreaInset('top', insets.top, { min: 24, offset: 16 }) }]} keyboardShouldPersistTaps="handled">
       <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : received || sent ? 'Mis Solicitudes' : personal ? 'Mis publicaciones' : 'Mercado'}
         subtitle={publishing ? 'Comparte un recurso físico con tu campus' : personal ? 'Tus publicaciones, solicitudes y transacciones' : 'Recursos físicos de tu campus'}
         action={view === 'explore' ? 'Mi actividad' : undefined} onAction={() => setView('mine')}
@@ -120,7 +120,7 @@ function PublicationForm({ onPublished, onGallery }: { onPublished: () => void; 
       {form.modality === 'VENTA' && <View style={f.field}><Text style={f.label}>Precio de venta (CLP) *</Text>
         <TextInput accessibilityLabel="Precio de venta (CLP)" value={form.price} onChangeText={form.setPrice} placeholder="Ej. 15000" inputMode="decimal" maxLength={20} editable={!disabled} style={f.input} /></View>}
     </PublicationSection>
-    <PublicationSection number="3" title="Imágenes del recurso" hint={`Al menos una foto · ${form.photos.length}/${PHYSICALGOODS_MAX_IMAGES} seleccionadas. La principal será la portada.`}>
+    <PublicationSection number="3" title="Imágenes del recurso" hint={`Al menos una foto · ${form.photos.length}/${PHYSICALGOODS_MAX_IMAGES} seleccionadas.${form.photos.length>1?' Desliza para verlas.':''}`}>
       <PublicationImages photos={form.photos} disabled={disabled} onRemove={form.removePhoto} onPrincipal={form.makePrincipal} />
       <PublicationUpload label="Agregar imágenes" hint={`JPEG, PNG o WebP · Hasta 5 MB por imagen · Máximo ${PHYSICALGOODS_MAX_IMAGES}`} disabled={disabled || form.photos.length >= PHYSICALGOODS_MAX_IMAGES} busy={form.pickingPhoto} onPress={() => void form.choosePhoto()} />
     </PublicationSection>

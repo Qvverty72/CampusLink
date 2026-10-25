@@ -16,6 +16,7 @@ import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './phys
 import type { PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
 import { findActiveMapByCampusId } from '../../maps/map.repository.js';
 import { spatialBuildings } from '../../maps/map.location.js';
+import {findPhysicalgoodsRequestTerms} from './physicalgoods.price-history.repository.js';
 
 /** Revalida identidad y participación; solo detalle/mensajes habilitan lectura histórica de otro campus. */
 async function transactionContext<T>(auth: VerifiedAuthConnection, publicationId: unknown, transactionId: unknown,
@@ -87,7 +88,8 @@ export async function getPhysicalgoodsTransaction(auth:VerifiedAuthConnection,pu
   return transactionContext(auth,publicationId,transactionId,async(client,_resource,transaction,current)=>{
     const row=await physicalgoodsTransactionDetail(client,transaction.id),confirmations=await physicalgoodsConfirmations(client,transaction.id);
     const rating=await findPhysicalgoodsRating(client,transaction.id);
-    return {id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at},
+    const requestedTerms=(await findPhysicalgoodsRequestTerms(client,[transaction.solicitud_id])).get(transaction.solicitud_id)??null;
+    return {id:row.id,requestedTerms,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at},
       campus:{id:row.campus_id,name:row.campus_nombre},owner:{id:row.propietario_id,fullName:row.propietario_nombre},
       receiver:{id:row.receptor_id,fullName:row.receptor_nombre},role:row.propietario_id===current.userId?'PROPIETARIO' as const:'RECEPTOR' as const,
       status:row.estado_transaccion,modality:row.modalidad_acordada,amount:row.monto_acordado===null?null:Number(row.monto_acordado),currency:row.moneda,

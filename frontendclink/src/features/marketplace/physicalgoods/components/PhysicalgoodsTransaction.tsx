@@ -15,6 +15,7 @@ import { agreementCopy as copy, agreementPresentation } from '../../utils/agreem
 import { TransactionConfirmations, TransactionDecisionDialog, TransactionFeedback, transactionUI } from '../../components/TransactionUI';
 import { PhysicalgoodsCoordination, PhysicalgoodsCoordinationMessages } from './PhysicalgoodsCoordination';
 import { PhysicalgoodsAgreementProduct } from './PhysicalgoodsAgreementProduct';
+import {PhysicalgoodsOriginalPrice} from './PhysicalgoodsPriceHistory';
 import { AgreementStepModal } from '../../components/AgreementStepModal';
 import { CATALOG_COLORS as colors } from '../../components/CatalogUI';
 import { CheckCircle2 } from 'lucide-react-native';
@@ -127,7 +128,7 @@ export function PhysicalgoodsTransaction({ target, onClose, onChanged, refreshEn
         <TransactionFeedback loading={t.loading} loadingLabel={copy.loadingTransaction} error={t.error} onRetry={t.reload} disabled={t.busy} />
         {t.busy && <Text accessibilityLiveRegion="polite" style={detailUI.helper}>{copy.saving}</Text>}
         {!t.loading && detail && view && <>
-          <AgreementSummary participants={participants} currentUserId={currentUserId} modality={detail.modality} amount={detail.amount} currency={detail.currency} />
+          <AgreementSummary participants={participants} currentUserId={currentUserId} modality={detail.modality} amount={detail.amount} currency={detail.currency} amountContent={<PhysicalgoodsOriginalPrice current={{modality:detail.modality,amount:detail.amount,currency:detail.currency}} original={detail.requestedTerms} currentLabel="Monto acordado" previousLabel="Precio al solicitar"/>}/>
           <AgreementStepper state={view.state} selected={panel === 'overview' ? undefined : panel} disabled={disabled} onSelect={setPanel} />
           {detail.status === 'COMPLETADA' && <TransactionRating score={detail.rating?.score} />}
           {panel === 'overview' && <Text style={detailUI.helper}>{copy.chooseStep}</Text>}

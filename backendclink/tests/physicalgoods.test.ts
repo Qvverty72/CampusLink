@@ -615,7 +615,7 @@ test('physical detail exposes current description, condition, sale price, campus
   assert.deepEqual(detail.campus, { id: campus, name: 'Home' });
   assert.equal(detail.status, 'DISPONIBLE'); assert.equal(detail.acceptsRequests, true); assert.equal(detail.canEdit, false);
   assert.equal(detail.images.length, 2); assert.equal(detail.images[0].principal, true); assert.equal(detail.expiresIn, 60);
-  assert.deepEqual(Object.keys(detail).sort(), ['acceptsRequests','campus','canEdit','category','condition','description','expiresIn','id','images','modality','owner','price','status','title','updatedAt'].sort());
+  assert.deepEqual(Object.keys(detail).sort(), ['acceptsRequests','campus','canEdit','category','condition','description','expiresIn','id','images','modality','originalTerms','owner','price','status','title','updatedAt'].sort());
   assert.doesNotMatch(JSON.stringify(detail), /private-avatar|Private region|Private district|fecha_nacimiento|foto_path|email|storage_path|bucket_id|genero|verificado_en/);
 });
 
@@ -675,6 +675,83 @@ test('detail safely reports private image failures and validates persisted campu
 
 const updates = (detail: Awaited<ReturnType<typeof imagesService.getPhysicalgoodsGallery>>, overrides: Record<string,unknown> = {}) => ({
   title: detail.title, description: detail.description,condition: detail.condition,modality: detail.modality,price: detail.price,updatedAt: detail.updatedAt,...overrides,
+});
+
+test('price edits preserve the requested price while acceptance uses the current price and keeps both through completion',async()=>{
+  const saved=await create(auth,{...input(),modality:'VENTA',price:5000}),requester=await otherActor(),operation=randomUUID();
+  const receipt=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'},operation);
+  const original={modality:'VENTA',amount:5000,currency:'CLP'};
+  assert.deepEqual(receipt.requestedTerms,original);
+  let gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{price:8000}));
+  gallery=await imagesService.getPhysicalgoodsGallery(requester,saved.id);
+  assert.equal(gallery.price,8000);assert.deepEqual(gallery.originalTerms,original);
+  assert.deepEqual((await historyService.getOwnPhysicalgoodsDetail(auth,saved.id)).originalTerms,original);
+  for(const row of [(await requestsService.getSentPhysicalgoodsRequests(requester,{})).data[0],(await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication'})).data[0],await requestsService.getOwnPhysicalgoodsRequest(requester,saved.id,receipt.id)]){
+    assert.equal(row.publication.price,8000);assert.deepEqual(row.requestedTerms,original);assert.equal(row.transaction,null);
+  }
+  assert.deepEqual(await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'},operation),receipt);
+  assert.deepEqual((await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id)).activeRequest,receipt);
+  const accepted=await requestsService.resolvePhysicalgoodsRequest(auth,saved.id,receipt.id,{decision:'ACEPTAR'});
+  assert.equal(accepted.transaction!.amount,8000);assert.deepEqual(accepted.request.requestedTerms,original);
+  gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{price:12000}));
+  const trade=await transactionsService.getPhysicalgoodsTransaction(requester,saved.id,accepted.transaction!.id);
+  assert.equal(trade.amount,8000);assert.deepEqual(trade.requestedTerms,original);
+  const sent=(await requestsService.getSentPhysicalgoodsRequests(requester,{})).data[0];
+  assert.equal(sent.publication.price,12000);assert.equal(sent.transaction!.amount,8000);assert.deepEqual(sent.requestedTerms,original);
+  await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,trade.id,{},'CONFIRMAR');
+  await transactionsService.transitionPhysicalgoodsTransaction(requester,saved.id,trade.id,{},'CONFIRMAR');
+  const completed=await transactionsService.getPhysicalgoodsTransaction(requester,saved.id,trade.id);
+  assert.equal(completed.status,'COMPLETADA');assert.equal(completed.amount,8000);assert.deepEqual(completed.requestedTerms,original);
+});
+
+test('each request recovers its own publication version across repeated price and donation edits',async()=>{
+  const saved=await create(auth,{...input(),modality:'VENTA',price:5000}),first=await otherActor(),second=await otherActor(),third=await otherActor();
+  const a=await requestsService.createPhysicalgoodsRequest(first,saved.id,{messageCode:'ME_INTERESA'});
+  let gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{price:7000}));
+  const b=await requestsService.createPhysicalgoodsRequest(second,saved.id,{messageCode:'ME_INTERESA'});
+  gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{modality:'DONACION',price:null}));
+  const c=await requestsService.createPhysicalgoodsRequest(third,saved.id,{messageCode:'ME_INTERESA'});
+  gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{modality:'VENTA',price:8000}));
+  const rows=(await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication'})).data;
+  assert.deepEqual(rows.map(row=>row.requestedTerms),[{modality:'VENTA',amount:5000,currency:'CLP'},{modality:'VENTA',amount:7000,currency:'CLP'},{modality:'DONACION',amount:null,currency:'CLP'}]);
+  assert.deepEqual(rows.map(row=>row.id),[a.id,b.id,c.id]);assert.ok(rows.every(row=>row.publication.price===8000));
+  const accepted=await requestsService.resolvePhysicalgoodsRequest(auth,saved.id,a.id,{decision:'ACEPTAR'});
+  assert.equal(accepted.transaction!.amount,8000);
+  await assert.rejects(requestsService.getOwnPhysicalgoodsRequest(third,saved.id,b.id),{status:404});
+});
+
+test('request price version lookup retains PostgreSQL microseconds rather than transaction audit creation time',async()=>{
+  const saved=await create(auth,{...input(),modality:'VENTA',price:5000}),requester=await otherActor();
+  const receipt=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'});
+  const gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{price:8000}));
+  await db.query(`UPDATE auditoria SET datos_despues=jsonb_set(datos_despues,'{updated_at}',to_jsonb($2::text)),
+    datos_antes=CASE WHEN datos_antes ? 'updated_at' THEN jsonb_set(datos_antes,'{updated_at}',to_jsonb($3::text)) ELSE datos_antes END,
+    created_at='2026-01-01' WHERE entidad_id=$1 AND accion='EDITAR_PUBLICACION'`,[saved.id,'2026-10-25T12:00:00.000200Z','2026-10-25T12:00:00.000100Z']);
+  await db.query(`UPDATE auditoria SET datos_despues=jsonb_set(datos_despues,'{updated_at}',to_jsonb($2::text)),created_at='2026-02-01'
+    WHERE entidad_id=$1 AND accion='PUBLICAR_PUBLICACION'`,[saved.id,'2026-10-25T12:00:00.000100Z']);
+  await db.query("UPDATE publicacion_recurso SET updated_at='2026-10-25T12:00:00.000200Z' WHERE id=$1",[saved.id]);
+  await db.query("UPDATE solicitud_recurso SET solicitada_en='2026-10-25T12:00:00.000150Z' WHERE id=$1",[receipt.id]);
+  assert.equal((await requestsService.getOwnPhysicalgoodsRequest(requester,saved.id,receipt.id)).requestedTerms!.amount,5000);
+});
+
+test('missing pre-edit history is explicit, never invents a price from current data and does not expose audit snapshots',async()=>{
+  const saved=await create(auth,{...input(),modality:'VENTA',price:5000}),requester=await otherActor();
+  const receipt=await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'});
+  const gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{price:8000}));
+  await db.query('DELETE FROM auditoria WHERE entidad_id=$1',[saved.id]);
+  const detail=await requestsService.getOwnPhysicalgoodsRequest(requester,saved.id,receipt.id);
+  assert.equal(detail.requestedTerms,null);assert.equal(detail.publication.price,8000);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(requester,saved.id)).originalTerms,null);
+  assert.doesNotMatch(JSON.stringify(detail),/datos_antes|datos_despues|storage_path|actor_usuario_id/);
+  const accepted=await requestsService.resolvePhysicalgoodsRequest(auth,saved.id,receipt.id,{decision:'ACEPTAR'});
+  assert.equal(accepted.transaction!.amount,8000);assert.equal(accepted.request.requestedTerms,null);
 });
 const audits = async (id: string) => (await db.query<{ accion:string; datos_antes:Record<string,unknown>|null; datos_despues:Record<string,unknown> }>('select accion,datos_antes,datos_despues from auditoria where entidad_id=$1 order by created_at,id',[id])).rows;
 

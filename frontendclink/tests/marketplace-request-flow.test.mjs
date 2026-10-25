@@ -50,6 +50,7 @@ test('history detail retains exact navigation and forbids public opening when on
  const calls=[], row={id:'request',status:'PENDIENTE',campus:{name:'Campus'},owner:{fullName:'Camila'},requester:{fullName:'Diego'},requestedAt:'2026-10-24T12:00:00Z',message:'Me interesa',publication:{id:'pub',title:'Libro',modality:'VENTA',price:1000,status:'DISPONIBLE',canView:true},transaction:null};
  const state={detail:row,loading:false,error:null,reload:noop};
  const {PhysicalgoodsHistoryDetail}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{react:{useCallback:fn=>fn},'react/jsx-runtime':jsx,'react-native':native,'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:30,bottom:20})},
+ '../utils/requestTerms':load('physicalgoods/utils/requestTerms.ts',{}),'./PhysicalgoodsPriceHistory':{PhysicalgoodsOriginalPrice:'OriginalPrice',PhysicalgoodsRequestPrices:'Prices'},
  '@/components/RefreshScrollView':{RefreshScrollView:'Refresh',useScrollRefresh:noop},'../hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistoryDetail:()=>state},
  '../../components/CatalogUI':{CATALOG_COLORS:{}},'../../components/ResourceDetailUI':detail,'../../components/PersonalUI':{PersonalStatus:'Status'},'../../components/RequestFlowUI':{RequestTimeline:'Timeline'},
  './PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'./PhysicalgoodsPublications':{PhysicalgoodsPublications:'Publications'},'../../components/ActivityUI':{},'../types/publication':{resourceConditions:[]}});
@@ -59,6 +60,11 @@ test('history detail retains exact navigation and forbids public opening when on
  row.publication.canView=false;assert.equal(render().some(row=>row.type==='Footer'),false);
  row.transaction={id:'trade',status:'RESERVADA'};nodes=render();nodes.find(row=>row.type==='Footer').props.onPress();assert.deepEqual(calls.at(-1),['pub','trade']);
  state.loading=true;assert.equal(render().some(row=>row.type==='Footer'),false);
+ state.loading=false;row.transaction=null;row.requestedTerms={modality:'VENTA',amount:5000,currency:'CLP'};row.publication.price=8000;
+ assert.equal(render().find(node=>node.type==='Summary').props.price,5000);
+ row.transaction={id:'trade',status:'RESERVADA',modality:'VENTA',amount:8000,currency:'CLP'};assert.equal(render().find(node=>node.type==='Summary').props.price,8000);
+ row.transaction=null;row.requestedTerms=null;row.publication.modality='DONACION';row.publication.price=null;
+ assert.equal(render().find(node=>node.type==='Summary').props.modality,'VENTA');assert.equal(render().find(node=>node.type==='Summary').props.price,null);assert.equal(render().find(node=>node.type==='Timeline').props.donation,false);
 });
 
 test('real sent confirmation has two actions; owner and active requests keep their protections',()=>{

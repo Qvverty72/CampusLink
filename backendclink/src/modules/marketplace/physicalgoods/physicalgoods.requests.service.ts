@@ -17,6 +17,7 @@ import { parseResourceOperationId, resourceOperationKey } from '../../analytics/
 import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
 import {findOwnerRatings,type OwnerRatingSummary} from '../marketplace.ratings.repository.js';
+import {findPhysicalgoodsRequestTerms,type PhysicalgoodsTerms} from './physicalgoods.price-history.repository.js';
 
 /** Reutiliza el orden de bloqueos de edición: perfil primero, publicación después. */
 async function requestContext<T>(auth: VerifiedAuthConnection, id: string,
@@ -37,16 +38,17 @@ async function requestContext<T>(auth: VerifiedAuthConnection, id: string,
     throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudo completar la solicitud.');
   }
 }
-function receipt(row: PhysicalgoodsRequestRow, resource: PhysicalgoodsMediaRow) {
+async function receipt(client:PoolClient,row: PhysicalgoodsRequestRow, resource: PhysicalgoodsMediaRow) {
+  const requestedTerms=(await findPhysicalgoodsRequestTerms(client,[row.id])).get(row.id)??null;
   return { id:row.id,publicationId:row.publicacion_id,requesterId:row.solicitante_id,ownerId:resource.propietario_id,
-    campusId:resource.campus_id,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en };
+    campusId:resource.campus_id,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,requestedTerms };
 }
 export async function getPhysicalgoodsRequestOptions(auth: VerifiedAuthConnection, publicationId: unknown) {
   const id = physicalgoodsId(publicationId,'publicationId');
   return requestContext(auth,id,async (client,resource,current) => {
     const active = await findActivePhysicalgoodsRequest(client,id,current.userId);
     const canRequest = resource.estado_publicacion === 'DISPONIBLE' && resource.propietario_id !== current.userId && !active;
-    return { canRequest,activeRequest:active ? receipt(active,resource) : null,
+    return { canRequest,activeRequest:active ? await receipt(client,active,resource) : null,
       messages:canRequest ? await physicalgoodsRequestMessages(client) : [] };
   });
 }
@@ -62,7 +64,7 @@ export async function createPhysicalgoodsRequest(auth: VerifiedAuthConnection, p
         if (previous.publicacion_id !== id || previous.solicitante_id !== current.userId || previous.codigo_mensaje !== code) {
           throw new ApiError(409,'CONFLICT','La clave de operación ya corresponde a otra solicitud.');
         }
-        return receipt(previous,resource);
+        return receipt(client,previous,resource);
       }
     }
     if (resource.propietario_id === current.userId) throw new ApiError(403,'FORBIDDEN','No puedes solicitar tu propio recurso.');
@@ -70,15 +72,15 @@ export async function createPhysicalgoodsRequest(auth: VerifiedAuthConnection, p
     if (await findActivePhysicalgoodsRequest(client,id,current.userId)) throw new ApiError(409,'CONFLICT','Ya tienes una solicitud activa para este recurso.');
     const message = await findPhysicalgoodsRequestMessage(client,code);
     if (!message?.activo) throw new ApiError(400,'VALIDATION_ERROR','Selecciona un mensaje predefinido disponible.');
-    return receipt(await insertPhysicalgoodsRequest(client,id,current.userId,code,requestId),resource);
+    return receipt(client,await insertPhysicalgoodsRequest(client,id,current.userId,code,requestId),resource);
   });
 }
-function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnection,rating?:OwnerRatingSummary) {
+function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnection,requestedTerms:PhysicalgoodsTerms|null,rating?:OwnerRatingSummary) {
   const canView=row.campus_id===current.campusId&&!row.deleted_at&&['DISPONIBLE','RESERVADO','FINALIZADO'].includes(row.estado_publicacion);
   return {id:row.id,publication:{id:row.publicacion_id,title:row.titulo,status:row.estado_publicacion,isWithdrawn:!!row.deleted_at,
     canView,publishedAt:row.publicado_en,modality:row.modalidad,price:row.modalidad==='VENTA'?Number(row.precio):null},campus:{id:row.campus_id,name:row.campus_nombre},
     owner:{id:row.propietario_id,fullName:row.propietario_nombre},requester:{id:row.solicitante_id,fullName:row.solicitante_nombre,careers:row.solicitante_carreras??[],...rating},
-    message:row.mensaje,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,
+    message:row.mensaje,messageCode:row.codigo_mensaje,status:row.estado_solicitud,requestedAt:row.solicitada_en,requestedTerms,
     canResolve:canView&&row.propietario_id===current.userId&&row.estado_solicitud==='PENDIENTE',
     transaction:row.transaccion_id?{id:row.transaccion_id,status:row.estado_transaccion,modality:row.modalidad_acordada,amount:row.monto_acordado===null?null:Number(row.monto_acordado),currency:row.moneda_acordada}:null};
 }
@@ -97,7 +99,8 @@ async function getPhysicalgoodsRequests(auth: VerifiedAuthConnection, query: unk
       // Own history can include an old campus; it does not authorize exploring its users' reputation.
       const ids=received?rows.filter(row=>row.campus_id===current.campusId).map(row=>row.solicitante_id):[];
       const ratings=await findOwnerRatings(client,ids,{resourceType:'FISICO',campusId:current.campusId});
-      return rows.map(row=>ownRequestDto(row,current,row.campus_id===current.campusId?ratings.get(row.solicitante_id):undefined));
+      const terms=await findPhysicalgoodsRequestTerms(client,rows.map(row=>row.id));
+      return rows.map(row=>ownRequestDto(row,current,terms.get(row.id)??null,row.campus_id===current.campusId?ratings.get(row.solicitante_id):undefined));
     };
     if(grouped){
       if(selectedPublicationId){
@@ -118,7 +121,7 @@ export async function getOwnPhysicalgoodsRequest(auth:VerifiedAuthConnection,pub
   return withPhysicalgoodsHistory(auth,async(client,current)=>{
     const row=await findOwnPhysicalgoodsRequest(client,current.userId,id,selected);
     if(!row)throw new ApiError(404,'NOT_FOUND','No se encontró una solicitud propia.');
-    return ownRequestDto(row,current);
+    return ownRequestDto(row,current,(await findPhysicalgoodsRequestTerms(client,[row.id])).get(row.id)??null);
   });
 }
 export const getReceivedPhysicalgoodsRequests = (auth: VerifiedAuthConnection, query: unknown) => getPhysicalgoodsRequests(auth,query,true);
@@ -141,7 +144,7 @@ export async function resolvePhysicalgoodsRequest(auth: VerifiedAuthConnection, 
     if (request.estado_solicitud !== 'PENDIENTE') throw new ApiError(409,'CONFLICT','La solicitud ya fue resuelta. Actualiza las solicitudes recibidas.');
     if (decision === 'RECHAZAR') {
       await updatePhysicalgoodsRequestStatus(client,selected,'RECHAZADA');
-      return { request:{ ...receipt(request,resource),status:'RECHAZADA' as const },transaction:null };
+      return { request:{ ...await receipt(client,request,resource),status:'RECHAZADA' as const },transaction:null };
     }
     if (resource.estado_publicacion !== 'DISPONIBLE' || await hasActivePhysicalgoodsTransaction(client,id)) throw new ApiError(409,'CONFLICT','El recurso ya tiene una reserva o no está disponible.');
     if (request.solicitante_id === resource.propietario_id) throw new ApiError(409,'CONFLICT','El propietario no puede ser receptor de su propio recurso.');
@@ -150,7 +153,7 @@ export async function resolvePhysicalgoodsRequest(auth: VerifiedAuthConnection, 
     await updatePhysicalgoodsRequestStatus(client,selected,'ACEPTADA');
     await setPhysicalgoodsPublicationStatus(client,id,'RESERVADO'); await touchPhysicalgoods(client,id);
     await auditPhysicalgoods(client,current,id,'EDITAR_PUBLICACION',before,await physicalgoodsSnapshot(client,id));
-    return { request:{ ...receipt(request,resource),status:'ACEPTADA' as const },
+    return { request:{ ...await receipt(client,request,resource),status:'ACEPTADA' as const },
       transaction:{ id:transaction.id,status:transaction.estado_transaccion,modality:transaction.modalidad_acordada,
         amount:transaction.monto_acordado===null?null:Number(transaction.monto_acordado),currency:transaction.moneda } };
   });

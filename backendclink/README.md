@@ -793,6 +793,12 @@ Las lecturas privadas físicas `GET /api/v1/marketplace/physicalgoods/my-publica
 
 Las métricas se derivan de las tablas existentes después de autorizar propiedad/contexto. Incluyen publicaciones retiradas dentro del historial permitido, sin reactivarlas ni modificar derechos. Los contadores digitales se consultan en lote para la página propia autorizada; no se añaden al catálogo público, recomendaciones ni materiales adquiridos. Pagos, estado global de la publicación, alcance institucional digital y comprobación de derechos/descarga permanecen sin cambios. Sin migraciones ni configuración nueva.
 
+## Precios históricos de recursos físicos
+
+Las solicitudes físicas (recibo, opciones, Enviadas, Recibidas y detalle propio) y el detalle de transacción agregan `requestedTerms:{modality,amount,currency}|null`. Representa la versión vigente al enviar la solicitud, recuperada de la auditoría protegida y comparada con `solicitada_en` a precisión PostgreSQL. `publication.price` continúa siendo el precio actual; `transaction.amount` sigue siendo el monto acordado al aceptar. Aceptar utiliza el precio vigente en ese momento, aunque difiera del precio al solicitar; futuras ediciones no cambian el acuerdo.
+
+Galería pública autorizada e historial de publicación propia agregan `originalTerms` con el mismo formato, derivado exclusivamente del registro auditado de alta. Solo se exponen modalidad, monto y moneda; nunca snapshots completos. Las lecturas se realizan después de autorizar el recurso o los IDs de solicitudes y se agrupan para cada página. Un precio histórico no verificable es `null`, sin reemplazarlo por un precio posterior. No requiere migración, nuevas tablas, escritura histórica ni cambios digitales.
+
 ## Referencias técnicas
 
 [Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).

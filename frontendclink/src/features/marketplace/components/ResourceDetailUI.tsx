@@ -109,9 +109,9 @@ export function ResourceSummaryRow({ title, subtitle, digital = false, keyData }
   </View>;
 }
 
-export function RequestResourceSummary({ title, modality, price, digital = false, subtitle }: { title: string; modality: string; price: number | null; digital?: boolean; subtitle?: string }) {
+export function RequestResourceSummary({ title, modality, price, digital = false, subtitle,priceContent }: { title: string; modality: string; price: number | null; digital?: boolean; subtitle?: string;priceContent?:ReactNode }) {
   return <View style={detailUI.card}><ResourceSummaryRow title={title} digital={digital}
-    subtitle={subtitle ?? (digital ? 'Recurso digital · Biblioteca' : 'Recurso físico · Mercado')} keyData={<ResourcePrice modality={modality} price={price} />} /></View>;
+    subtitle={subtitle ?? (digital ? 'Recurso digital · Biblioteca' : 'Recurso físico · Mercado')} keyData={priceContent??<ResourcePrice modality={modality} price={price} />} /></View>;
 }
 
 export const detailUI = StyleSheet.create({

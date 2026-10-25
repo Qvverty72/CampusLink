@@ -12,6 +12,7 @@ import { PersonalEmpty } from '../../components/PersonalUI';
 import { CATALOG_COLORS as colors } from '../../components/CatalogUI';
 import { detailUI } from '../../components/ResourceDetailUI';
 import { agreementCopy as copy, agreementPresentation } from '../../utils/agreementPresentation';
+import {PhysicalgoodsOriginalPrice} from './PhysicalgoodsPriceHistory';
 
 const EMPTY: PhysicalgoodsTransactionSummary[] = [];
 
@@ -64,6 +65,7 @@ export function PhysicalgoodsAgreements({ active, refreshVersion, onExplore, ref
             participants={detail ? [{ id: detail.owner.id, name: detail.owner.fullName, role: 'PROPIETARIO' }, { id: detail.receiver.id, name: detail.receiver.fullName, role: 'RECEPTOR' }] : undefined}
             currentUserId={detail ? detail.role === 'PROPIETARIO' ? detail.owner.id : detail.receiver.id : undefined}
             modality={detail?.modality ?? row.modality} amount={detail ? detail.amount : row.amount} currency={detail?.currency ?? row.currency}
+            amountContent={<PhysicalgoodsOriginalPrice current={{modality:detail?.modality??row.modality,amount:detail?detail.amount:row.amount,currency:detail?.currency??row.currency}} original={detail?.requestedTerms} currentLabel="Monto acordado" previousLabel="Precio al solicitar"/>}
             ratingScore={detail?.status === 'COMPLETADA' ? detail.rating?.score : null}
             state={view?.state ?? terminalState} label={view?.label ?? (terminalState === 'FINALIZADO' ? copy.finishedStatus : terminalState === 'CANCELADO' ? copy.cancelled : copy.unknown)}
             dateLabel={closed ? copy.closed(new Date(closed).toLocaleDateString('es-CL')) : copy.initiated(new Date(row.startedAt).toLocaleDateString('es-CL'))}

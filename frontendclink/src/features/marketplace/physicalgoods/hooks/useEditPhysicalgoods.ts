@@ -18,11 +18,13 @@ export function useEditPhysicalgoods(r: ReturnType<typeof usePhysicalgoodsResour
   }
   /** Valida modalidad y precio, y envía actualización con `updatedAt` original. */
   async function save() {
-    if (!draft || !r.gallery) return;
+    if (!draft || !r.gallery) return false;
     const id = r.gallery.id, value = draft.price.trim().replace(',', '.'), price = draft.modality === 'DONACION' ? null : Number(value);
-    if (!draft.title.trim() || !draft.description.trim() || (draft.modality === 'VENTA' && (!value || !/^\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(price) || price! <= 0 || price! > Number.MAX_SAFE_INTEGER))) { setError('Completa nombre, descripción y un precio de venta válido.'); return; }
+    if (!draft.title.trim() || !draft.description.trim() || (draft.modality === 'VENTA' && (!value || !/^\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(price) || price! <= 0 || price! > Number.MAX_SAFE_INTEGER))) { setError('Completa nombre, descripción y un precio de venta válido.'); return false; }
     setError(null);
-    await r.change(async signal => { await updatePhysicalgoods(id,{ ...draft,price },signal); if (!signal.aborted) setDraft(null); });
+    let saved=false;
+    await r.change(async signal => { await updatePhysicalgoods(id,{ ...draft,price },signal); if (!signal.aborted) {setDraft(null);saved=true;} });
+    return saved;
   }
   /** Retira el recurso y cierra la ficha solo después de una confirmación exitosa. */
   async function withdraw() {

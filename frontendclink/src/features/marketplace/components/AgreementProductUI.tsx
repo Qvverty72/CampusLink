@@ -15,16 +15,16 @@ export function AgreementProductModal({ onClose, children, title = copy.product,
 }
 
 /** Ficha de solo lectura sin importar DTO físico; el consumidor elige los términos mostrados. */
-export function AgreementProductDetails({ title, modality, amount, currency, campus, startedAt, tags, description, children, loading = false, dateLabel }: {
+export function AgreementProductDetails({ title, modality, amount, currency, campus, startedAt, tags, description, children, loading = false, dateLabel,priceContent }: {
   title: string; modality: string; amount: number | null; currency: string; campus: string; startedAt: string;
-  tags: string[]; description?: string; children: ReactNode; loading?: boolean; dateLabel?: string|null;
+  tags: string[]; description?: string; children: ReactNode; loading?: boolean; dateLabel?: string|null;priceContent?:ReactNode;
 }) {
   const date = new Date(startedAt);
   const price = modality === 'DONACION' ? copy.donation : amount === null ? 'Precio no disponible' : `$${amount.toLocaleString('es-CL')}${currency === 'CLP' ? '' : ` ${currency}`}`;
   const content = <View style={styles.productCard}>{children}<View style={styles.details}>
     {loading ? <View style={styles.tags}><SkeletonBlock width={54} height={22} borderRadius={12} /><SkeletonBlock width={110} height={22} borderRadius={12} /></View>
       : tags.length > 0 && <View style={styles.tags}>{tags.map((tag, index) => <View key={`${index}:${tag}`} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>)}</View>}
-    <View style={styles.titleRow}><Text accessibilityRole="header" style={styles.title}>{title}</Text><Text accessibilityLabel={`${price}${modality === 'VENTA' && amount !== null && currency === 'CLP' ? ' CLP' : ''}`} style={styles.price}>{price}</Text></View>
+    <View style={[styles.titleRow,Boolean(priceContent)&&{flexWrap:'wrap'}]}><Text accessibilityRole="header" style={[styles.title,Boolean(priceContent)&&{minWidth:160}]}>{title}</Text>{priceContent?<View style={{maxWidth:'100%',flexShrink:0}}>{priceContent}</View>:<Text accessibilityLabel={`${price}${modality === 'VENTA' && amount !== null && currency === 'CLP' ? ' CLP' : ''}`} style={styles.price}>{price}</Text>}</View>
     <View style={styles.metadataRow}><MapPin size={14} color={colors.secondary} /><Text style={styles.metadata}>{campus}</Text></View>
     {dateLabel!==null&&<View style={styles.metadataRow}><Clock size={14} color={colors.secondary} /><Text style={styles.metadata}>{dateLabel ?? copy.productStarted(date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' }), date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false }))}</Text></View>}
     {description !== undefined && <View style={styles.description}><Text accessibilityRole="header" style={styles.descriptionTitle}>{copy.description}</Text><Text style={detailUI.body}>{description}</Text></View>}

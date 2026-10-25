@@ -1,5 +1,6 @@
 import type {SentRequestTone} from '../../components/SentRequestCard';
 import type {PhysicalgoodsReceivedRequest} from '../types/publication';
+import {physicalgoodsRequestTerms,physicalgoodsTermsLabel} from './requestTerms';
 
 /** Nunca deduce rechazo por una reserva ajena ni usa el precio actual como monto acordado. */
 export function sentRequestPresentation(request:PhysicalgoodsReceivedRequest){
@@ -18,10 +19,6 @@ export function sentRequestPresentation(request:PhysicalgoodsReceivedRequest){
   }else if(request.publication.status==='RESERVADO'){
     summary='Pendiente · recurso reservado';status='Tu solicitud sigue pendiente. El recurso está reservado para otra persona.';
   }
-  const agreed=Boolean(request.transaction?.modality&&request.transaction.currency);
-  const modality=agreed?request.transaction!.modality:request.publication.modality;
-  const value=agreed?request.transaction!.amount:request.publication.price;
-  const currency=agreed?request.transaction!.currency:'CLP';
-  const amount=modality==='DONACION'?'Donación':typeof value==='number'&&Number.isFinite(value)?`$${value.toLocaleString('es-CL')}${currency&&currency!=='CLP'?` ${currency}`:''}`:'Precio no disponible';
-  return {tone,summary,status,amount,amountLabel:agreed?'Monto acordado':modality==='DONACION'?'Modalidad':'Precio publicado'};
+  const terms=physicalgoodsRequestTerms(request),amount=physicalgoodsTermsLabel(terms.selected);
+  return {tone,summary,status,amount,amountLabel:terms.label};
 }

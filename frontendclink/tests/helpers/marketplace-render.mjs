@@ -26,8 +26,9 @@ const digitalRows = ['Guía de cálculo integral', 'Resumen de bases de datos', 
 }));
 
 /** Render aislado de las pantallas reales con datos sintéticos. Nunca conecta a APIs o sesiones. */
-export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null, sentScenario = null, sentOpen = null, sentResource = null, receivedScenario = null, receivedOpen = null, receivedResource = false, receivedOrder = 'oldest', receivedPage = 1, receivedSelected = null, receivedLoading = false, receivedError = false, receivedDecision = null, requestCounts = null, requestCountsLoading = false, publicationTab = 'all', publicationOpen = null, publicationProductState = 'ready' } = {}) {
+export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null, sentScenario = null, sentOpen = null, sentResource = null, receivedScenario = null, receivedOpen = null, receivedResource = false, receivedOrder = 'oldest', receivedPage = 1, receivedSelected = null, receivedLoading = false, receivedError = false, receivedDecision = null, requestCounts = null, requestCountsLoading = false, publicationTab = 'all', publicationOpen = null, publicationProductState = 'ready',managementPanel=null,managementRead='ready',priceHistory=false } = {}) {
   const physical = screen === 'physical';
+  const historyTerms=priceHistory==='donation'?{modality:'DONACION',amount:null,currency:'CLP'}:{modality:'VENTA',amount:5000,currency:'CLP'};
   const detailMode = mode === 'detail' || mode === 'request';
   const mocks = new Map();
   const add = (file, value) => mocks.set(path.join(sourceRoot, file), value);
@@ -54,11 +55,23 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     ['physicalgoods/components/PhysicalgoodsTransaction.tsx', ['PhysicalgoodsTransaction']],
     ['physicalgoods/components/PhysicalgoodsRequest.tsx', ['PhysicalgoodsRequest']],
     ['physicalgoods/components/PhysicalgoodsEditor.tsx', ['PhysicalgoodsEditor']],
+    ['physicalgoods/components/PhysicalgoodsManagement.tsx', ['PhysicalgoodsManagement']],
     ['elibrary/components/DigitalAcademicSelector.tsx', ['DigitalAcademicSelector']],
     ['elibrary/components/DigitalPublicationEditor.tsx', ['DigitalPublicationEditor']],
     ['elibrary/components/DigitalPersonalLibrary.tsx', ['DigitalPersonalLibrary']],
     ['elibrary/components/DigitalTradeCenter.tsx', ['DigitalRequestAction']],
   ]) add('features/marketplace/' + file, Object.fromEntries(names.map(name => [name, nil])));
+  if(managementPanel){
+    const previous=mocks.get(path.join(sourceRoot,'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources;
+    const image='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="110"><rect width="120" height="110" rx="8" fill="#E9F0F6"/><rect x="40" y="12" width="40" height="86" rx="5" fill="#002E56"/><rect x="46" y="20" width="28" height="18" fill="#C8D7E0"/><path d="M46 52h28M46 64h28M46 76h28" stroke="#FDBB30" stroke-width="5"/></svg>');
+    add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts',{usePhysicalgoodsResources:()=>{const r=previous();return {...r,selectedId:'physical-0',busy:managementRead==='busy',galleryLoading:managementRead==='loading',galleryError:managementRead==='error'?'No se pudieron guardar los cambios. Tu borrador se conserva.':null,
+      gallery:{...r.gallery,id:'physical-0',title:physicalRows[0].title,owner:{id:'qa',fullName:'Camila'},campus:{id:'qa',name:'San Andrés'},category:{id:'books',name:'Libros y textos'},status:'DISPONIBLE',canEdit:true,updatedAt:'2026-10-25T12:00:00.000000Z',images:[{id:'photo-0',url:image,principal:true},{id:'photo-1',url:image,principal:false}]},
+      options:{...r.options,categories:[{id:'other',name:'Otros'},{id:'books',name:'Libros y textos'},{id:'tech',name:'Tecnología'}]},editCategory:'books',setEditCategory:noop,saveCategory:noop,principal:noop,retire:noop,selectPhotos:noop,upload:noop,removeDraft:noop,
+      draftImages:managementPanel==='photos'?[{uri:image,name:'nueva.jpg',mimeType:'image/jpeg',base64:'fixture'}]:[],remainingImageSlots:managementPanel==='photos'?0:1};}});
+    mocks.delete(path.join(sourceRoot,'features/marketplace/physicalgoods/components/PhysicalgoodsEditor.tsx'));
+    mocks.delete(path.join(sourceRoot,'features/marketplace/physicalgoods/components/PhysicalgoodsManagement.tsx'));
+    add('features/marketplace/physicalgoods/hooks/useEditPhysicalgoods.ts',{useEditPhysicalgoods:()=>({canManage:true,draft:managementPanel==='edit'?{title:physicalRows[0].title,description:'Calculadora en buen estado. Incluye cubierta protectora.',condition:'BUEN_ESTADO',modality:'VENTA',price:'12000',updatedAt:'2026-10-25T12:00:00.000000Z'}:null,setDraft:noop,start:noop,cancel:noop,reload:noop,setConfirm:noop,save:async()=>true,withdraw:noop,error:null})});
+  }
   add('features/reports/components/ContentReportForm.tsx', { ContentReportForm: nil });
   if (mode !== 'report' && !(inlinePanel && variant === 'report-form')) add('features/marketplace/components/MarketplaceReportForm.tsx', { MarketplaceReportForm: nil });
   add('features/marketplace/elibrary/hooks/useDigitalLibrary.ts', { useDigitalLibrary: () => ({
@@ -75,6 +88,8 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     const publicationCatalog = { careers: [...catalog.careers, { id: 'career2', name: 'Ingeniería en Administración', code: 'ADM' }], subjects: [{ ...catalog.subjects[0], careerIds: ['career', 'career2'] }, { id: 'subject2', name: 'Álgebra aplicada', code: 'ALG', careerIds: ['career'] }] };
     const sample = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="440" height="250"><rect width="440" height="250" fill="#e9f0f6"/><rect x="165" y="20" width="110" height="210" rx="15" fill="#002e56"/><rect x="180" y="38" width="80" height="45" rx="4" fill="#c8d7e0"/><g fill="#fdbb30"><rect x="180" y="103" width="20" height="18"/><rect x="210" y="103" width="20" height="18"/><rect x="240" y="103" width="20" height="18"/></g><g fill="#3f6a8e"><rect x="180" y="135" width="80" height="65" rx="4"/></g></svg>');
     const photos = [{ uri: sample, name: 'calculadora.jpg', mimeType: 'image/jpeg', base64: 'fixture' }, { uri: sample, name: 'detalle.jpg', mimeType: 'image/jpeg', base64: 'fixture' }];
+    if(variant==='three-images')photos.push({...photos[0],name:'cubierta.jpg',uri:sample.replace(encodeURIComponent('#002e56'),encodeURIComponent('#3f6a8e'))});
+    if(variant==='single-image')photos.splice(1);
     add('features/marketplace/physicalgoods/hooks/usePublishPhysicalgoods.ts', { usePublishPhysicalgoods: () => ({
       options: state === 'error-options' ? null : { ...catalog, campus: { id: 'qa', name: 'Campus de prueba' }, categories: [{ id: 'books', name: 'Material académico' }, { id: 'other', name: 'Otros' }, { id: 'tech', name: 'Tecnología' }] },
       loading: state === 'loading', busy: state === 'busy', pickingPhoto: false, created: variant === 'partial' ? { id: 'saved', title: 'Calculadora científica', modality: 'VENTA', price: 12000 } : null,
@@ -162,6 +177,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       requestRows.splice(0,requestRows.length,first,finished);
     }
   }
+  if(physical&&priceHistory){const row=requestRows[0];Object.assign(row,{requestedTerms:historyTerms,publication:{...row.publication,modality:'VENTA',price:8000}});if(row.transaction)Object.assign(row.transaction,{modality:'VENTA',amount:8000,currency:'CLP'});}
   const requestState = { open: true, received: variant !== 'sent', rows: state === 'empty' || state === 'error' ? [] : requestRows, number: 1, page: { data: state === 'empty' || state === 'error' ? [] : requestRows, meta: { hasMore: false } },
     loading: state === 'loading', error: state === 'error' ? 'No se pudo conectar. Revisa tu conexión e inténtalo otra vez.' : null, busy: false, selection: null, hasMore: false,
     reload: noop, mode: noop, select: noop, resolve: noop, cancel: noop, cancelSelection: noop, previous: noop, next: noop, setNumber: noop,
@@ -254,6 +270,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       confirmations: [{ userId: 'owner', role: 'PROPIETARIO', confirmedAt: '2026-10-24T12:00:00Z' }, { userId: 'qa', role: 'RECEPTOR', confirmedAt: '2026-10-24T12:30:00Z' }],
       publication: { ...data.publication, status: physical ? 'FINALIZADO' : 'DISPONIBLE' },
       canRate: variant !== 'rated', rating: variant === 'rated' ? { id: 'rating', score: ratingScore, createdAt: '2026-10-24T12:35:00Z' } : null });
+    if(physical&&priceHistory)Object.assign(data,{amount:8000,requestedTerms:historyTerms});
     if (variant === 'participants-donation') Object.assign(data, { modality: 'DONACION', amount: null });
     if (variant === 'participants-buyer') Object.assign(data, { role: 'RECEPTOR', ownerId: 'owner', receiverId: 'qa', owner: { ...data.owner, id: 'owner' }, receiver: { ...data.receiver, id: 'qa' } });
     if (variant === 'participants-same-name') data.receiver.fullName = data.owner.fullName;
@@ -316,11 +333,20 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   if (mode === 'report' || (inlinePanel && variant === 'report-form')) add('features/reports/hooks/useContentReport.ts', { useContentReport: () => ({ busy: state === 'busy', error: state === 'error' ? 'No se pudo confirmar el envío. Si se guardó, reenviarla podría crear otra denuncia.' : null,
     receipt: variant === 'receipt' ? { id: 'receipt', status: 'PENDIENTE', reportedAt: '2026-10-24T12:35:00Z' } : null, submit: noop }) });
   if (refreshing) mocks.delete(path.join(sourceRoot, 'components/RefreshScrollView.tsx'));
+  if(physical&&priceHistory){
+    const originalTerms=historyTerms;
+    const resourceMock=mocks.get(path.join(sourceRoot,'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts'));
+    const resource=resourceMock.usePhysicalgoodsResources();resourceMock.usePhysicalgoodsResources=()=>({...resource,gallery:resource.gallery?{...resource.gallery,modality:'VENTA',price:8000,originalTerms}:null});
+    const productMock=mocks.get(path.join(sourceRoot,'features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementProduct.ts'));
+    const read=productMock.usePhysicalgoodsAgreementProduct;productMock.usePhysicalgoodsAgreementProduct=(...args)=>{const value=read(...args);return {...value,product:value.product?{...value.product,modality:'VENTA',price:8000,originalTerms}:null};};
+    const agreementMock=mocks.get(path.join(sourceRoot,'features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementPage.ts'));
+    const agreements=agreementMock.usePhysicalgoodsAgreementPage;agreementMock.usePhysicalgoodsAgreementPage=(...args)=>{const value=agreements(...args);return {...value,details:Object.fromEntries(Object.entries(value.details).map(([id,row])=>[id,{...row,modality:'VENTA',amount:8000,requestedTerms:originalTerms}]))};};
+  }
   const cache = new Map();
   const browserNative = { ...native, useWindowDimensions: () => ({ width, height: 844, scale: 1, fontScale: 1 }) };
   // SSR cannot create RN Modal portals. The HTML fixture moves these wrappers to body,
   // preserving stacking order and preventing nested dialogs from clipping other modals.
-  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || mode==='acquired-detail' || inlinePanel || sentResource || receivedResource || receivedOpen || publicationOpen) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
+  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || mode==='acquired-detail' || inlinePanel || sentResource || receivedResource || receivedOpen || publicationOpen || managementPanel) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
   const originalLoad = Module._load;
   Module._load = function(name, parent, isMain) {
     if (name === 'react-native') return native;
@@ -344,6 +370,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       if (name === 'react' && ratingSent && /PhysicalgoodsTransaction\.tsx$/.test(filename)) return { ...React, useRef: initial => React.useRef(initial && typeof initial === 'object' && 'started' in initial ? { ...initial, started: true } : initial) };
       if (name === 'react' && mode === 'filters' && /(?:PhysicalgoodsSearchFilters|DigitalSearchForm)\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === false ? true : initial === null ? ['careerId', 'subjectId', 'categoryId', 'condition'].includes(variant) ? variant : null : initial) };
       if (name === 'react' && (mode === 'filters' || mode === 'publish') && /SearchableFilterSelect\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === '' ? filterQuery : initial) };
+      if (name === 'react' && managementPanel && /PhysicalgoodsManagement\.tsx$/.test(filename)) return {...React,useState:initial=>React.useState(initial==='overview'?managementPanel:initial===false&&variant==='category-menu'?true:initial)};
       if (name === 'react' && mode === 'publish' && /PublishPhysicalgoods\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(initial === 'explore' ? 'publish' : initial === null && ['condition','categoryId','careerId','subjectId'].includes(variant) ? variant : initial) };
       if (name === 'react' && !physical && mode === 'transactions' && /DigitalActivityTransactions\.tsx$/.test(filename)) return {...React,useState:initial=>{const index=requestStateIndex++;return React.useState(index===0&&agreementTab==='finished'?'finished':index===2&&inlinePanel?{trade:activityTrade,panel:inlinePanel}:index===4&&variant==='rating'?ratingScore:initial);}};
       if (name === 'react' && !physical && /DigitalActivityRequests\.tsx$/.test(filename)) return {...React,useState:initial=>{const index=requestStateIndex++;return React.useState(index===0&&mode==='agreements'?variant!=='sent':index===2&&sentOpen?activityRequest.id:index===5&&receivedOpen?{publicationId:activityRequest.publicationId,title:activityRequest.title,campusName:activityRequest.campusName,modality:'VENTA',amount:2500,total:11,pending:10,active:1,completed:0}:initial);}};
@@ -380,10 +407,10 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
     return module.exports;
   }
   try {
-    const target = mode === 'request-detail' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'filters' ? physical ? 'physicalgoods/components/PhysicalgoodsSearchFilters.tsx' : 'elibrary/components/DigitalSearchForm.tsx' : mode === 'report' ? 'components/MarketplaceReportForm.tsx' : mode === 'transaction' ? physical ? 'physicalgoods/components/PhysicalgoodsTransaction.tsx' : 'elibrary/components/DigitalTradeCenter.tsx' : !physical && personalMode ? 'elibrary/components/DigitalPersonalLibrary.tsx' : mode === 'transactions' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'requests' ? physical ? 'physicalgoods/components/PhysicalgoodsRequests.tsx' : 'elibrary/components/DigitalRequests.tsx'
+    const target = managementPanel ? 'physicalgoods/components/PhysicalgoodsManagement.tsx' : mode === 'request-detail' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'filters' ? physical ? 'physicalgoods/components/PhysicalgoodsSearchFilters.tsx' : 'elibrary/components/DigitalSearchForm.tsx' : mode === 'report' ? 'components/MarketplaceReportForm.tsx' : mode === 'transaction' ? physical ? 'physicalgoods/components/PhysicalgoodsTransaction.tsx' : 'elibrary/components/DigitalTradeCenter.tsx' : !physical && personalMode ? 'elibrary/components/DigitalPersonalLibrary.tsx' : mode === 'transactions' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'requests' ? physical ? 'physicalgoods/components/PhysicalgoodsRequests.tsx' : 'elibrary/components/DigitalRequests.tsx'
       : physical ? detailMode ? 'physicalgoods/components/PhysicalgoodsDetail.tsx' : 'physicalgoods/components/PublishPhysicalgoods.tsx' : 'elibrary/components/DigitalLibraryScreen.tsx';
     const exports = load(path.join(sourceRoot, 'features/marketplace', target));
-    const Screen = mode === 'request-detail' ? () => React.createElement(exports.PhysicalgoodsHistoryDetail, { target: { publicationId: 'physical-0', requestId: 'request-0' }, onClose: noop, onOpen: noop, onAgreement: noop }) : mode === 'filters' ? () => {
+    const Screen = managementPanel ? () => React.createElement(exports.PhysicalgoodsManagement,{resources:mocks.get(path.join(sourceRoot,'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources(),onClose:noop}) : mode === 'request-detail' ? () => React.createElement(exports.PhysicalgoodsHistoryDetail, { target: { publicationId: 'physical-0', requestId: 'request-0' }, onClose: noop, onOpen: noop, onAgreement: noop }) : mode === 'filters' ? () => {
       const careers = [{ id: 'career', name: 'Ingeniería en Informática', code: 'INF' }, { id: 'adm', name: 'Ingeniería en Administración', code: 'ADM' }, { id: 'design', name: 'Diseño gráfico', code: 'DIS' }, { id: 'construction', name: 'Construcción civil', code: 'CON' }, { id: 'tourism', name: 'Turismo', code: 'TUR' }];
       const subjects = [{ id: 'subject', name: 'Cálculo integral', code: 'MAT' }, { id: 'db', name: 'Bases de datos', code: 'BD' }, { id: 'prog', name: 'Programación de aplicaciones', code: 'PROG' }, { id: 'algebra', name: 'Álgebra lineal', code: 'ALG' }];
       const resourceState = mocks.get(path.join(sourceRoot, 'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources();

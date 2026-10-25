@@ -6,15 +6,15 @@ import {CATALOG_COLORS as colors} from './CatalogUI';
 
 export type RequestTone='pending'|'accepted'|'completed'|'rejected'|'closed';
 
-export function RequestAccordionCard({title,initialName,subtitle,trailing,expanded,disabled=false,onToggle,children,tone='accepted',label=`solicitud: ${title}`}:{
-  title:string;initialName:string;subtitle:string;trailing:string;expanded:boolean;disabled?:boolean;onToggle:()=>void;children?:ReactNode;tone?:RequestTone;label?:string;
+export function RequestAccordionCard({title,initialName,subtitle,trailing,expanded,disabled=false,onToggle,children,tone='accepted',label=`solicitud: ${title}`,trailingContent}:{
+  title:string;initialName:string;subtitle:string;trailing:string;expanded:boolean;disabled?:boolean;onToggle:()=>void;children?:ReactNode;tone?:RequestTone;label?:string;trailingContent?:ReactNode;
 }){
   const Chevron=expanded?ChevronUp:ChevronDown;
   return <View style={requestAccordionUI.card}>
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${expanded?'Contraer':'Abrir'} ${label}`} aria-expanded={expanded} accessibilityState={{expanded,disabled}} disabled={disabled} activeOpacity={0.75} onPress={onToggle} style={requestAccordionUI.header}>
       <View accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[requestAccordionUI.avatar,{backgroundColor:tone==='pending'?colors.secondary:tone==='closed'||tone==='rejected'?colors.muted:colors.primary}]}><Text style={requestAccordionUI.initial}>{initialName.trim().charAt(0).toLocaleUpperCase('es-CL')||'?'}</Text></View>
       <View style={requestAccordionUI.heading}><Text numberOfLines={expanded?undefined:1} style={requestAccordionUI.title}>{title}</Text><Text numberOfLines={expanded?undefined:1} style={requestAccordionUI.subtitle}>{subtitle}</Text></View>
-      <View style={requestAccordionUI.trailing}><Text style={expanded?requestAccordionUI.date:requestAccordionUI.compactAmount} numberOfLines={1}>{trailing}</Text><View accessible={false} aria-hidden><Chevron size={16} color={colors.secondary}/></View></View>
+      <View style={requestAccordionUI.trailing}>{trailingContent??<Text style={expanded?requestAccordionUI.date:requestAccordionUI.compactAmount} numberOfLines={1}>{trailing}</Text>}<View accessible={false} aria-hidden><Chevron size={16} color={colors.secondary}/></View></View>
     </TouchableOpacity>
     {expanded&&<View style={requestAccordionUI.body}>{children}</View>}
   </View>;

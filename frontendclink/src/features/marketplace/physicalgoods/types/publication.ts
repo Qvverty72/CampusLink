@@ -1,6 +1,7 @@
 import type { ResourceOwner } from '../../types/resource';
 
 export const PHYSICALGOODS_MAX_IMAGES = 3;
+export interface PhysicalgoodsTerms {modality:'VENTA'|'DONACION';amount:number|null;currency:string}
 
 export const resourceConditions = [
   { value: 'NUEVO', label: 'Nuevo' }, { value: 'BUEN_ESTADO', label: 'Buen estado' },
@@ -65,6 +66,7 @@ export const emptyPhysicalgoodsFilters: PhysicalgoodsSearchFilters = {
   q: '', categoryId: '', modality: '', condition: '', careerId: '', subjectId: '', minPrice: '', maxPrice: '', mine: false,
 };
 export interface PhysicalgoodsGallery extends PhysicalgoodsResource {
+  originalTerms?:PhysicalgoodsTerms|null;
   updatedAt: string;
   description: string;
   campus: { id: string; name: string };
@@ -79,6 +81,7 @@ export interface PhysicalgoodsPage {
   meta: { page: number; limit: number; hasMore: boolean };
 }
 export interface PhysicalgoodsRequest {
+  requestedTerms?:PhysicalgoodsTerms|null;
   id: string;
   publicationId: string;
   requesterId: string;
@@ -97,6 +100,7 @@ export interface PhysicalgoodsRequestOptions {
 export interface PhysicalgoodsRequestCounts {sentAccepted:number;receivedPending:number;pendingRequests:number;pendingTransactions:number}
 
 export interface PhysicalgoodsReceivedRequest {
+  requestedTerms?:PhysicalgoodsTerms|null;
   id: string;
   publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean;isWithdrawn:boolean;publishedAt?:string };
   campus:{id:string;name:string};
@@ -116,6 +120,7 @@ export interface PhysicalgoodsReceivedPage {
 export interface PhysicalgoodsTransactionTarget { publicationId:string; transactionId:string }
 export interface PhysicalgoodsRating {id:string;score:number;createdAt:string}
 export interface PhysicalgoodsTransaction {
+  requestedTerms?:PhysicalgoodsTerms|null;
   id:string;
   publication:{id:string;title:string;status:string;isWithdrawn:boolean};
   campus:{id:string;name:string};
@@ -147,6 +152,7 @@ export interface PhysicalgoodsOwnPublication extends PhysicalgoodsResource {
   publishedAt:string;
 }
 export interface PhysicalgoodsOwnDetail extends PhysicalgoodsOwnPublication {
+  originalTerms?:PhysicalgoodsTerms|null;
   description:string;
   images:PhysicalgoodsGallery['images'];
   expiresIn:number;

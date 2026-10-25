@@ -11,8 +11,8 @@ import type { ReactNode } from 'react';
 
 const agreedPrice = (modality: string, amount: number | null, currency: string) => modality === 'DONACION' ? copy.donation : amount === null ? 'Precio no disponible' : `$${amount.toLocaleString('es-CL')} ${currency}`;
 
-function AgreementAmount({ modality, amount, currency }: { modality: string; amount: number | null; currency: string }) {
-  return <View style={styles.amountRow}><Text style={detailUI.helper}>{copy.agreedAmount} <Text style={styles.amount}>{agreedPrice(modality, amount, currency)}</Text></Text></View>;
+function AgreementAmount({ modality, amount, currency,content }: { modality: string; amount: number | null; currency: string;content?:ReactNode }) {
+  return <View style={styles.amountRow}>{content??<Text style={detailUI.helper}>{copy.agreedAmount} <Text style={styles.amount}>{agreedPrice(modality, amount, currency)}</Text></Text>}</View>;
 }
 
 export function AgreementStatusChip({ state, label }: { state?: AgreementUIState; label: string }) {
@@ -41,11 +41,11 @@ export function AgreementMenu({ visible, onClose, onDismiss = onClose, actions, 
   return embedded ? visible ? content : null : <FilterSheet compact visible={visible} title={copy.menu} confirmLabel={null} onClose={onDismiss}>{content}</FilterSheet>;
 }
 
-export function AgreementSummary({ participants, modality, amount, currency, currentUserId, embedded = false }: {
-  participants: TransactionParticipant[]; modality: string; amount: number | null; currency: string; currentUserId?: string; embedded?: boolean;
+export function AgreementSummary({ participants, modality, amount, currency, currentUserId, embedded = false,amountContent }: {
+  participants: TransactionParticipant[]; modality: string; amount: number | null; currency: string; currentUserId?: string; embedded?: boolean;amountContent?:ReactNode;
 }) {
   return <AgreementParticipants participants={participants} donation={modality === 'DONACION'} currentUserId={currentUserId} embedded={embedded}>
-    <AgreementAmount modality={modality} amount={amount} currency={currency} />
+    <AgreementAmount modality={modality} amount={amount} currency={currency} content={amountContent}/>
   </AgreementParticipants>;
 }
 
@@ -97,17 +97,18 @@ export function AgreementStepper({ state, digital = false, selected, onSelect, d
 }
 
 /** Pasos y menú son destinos hermanos; el contenedor no intercepta sus toques. */
-export function AgreementCard({ title, roleLabel, participants, currentUserId, modality, amount, currency, state, label, dateLabel, ratingScore, onSelect, onMenu, disabled = false, digital = false }: {
+export function AgreementCard({ title, roleLabel, participants, currentUserId, modality, amount, currency, state, label, dateLabel, ratingScore, onSelect, onMenu, disabled = false, digital = false,amountNote,amountContent }: {
   title: string; roleLabel: string; participants?: TransactionParticipant[]; currentUserId?: string; modality: string; amount: number | null; currency: string;
-  state?: AgreementUIState; label: string; dateLabel: string; ratingScore?: number | null; onSelect: (step: AgreementStep) => void; onMenu: () => void; disabled?: boolean; digital?:boolean;
+  state?: AgreementUIState; label: string; dateLabel: string; ratingScore?: number | null; onSelect: (step: AgreementStep) => void; onMenu: () => void; disabled?: boolean; digital?:boolean;amountNote?:string;amountContent?:ReactNode;
 }) {
   return <View style={styles.card}>
     <View style={styles.cardHeading}><Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel={`${copy.menu}: ${title}`} disabled={disabled} accessibilityState={{ disabled }} onPress={onMenu} style={styles.menuButton}><MoreHorizontal size={22} color={colors.primary} /></Pressable>
     </View>
-    {participants ? <AgreementSummary embedded participants={participants} currentUserId={currentUserId} modality={modality} amount={amount} currency={currency} />
-      : <><Text style={styles.cardHelper}>{roleLabel}</Text><Text style={detailUI.helper}>{copy.participantsUnavailable}</Text><AgreementAmount modality={modality} amount={amount} currency={currency} />
+    {participants ? <AgreementSummary embedded participants={participants} currentUserId={currentUserId} modality={modality} amount={amount} currency={currency} amountContent={amountContent}/>
+      : <><Text style={styles.cardHelper}>{roleLabel}</Text><Text style={detailUI.helper}>{copy.participantsUnavailable}</Text><AgreementAmount modality={modality} amount={amount} currency={currency} content={amountContent}/>
         <Pressable accessibilityRole="button" disabled={disabled} onPress={() => onSelect('accepted')} style={ui.outlined}><Text style={ui.link}>{copy.retryTransaction}</Text></Pressable></>}
+    {amountNote&&<Text style={detailUI.helper}>{amountNote}</Text>}
     {state && <AgreementStepper state={state} digital={digital} showCancelled disabled={disabled} onSelect={onSelect} />}
     {state === 'FINALIZADO' && <TransactionRating score={ratingScore} />}
     <View style={styles.cardFooter}><Text style={styles.cardHelper}>{label}</Text><Text style={detailUI.helper}>{dateLabel}</Text></View>

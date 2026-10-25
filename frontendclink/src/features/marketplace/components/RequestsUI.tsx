@@ -80,14 +80,15 @@ export function RequestsPager({ page, hasMore, disabled, onPrevious, onNext, ite
   </View>;
 }
 
-export function RequestDecisionDialog({ selection, physical = false, disabled, onConfirm, onCancel, embedded = false }: {
+export function RequestDecisionDialog({ selection, physical = false, disabled, onConfirm, onCancel, embedded = false,details }: {
   selection: { name: string; title: string; decision: 'ACEPTAR' | 'RECHAZAR' } | null; physical?: boolean;
-  disabled: boolean; onConfirm: () => void; onCancel: () => void;embedded?:boolean;
+  disabled: boolean; onConfirm: () => void; onCancel: () => void;embedded?:boolean;details?:ReactNode;
 }) {
   const content=<View style={[requestUI.overlay,embedded&&StyleSheet.absoluteFill]}><ScrollView contentContainerStyle={requestUI.dialogScroll} keyboardShouldPersistTaps="handled">
       {selection && <View accessibilityViewIsModal style={requestUI.dialog}>
         <Text accessibilityRole="header" style={ui.sectionTitle}>{selection.decision === 'ACEPTAR' ? 'Aceptar' : 'Rechazar'} solicitud</Text>
         <Text style={detailUI.body}>{selection.name} · {selection.title}</Text>
+        {details}
         <Text style={detailUI.helper}>{selection.decision === 'RECHAZAR' ? 'La solicitud quedará rechazada. Su registro se conservará en el historial.' : physical
           ? 'El recurso quedará reservado para esta persona. Las demás solicitudes seguirán pendientes.'
           : 'Se iniciará un acuerdo con esta persona. El recurso seguirá disponible para otros estudiantes.'}</Text>
