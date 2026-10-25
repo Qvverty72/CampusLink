@@ -9,6 +9,14 @@ import { pickPublicationPhotos } from '../api/photoPicker';
 import type { PhysicalgoodsGallery, PhysicalgoodsPage, PublicationOptions, PublicationPhoto } from '../types/publication';
 import { emptyPhysicalgoodsFilters, PHYSICALGOODS_MAX_IMAGES, type PhysicalgoodsSearchFilters } from '../types/publication';
 
+/** Conserva tarjetas idénticas y respeta las altas/bajas y el orden de la página autorizada. */
+function reconcilePage(previous:PhysicalgoodsPage|null,next:PhysicalgoodsPage):PhysicalgoodsPage {
+  if(!previous)return next;
+  if(JSON.stringify(previous)===JSON.stringify(next))return previous;
+  const existing=new Map(previous.data.map(row=>[row.id,row]));
+  return {...next,data:next.data.map(row=>{const old=existing.get(row.id);return old&&JSON.stringify(old)===JSON.stringify(row)?old:row;})};
+}
+
 /** Coordina filtros, paginación, galería, imágenes y mutaciones de publicaciones físicas. */
 export function usePhysicalgoodsResources() {
   const auth = useAuth();
@@ -33,32 +41,59 @@ export function usePhysicalgoodsResources() {
     else setMessage(reason instanceof AuthApiError ? reason.serverMessage || 'No se pudo completar la operación.' : reason instanceof Error ? reason.message : 'No se pudo completar la operación.');
   }
   useEffect(() => {
-    const abort = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
+    const abort = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined,renew=false;
     setLoading(true); setError(null); setPage(null);
-    void Promise.all([loadPublicationOptions(abort.signal), loadPhysicalgoodsResources(applied, number, abort.signal)])
-      .then(([catalog, result]) => { if (!abort.signal.aborted) {
-        setOptions(catalog); setPage(result);
-        if (result.data.some(resource => resource.imageUrl)) timer = setTimeout(() => setRevision(value => value + 1), 50000);
-      } })
-      .catch(reason => { if (!abort.signal.aborted) report(reason, setError); })
-      .finally(() => { if (!abort.signal.aborted) setLoading(false); });
+    async function read(silent=false){
+      try {
+        const [catalog,result]=await Promise.all([silent?Promise.resolve(null):loadPublicationOptions(abort.signal),loadPhysicalgoodsResources(applied,number,abort.signal)]);
+        if(abort.signal.aborted)return;
+        if(catalog)setOptions(catalog);
+        setPage(previous=>reconcilePage(previous,result));
+        renew=result.data.some(resource=>resource.imageUrl);
+      } catch(reason){
+        if(abort.signal.aborted)return;
+        if(!silent||reason instanceof AuthApiError&&[401,403].includes(reason.status)){
+          renew=false;if(silent)setPage(null);report(reason,setError);
+        }
+      } finally {
+        if(!abort.signal.aborted){
+          if(!silent)setLoading(false);
+          if(renew)timer=setTimeout(()=>void read(true),50000);
+        }
+      }
+    }
+    void read();
     return () => { abort.abort(); if (timer) clearTimeout(timer); };
   }, [applied, number, revision]);
   useEffect(() => {
     if (!selectedId) return;
-    const abort = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
+    const abort = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined,renew=false;
     setGalleryLoading(true); setGallery(null);
-    void loadPhysicalgoodsGallery(selectedId, abort.signal).then(result => {
-      if (abort.signal.aborted) return;
-      setGallery(result);
-      if (opening.current?.id === selectedId && !opening.current.recorded) {
-        opening.current.recorded = true;
-        void recordResourceOpening(selectedId, opening.current.key);
+    async function read(silent=false){
+      if(silent&&running.current){timer=setTimeout(()=>void read(true),50000);return;}
+      try {
+        const result=await loadPhysicalgoodsGallery(selectedId!,abort.signal);
+        if(abort.signal.aborted)return;
+        setGallery(previous=>JSON.stringify(previous)===JSON.stringify(result)?previous:result);
+        if(opening.current?.id===selectedId&&!opening.current.recorded){
+          opening.current.recorded=true;
+          void recordResourceOpening(selectedId!,opening.current.key);
+        }
+        if(savedCategory.current!==result.category.id){setEditCategory(result.category.id);savedCategory.current=result.category.id;}
+        renew=true;
+      } catch(reason){
+        if(abort.signal.aborted)return;
+        if(!silent||reason instanceof AuthApiError&&[401,403,404].includes(reason.status)){
+          renew=false;setGallery(null);report(reason,setGalleryError);
+        }
+      } finally {
+        if(!abort.signal.aborted){
+          if(!silent)setGalleryLoading(false);
+          if(renew)timer=setTimeout(()=>void read(true),50000);
+        }
       }
-      if (savedCategory.current !== result.category.id) { setEditCategory(result.category.id); savedCategory.current = result.category.id; }
-      timer = setTimeout(() => setGalleryRevision(value => value + 1), 50000);
-    }).catch(reason => { if (!abort.signal.aborted) { setGallery(null); report(reason, setGalleryError); } })
-      .finally(() => { if (!abort.signal.aborted) setGalleryLoading(false); });
+    }
+    void read();
     return () => { abort.abort(); if (timer) clearTimeout(timer); };
   }, [selectedId, galleryRevision]);
   /** Serializa cambios de galería/categoría y recarga recursos tras cada operación. */

@@ -31,6 +31,7 @@ function renderForm(progress, error = null) {
     '@/features/auth/hooks/useAuth': { useAuth: () => ({}) },
     '@/types/colors': { APP_COLORS: { PRIMARY: '#003459' } },
     '../hooks/useDigitalLibrary': { useDigitalLibrary: () => state },
+    '../hooks/useDigitalActivity': { useDigitalActivityCounts: () => ({counts:null,loading:false,reload:()=>{}}) },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
   };
   for (const [name, exports] of Object.entries({

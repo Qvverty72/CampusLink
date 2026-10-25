@@ -6,7 +6,7 @@ export type SentRequestTone=RequestTone;
 
 /** Presentación compartida de una solicitud propia; no contiene DTO ni acciones de dominio. */
 export function SentRequestCard({title,ownerName,campus,requestedAt,message,amount,amountLabel,summary,status,tone,expanded,disabled=false,onToggle,children,amountContent,collapsedPriceContent}:{
-  title:string;ownerName:string;campus:string;requestedAt:string;message:string;amount:string;amountLabel:string;
+  title:string;ownerName:string;campus?:string;requestedAt:string;message:string;amount:string;amountLabel:string;
   summary:string;status:string;tone:SentRequestTone;expanded:boolean;disabled?:boolean;onToggle:()=>void;children?:ReactNode;amountContent?:ReactNode;collapsedPriceContent?:ReactNode;
 }) {
   const date=new Date(requestedAt),valid=!Number.isNaN(date.getTime());

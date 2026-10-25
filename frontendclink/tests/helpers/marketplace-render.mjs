@@ -346,7 +346,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   const browserNative = { ...native, useWindowDimensions: () => ({ width, height: 844, scale: 1, fontScale: 1 }) };
   // SSR cannot create RN Modal portals. The HTML fixture moves these wrappers to body,
   // preserving stacking order and preventing nested dialogs from clipping other modals.
-  if (mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || mode==='acquired-detail' || inlinePanel || sentResource || receivedResource || receivedOpen || publicationOpen || managementPanel) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
+  if ((!physical&&detailMode) || mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || mode==='acquired-detail' || inlinePanel || sentResource || receivedResource || receivedOpen || publicationOpen || managementPanel) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
   const originalLoad = Module._load;
   Module._load = function(name, parent, isMain) {
     if (name === 'react-native') return native;

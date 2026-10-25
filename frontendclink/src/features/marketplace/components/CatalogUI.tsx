@@ -14,15 +14,18 @@ export const CATALOG_COLORS = {
   primary: APP_COLORS.PRIMARY, secondary: APP_COLORS.SECONDARY,
 };
 
-export function ScreenHeader({ title, subtitle, action, onAction, onBack }: {
-  title: string; subtitle: string; action?: string; onAction?: () => void; onBack?: () => void;
+export function ScreenHeader({ title, subtitle, action, onAction, onBack, actionBadgeCount }: {
+  title: string; subtitle: string; action?: string; onAction?: () => void; onBack?: () => void; actionBadgeCount?:number;
 }) {
+  const count=typeof actionBadgeCount==='number'&&Number.isFinite(actionBadgeCount)&&actionBadgeCount>0?actionBadgeCount:0;
   return <View style={ui.header}>
     {onBack && <Pressable accessibilityRole="button" accessibilityLabel="Volver al catálogo" onPress={onBack} style={ui.back}>
       <ArrowLeft size={18} color={CATALOG_COLORS.primary} /><Text style={ui.link}>Volver</Text>
     </Pressable>}
     <View style={ui.headingRow}><Text accessibilityRole="header" style={ui.title}>{title}</Text>
-      {action && <Pressable accessibilityRole="button" onPress={onAction} style={ui.outlined}><Text style={ui.actionText}>{action}</Text></Pressable>}
+      {action && <Pressable accessibilityRole="button" accessibilityLabel={count?`${action}, ${count} ${count===1?'pendiente':'pendientes'} en Solicitudes y Transacciones`:action} onPress={onAction} style={[ui.outlined,ui.headerAction]}><Text style={ui.actionText}>{action}</Text>
+        {count>0&&<View accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={ui.tabBadge}><Text style={ui.tabBadgeText}>{count>99?'99+':count}</Text></View>}
+      </Pressable>}
     </View>
     <Text style={ui.subtitle}>{subtitle}</Text>
   </View>;
@@ -171,6 +174,7 @@ export const ui = StyleSheet.create({
   subtitle: { color: CATALOG_COLORS.muted, fontSize: 13, lineHeight: 20 },
   sectionTitle: { color: CATALOG_COLORS.ink, fontSize: 16, fontWeight: '800' },
   outlined: { minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: CATALOG_COLORS.inputBorder, paddingHorizontal: 12 },
+  headerAction:{flexDirection:'row',gap:6,flexShrink:0},
   actionText: { fontSize: 12, fontWeight: '700', color: CATALOG_COLORS.primary }, link: { fontSize: 13, fontWeight: '700', color: CATALOG_COLORS.primary },
   back: { minHeight: 44, flexDirection: 'row', gap: 6, alignItems: 'center', alignSelf: 'flex-start' },
   search: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: CATALOG_COLORS.inputBorder, backgroundColor: '#FFFFFF', paddingLeft: 14, flexDirection: 'row', gap: 10, alignItems: 'center' },

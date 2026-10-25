@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { renderCatalog } from './helpers/marketplace-render.mjs';
 
+function digitalDetailMarkup(options){
+ const{markup}=renderCatalog('digital',options),start=markup.indexOf('data-qa-modal-portal="true"');
+ assert.ok(start>=0,'El detalle digital debe estar dentro del modal');return markup.slice(start);
+}
+
 for (const screen of ['physical', 'digital']) {
   test(`${screen}: portada real con Babel/NativeWind, navegación institucional y un solo acceso para publicar`, () => {
     const { markup } = renderCatalog(screen);
@@ -14,6 +19,13 @@ for (const screen of ['physical', 'digital']) {
     assert.match(markup, /aria-selected="true"/);
     if (screen === 'digital') { assert.match(markup, /Recomendados para ti/); assert.match(markup, /Ya lo tienes/); }
     else assert.match(markup, /Buen estado/);
+    const action=screen==='physical'?'Mi actividad':'Mi biblioteca';
+    const requestCounts={sentAccepted:7,receivedPending:9,pendingRequests:1,pendingTransactions:2};
+    assert.ok(renderCatalog(screen,{requestCounts}).markup.includes(`aria-label="${action}, 3 pendientes en Solicitudes y Transacciones"`));
+    const large=renderCatalog(screen,{width:320,requestCounts:{...requestCounts,pendingRequests:100}}).markup;
+    assert.ok(large.includes(`${action}, 102 pendientes en Solicitudes y Transacciones`));assert.match(large,/>99\+</);
+    const zero=renderCatalog(screen,{requestCounts:{...requestCounts,pendingRequests:0,pendingTransactions:0}}).markup;
+    assert.ok(zero.includes(`aria-label="${action}"`));assert.ok(!zero.includes(`${action},`));
   });
   test(`${screen}: carga con skeleton, error con reintento y vacío con siguiente acción`, () => {
     const loading = renderCatalog(screen, { state: 'loading' }).markup;
@@ -39,7 +51,8 @@ test('physical detail renders gallery fallback, current status, public owner and
 });
 
 test('digital detail renders protected preview, academic metadata and real DTO owner figures without original download for a reader', () => {
-  const { markup } = renderCatalog('digital', { mode: 'detail' });
+  const markup = digitalDetailMarkup({ mode: 'detail' });
+  assert.doesNotMatch(markup,/aria-label="Navegación principal"/);
   for (const text of ['Vista previa protegida', 'Muestra limitada preparada por el servidor', 'Guía de cálculo integral', 'Ingeniería en Informática', 'Se desbloquea al completar el acuerdo', 'Camila González', '12 valoraciones', '16 transacciones completadas']) assert.ok(markup.includes(text), text);
   assert.doesNotMatch(markup,/Entrega en|ventas completadas/);
   assert.doesNotMatch(markup, /aria-label="Descargar/);
@@ -51,18 +64,19 @@ test('digital detail renders protected preview, academic metadata and real DTO o
 });
 
 test('opening a digital detail shows a skeleton and retry inside detail instead of flashing the catalog', () => {
-  assert.match(renderCatalog('digital', { mode: 'detail', state: 'loading' }).markup, /Cargando detalle del recurso/);
-  const error = renderCatalog('digital', { mode: 'detail', state: 'error' }).markup;
+  assert.match(digitalDetailMarkup({ mode: 'detail', state: 'loading' }), /Cargando detalle del recurso/);
+  const error = digitalDetailMarkup({ mode: 'detail', state: 'error' });
   assert.match(error, /Reintentar detalle/); assert.doesNotMatch(error, /Todos los recursos/);
 });
 
 for (const screen of ['physical', 'digital']) {
   test(`${screen}: request form uses the resource summary and predefined radio messages without free text`, () => {
-    const { markup } = renderCatalog(screen, { mode: 'request', width: 320 });
+    const markup = screen==='digital'?digitalDetailMarkup({mode:'request',width:320}):renderCatalog(screen,{mode:'request',width:320}).markup;
     assert.match(markup, /Mensaje para el propietario/); assert.match(markup, /Enviar solicitud/);
     assert.match(markup, /role="radiogroup"/); assert.match(markup, /aria-checked="true"/);
     assert.match(markup, screen === 'physical' ? /Recurso físico · Mercado/ : /Recurso digital · Biblioteca/);
     assert.doesNotMatch(markup, /<input|<textarea|Descargar archivo/);
+    if(screen==='digital')assert.doesNotMatch(markup,/aria-label="Navegación principal"/);
   });
   test(`${screen}: received inbox shows its current layout; failures do not show the empty state`, () => {
     const { markup } = renderCatalog(screen, { mode: 'requests' });

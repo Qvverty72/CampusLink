@@ -9,11 +9,12 @@ import {DigitalAcquiredActivity} from './DigitalAcquiredActivity';
 import {useDigitalActivityCounts} from '../hooks/useDigitalActivity';
 
 type Tab='owned'|'requests'|'transactions'|'acquired';
-export function DigitalPersonalLibrary({initialTab='acquired',initialPublicationId,onExplore,onPublish,onTitleChange,onOpenResource}:{initialTab?:Tab|'trades';initialPublicationId?:string;onExplore?:()=>void;onPublish?:()=>void;onTitleChange?:(title:string)=>void;onOpenResource?:(id:string)=>void}={}){
+export function DigitalPersonalLibrary({initialTab='acquired',initialPublicationId,onExplore,onPublish,onTitleChange,onOpenResource,activityCounters}:{initialTab?:Tab|'trades';initialPublicationId?:string;onExplore?:()=>void;onPublish?:()=>void;onTitleChange?:(title:string)=>void;onOpenResource?:(id:string)=>void;activityCounters?:ReturnType<typeof useDigitalActivityCounts>}={}){
  const first:Tab=initialTab==='trades'?'requests':initialTab;
  const [tab,setTab]=useState<Tab>(first),[visited,setVisited]=useState<Record<Tab,boolean>>({owned:first==='owned',requests:first==='requests',transactions:first==='transactions',acquired:first==='acquired'});
  const [receivedEntry,setReceivedEntry]=useState(0),[acquiredEntry,setAcquiredEntry]=useState({id:initialPublicationId,version:0});
- const counts=useDigitalActivityCounts();
+ const ownCounters=useDigitalActivityCounts(!activityCounters);
+ const counts=activityCounters??ownCounters;
  const tabsScroll=useRef<ScrollViewInstance>(null);
  const select=(next:Tab)=>{setVisited(old=>({...old,[next]:true}));setTab(next);};
  const reviewRequests=()=>{setReceivedEntry(value=>value+1);select('requests');};

@@ -36,7 +36,7 @@ class AuthApiError extends Error {}
 const auth = { identity: { userId: 'owner', campusId: 'campus' }, refreshIdentity() {} };
 const emptyPhysicalgoodsFilters = { q: '', categoryId: '', modality: '', condition: '', careerId: '', subjectId: '', minPrice: '', maxPrice: '', mine: false };
 function fixture(kind) {
-  const h = runtime(), calls = [], details = [];
+  const h = runtime(), calls = [], details = [],optionReads=[];
   const { useDebouncedValue } = load('hooks/useDebouncedValue.ts', { react: h.react }, h.globals);
   const shared = { react: h.react, '@/features/auth/hooks/useAuth': { useAuth: () => auth },
     '@/lib/api/authenticated-request': { AuthApiError }, '../../api/resourceInteractions': { recordResourceOpening() {} },
@@ -47,7 +47,8 @@ function fixture(kind) {
     ({ usePhysicalgoodsResources: hook } = load('physicalgoods/hooks/usePhysicalgoodsResources.ts', { ...shared,
       '@/lib/api/operation-id': { operationId: () => 'operation' }, '../api/photoPicker': {},
       '../types/publication': { emptyPhysicalgoodsFilters, PHYSICALGOODS_MAX_IMAGES: 3 },
-      '../api/physicalgoodsApi': { loadPublicationOptions: async () => ({ categories: [], careers: [], subjects: [] }), loadPhysicalgoodsResources: capture },
+      '../api/physicalgoodsApi': { loadPublicationOptions: async () => {optionReads.push(true);return { categories: [], careers: [], subjects: [] };}, loadPhysicalgoodsResources: capture,
+        loadPhysicalgoodsGallery:(id,signal)=>new Promise((resolve,reject)=>details.push({id,signal,resolve,reject})) },
     }, h.globals));
   } else {
     ({ useDigitalLibrary: hook } = load('elibrary/hooks/useDigitalLibrary.ts', { ...shared,
@@ -57,8 +58,43 @@ function fixture(kind) {
     }, h.globals));
   }
   let state;
-  return { h, calls, details, render() { for (let i = 0; i < 3; i++) state = h.render(hook); return state; } };
+  return { h, calls, details,optionReads, render() { for (let i = 0; i < 3; i++) state = h.render(hook); return state; } };
 }
+
+test('physical: automatic renewal keeps the loaded page, reconciles changes and discards a stale background response',async()=>{
+ const f=fixture('physical');let state=f.render();f.calls[0].resolve({data:[],meta:{hasMore:true}});await setImmediate();state=f.render();state.setNumber(2);state=f.render();
+ const same={id:'same',imageUrl:'signed',price:5000},changed={id:'changed',imageUrl:null,price:1000};
+ f.calls.at(-1).resolve({data:[same,changed,{id:'removed',imageUrl:null}],meta:{hasMore:true}});await setImmediate();state=f.render();const before=state.page;
+ f.h.tick(50000);state=f.render();assert.equal(state.loading,false);assert.equal(state.page,before);assert.equal(f.calls.at(-1).page,2);assert.equal(f.optionReads.length,2);
+ f.calls.at(-1).reject(new Error('offline'));await setImmediate();state=f.render();assert.equal(state.page,before);assert.equal(state.error,null);
+ f.h.tick(50000);state=f.render();f.calls.at(-1).resolve({data:[{...same},{...changed,price:8000},{id:'new',imageUrl:null}],meta:{hasMore:false}});await setImmediate();state=f.render();
+ assert.equal(state.loading,false);assert.equal(state.number,2);assert.equal(state.page.data[0],same);assert.equal(state.page.data[1].price,8000);assert.deepEqual(Array.from(state.page.data,row=>row.id),['same','changed','new']);
+ const stable=state.page;f.h.tick(50000);f.calls.at(-1).resolve(JSON.parse(JSON.stringify(stable)));await setImmediate();state=f.render();assert.equal(state.page,stable);
+ f.h.tick(50000);const stale=f.calls.at(-1);state.setFilter('q','nuevo');state=f.render();f.h.tick(300);state=f.render();assert.equal(stale.signal.aborted,true);
+ stale.resolve(before);f.calls.at(-1).resolve({data:[{id:'filtered',imageUrl:null}],meta:{hasMore:false}});await setImmediate();state=f.render();assert.equal(state.page.data[0].id,'filtered');assert.equal(state.number,1);assert.equal(f.h.timers.size,0);f.h.unmount();
+});
+
+test('physical: gallery renewal preserves content and edits, updates current state and stops after close',async()=>{
+ const f=fixture('physical');let state=f.render();f.calls[0].resolve({data:[],meta:{hasMore:false}});await setImmediate();state=f.render();state.open('resource');state=f.render();
+ const gallery={id:'resource',title:'Recurso',category:{id:'books'},images:[{id:'photo',url:'old'}],status:'DISPONIBLE',acceptsRequests:true};
+ f.details[0].resolve(gallery);await setImmediate();state=f.render();state.setEditCategory('draft');state=f.render();
+ f.h.tick(50000);state=f.render();assert.equal(state.galleryLoading,false);assert.equal(state.gallery,gallery);assert.equal(state.editCategory,'draft');
+ f.details.at(-1).reject(new Error('offline'));await setImmediate();state=f.render();assert.equal(state.gallery,gallery);assert.equal(state.galleryError,null);
+ f.h.tick(50000);f.details.at(-1).resolve({...gallery,status:'RESERVADO',acceptsRequests:false,images:[{id:'photo',url:'renewed'}]});await setImmediate();state=f.render();
+ assert.equal(state.galleryLoading,false);assert.equal(state.gallery.status,'RESERVADO');assert.equal(state.gallery.acceptsRequests,false);assert.equal(state.gallery.images[0].url,'renewed');assert.equal(state.editCategory,'draft');
+ f.h.tick(50000);const stale=f.details.at(-1);state.close();state=f.render();assert.equal(stale.signal.aborted,true);stale.resolve(gallery);await setImmediate();state=f.render();assert.equal(state.gallery,null);assert.equal(f.h.timers.size,0);f.h.unmount();
+});
+
+test('physical: background authorization loss and removed detail clear stale data instead of retrying silently',async()=>{
+ for(const status of [401,403,404]){
+  const f=fixture('physical');let state=f.render();f.calls[0].resolve({data:[{id:'resource',imageUrl:'signed'}],meta:{hasMore:false}});await setImmediate();state=f.render();
+  if(status===404){state.open('resource');state=f.render();f.details[0].resolve({id:'resource',category:{id:'books'},images:[]});await setImmediate();state=f.render();}
+  f.h.tick(50000);const reason=new AuthApiError('not available');reason.status=status;
+  (status===404?f.details:f.calls).at(-1).reject(reason);await setImmediate();state=f.render();assert.equal(status===404?state.gallery:state.page,null);
+  if(status===404){assert.match(state.galleryError,/operación/);f.calls.at(-1).resolve({data:[],meta:{hasMore:false}});await setImmediate();f.render();}
+  assert.equal(f.h.timers.size,0);f.h.unmount();
+ }
+});
 
 for (const kind of ['physical', 'digital']) {
   test(`${kind}: escritura agrupada a 300 ms, reinicio de página y descarte de respuesta obsoleta`, async () => {

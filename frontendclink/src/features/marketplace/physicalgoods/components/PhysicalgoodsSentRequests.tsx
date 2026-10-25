@@ -19,7 +19,7 @@ export function PhysicalgoodsSentRequests({state}:{
   const [resource,setResource]=useState<PhysicalgoodsReceivedRequest|null>(null);
   const disabled=state.busy||Boolean(state.selection);
   return <>{state.loading?<SentRequestsSkeleton expanded={Boolean(selection?.id)}/>:<View style={requestUI.cards}>{rows.map(request=>{
-    return <SentRequestCard key={request.id} title={request.publication.title} ownerName={request.owner.fullName} campus={request.campus.name}
+    return <SentRequestCard key={request.id} title={request.publication.title} ownerName={request.owner.fullName}
       requestedAt={request.requestedAt} message={request.message} {...sentRequestPresentation(request)}
       amountContent={<PhysicalgoodsRequestPrices request={request} showSelected/>} collapsedPriceContent={<PhysicalgoodsRequestPrices request={request} showSelected compact/>}
       expanded={selected===request.id} disabled={disabled} onToggle={()=>setSelection({key,id:selected===request.id?null:request.id})}>

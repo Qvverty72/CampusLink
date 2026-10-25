@@ -43,18 +43,19 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const personal = view !== 'explore' && !publishing;
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [view]);
   const [agreement,setAgreement]=useState<PhysicalgoodsTransactionTarget|null>(null),[requestsVersion,setRequestsVersion]=useState(0);
-  const requestCounters=usePhysicalgoodsRequestCounts(personal,requestsVersion);
+  const requestCounters=usePhysicalgoodsRequestCounts(!publishing,requestsVersion);
   const [historyDetail,setHistoryDetail]=useState<PhysicalgoodsHistoryTarget|null>(null);
   useEffect(()=>{if(initialPublicationId){setView('explore');resources.open(initialPublicationId);}},[initialPublicationId]);
   const refresh=()=>{resources.reload();resources.reloadGallery();setRequestsVersion(value=>value+1);};
+  const refreshCatalog=()=>{requestCounters.reload();return resources.refresh();};
   const openAgreement=(publicationId:string,transactionId:string)=>{setHistoryDetail(null);setAgreement({publicationId,transactionId});};
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
-    <RefreshScrollView ref={scroll} automaticallyAdjustKeyboardInsets refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: safeAreaInset('top', insets.top, { min: 24, offset: 16 }) }]} keyboardShouldPersistTaps="handled">
+    <RefreshScrollView ref={scroll} automaticallyAdjustKeyboardInsets refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? refreshCatalog : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: safeAreaInset('top', insets.top, { min: 24, offset: 16 }) }]} keyboardShouldPersistTaps="handled">
       <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : received || sent ? 'Mis Solicitudes' : personal ? 'Mis publicaciones' : 'Mercado'}
         subtitle={publishing ? 'Comparte un recurso físico con tu campus' : personal ? 'Tus publicaciones, solicitudes y transacciones' : 'Recursos físicos de tu campus'}
-        action={view === 'explore' ? 'Mi actividad' : undefined} onAction={() => setView('mine')}
-        onBack={view !== 'explore' ? () => setView('explore') : undefined} />
+        action={view === 'explore' ? 'Mi actividad' : undefined} actionBadgeCount={requestCounters.counts?(requestCounters.counts.pendingRequests+requestCounters.counts.pendingTransactions):undefined} onAction={() => {requestCounters.reload();setView('mine');}}
+        onBack={view !== 'explore' ? () => {requestCounters.reload();setView('explore');} : undefined} />
       {personal && <CatalogTabs variant="underline" selected={received || sent ? 'requests' : view === 'transactions' ? 'transactions' : 'mine'}
         onSelect={tab => { if (tab === 'requests') showRequests(requestView); else setView(tab); }} tabs={[
           { id: 'mine', label: 'Publicaciones' }, { id: 'requests', label: 'Solicitudes',badgeCount:requestCounters.counts?.pendingRequests,badgeLabel:requestCounters.counts?.pendingRequests===1?'solicitud pendiente':'solicitudes pendientes' }, { id: 'transactions', label: agreementCopy.tabTitle,badgeCount:requestCounters.counts?.pendingTransactions,badgeLabel:requestCounters.counts?.pendingTransactions===1?'transacción pendiente':'transacciones pendientes' },

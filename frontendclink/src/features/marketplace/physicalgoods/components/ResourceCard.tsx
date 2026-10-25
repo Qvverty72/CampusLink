@@ -5,9 +5,9 @@ import { CATALOG_COLORS, PriceTag, ui } from '../../components/CatalogUI';
 import { resourceConditions, type PhysicalgoodsResource } from '../types/publication';
 
 export function ResourceCard({ resource, onOpen }: { resource: PhysicalgoodsResource; onOpen: () => void }) {
-  const [failed, setFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string|null>(null);
   return <Pressable accessibilityRole="button" accessibilityLabel={`Ver detalle de ${resource.title}`} onPress={onOpen} style={styles.card}>
-    <View style={styles.photo}>{resource.imageUrl && !failed ? <Image source={{ uri: resource.imageUrl }} onError={() => setFailed(true)}
+    <View style={styles.photo}>{resource.imageUrl && resource.imageUrl!==failedUrl ? <Image source={{ uri: resource.imageUrl }} onError={() => setFailedUrl(resource.imageUrl??null)}
       style={styles.image} accessibilityLabel={`Imagen principal de ${resource.title}`} /> : <ImageIcon size={30} color={CATALOG_COLORS.secondary} />}</View>
     <View style={styles.info}><Text numberOfLines={2} style={styles.title}>{resource.title}</Text>
       <Text numberOfLines={1} style={styles.condition}>{resourceConditions.find(row => row.value === resource.condition)?.label}</Text>

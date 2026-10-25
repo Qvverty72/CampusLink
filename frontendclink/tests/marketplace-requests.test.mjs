@@ -142,7 +142,7 @@ test('sent prices distinguish requested, current and accepted terms without rewr
   row.requestedTerms={modality:'DONACION',amount:null,currency:'CLP'};assert.equal(sentRequestPresentation(row).amount,'Donación');
 });
 
-test('price history renders separate labels only for verified changed terms, including an existing higher agreement',()=>{
+test('price history visibly strikes verified former prices and donations without changing agreement amounts',()=>{
   const ui=load('physicalgoods/components/PhysicalgoodsPriceHistory.tsx',{'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text',StyleSheet:{create:x=>x}},'../../components/CatalogUI':{CATALOG_COLORS:{}},'../utils/requestTerms':requestTerms});
   const original={modality:'VENTA',amount:5000,currency:'CLP'},current={...original,amount:8000};
   const text=node=>elements(node).filter(n=>n.type==='Text').flatMap(n=>n.props.children).join('');
@@ -154,7 +154,7 @@ test('price history renders separate labels only for verified changed terms, inc
   row.transaction={id:'trade',status:'RESERVADA',modality:'VENTA',amount:8000,currency:'CLP'};
   assert.equal(text(renderedPrices()),'$8.000$5.000');
   row.requestedTerms={modality:'DONACION',amount:null,currency:'CLP'};
-  const donation=renderedPrices();assert.equal(text(donation),'$8.000Donación');assert.ok(elements(donation).filter(node=>node.type==='Text').at(-1).props.style.some(style=>style?.textDecorationLine==='line-through'));
+  const donation=renderedPrices();assert.equal(text(donation),'$8.000Donación');assert.ok(elements(donation).some(node=>node.props?.pointerEvents==='none'&&node.props.style.position==='absolute'&&node.props.style.height>=1));
 });
 
 test('sent summaries retain pending reservations, real terminal states and original agreement amounts',()=>{

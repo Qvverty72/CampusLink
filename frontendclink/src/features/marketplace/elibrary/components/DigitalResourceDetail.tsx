@@ -1,9 +1,8 @@
 import { safeAreaInset } from '@/lib/layout/safeArea';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { FileText, LockKeyhole } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
 import { MarketplaceReportForm } from '../../components/MarketplaceReportForm';
 import { CATALOG_COLORS as colors, PriceTag, StatusTag, ui } from '../../components/CatalogUI';
 import { AgreementNotice, DetailActionBar, DetailHeader, DetailSection, OwnerCard, RequestMessageForm, RequestResourceSummary, ResourceDetailSkeleton, detailUI } from '../../components/ResourceDetailUI';
@@ -14,7 +13,7 @@ import { DigitalAcademicSelector } from './DigitalAcademicSelector';
 import { DigitalPublicationEditor } from './DigitalPublicationEditor';
 
 type Library = ReturnType<typeof useDigitalLibrary>;
-export function DigitalResourceDetail({ library, onAcquired, onRequests }: { library: Library; onAcquired: (id: string) => void; onRequests: () => void }) {
+export function DigitalResourceDetail({ library, onAcquired, onRequests,onBusyChange }: { library: Library; onAcquired: (id: string) => void; onRequests: () => void;onBusyChange?:(busy:boolean)=>void }) {
   const insets = useSafeAreaInsets(), resource = library.detail;
   const request = useDigitalRequestAction(resource?.id ?? '', Boolean(resource && !library.isOwner));
   const [reporting, setReporting] = useState(false), [reportBusy, setReportBusy] = useState(false);
@@ -22,6 +21,7 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests }: { lib
   const [previewId, setPreviewId] = useState<string | null>(null);
   const preview = resource?.files.find(file => file.id === previewId) ?? resource?.files[0];
   const busy = library.busy || request.busy || reportBusy || Boolean(library.downloading);
+  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false);},[busy,onBusyChange]);
   const acquired = !library.isOwner && Boolean(resource?.acquired || request.options?.acquired);
   const active = Boolean(request.options?.activeRequestId);
   const available = resource?.status === 'DISPONIBLE' && !resource.isWithdrawn;
@@ -40,7 +40,7 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests }: { lib
     else library.closeDetail();
   };
   return <View style={detailUI.page}>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }), paddingBottom: 250 }]}>
+    <ScrollView style={{flex:1,minHeight:0}} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }), paddingBottom: 24 }]}>
       <DetailHeader onBack={goBack} disabled={busy} title={reporting ? 'Denunciar recurso' : managing ? 'Administrar publicación' : requesting ? 'Solicitar recurso' : 'Biblioteca'}
         onReport={resource && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} />
       {!resource ? library.detailLoading ? <ResourceDetailSkeleton /> : <View style={detailUI.card}>
@@ -89,8 +89,7 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests }: { lib
           {library.isOwner && <Pressable accessibilityRole="button" disabled={busy} onPress={() => setManaging(true)} style={ui.outlined}><Text style={ui.link}>Administrar publicación</Text></Pressable>}
         </>}
     </ScrollView>
-    {resource && !reporting && !managing && <DetailActionBar label={label} helper={helper} disabled={disabled} bottomOffset={safeAreaInset('bottom', insets.bottom, { min: 8, base: 98 })}
+    {resource && !reporting && !managing && <DetailActionBar flow busy={request.busy} label={label} helper={helper} disabled={disabled}
       onPress={acquired ? () => onAcquired(resource.id) : active ? onRequests : requesting ? () => { void request.submit().then(sent => { if (sent) void library.openDetail(resource.id); }); } : () => setRequesting(true)} />}
-    <BottomNavigationBar activeItemId="elibrary" />
   </View>;
 }

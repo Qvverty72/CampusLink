@@ -40,7 +40,7 @@ const publication={id:'pub',title:'Guía',description:'Descripción',status:'DIS
 test('physical personal cards retain withdrawn records and delegate transactions without a detail-page callback',()=>{
   const opened=[],agreements=[],reviews=[];const own={...publication,campus:{name:'Origen'},publishedAt:'2026-10-23T12:00:00Z',isWithdrawn:true,modality:'DONACION'};
   const state={loading:false,page:{data:[own],meta:{}},number:1};
-  const {PhysicalgoodsHistory}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{react:{useCallback:fn=>fn},...base,'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'./PhysicalgoodsPublications':{PhysicalgoodsPublications:'Publications'},
+  const {PhysicalgoodsHistory}=load('physicalgoods/components/PhysicalgoodsHistory.tsx',{react:{useCallback:fn=>fn},...base,'../utils/requestTerms':{},'./PhysicalgoodsPriceHistory':{},'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'./PhysicalgoodsPublications':{PhysicalgoodsPublications:'Publications'},
     'react-native-safe-area-context':{useSafeAreaInsets:()=>({top:0,bottom:0})}, '../../components/PersonalUI':{PersonalStatus:'Status'}, '../../components/RequestFlowUI':{RequestTimeline:'Timeline'},'@/components/RefreshScrollView':{useScrollRefresh:noop},'../hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistory:()=>state},'../types/publication':{resourceConditions:[]}});
   const render=transactions=>{const node=PhysicalgoodsHistory({active:true,transactions,refreshVersion:0,onDetail:value=>opened.push(value),onAgreement:(...args)=>agreements.push(args),onRequests:()=>reviews.push(true)});return elements(typeof node.type==='function'?node.type(node.props):node);};
   let nodes=render(false);const publications=nodes.find(n=>n.type==='Publications');assert.equal(publications.props.active,true);
@@ -50,12 +50,13 @@ test('physical personal cards retain withdrawn records and delegate transactions
 });
 
 test('digital personal navigation opens received requests and retains previously visited panels',()=>{
-  const h=runtime();const {DigitalPersonalLibrary}=load('elibrary/components/DigitalPersonalLibrary.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':native,
-    '../../components/CatalogUI':{CatalogTabs:'Tabs'},'../hooks/useDigitalActivity':{useDigitalActivityCounts:()=>({counts:null,loading:false,reload:noop})},'./DigitalAcquiredActivity':{DigitalAcquiredActivity:'Acquired'},'./DigitalPublications':{DigitalPublications:'Owned'},'./DigitalActivityRequests':{DigitalActivityRequests:'Requests'},'./DigitalActivityTransactions':{DigitalActivityTransactions:'Trades'}});
-  const render=()=>elements(h.render(()=>DigitalPersonalLibrary({initialTab:'owned'})));
+  const h=runtime(),reads=[];let activityCounters;const {DigitalPersonalLibrary}=load('elibrary/components/DigitalPersonalLibrary.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':native,
+    '../../components/CatalogUI':{CatalogTabs:'Tabs'},'../hooks/useDigitalActivity':{useDigitalActivityCounts:(active)=>{reads.push(active);return {counts:null,loading:false,reload:noop};}},'./DigitalAcquiredActivity':{DigitalAcquiredActivity:'Acquired'},'./DigitalPublications':{DigitalPublications:'Owned'},'./DigitalActivityRequests':{DigitalActivityRequests:'Requests'},'./DigitalActivityTransactions':{DigitalActivityTransactions:'Trades'}});
+  const render=()=>elements(h.render(()=>DigitalPersonalLibrary({initialTab:'owned',activityCounters})));
   let nodes=render();assert.equal(nodes.filter(n=>n.type==='Trades').length,0);nodes.find(n=>n.type==='Owned').props.onRequests();nodes=render();
   assert.equal(nodes.find(n=>n.type==='Tabs').props.selected,'requests');assert.equal(nodes.find(n=>n.type==='Requests').props.entryVersion,1);assert.equal(nodes.filter(n=>n.type==='Owned').length,1);
-  nodes.find(n=>n.type==='Tabs').props.onSelect('owned');nodes=render();nodes.find(n=>n.type==='Owned').props.onRequests();nodes=render();assert.equal(nodes.find(n=>n.type==='Requests').props.entryVersion,2);h.unmount();
+  nodes.find(n=>n.type==='Tabs').props.onSelect('owned');nodes=render();nodes.find(n=>n.type==='Owned').props.onRequests();nodes=render();assert.equal(nodes.find(n=>n.type==='Requests').props.entryVersion,2);assert.equal(reads.at(-1),true);
+  activityCounters={counts:{pendingRequests:4,pendingTransactions:2},loading:false,reload:noop};nodes=render();assert.equal(reads.at(-1),false);assert.equal(nodes.find(n=>n.type==='Requests').props.counts,activityCounters.counts);assert.equal(nodes.find(n=>n.type==='Owned').props.onChanged,activityCounters.reload);assert.equal(nodes.find(n=>n.type==='Tabs').props.tabs[2].badgeCount,4);h.unmount();
 });
 
 test('completed agreement navigation reopens the same acquired ID on every explicit entry',()=>{

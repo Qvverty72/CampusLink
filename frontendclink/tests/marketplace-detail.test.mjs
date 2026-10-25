@@ -79,6 +79,8 @@ test('digital detail uses protected preview, blocks own requests and opens the a
   let nodes = render(); const preview = nodes.find(node => node.type === 'Preview');
   assert.equal(preview.props.autoOpen, true); assert.equal(preview.props.fileId, 'file');
   assert.equal(nodes.find(node => node.type === 'DetailActionBar').props.label, 'Solicitar este recurso');
+  assert.equal(nodes.find(node=>node.type==='DetailActionBar').props.flow,true);assert.equal(nodes.find(node=>node.type==='DetailActionBar').props.bottomOffset,undefined);
+  const scroll=nodes.find(node=>node.type==='Scroll');assert.equal(scroll.props.style.flex,1);assert.equal(scroll.props.contentContainerStyle.at(-1).paddingBottom,24);assert.ok(!elements(scroll).some(node=>node.type==='DetailActionBar'));assert.ok(!nodes.some(node=>node.type==='Nav'));
   resource.acquired = true; nodes = render(); let footer = nodes.find(node => node.type === 'DetailActionBar');
   assert.equal(footer.props.label, 'Abrir en mis materiales'); footer.props.onPress(); assert.deepEqual(acquired, ['digital']);
   resource.acquired = false; request.options.activeRequestId = 'request'; nodes = render(); nodes.find(node => node.type === 'DetailActionBar').props.onPress(); assert.equal(requests, 1);

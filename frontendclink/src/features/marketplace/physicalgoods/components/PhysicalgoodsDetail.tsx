@@ -56,7 +56,7 @@ export function PhysicalgoodsDetail({ resources: r, onClose, onBusyChange, onReq
           {r.galleryLoading && <ResourceDetailSkeleton physical />}
           {r.galleryError && <View style={detailUI.card}><Text accessibilityRole="alert" style={detailUI.error}>{r.galleryError}</Text><Pressable accessibilityRole="button" onPress={r.reloadGallery} style={ui.outlined}><Text style={ui.link}>Reintentar detalle</Text></Pressable></View>}
           {gallery && <>
-            <View style={styles.hero}>{photo ? <Image key={photo.url} source={{ uri: photo.url }} accessibilityLabel={`Fotografía de ${gallery.title}`} style={styles.image} />
+            <View style={styles.hero}>{photo ? <Image key={photo.id} source={{ uri: photo.url }} accessibilityLabel={`Fotografía de ${gallery.title}`} style={styles.image} />
               : <><ImageIcon size={38} color={colors.secondary} /><Text style={detailUI.helper}>Sin fotografías disponibles</Text></>}</View>
             {gallery.images.length > 1 && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>{gallery.images.map((image, index) => <Pressable key={image.id} accessibilityRole="button" accessibilityLabel={`Ver fotografía ${index + 1}`}
               accessibilityState={{ selected: photo?.id === image.id }} onPress={() => setPhotoId(image.id)} style={[styles.thumbnail, photo?.id === image.id && styles.selected]}><Image source={{ uri: image.url }} style={styles.image} /></Pressable>)}</ScrollView>}
