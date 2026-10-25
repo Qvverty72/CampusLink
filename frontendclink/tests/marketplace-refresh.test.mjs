@@ -1,3 +1,4 @@
+import { loadSafeArea } from './helpers/safe-area.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -7,7 +8,7 @@ import * as jsx from 'react/jsx-runtime';
 const noop=()=>{};
 const elements=node=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(6).flatMap(elements)];
 function load(file,deps,globals={},extra=''){const module={exports:{}};const code=ts.transpileModule(fs.readFileSync(new URL('../src/features/marketplace/'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-vm.runInNewContext(code+extra,{module,exports:module.exports,...globals,require:name=>{assert.ok(Object.hasOwn(deps,name),name);return deps[name];}});return module.exports;}
+vm.runInNewContext(code+extra,{module,exports:module.exports,...globals,require:name=>{if (name === '@/lib/layout/safeArea') return loadSafeArea(deps['react-native']?.Platform?.OS); assert.ok(Object.hasOwn(deps,name),name);return deps[name];}});return module.exports;}
 function runtime() {
   const slots = []; let index = 0, effects = [];
   const react = {

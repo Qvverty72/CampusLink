@@ -1,3 +1,4 @@
+import { loadSafeArea } from './helpers/safe-area.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -23,7 +24,7 @@ function publicationForm(reverse=false){
  for(const name of ['PhysicalgoodsResources','PublicationImages','PhysicalgoodsRequests','PhysicalgoodsTransaction','PhysicalgoodsHistory'])mocks['./'+name]={[name]:name};
  mocks['../utils/orderPhysicalgoodsCategories']=orderModule.exports;
  const module={exports:{}};
- vm.runInNewContext(compiled+'\nmodule.exports.formForTest=PublicationForm;',{module,exports:module.exports,require:name=>{assert.ok(Object.hasOwn(mocks,name),name);return mocks[name];}});
+ vm.runInNewContext(compiled+'\nmodule.exports.formForTest=PublicationForm;',{module,exports:module.exports,require:name=>{if (name === '@/lib/layout/safeArea') return loadSafeArea(mocks['react-native']?.Platform?.OS); assert.ok(Object.hasOwn(mocks,name),name);return mocks[name];}});
  const render=()=>elements(module.exports.formForTest({onPublished:noop,onGallery:noop}));
  return {render,selected,form,selectors:()=>render().filter(node=>node.type==='Select')};
 }

@@ -121,13 +121,18 @@ test('export buttons select PDF/Excel, show progress/errors and respect reportin
 
 function fileHarness(platform) {
   const written = [], shared = [], deleted = [], clicked = [], revoked = [], timers = [];
-  let available = true, failShare = false;
+  let available = true, failShare = false, failWrite = false, writeGate;
   const link = { remove() { clicked.push('removed'); }, click() { clicked.push(this.download); } };
   const { saveFile } = load('../src/lib/files/saveFile.ts', {
     'react-native': { Platform: { OS: platform } },
     'expo-file-system': { Paths: { cache: 'cache' }, File: class {
       constructor(_root, name) { this.uri = `cache/${name}`; this.exists = true; }
-      write(bytes) { written.push({ uri: this.uri, bytes: [...bytes] }); } delete() { deleted.push(this.uri); }
+      async write(bytes) {
+        if (writeGate) await writeGate;
+        if (failWrite) throw new Error('Write failed');
+        written.push({ uri: this.uri, bytes: [...bytes] });
+      }
+      delete() { deleted.push(this.uri); }
     } },
     'expo-sharing': { isAvailableAsync: async () => available, shareAsync: async (uri, options) => {
       shared.push({ uri, options }); if (failShare) throw new Error('Share failed');
@@ -135,7 +140,8 @@ function fileHarness(platform) {
   }, { URL: { createObjectURL: () => 'blob:local', revokeObjectURL: url => revoked.push(url) },
     document: { createElement: () => link, body: { appendChild() {} } }, setTimeout: callback => timers.push(callback) });
   return { saveFile, written, shared, deleted, clicked, revoked, timers,
-    unavailable() { available = false; }, failShare() { failShare = true; } };
+    unavailable() { available = false; }, failShare() { failShare = true; },
+    failWrite() { failWrite = true; }, delayWrite() { let finish; writeGate = new Promise(resolve => { finish = resolve; }); return finish; } };
 }
 const descriptor = { id: 'saved-id', name: 'reporte.xlsx', extension: 'xlsx',
   mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', uti: 'org.openxmlformats.spreadsheetml.sheet' };
@@ -162,6 +168,28 @@ test('cancellation while obtaining native bytes prevents local writes and sharin
   const pending = h.saveFile({ arrayBuffer: () => new Promise(resolve => { finish = resolve; }) }, descriptor, controller.signal);
   await setImmediate(); controller.abort(); finish(new Uint8Array([1]).buffer); await pending;
   assert.equal(h.written.length, 0); assert.equal(h.shared.length, 0);
+});
+
+test('SDK 58 async writing finishes before sharing and cleanup', async () => {
+  const h = fileHarness('ios'), finish = h.delayWrite();
+  const pending = h.saveFile(new Blob(['pdf']), descriptor);
+  await setImmediate();
+  assert.equal(h.shared.length, 0); assert.equal(h.deleted.length, 0);
+  finish(); await pending;
+  assert.equal(h.written.length, 1); assert.equal(h.shared.length, 1); assert.equal(h.deleted.length, 1);
+});
+
+test('cancellation during async writing skips sharing and still cleans the completed file', async () => {
+  const h = fileHarness('ios'), finish = h.delayWrite(), controller = new AbortController();
+  const pending = h.saveFile(new Blob(['pdf']), descriptor, controller.signal);
+  await setImmediate(); controller.abort(); finish(); await pending;
+  assert.equal(h.written.length, 1); assert.equal(h.shared.length, 0); assert.equal(h.deleted.length, 1);
+});
+
+test('async write rejection reaches the caller without opening sharing', async () => {
+  const h = fileHarness('android'); h.failWrite();
+  await assert.rejects(() => h.saveFile(new Blob(['pdf']), descriptor), /Write failed/);
+  assert.equal(h.shared.length, 0); assert.equal(h.deleted.length, 1);
 });
 
 test('existing digital PDF download delegates to the shared saver with its original contract', async () => {

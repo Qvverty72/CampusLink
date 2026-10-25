@@ -419,15 +419,15 @@ colecciones MongoDB ni se cambia el contrato usado por los modales.
 
 ## Compatibilidad del MVP
 
-- Expo SDK 57
-- React 19.2.3
-- React Native 0.86.3
+- Expo SDK 58
+- React 19.3.0
+- React Native 0.88.0
 - Three.js 0.185.x
-- `@react-three/fiber` 9.7.x
+- `@react-three/fiber` 9.8.x (soporte de React 19.3)
 - `@react-three/drei` 10.7.x
-- `expo-gl`, `expo-asset` y `expo-file-system` 57.x
+- `expo-gl`, `expo-asset` y `expo-file-system` 58.x
 
 No instalar `r3f-native-orbitcontrols`: es incompatible con React 19 y React
-Compiler en Expo SDK 57. Los controles de cámara deben implementarse dentro de
+Compiler en la integración original. Los controles de cámara deben implementarse dentro de
 `controls/`.
 

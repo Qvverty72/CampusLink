@@ -1,3 +1,5 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
+import type { ScrollViewInstance } from 'react-native';
 import { RefreshScrollView } from '@/components/RefreshScrollView';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useEffect, useRef,useState } from 'react';
@@ -24,7 +26,7 @@ function Library() {
   const [personal, setPersonal] = useState(false);
   const [personalTitle,setPersonalTitle]=useState('Materiales adquiridos');
   const [personalEntry, setPersonalEntry] = useState<{ tab: 'acquired' | 'trades'; resourceId?: string }>({ tab: 'acquired' });
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [library.formOpen, library.detail?.id, library.editingAcademics, personal]);
   useEffect(() => {
     if (!library.error && !library.notice) return;
@@ -35,7 +37,7 @@ function Library() {
     onAcquired={id => { setPersonalEntry({ tab: 'acquired', resourceId: id }); setPersonal(true); library.closeDetail(); }}
     onRequests={() => { setPersonalEntry({ tab: 'trades' }); setPersonal(true); library.closeDetail(); }} />;
   return <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={!personal && !library.formOpen ? library.refresh : undefined} refreshing={library.loading} refreshEnabled={!personal && !library.formOpen && !library.busy && !library.loading} refreshLabel="los recursos de Biblioteca" keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]}>
+    <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={!personal && !library.formOpen ? library.refresh : undefined} refreshing={library.loading} refreshEnabled={!personal && !library.formOpen && !library.busy && !library.loading} refreshLabel="los recursos de Biblioteca" keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: safeAreaInset('top', insets.top, { min: 24, offset: 16 }) }]}>
       <ScreenHeader title={personal ? personalTitle : library.formOpen ? 'Publicar recurso digital' : 'Biblioteca'}
         subtitle={personal ? 'Tus materiales, publicaciones y transacciones' : library.formOpen ? 'Comparte material con tu comunidad académica' : 'Apuntes y guías de todos los campus'}
         action={!personal && !library.formOpen && !library.detail ? 'Mi biblioteca' : undefined} onAction={() => { setPersonalEntry({ tab: 'acquired' }); setPersonal(true); }}

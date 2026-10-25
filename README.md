@@ -184,10 +184,10 @@ El campus se modela mediante **Blender** y se exporta como **GLB**.
 
 Para trabajar con el proyecto se recomienda:
 
-- Node.js 22.
+- Node.js 22.13 o posterior en la rama 22 (también 24.3+ o 26+ para Expo SDK 58).
 - npm.
 - Git.
-- Expo Go o emulador Android/iOS.
+- Expo Go compatible con SDK 58 o emulador Android/iOS.
 - Docker, opcional para el backend.
 - Acceso al proyecto de Supabase.
 - Acceso a MongoDB.
@@ -211,7 +211,7 @@ cd CampusLink
 
 ```bash
 cd frontendclink
-npm install
+npm ci
 ```
 
 Crear `.env` a partir de `.env.example`.
@@ -228,6 +228,15 @@ Luego:
 ```bash
 npx expo start -c
 ```
+
+El frontend usa Expo SDK 58, React 19.3 y React Native 0.88. Si Metro estaba
+ejecutándose antes de actualizar dependencias, detenerlo y volver a iniciar con
+el comando anterior. En Windows, Metro puede bloquear los binarios de NativeWind
+durante `npm ci`.
+
+La web conserva salida `single` y rutas síncronas. Los insets web se aplican con
+CSS `env()` mediante `safeAreaInset`; en iOS/Android se conservan los valores
+nativos. El guardado compartido espera la escritura asíncrona antes de compartir.
 
 ### Probar desde un teléfono físico
 

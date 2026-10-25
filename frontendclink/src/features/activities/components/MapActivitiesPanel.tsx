@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { X } from 'lucide-react-native';
@@ -20,7 +21,7 @@ export function MapActivitiesPanel({ state }: { state: ActivitiesState }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
   const close = useCallback(() => setActivityType(null), []);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const resetScroll = useCallback(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, []);
   useLayoutEffect(resetScroll, [detailOpen, resetScroll]);
   useEffect(() => setActivityType(null), [map?.campusId, buildingKey, floorOpen]);

@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { FileText, LockKeyhole } from 'lucide-react-native';
@@ -39,7 +40,7 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests }: { lib
     else library.closeDetail();
   };
   return <View style={detailUI.page}>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingTop: Math.max(16, insets.top + 8), paddingBottom: 250 }]}>
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }), paddingBottom: 250 }]}>
       <DetailHeader onBack={goBack} disabled={busy} title={reporting ? 'Denunciar recurso' : managing ? 'Administrar publicación' : requesting ? 'Solicitar recurso' : 'Biblioteca'}
         onReport={resource && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} />
       {!resource ? library.detailLoading ? <ResourceDetailSkeleton /> : <View style={detailUI.card}>
@@ -88,7 +89,7 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests }: { lib
           {library.isOwner && <Pressable accessibilityRole="button" disabled={busy} onPress={() => setManaging(true)} style={ui.outlined}><Text style={ui.link}>Administrar publicación</Text></Pressable>}
         </>}
     </ScrollView>
-    {resource && !reporting && !managing && <DetailActionBar label={label} helper={helper} disabled={disabled} bottomOffset={98 + Math.max(insets.bottom, 8)}
+    {resource && !reporting && !managing && <DetailActionBar label={label} helper={helper} disabled={disabled} bottomOffset={safeAreaInset('bottom', insets.bottom, { min: 8, base: 98 })}
       onPress={acquired ? () => onAcquired(resource.id) : active ? onRequests : requesting ? () => { void request.submit().then(sent => { if (sent) void library.openDetail(resource.id); }); } : () => setRequesting(true)} />}
     <BottomNavigationBar activeItemId="elibrary" />
   </View>;

@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 /** Presenta información de piso, POI y actividades usando metadatos del mapa activo. */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -43,7 +44,7 @@ function FloorInfoContent({ map, floor, activities, onClose }: {
   const [selectedPoiKey, setSelectedPoiKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const resetScroll = useCallback(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, []);
   const query = { buildingKey: floor.buildingId, floorKey: floor.id };
   const entries = filterLocationActivities(activities.activities, query);

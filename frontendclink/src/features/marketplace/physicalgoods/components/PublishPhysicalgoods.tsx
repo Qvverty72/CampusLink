@@ -1,3 +1,5 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
+import type { ScrollViewInstance } from 'react-native';
 import { RefreshScrollView } from '@/components/RefreshScrollView';
 import { useEffect, useRef, useState } from 'react';
 import {useLocalSearchParams} from 'expo-router';
@@ -32,7 +34,7 @@ export function PhysicalGoodsScreen() {
 /** Mantiene en un flujo común el alta y la recuperación de su publicación. */
 function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:string}) {
   const insets = useSafeAreaInsets();
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const resources = usePhysicalgoodsResources();
   const [view,setView] = useState<'explore'|'publish'|'received'|'sent'|'mine'|'transactions'>('explore');
   const [requestView, setRequestView] = useState<'sent' | 'received'>('sent');
@@ -48,7 +50,7 @@ function PhysicalgoodsContent({initialPublicationId}:{initialPublicationId?:stri
   const openAgreement=(publicationId:string,transactionId:string)=>{setHistoryDetail(null);setAgreement({publicationId,transactionId});};
   const openRequest=(publicationId:string,requestId:string)=>setHistoryDetail({publicationId,requestId});
   return <View style={styles.screen}>
-    <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: Math.max(24, insets.top + 16) }]} keyboardShouldPersistTaps="handled">
+    <RefreshScrollView ref={scroll} refreshIndicatorOffset={insets.top + 8} onRefresh={view === 'explore' ? resources.refresh : undefined} refreshing={resources.loading} refreshEnabled={view === 'explore' && !resources.loading && !resources.busy && !resources.selectedId} refreshLabel="los recursos de Mercado" contentContainerStyle={[styles.content, { paddingTop: safeAreaInset('top', insets.top, { min: 24, offset: 16 }) }]} keyboardShouldPersistTaps="handled">
       <ScreenHeader title={publishing ? 'Publicar recurso' : view === 'transactions' ? agreementCopy.title : received || sent ? 'Mis Solicitudes' : personal ? 'Mis publicaciones' : 'Mercado'}
         subtitle={publishing ? 'Comparte un recurso físico con tu campus' : personal ? 'Tus publicaciones, solicitudes y transacciones' : 'Recursos físicos de tu campus'}
         action={view === 'explore' ? 'Mi actividad' : undefined} onAction={() => setView('mine')}

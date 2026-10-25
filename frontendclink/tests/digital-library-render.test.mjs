@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
+import { loadSafeArea } from './helpers/safe-area.mjs';
 
 const require = createRequire(import.meta.url);
 const native = require('react-native-web');
@@ -20,6 +21,7 @@ function renderForm(progress, error = null) {
   const state = { formOpen: true, files: [], title: 'Apuntes de BD', description: 'Material académico',
     modality: 'DONACION', careerIds: [], subjectIds: [], progress, error };
   const mocks = {
+    '@/lib/layout/safeArea': loadSafeArea('web'),
     react: React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     'react-native': native,

@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 import { createContext, forwardRef, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, View, type ScrollViewProps } from 'react-native';
@@ -56,11 +57,11 @@ export type RefreshScrollViewProps = ScrollViewProps & {
   indicatorColor?: string;
   refreshIndicatorOffset?: number;
 };
-export const RefreshScrollView = forwardRef<ScrollView, RefreshScrollViewProps>(function RefreshScrollView(
+export const RefreshScrollView = forwardRef<ScrollViewInstance, RefreshScrollViewProps>(function RefreshScrollView(
   { children, onClose, onHeaderVisibilityChange, onRefresh, refreshing: controlledRefreshing = false,
     refreshEnabled = true, refreshLabel = 'el contenido', indicatorColor = APP_COLORS.PRIMARY, refreshIndicatorOffset = 0, ...props }, forwardedRef,
 ) {
-  const scroll = useRef<ScrollView | null>(null);
+  const scroll = useRef<ScrollViewInstance | null>(null);
   const [registeredState, register] = useState<ScrollRefreshState | null>(null);
   // Las props directas tienen prioridad; sin ellas, manda la vista registrada en este scroll.
   const state = onRefresh ? { onRefresh, refreshing: controlledRefreshing, enabled: refreshEnabled, label: refreshLabel } : registeredState;
@@ -70,7 +71,7 @@ export const RefreshScrollView = forwardRef<ScrollView, RefreshScrollViewProps>(
   const locked = useRef(false);
   const [requested, setRequested] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
-  const assignRef = useCallback((value: ScrollView | null) => {
+  const assignRef = useCallback((value: ScrollViewInstance | null) => {
     scroll.current = value;
     if (typeof forwardedRef === 'function') forwardedRef(value);
     else if (forwardedRef) forwardedRef.current = value;

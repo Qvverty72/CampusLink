@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { useCallback, useState } from 'react';
 import { Link, type Href } from 'expo-router';
 import { Bell, ChartColumn, ChevronRight, Clock3, Flag, GraduationCap, MapPin, UsersRound, type LucideIcon } from 'lucide-react-native';
@@ -47,10 +48,10 @@ export function ProfileScreen() {
         indicatorColor={APP_COLORS.ACCENT}
         refreshIndicatorOffset={insets.top + 8}
         contentContainerStyle={[styles.scrollContent, {
-          paddingTop: insets.top + 24,
-          paddingBottom: Math.max(insets.bottom, 8) + 112,
-          paddingLeft: Math.max(insets.left, 16),
-          paddingRight: Math.max(insets.right, 16),
+          paddingTop: safeAreaInset('top', insets.top, { offset: 24 }),
+          paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 8, base: 112 }),
+          paddingLeft: safeAreaInset('left', insets.left, { min: 16 }),
+          paddingRight: safeAreaInset('right', insets.right, { min: 16 }),
         }]}
         keyboardShouldPersistTaps="handled"
       >

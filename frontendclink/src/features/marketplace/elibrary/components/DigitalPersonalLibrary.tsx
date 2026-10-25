@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import {useEffect,useRef,useState} from 'react';
 import {ScrollView,View} from 'react-native';
 import {CatalogTabs} from '../../components/CatalogUI';
@@ -13,7 +14,7 @@ export function DigitalPersonalLibrary({initialTab='acquired',initialPublication
  const [tab,setTab]=useState<Tab>(first),[visited,setVisited]=useState<Record<Tab,boolean>>({owned:first==='owned',requests:first==='requests',transactions:first==='transactions',acquired:first==='acquired'});
  const [receivedEntry,setReceivedEntry]=useState(0),[acquiredEntry,setAcquiredEntry]=useState({id:initialPublicationId,version:0});
  const counts=useDigitalActivityCounts();
- const tabsScroll=useRef<ScrollView>(null);
+ const tabsScroll=useRef<ScrollViewInstance>(null);
  const select=(next:Tab)=>{setVisited(old=>({...old,[next]:true}));setTab(next);};
  const reviewRequests=()=>{setReceivedEntry(value=>value+1);select('requests');};
  const openAcquired=(id:string)=>{setAcquiredEntry(old=>({id,version:old.version+1}));select('acquired');};

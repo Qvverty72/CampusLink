@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { GlassSurface } from '@/components/GlassSurface';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -91,7 +92,7 @@ export function BottomNavigationBar({
   };
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, BOTTOM_GAP) }]}
+    <View style={[styles.wrapper, { paddingBottom: safeAreaInset('bottom', insets.bottom, { min: BOTTOM_GAP }) }]}
       pointerEvents="box-none">
       <GlassSurface
         radius={BAR_RADIUS}

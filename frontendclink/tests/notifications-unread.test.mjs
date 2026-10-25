@@ -1,3 +1,4 @@
+import { loadSafeArea } from './helpers/safe-area.mjs';
 ﻿import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -12,7 +13,7 @@ function load(file, dependencies, globals = {}) {
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(code, { module, exports: module.exports, AbortController, ...globals, require(name) {
-    assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
+    if (name === '@/lib/layout/safeArea') return loadSafeArea(dependencies['react-native']?.Platform?.OS); assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
   } });
   return module.exports;
 }

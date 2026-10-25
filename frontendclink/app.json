@@ -4,8 +4,11 @@
     "slug": "campuslink",
     "scheme": "campuslink",
     "userInterfaceStyle": "automatic",
+    "web": {
+      "output": "single"
+    },
     "plugins": [
-      "expo-router",
+      ["expo-router", { "asyncRoutes": { "web": false } }],
       "expo-asset",
       "@react-native-community/datetimepicker",
       ["expo-image-picker", {

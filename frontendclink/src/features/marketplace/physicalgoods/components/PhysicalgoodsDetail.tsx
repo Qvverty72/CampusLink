@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ImageIcon } from 'lucide-react-native';
@@ -41,7 +42,7 @@ export function PhysicalgoodsDetail({ resources: r, onClose, onBusyChange, onReq
     : gallery && !gallery.acceptsRequests ? `El recurso está ${statusLabel(gallery.status).toLowerCase()} y no admite nuevas solicitudes.`
       : request.loading ? 'Comprobando disponibilidad y solicitudes…' : request.error ? 'No pudimos comprobar si puedes solicitarlo. Reintenta la consulta.' : null;
   return <View style={detailUI.page}>
-    <ScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingBottom: 24, paddingTop: Math.max(16, insets.top + 8) }]}>
+    <ScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingBottom: 24, paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }) }]}>
       <DetailHeader onBack={() => { if (reporting) setReporting(false); else if (requesting) setRequesting(false); else if (managing) setManaging(false); else onClose(); }}
         onReport={gallery && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} disabled={busy} title={reporting ? 'Denunciar recurso' : requesting ? 'Solicitar recurso' : managing ? 'Administrar publicación' : 'Mercado'} />
       {reporting && gallery ? <MarketplaceReportForm target={{ type: 'PUBLICACION_FISICA', publicationId: gallery.id }} title={gallery.title} onBusyChange={setReportBusy} onBack={() => setReporting(false)} />

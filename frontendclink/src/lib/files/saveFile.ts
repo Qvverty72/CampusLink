@@ -24,7 +24,8 @@ export async function saveFile(blob: Blob, file: DownloadFile, signal?: AbortSig
   if (signal?.aborted) return;
   const local = new LocalFile(Paths.cache, `campuslink-${file.id}.${file.extension}`);
   try {
-    local.write(bytes);
+    await local.write(bytes);
+    if (signal?.aborted) return;
     await shareAsync(local.uri, { mimeType: file.mimeType, dialogTitle: file.name, UTI: file.uti });
   } finally { if (local.exists) local.delete(); }
 }

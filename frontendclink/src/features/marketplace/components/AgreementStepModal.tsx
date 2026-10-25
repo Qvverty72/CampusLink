@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { X } from 'lucide-react-native';
@@ -13,9 +14,9 @@ export function AgreementStepModal({ title, closeLabel, onClose, closeDisabled =
   const insets = useSafeAreaInsets();
   const fixedHeight = fillHeight || preferredHeight !== undefined;
   const close = () => { if (!closeDisabled) onClose(); };
-  const bodyContentStyle = [styles.content, contentStyle, { paddingBottom: Math.max(18, insets.bottom + 8) }];
+  const bodyContentStyle = [styles.content, contentStyle, { paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 18, offset: 8 }) }];
   return <Modal visible transparent animationType="fade" onRequestClose={close}><KeyboardAvoidingView enabled={keyboardAvoiding} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-    <View style={[styles.overlay, { paddingTop: Math.max(20, insets.top + 8), paddingBottom: Math.max(20, insets.bottom + 8) }]}>
+    <View style={[styles.overlay, { paddingTop: safeAreaInset('top', insets.top, { min: 20, offset: 8 }), paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 20, offset: 8 }) }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={closeLabel} disabled={closeDisabled} onPress={close} style={StyleSheet.absoluteFill} />
       <View accessibilityViewIsModal onAccessibilityEscape={close} style={[styles.dialog, fixedHeight && styles.fullDialog, preferredHeight !== undefined && { height: preferredHeight }]}>
         <View accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} style={styles.heading}><Text accessibilityRole="header" style={[ui.sectionTitle, { flex: 1 }]}>{title}</Text>
@@ -24,7 +25,7 @@ export function AgreementStepModal({ title, closeLabel, onClose, closeDisabled =
         {refresh ? <RefreshScrollView key={contentKey} accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} style={[styles.body, fixedHeight && { flex: 1 }]} contentContainerStyle={bodyContentStyle} keyboardShouldPersistTaps="handled"
           onRefresh={refresh.onRefresh} refreshing={refresh.refreshing} refreshEnabled={refresh.enabled} refreshLabel={refresh.label} refreshIndicatorOffset={8}>{children}</RefreshScrollView>
           : <ScrollView key={contentKey} accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay ? 'no-hide-descendants' : 'auto'} style={[styles.body, fixedHeight && { flex: 1 }]} contentContainerStyle={bodyContentStyle} keyboardShouldPersistTaps="handled">{children}</ScrollView>}
-        {footer&&<View accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay?'no-hide-descendants':'auto'} style={[styles.footer,{paddingBottom:Math.max(12,insets.bottom+8)}]}>{footer}</View>}
+        {footer&&<View accessibilityElementsHidden={Boolean(overlay)} importantForAccessibility={overlay?'no-hide-descendants':'auto'} style={[styles.footer,{paddingBottom:safeAreaInset('bottom',insets.bottom,{min:12,offset:8})}]}>{footer}</View>}
         {overlay}
       </View>
     </View>

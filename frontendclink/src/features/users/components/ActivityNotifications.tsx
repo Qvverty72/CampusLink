@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { BellOff, X, type LucideIcon } from 'lucide-react-native';
@@ -44,8 +45,8 @@ function NotificationsContent() {
 
   return (
     <View style={[styles.screen, {
-      paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16),
-      paddingLeft: Math.max(insets.left, 16), paddingRight: Math.max(insets.right, 16),
+      paddingTop: safeAreaInset('top', insets.top, { min: 16 }), paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 16 }),
+      paddingLeft: safeAreaInset('left', insets.left, { min: 16 }), paddingRight: safeAreaInset('right', insets.right, { min: 16 }),
     }]}>
       <TouchableOpacity accessible={false} aria-hidden activeOpacity={1} onPress={close} style={StyleSheet.absoluteFill} />
       <View style={styles.panel} accessibilityViewIsModal onAccessibilityEscape={close}>

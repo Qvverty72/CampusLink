@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { COORDINATION_MESSAGES_POLL_INTERVAL, useAgreementPolling } from '../../hooks/useAgreementPolling';
 import { OwnerRating } from '../../components/OwnerRating';
 import { TransactionRating } from '../../components/TransactionRating';
@@ -119,7 +120,7 @@ export function PhysicalgoodsTransaction({ target, onClose, onChanged, refreshEn
     </>}
   </AgreementStepModal>;
   const content = <View style={detailUI.page}>
-    <RefreshScrollView refreshIndicatorOffset={insets.top + 8} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={[transactionUI.content, { paddingTop: Math.max(16, insets.top + 8), paddingBottom: Math.max(24, insets.bottom + 12) }]} keyboardShouldPersistTaps="handled"
+    <RefreshScrollView refreshIndicatorOffset={insets.top + 8} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={[transactionUI.content, { paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }), paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 24, offset: 12 }) }]} keyboardShouldPersistTaps="handled"
       onRefresh={t.reload} refreshing={refreshing} refreshEnabled={panel === 'overview' && refreshEnabled && !refreshing && !interacting && !detail?.canRate} refreshLabel="la transacción">
       <AgreementHeader title={detail ? copy.transactionTitle(detail.publication.title) : copy.title} onBack={close} onMenu={() => setMenuOpen(true)} disabled={disabled} menuDisabled={reporting || t.loading || !detail || historical} />
       {reporting ? reportForm : <>

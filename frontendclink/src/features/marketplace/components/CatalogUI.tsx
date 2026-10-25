@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -69,7 +70,7 @@ export function FilterSheet({ visible, title, onClose, children, confirmLabel = 
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <KeyboardAvoidingView style={ui.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={StyleSheet.absoluteFill} />
-      <View accessibilityViewIsModal style={[ui.sheet, fillHeight && ui.fullSheet, fillHeight && preferredHeight !== undefined && { height: preferredHeight }, compact && ui.compactSheet, { paddingBottom: Math.max(20, insets.bottom), marginTop: Math.max(24, insets.top) }]}>
+      <View accessibilityViewIsModal style={[ui.sheet, fillHeight && ui.fullSheet, fillHeight && preferredHeight !== undefined && { height: preferredHeight }, compact && ui.compactSheet, { paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 20 }), marginTop: safeAreaInset('top', insets.top, { min: 24 }) }]}>
         {!compact && <View style={ui.handle} />}
         <View style={ui.headingRow}><Text accessibilityRole="header" style={ui.sectionTitle}>{title}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={ui.iconButton}><X color={CATALOG_COLORS.primary} size={22} /></Pressable>
@@ -140,7 +141,7 @@ export function CatalogPagination({ page, hasMore, loading, previous, next }: { 
 
 export function PublishFAB({ onPress }: { onPress: () => void }) {
   const insets = useSafeAreaInsets();
-  return <View pointerEvents="box-none" style={[ui.fabContainer, { bottom: 102 + Math.max(insets.bottom, 8) }]}>
+  return <View pointerEvents="box-none" style={[ui.fabContainer, { bottom: safeAreaInset('bottom', insets.bottom, { min: 8, base: 102 }) }]}>
     <Pressable accessibilityRole="button" accessibilityLabel="Publicar un recurso" onPress={onPress} style={ui.fab}>
       <Plus size={21} color="#FFFFFF" /><Text style={ui.primaryText}>Publicar</Text>
     </Pressable>

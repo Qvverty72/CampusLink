@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { ArrowRight, CalendarDays, MapPin, X } from 'lucide-react-native';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,8 +28,8 @@ export function NotificationActivityModal({ activityId, notificationId, notifica
   const insets = useSafeAreaInsets();
   const date = (value: string) => new Date(value).toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
   return <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-    <View style={[styles.overlay, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16),
-      paddingLeft: Math.max(insets.left, 16), paddingRight: Math.max(insets.right, 16) }]}>
+    <View style={[styles.overlay, { paddingTop: safeAreaInset('top', insets.top, { min: 16 }), paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 16 }),
+      paddingLeft: safeAreaInset('left', insets.left, { min: 16 }), paddingRight: safeAreaInset('right', insets.right, { min: 16 }) }]}>
       <TouchableOpacity accessible={false} aria-hidden activeOpacity={1} onPress={onClose} style={StyleSheet.absoluteFill} />
       <View style={styles.panel} accessibilityViewIsModal onAccessibilityEscape={onClose}>
         <View style={styles.header}>

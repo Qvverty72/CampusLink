@@ -1,3 +1,5 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
+import type { DimensionValue } from 'react-native';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -49,10 +51,10 @@ export function AgreementNotice() {
 }
 
 export function DetailActionBar({ label, onPress, disabled = false, helper, bottomOffset = 0, secondaryAction, flow = false, busy = false, neutralDisabled = false }: {
-  label: string; onPress: () => void; disabled?: boolean; helper?: string | null; bottomOffset?: number; secondaryAction?: { label: string; onPress: () => void }; flow?: boolean; busy?: boolean; neutralDisabled?: boolean;
+  label: string; onPress: () => void; disabled?: boolean; helper?: string | null; bottomOffset?: DimensionValue; secondaryAction?: { label: string; onPress: () => void }; flow?: boolean; busy?: boolean; neutralDisabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  return <View style={[detailUI.actionBar, flow && detailUI.flowBar, { bottom: bottomOffset, paddingBottom: bottomOffset ? 12 : Math.max(16, insets.bottom) }]}>
+  return <View style={[detailUI.actionBar, flow && detailUI.flowBar, { bottom: bottomOffset, paddingBottom: bottomOffset ? 12 : safeAreaInset('bottom', insets.bottom, { min: 16 }) }]}>
     {Boolean(helper) && <Text accessibilityLiveRegion="polite" style={detailUI.actionHelper}>{helper}</Text>}
     <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={[ui.primary, { flexDirection: 'row', gap: 8 }, disabled && (neutralDisabled ? detailUI.disabledPrimary : ui.disabled)]}>{busy && <ActivityIndicator size="small" color={neutralDisabled && disabled ? colors.primary : colors.surface} />}<Text style={[ui.primaryText, { flexShrink: 1, textAlign: 'center' }, neutralDisabled && disabled && { color: colors.primary }]}>{label}</Text></Pressable>
     {secondaryAction && <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{ disabled }} onPress={secondaryAction.onPress} style={[ui.outlined, disabled && ui.disabled]}><Text style={ui.link}>{secondaryAction.label}</Text></Pressable>}

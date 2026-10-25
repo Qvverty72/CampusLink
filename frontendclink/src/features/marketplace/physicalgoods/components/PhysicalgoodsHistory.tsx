@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import {Image,Modal,Pressable,StyleSheet,Text,View} from 'react-native';
 import {RefreshScrollView} from '@/components/RefreshScrollView';
 import {usePhysicalgoodsHistoryDetail} from '../hooks/usePhysicalgoodsHistory';
@@ -32,7 +33,7 @@ export function PhysicalgoodsHistoryDetail({target,onClose,onOpen,onAgreement,re
   const openResource = publication?.canView && onOpen ? () => onOpen(publication.id) : undefined;
   const openAgreement = request?.transaction && publication ? () => onAgreement(publication.id, request.transaction!.id) : undefined;
   return <Modal visible animationType="slide" onRequestClose={onClose}><View style={detailUI.page}>
-    <RefreshScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={[styles.content, { paddingTop: Math.max(16, insets.top + 8), paddingBottom: 24 }]}
+    <RefreshScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={[styles.content, { paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }), paddingBottom: 24 }]}
       onRefresh={h.reload} refreshing={h.loading} refreshEnabled={refreshEnabled&&!h.loading} refreshLabel="el detalle del historial">
       <DetailHeader title="Mi actividad" onBack={onClose} />
       <View style={styles.heading}><Text accessibilityRole="header" style={[styles.title, { flex: 1 }]}>{target.requestId?'Detalle de solicitud':'Mi publicación'}</Text>

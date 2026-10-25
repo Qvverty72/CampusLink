@@ -1,3 +1,4 @@
+import { safeAreaInset } from '@/lib/layout/safeArea';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { CalendarCheck, MapPin, X } from 'lucide-react-native';
@@ -37,7 +38,7 @@ function PersonalContent({ section, campusId, allowed }: { section: PersonalSect
   const showAgreement = (publicationId: string, transactionId: string) => {
     setHistory(null); setAgreement({ publicationId, transactionId });
   };
-  return <View style={[styles.overlay, { paddingTop: Math.max(insets.top, 12), paddingBottom: Math.max(insets.bottom, 12) }]}>
+  return <View style={[styles.overlay, { paddingTop: safeAreaInset('top', insets.top, { min: 12 }), paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 12 }) }]}>
     <View style={styles.panel} accessibilityViewIsModal>
       {headerVisible && <View style={styles.header}>
         <Text accessibilityRole="header" style={styles.title}>{section ? PERSONAL_TITLES[section] : 'Mi perfil'}</Text>
