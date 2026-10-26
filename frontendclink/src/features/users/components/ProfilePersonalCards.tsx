@@ -12,7 +12,7 @@ export const PERSONAL_TITLES: Record<PersonalSection, string> = {
 };
 
 export function ProfilePersonalCards({ overview, activities, failed, retry, loading }: ReturnType<typeof useProfileOverview>) {
-  if (loading) return <ProfilePersonalCardsSkeleton />;
+  if (loading && !overview) return <ProfilePersonalCardsSkeleton />;
   return <View style={styles.section}>
     <View style={styles.row}>
       <PersonalCard section="publications" icon={Store} subtitle="Venta y donaciones" count={overview?.activePublications} unit="activas" />

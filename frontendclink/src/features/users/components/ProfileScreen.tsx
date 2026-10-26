@@ -21,13 +21,11 @@ export function ProfileScreen() {
   const { auth, closing, identity, signOut, academicProfile, academicLoading, academicError, reloadAcademicProfile } = useProfile();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const { unreadCount, refreshUnreadCount, loading: unreadLoading } = useUnreadNotificationCount();
-  const personal = useProfileOverview(identity?.capabilities.general ? identity.campusId : null, identity?.userId);
-  const profileLoading = academicLoading || personal.loading;
-  const refreshing = profileLoading || unreadLoading;
+  const personal = useProfileOverview(identity?.capabilities.general ? identity.campusId : null, identity?.userId, auth.session?.user.last_sign_in_at);
+  const refreshing = personal.refreshing || unreadLoading;
   const refreshProfile = useCallback(() => {
-    auth.refreshIdentity();
     personal.retry(); refreshUnreadCount();
-  }, [auth.refreshIdentity, personal.retry, refreshUnreadCount]);
+  }, [personal.retry, refreshUnreadCount]);
   const insets = useSafeAreaInsets();
   const fullName = academicProfile?.fullName?.trim() || identity?.profile.nombre_completo?.trim() || 'Mi perfil';
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toLocaleUpperCase('es');
@@ -77,12 +75,12 @@ export function ProfileScreen() {
                 <Link href="/notifications" asChild>
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel={refreshing ? 'Notificaciones, actualizando contador' : unreadCount ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
+                    accessibilityLabel={unreadCount ? `Notificaciones, ${unreadCount} sin leer` : unreadLoading && unreadCount === null ? 'Notificaciones, actualizando contador' : 'Notificaciones'}
                     activeOpacity={0.65}
                     style={styles.notificationButton}
                   >
                     <ProfileIcon icon={Bell} />
-                    {refreshing ? <ProfileNotificationCountSkeleton /> : unreadCount !== null && unreadCount > 0 && (
+                    {unreadLoading && unreadCount === null ? <ProfileNotificationCountSkeleton /> : unreadCount !== null && unreadCount > 0 && (
                       <View style={styles.notificationBadge} accessible={false} aria-hidden>
                         <Text style={styles.notificationBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
                       </View>
@@ -110,7 +108,7 @@ export function ProfileScreen() {
             )}
           </View>
 
-          {identity?.capabilities.general && <ProfilePersonalCards {...personal} loading={profileLoading} />}
+          {identity?.capabilities.general && <ProfilePersonalCards {...personal} />}
 
           {(managesAccess || hasAnalytics) && (
             <View style={styles.section}>

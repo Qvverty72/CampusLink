@@ -60,6 +60,7 @@ function hooks() {
       return value; },
     blur() { focused = false; focusCleanup?.(); }, focus() { focused = true; focusCleanup = focusCallback?.(); },
     unmount() { slots.forEach(slot => slot?.cleanup?.()); focusCleanup?.(); },
+    remount() { slots.length = 0; focused = true; focusCallback = undefined; focusCleanup = undefined; nextFocus = undefined; },
   };
 }
 
@@ -91,31 +92,43 @@ test('profile loads only counters, cancels on blur and refreshes after returning
   assert.equal(render().overview, null); assert.equal(render().activities, null);
   h.focus(); requests[2].resolve({ activePublications: 2 }); requests[3].resolve(1); await setImmediate();
   assert.equal(render().overview.activePublications, 2); assert.equal(render().activities, 1);
-  h.blur(); h.focus(); requests[4].reject(new Error('offline')); requests[5].resolve(0); await setImmediate();
-  assert.equal(render().failed, true); assert.equal(render().overview.activePublications, 2); assert.equal(render().activities, 0);
-  assert.equal(render().loading, false); h.unmount();
+  h.blur(); h.focus(); assert.equal(requests.length, 5); assert.equal(requests[4].kind, 'overview');
+  assert.equal(render().loading, false); assert.equal(render().refreshing, true);
+  requests[4].reject(new Error('offline')); await setImmediate();
+  assert.equal(render().failed, true); assert.equal(render().overview.activePublications, 2); assert.equal(render().activities, 1);
+  assert.equal(render().refreshing, false); h.unmount();
+  h.remount(); const restored = render();
+  assert.equal(restored.overview.activePublications, 2); assert.equal(restored.activities, 1); assert.equal(restored.loading, false);
+  assert.equal(requests.length, 6); assert.equal(requests[5].kind, 'overview');
+  requests[5].resolve({ activePublications: 8, pendingRequests: 3, transactions: 2 }); await setImmediate();
+  assert.equal(render().overview.activePublications, 8); assert.equal(render().overview.pendingRequests, 3); assert.equal(render().overview.transactions, 2);
+  h.unmount();
 });
 
-test('manual profile refresh retains known counts, waits for both queries and hides other user/campus data', async () => {
-  const h = hooks(), requests = []; let campus = 'campus-a', user = 'user-a';
+test('manual profile refresh only revalidates overview and isolates user, campus and login changes', async () => {
+  const h = hooks(), requests = []; let campus = 'campus-a', user = 'user-a', session = 'login-a';
   const call = signal => new Promise((resolve, reject) => requests.push({ signal, resolve, reject }));
   const { useProfileOverview } = load('hooks/useProfileOverview.ts', { react: h.react, 'expo-router': h.router, '../api/profilePersonalApi': {
     fetchProfileOverview: call, fetchOwnActivityCount: (_campus, signal) => call(signal),
   } });
-  const render = () => h.render(() => useProfileOverview(campus, user));
+  const render = () => h.render(() => useProfileOverview(campus, user, session));
   render(); assert.equal(render().loading, true);
-  requests[0].resolve({ activePublications: 4 }); await setImmediate(); assert.equal(render().loading, true);
+  requests[0].resolve({ activePublications: 4 }); await setImmediate(); assert.equal(render().loading, false); assert.equal(render().refreshing, true);
   requests[1].resolve(3); await setImmediate(); assert.equal(render().loading, false);
-  render().retry(); render(); assert.equal(render().overview.activePublications, 4); assert.equal(render().activities, 3); assert.equal(render().loading, true);
+  render().retry(); render(); assert.equal(render().overview.activePublications, 4); assert.equal(render().activities, 3); assert.equal(render().loading, false);
+  assert.equal(render().refreshing, true); assert.equal(requests.length, 3);
   user = 'user-b'; const next = render(); assert.equal(next.overview, null); assert.equal(next.activities, null);
-  assert.equal(requests[2].signal.aborted, true); requests[2].resolve({ activePublications: 999 }); requests[3].resolve(999); await setImmediate();
-  assert.equal(render().overview, null); campus = null; render(); assert.equal(render().loading, false);
-  assert.equal(requests[4].signal.aborted, true); h.unmount();
+  assert.equal(requests[2].signal.aborted, true); requests[2].resolve({ activePublications: 999 }); await setImmediate();
+  assert.equal(render().overview, null);
+  const otherAccount = requests.at(-1); campus = 'campus-b'; assert.equal(render().overview, null); assert.equal(otherAccount.signal.aborted, true);
+  const otherCampus = requests.at(-1); session = 'login-b'; assert.equal(render().overview, null); assert.equal(otherCampus.signal.aborted, true);
+  campus = null; render(); assert.equal(render().loading, false); assert.equal(render().refreshing, false);
+  assert.equal(requests.at(-1).signal.aborted, true); h.unmount();
 });
 
-test('academic data survives identity renewal, reloads explicitly and isolates user/campus replies', async () => {
-  const h = hooks(), requests = []; let identity = { userId: 'user-a', campusId: 'campus-a', capabilities: { general: true }, roles: [], profile: {} };
-  const { useProfile } = load('hooks/useProfile.ts', { react: h.react, '@/features/auth/hooks/useAuth': { useAuth: () => ({ identity, signOut: async () => {} }) },
+test('academic data survives route remount and identity renewal, reloads after edits and isolates login/user/campus', async () => {
+  const h = hooks(), requests = []; let identity = { userId: 'user-a', campusId: 'campus-a', capabilities: { general: true }, roles: [], profile: {} }, login = 'login-a';
+  const { useProfile } = load('hooks/useProfile.ts', { react: h.react, '@/features/auth/hooks/useAuth': { useAuth: () => ({ identity, session: { user: { last_sign_in_at: login } }, signOut: async () => {} }) },
     '../api/profileApi': { loadAcademicProfile: signal => new Promise((resolve, reject) => requests.push({ signal, resolve, reject })) },
   });
   const render = () => h.render(useProfile);
@@ -124,6 +137,8 @@ test('academic data survives identity renewal, reloads explicitly and isolates u
   identity = { ...identity, roles: [], profile: { nombre_completo: 'Carlos' } };
   assert.equal(render().academicProfile.fullName, 'Carlos'); assert.equal(render().academicLoading, false);
   assert.equal(requests.length, 1);
+  h.unmount(); h.remount(); assert.equal(render().academicProfile.fullName, 'Carlos'); assert.equal(requests.length, 1);
+  assert.equal(render().academicLoading, false);
   render().reloadAcademicProfile(); render(); assert.equal(render().academicLoading, true); assert.equal(render().academicProfile.fullName, 'Carlos');
   requests[1].reject(new Error('offline')); await setImmediate(); assert.equal(render().academicLoading, false);
   assert.equal(render().academicProfile.campusName, 'San Andrés'); assert.ok(render().academicError);
@@ -138,6 +153,9 @@ test('academic data survives identity renewal, reloads explicitly and isolates u
   otherUser.resolve({ fullName: 'Previous campus' }); await setImmediate(); assert.equal(render().academicProfile, null);
   requests.at(-1).resolve({ fullName: 'New user', careers: [{ id: 'career', nombre: 'Career' }] }); await setImmediate();
   assert.equal(render().academicProfile.careers[0].id, 'career');
+  login = 'login-b'; assert.equal(render().academicProfile, null); assert.equal(render().academicLoading, true);
+  requests.at(-1).resolve({ fullName: 'Fresh login', careers: [] }); await setImmediate();
+  assert.equal(render().academicProfile.fullName, 'Fresh login');
   identity = { ...identity, capabilities: { general: false } }; assert.equal(render().academicProfile, null);
   assert.equal(render().academicLoading, false);
   h.unmount(); assert.equal(requests.at(-1).signal.aborted, true);
@@ -169,9 +187,9 @@ function elements(node) {
   return [node, ...[node.props?.children].flat(4).flatMap(elements)];
 }
 
-test('profile refreshes cards and bell while keeping academic chips visible, with initial/loading/modal guards', () => {
+test('profile refresh only requests counters and preserves cards, academic chips and confirmed bell values', () => {
   const h = hooks(), calls = [], state = { academicLoading: false, academicProfile: { fullName: 'Carlos actualizado', careers: [] }, closing: false };
-  const summary = { loading: false, retry: () => calls.push('summary') };
+  const summary = { loading: false, refreshing: false, overview: { activePublications: 4 }, retry: () => calls.push('summary') };
   const identity = { userId: 'user', campusId: 'campus', capabilities: { general: true }, roles: [], profile: { nombre_completo: 'Carlos anterior' } };
   const academicSkeleton = () => null, countSkeleton = () => null, cards = () => null, account = () => null;
   const notifications = { unreadCount: 7, loading: false, refreshUnreadCount: () => calls.push('bell') };
@@ -193,31 +211,55 @@ test('profile refreshes cards and bell while keeping academic chips visible, wit
   assert.equal(scroll.props.style.flex, 1);
   assert.equal(scroll.props.bounces, true); assert.equal(scroll.props.alwaysBounceVertical, true); assert.equal(scroll.props.overScrollMode, 'always');
   assert.equal(scroll.props.refreshIndicatorOffset, 28);
-  assert.equal(scroll.props.refreshEnabled, true); scroll.props.onRefresh(); assert.deepEqual(calls, ['identity', 'summary', 'bell']);
+  assert.equal(scroll.props.refreshEnabled, true); scroll.props.onRefresh(); assert.deepEqual(calls, ['summary', 'bell']);
   assert.ok(tree.some(node => node.props?.children === 'Carlos actualizado'));
   assert.equal(tree.some(node => node.type === countSkeleton), false);
-  notifications.loading = true; tree = render(); assert.ok(tree.some(node => node.type === countSkeleton));
-  assert.equal(tree.find(node => node.props?.accessibilityLabel === 'Notificaciones, actualizando contador').props.children[1].type, countSkeleton);
+  notifications.loading = true; tree = render(); assert.equal(tree.some(node => node.type === countSkeleton), false);
+  assert.ok(tree.some(node => node.props?.accessibilityLabel === 'Notificaciones, 7 sin leer'));
   notifications.loading = false;
-  state.academicLoading = true; summary.loading = true; tree = render(); scroll = tree.find(node => node.type === 'UniversalScroll');
+  state.academicLoading = true; summary.refreshing = true; tree = render(); scroll = tree.find(node => node.type === 'UniversalScroll');
   assert.equal(scroll.props.refreshing, true); assert.equal(scroll.props.refreshEnabled, false); assert.equal(tree.some(node => node.type === academicSkeleton), false);
-  assert.ok(tree.some(node => node.type === countSkeleton));
-  assert.equal(tree.find(node => node.type === cards).props.loading, true);
+  assert.equal(tree.some(node => node.type === countSkeleton), false);
+  assert.equal(tree.find(node => node.type === cards).props.loading, false);
   assert.equal(tree.filter(node => node.type?.name === 'AcademicChip').length, 2);
   state.academicLoading = false; tree = render();
-  assert.equal(tree.some(node => node.type === academicSkeleton), false); assert.equal(tree.find(node => node.type === cards).props.loading, true);
+  assert.equal(tree.some(node => node.type === academicSkeleton), false); assert.equal(tree.find(node => node.type === cards).props.loading, false);
   const confirmed = state.academicProfile;
   state.academicProfile = null; state.academicLoading = true; tree = render();
   assert.ok(tree.some(node => node.type === academicSkeleton)); assert.equal(tree.some(node => node.type?.name === 'AcademicChip'), false);
   state.academicProfile = confirmed;
-  state.academicLoading = false; summary.loading = false; tree = render();
+  state.academicLoading = false; summary.refreshing = false; tree = render();
   assert.equal(tree.some(node => node.type === academicSkeleton), false); assert.equal(tree.find(node => node.type === cards).props.loading, false);
   assert.equal(tree.some(node => node.type === countSkeleton), false);
   notifications.unreadCount = 0; tree = render();
   assert.ok(tree.some(node => node.props?.accessibilityLabel === 'Notificaciones')); assert.equal(tree.some(node => node.type === countSkeleton), false);
+  notifications.loading = true; tree = render(); assert.equal(tree.some(node => node.type === countSkeleton), false);
+  notifications.unreadCount = null; tree = render(); assert.ok(tree.some(node => node.type === countSkeleton));
+  notifications.loading = false;
   tree.find(node => node.props?.accessibilityLabel === 'Abrir opciones de cuenta').props.onPress();
   tree = render(); assert.equal(tree.find(node => node.type === 'UniversalScroll').props.refreshEnabled, false);
   tree.find(node => node.type === account).props.onAcademicSaved(); assert.equal(calls.at(-1), 'academic');
+});
+
+test('personal cards stay available with known counters while refreshing and only skeletonize an unknown first load', () => {
+  const skeleton = () => null;
+  const { ProfilePersonalCards } = load('components/ProfilePersonalCards.tsx', {
+    'react/jsx-runtime': jsx, 'expo-router': { Link: 'Link' },
+    'lucide-react-native': Object.fromEntries(['CalendarCheck', 'ChevronRight', 'ClipboardClock', 'FolderDown', 'ReceiptText', 'Store'].map(name => [name, () => null])),
+    'react-native': { View: 'View', Text: 'Text', TouchableOpacity: 'Button', StyleSheet: { create: value => value, flatten: value => value } },
+    '@/types/colors': { APP_COLORS: { PRIMARY: '#002E56', SECONDARY: '#3F6A8E' } },
+    './ProfileSkeleton': { ProfilePersonalCardsSkeleton: skeleton },
+  });
+  const props = { loading: true, refreshing: true, overview: { activePublications: 2, pendingRequests: 3, transactions: 4 }, activities: 1, failed: false, retry() {} };
+  let tree = elements(ProfilePersonalCards(props));
+  assert.equal(tree.some(node => node.type === skeleton), false);
+  const sections = tree.filter(node => node.type?.name === 'PersonalCard');
+  assert.equal(sections.length, 5); assert.deepEqual(sections.slice(0, 3).map(node => node.props.count), [2, 3, 4]);
+  assert.ok(elements(sections[0].type(sections[0].props)).some(node => node.props?.href?.params?.section === 'publications'));
+  assert.equal(ProfilePersonalCards({ ...props, overview: null }).type, skeleton);
+  tree = elements(ProfilePersonalCards({ ...props, loading: false, failed: true }));
+  assert.equal(tree.filter(node => node.type?.name === 'PersonalCard').length, 5);
+  assert.equal(tree.find(node => node.type === 'Button').props.onPress, props.retry);
 });
 
 test('personal sections retain their flows while enrolled activities only offer explicit map exploration', () => {
