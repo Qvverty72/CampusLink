@@ -688,7 +688,7 @@ test('price edits preserve the requested price while acceptance uses the current
   assert.equal(gallery.price,8000);assert.deepEqual(gallery.originalTerms,original);
   assert.deepEqual((await historyService.getOwnPhysicalgoodsDetail(auth,saved.id)).originalTerms,original);
   for(const row of [(await requestsService.getSentPhysicalgoodsRequests(requester,{})).data[0],(await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication'})).data[0],await requestsService.getOwnPhysicalgoodsRequest(requester,saved.id,receipt.id)]){
-    assert.equal(row.publication.price,8000);assert.deepEqual(row.requestedTerms,original);assert.equal(row.transaction,null);
+    assert.equal(row.publication.price,8000);assert.deepEqual(row.publication.originalTerms,original);assert.deepEqual(row.requestedTerms,original);assert.equal(row.transaction,null);
   }
   assert.deepEqual(await requestsService.createPhysicalgoodsRequest(requester,saved.id,{messageCode:'ME_INTERESA'},operation),receipt);
   assert.deepEqual((await requestsService.getPhysicalgoodsRequestOptions(requester,saved.id)).activeRequest,receipt);
@@ -719,6 +719,7 @@ test('each request recovers its own publication version across repeated price an
   await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{modality:'VENTA',price:8000}));
   const rows=(await requestsService.getReceivedPhysicalgoodsRequests(auth,{groupBy:'publication'})).data;
   assert.deepEqual(rows.map(row=>row.requestedTerms),[{modality:'VENTA',amount:5000,currency:'CLP'},{modality:'VENTA',amount:7000,currency:'CLP'},{modality:'DONACION',amount:null,currency:'CLP'}]);
+  assert.ok(rows.every(row=>row.publication.originalTerms?.amount===5000));
   assert.deepEqual(rows.map(row=>row.id),[a.id,b.id,c.id]);assert.ok(rows.every(row=>row.publication.price===8000));
   const accepted=await requestsService.resolvePhysicalgoodsRequest(auth,saved.id,a.id,{decision:'ACEPTAR'});
   assert.equal(accepted.transaction!.amount,8000);
@@ -747,7 +748,7 @@ test('missing pre-edit history is explicit, never invents a price from current d
   await editService.updatePhysicalgoods(auth,saved.id,updates(gallery,{price:8000}));
   await db.query('DELETE FROM auditoria WHERE entidad_id=$1',[saved.id]);
   const detail=await requestsService.getOwnPhysicalgoodsRequest(requester,saved.id,receipt.id);
-  assert.equal(detail.requestedTerms,null);assert.equal(detail.publication.price,8000);
+  assert.equal(detail.requestedTerms,null);assert.equal(detail.publication.originalTerms,null);assert.equal(detail.publication.price,8000);
   assert.equal((await imagesService.getPhysicalgoodsGallery(requester,saved.id)).originalTerms,null);
   assert.doesNotMatch(JSON.stringify(detail),/datos_antes|datos_despues|storage_path|actor_usuario_id/);
   const accepted=await requestsService.resolvePhysicalgoodsRequest(auth,saved.id,receipt.id,{decision:'ACEPTAR'});
@@ -1131,6 +1132,7 @@ test('profile overview counts own physical history across campuses and rejects s
 const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',actor=auth)=>requestsService.resolvePhysicalgoodsRequest(actor,publicationId,requestId,{decision});
 
 test('request counters aggregate both inboxes across pages and follow acceptance, both confirmations and cancellation',async()=>{
+  const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
   const {saved,first,second,a}=await requestedPair(),extra=await create(auth,input());
   const c=await requestsService.createPhysicalgoodsRequest(first,extra.id,{messageCode:'ME_INTERESA'});
   assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3,pendingRequests:3,pendingTransactions:0});
@@ -1140,15 +1142,19 @@ test('request counters aggregate both inboxes across pages and follow acceptance
   assert.equal((await requestsService.getSentPhysicalgoodsRequests(first,{limit:'1'})).data.length,1);
   assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(first,{}),{sentAccepted:2,receivedPending:0,pendingRequests:0,pendingTransactions:2});
   assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3,pendingRequests:1,pendingTransactions:2});
+  const profile=await getProfileOverview(auth);assert.equal(profile.pendingRequests,1);assert.equal(profile.transactions,2);
+  assert.equal((await getProfileOverview(first)).pendingRequests,0);assert.equal((await getProfileOverview(first)).transactions,2);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,3);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(second,{})).sentAccepted,0);
   await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,one,{},'CONFIRMAR');
+  assert.equal((await getProfileOverview(auth)).transactions,2);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,2);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,3);
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,one,{},'CONFIRMAR');
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,1);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).receivedPending,1);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).pendingTransactions,1);
+  assert.equal((await getProfileOverview(auth)).transactions,1);
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(auth,{})).pendingRequests,0);
   await transactionsService.transitionPhysicalgoodsTransaction(first,extra.id,two,{},'CANCELAR');
   assert.equal((await requestsService.getPhysicalgoodsRequestCounts(first,{})).sentAccepted,0);
@@ -2042,18 +2048,19 @@ test('physical publication reports reuse the common table with server scope, tri
   assert.equal(row.contenido_reportado_json.publication.titulo,'Calculadora');assert.equal(row.contenido_reportado_json.publication.propietario_id,auth.userId);
   assert.equal(row.contenido_reportado_json.publication.images.length,1);assert.doesNotMatch(JSON.stringify(row.contenido_reportado_json),/storage_path|base64|token|reportante_id/);
   assert.equal(receipt.publicationId,saved.id);assert.equal(receipt.transactionId,null);assert.equal(receipt.status,'PENDIENTE');assert.equal(receipt.reportedAt,new Date(row.reportado_en).toISOString());
-  assert.deepEqual(Object.keys(receipt).sort(),['campusId','id','publicationId','reportedAt','status','transactionId']);
+  assert.deepEqual(Object.keys(receipt).sort(),['campusId','description','id','publicationId','reason','reportedAt','status','transactionId']);
   assert.deepEqual((await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id])).rows,before.rows);assert.deepEqual(await audits(saved.id),history);
   await db.query("UPDATE publicacion_recurso SET titulo='Editada',descripcion='Nueva',deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1",[saved.id]);
   assert.deepEqual((await reported(receipt.id)).rows[0].contenido_reportado_json,row.contenido_reportado_json);
 });
 
-test('reportable publications follow existing detail visibility for sale and donation, including own content, without requiring admin or analytics permissions',async()=>{
+test('reportable publications follow detail visibility for sale and donation and prohibit owner reports',async()=>{
   for(const modality of ['VENTA','DONACION']){
     const saved=await create(auth,input({modality,price:modality==='DONACION'?null:15000}));
     for(const status of ['DISPONIBLE','RESERVADO','FINALIZADO']){
       await db.query('UPDATE publicacion_recurso SET estado_publicacion=$2 WHERE id=$1',[saved.id,status]);
-      const receipt=await reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'Motivo',description:'  '});
+      await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'Motivo'}),{status:403});
+      const receipt=await reportsService.reportPhysicalgoods(await otherActor(),saved.id,null,{reason:'Motivo',description:'  '});
       const row=(await reported(receipt.id)).rows[0];assert.equal(row.descripcion,null);assert.equal(row.contenido_reportado_json.publication.estado_publicacion,status);
       assert.equal(row.contenido_reportado_json.publication.modalidad,modality);
     }
@@ -2133,27 +2140,47 @@ test('report payload cannot supply identities, a rating target, state or snapsho
   await assert.rejects(reportsService.reportPhysicalgoods(auth,'invalid',null,{reason:'Motivo'}),{status:400});
   await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,'invalid',{reason:'Motivo'}),{status:400});
   assert.equal((await reportCount()).rows[0].count,before);
-  const receipt=await reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'x'.repeat(200),description:'x'.repeat(2000)});assert.equal((await reported(receipt.id)).rows[0].motivo.length,200);
+  const receipt=await reportsService.reportPhysicalgoods(await otherActor(),saved.id,null,{reason:'x'.repeat(200),description:'x'.repeat(2000)});assert.equal((await reported(receipt.id)).rows[0].motivo.length,200);
 });
 
 test('report insertion failure rolls back and uncertain acknowledgement never changes the reported publication or schema',async()=>{
-  const saved=await create(auth,input()),before=await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id]),count=(await reportCount()).rows[0].count,
+  const reporter=await otherActor(),saved=await create(auth,input()),before=await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id]),count=(await reportCount()).rows[0].count,
     inventory=()=>db.query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position"),columns=await inventory();
-  failReportInsert=true;await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'Motivo'}),{status:503});failReportInsert=false;
+  failReportInsert=true;await assert.rejects(reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Motivo'}),{status:503});failReportInsert=false;
   assert.equal((await reportCount()).rows[0].count,count);
-  lostReportCommit=true;await assert.rejects(reportsService.reportPhysicalgoods(auth,saved.id,null,{reason:'Motivo'}),{status:503});
+  lostReportCommit=true;await assert.rejects(reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Motivo'}),{status:503});
   assert.equal((await reportCount()).rows[0].count,count+1);assert.deepEqual((await db.query('SELECT * FROM publicacion_recurso WHERE id=$1',[saved.id])).rows,before.rows);assert.deepEqual((await inventory()).rows,columns.rows);
 });
 
-test('report HTTP is authenticated, no-store, private and sanitized, with no client read, resolution or rating-report endpoints',async()=>{
+test('publication report is idempotent across competing sends and exposes only the first own receipt in all states',async()=>{
+  const saved=await create(auth,input()),reporter=await otherActor(),other=await otherActor();
+  await assert.rejects(reportsService.getOwnPhysicalgoodsReport(auth,saved.id),{status:403});
+  assert.equal(await reportsService.getOwnPhysicalgoodsReport(reporter,saved.id),null);
+  const sends=await Promise.all([reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Primero',description:'Comentario'}),reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'Segundo'})]);
+  assert.equal(sends[0].id,sends[1].id);assert.equal((await db.query('SELECT * FROM reporte_contenido WHERE entidad_id=$1',[saved.id])).rows.length,1);
+  for(const status of ['PENDIENTE','EN_REVISION','RESUELTO','DESESTIMADO']){
+    await db.query('UPDATE reporte_contenido SET estado_reporte=$2 WHERE id=$1',[sends[0].id,status]);
+    const receipt=await reportsService.getOwnPhysicalgoodsReport(reporter,saved.id);assert.equal(receipt!.status,status);assert.equal(receipt!.reason,sends[0].reason);assert.equal(receipt!.reportedAt,sends[0].reportedAt);
+    const replay=await reportsService.reportPhysicalgoods(reporter,saved.id,null,{reason:'No reemplazar'});assert.deepEqual(replay,receipt);
+  }
+  assert.equal(await reportsService.getOwnPhysicalgoodsReport(other,saved.id),null);
+  await db.query("UPDATE publicacion_recurso SET deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1",[saved.id]);
+  const receipt=await reportsService.getOwnPhysicalgoodsReport(reporter,saved.id);assert.equal(receipt!.id,sends[0].id);assert.doesNotMatch(JSON.stringify(receipt),/contenido_reportado|snapshot|reportante|resuelto_por/);
+  current=structuredClone(reporter);const url=base.replace('/marketplace/physicalgoods','/reports/physicalgoods')+'/'+saved.id+'/own';
+  const response=await originalFetch(url,{headers:{Authorization:'Bearer '+token}});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.equal((await response.json()).data.id,sends[0].id);
+  assert.equal((await originalFetch(url)).status,401);assert.equal((await originalFetch(url+'?userId='+other.userId,{headers:{Authorization:'Bearer '+token}})).status,400);
+});
+
+test('report HTTP is authenticated, no-store, private and sanitized, with no administrative read or rating-report endpoints',async()=>{
   const pair=await acceptedAgreement(),url=base.replace('/marketplace/physicalgoods','/reports/physicalgoods')+'/'+pair.saved.id,
     headers={Authorization:'Bearer '+token,'Content-Type':'application/json'},body=JSON.stringify({reason:'Motivo',description:'Detalle'});
   assert.equal((await originalFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body})).status,401);
   for(const target of [url+'?campusId='+otherCampus,url.replace(pair.saved.id,'invalid')])assert.equal((await originalFetch(target,{method:'POST',headers,body})).status,400);
   assert.equal((await originalFetch(url,{method:'POST',headers,body:JSON.stringify({reason:'Motivo',status:'RESUELTO'})})).status,400);
+  assert.equal((await originalFetch(url,{method:'POST',headers,body})).status,403);current=structuredClone(pair.first);
   failReportInsert=true;let response=await originalFetch(url,{method:'POST',headers,body});assert.equal(response.status,503);assert.doesNotMatch(JSON.stringify(await response.json()),/private|SQL|password/);failReportInsert=false;
   response=await originalFetch(url,{method:'POST',headers,body});assert.equal(response.status,201);assert.equal(response.headers.get('cache-control'),'no-store');const receipt=(await response.json()).data;
-  assert.equal(receipt.status,'PENDIENTE');for(const field of ['snapshot','reason','description','userId','reportante_id'])assert.equal(field in receipt,false);
+  assert.equal(receipt.status,'PENDIENTE');assert.equal(receipt.reason,'Motivo');assert.equal(receipt.description,'Detalle');for(const field of ['snapshot','userId','reportante_id'])assert.equal(field in receipt,false);
   current=structuredClone(pair.first);response=await originalFetch(url+'/transactions/'+pair.id,{method:'POST',headers,body});assert.equal(response.status,201);
   current=structuredClone(pair.second);assert.equal((await originalFetch(url+'/transactions/'+pair.id,{method:'POST',headers,body})).status,404);
   for(const target of [url,url+'/'+receipt.id,base.replace('/marketplace/physicalgoods','/reports')+'/'+receipt.id]){

@@ -12,9 +12,9 @@ const native={View:'View',Text:'Text',TextInput:'Input',Pressable:'Button',Style
 const shared={'react/jsx-runtime':jsx,'react-native':native,'lucide-react-native':{Check:'Check',Flag:'Flag',Star:'Star'},'./CatalogUI':{CATALOG_COLORS:{primary:'#002E56'}},'./PublicationFormUI':{publicationUI:{},PublicationFeedback:'Feedback',PublicationSubmit:'Submit'},'@/types/colors':{APP_COLORS:{ACCENT:'#FDBB30'}}};
 const elements=node=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(5).flatMap(elements)];
 const reasons=load('types/report.ts',{}).MARKETPLACE_REPORT_REASONS;
-function report(target={type:'PUBLICACION_FISICA',publicationId:'publication'}){const slots=[],writes=[],state={busy:false,error:null,receipt:null,submit:input=>writes.push(input)};let cursor=0;
+function report(target={type:'PUBLICACION_FISICA',publicationId:'publication'}){const slots=[],writes=[],state={busy:false,error:null,receipt:null,submit:input=>{writes.push(input);}};let cursor=0;
  const react={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=initial;return[slots[i],value=>{slots[i]=typeof value==='function'?value(slots[i]):value;}];},useEffect:noop};
- const {fields}=load('components/MarketplaceReportForm.tsx',{...shared,react,'@/features/auth/hooks/useAuth':{},'@/features/reports/hooks/useContentReport':{useContentReport:()=>state},'../types/report':{MARKETPLACE_REPORT_REASONS:reasons}},'\nmodule.exports.fields=ReportFields;');
+ const {fields}=load('components/MarketplaceReportForm.tsx',{...shared,react,'@/features/reports/components/ContentReportConfirmation':{ContentReportConfirmation:'Confirmation'},'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},'@/features/auth/hooks/useAuth':{},'@/features/reports/hooks/useContentReport':{useContentReport:()=>state},'../types/report':{MARKETPLACE_REPORT_REASONS:reasons}},'\nmodule.exports.fields=ReportFields;');
  return{writes,state,render(){cursor=0;return fields({target,title:'Recurso',onBack:noop});}};}
 test('denuncia: opción envía texto del contrato existente; otro motivo conserva entrada libre y trim',()=>{
  const q=report();let tree=q.render();const find=label=>elements(tree).find(node=>node.props?.accessibilityLabel===label);
@@ -28,6 +28,7 @@ test('denuncia: motivo de intercambio solo en acuerdo; fallos conservan selecci�
  elements(tree).find(node=>node.props?.accessibilityLabel==='Spam o publicidad').props.onPress();q.state.error='No se pudo confirmar';tree=q.render();assert.equal(elements(tree).find(node=>node.type==='Feedback').props.error,'No se pudo confirmar');assert.equal(elements(tree).find(node=>node.props?.accessibilityLabel==='Spam o publicidad').props['aria-checked'],true);
  q.state.busy=true;tree=q.render();const send=elements(tree).find(node=>node.type==='Submit');assert.equal(send.props.disabled,true);send.props.onPress();assert.equal(q.writes.length,0);
  q.state.receipt={reportedAt:'2026-10-24T12:00:00Z'};tree=q.render();assert.ok(!elements(tree).some(node=>node.type==='Submit'||node.type==='Input'));
+ const lookup=report();lookup.state.checking=true;assert.ok(!elements(lookup.render()).some(node=>node.type==='Submit'||node.type==='Input'));lookup.state.checking=false;lookup.state.lookupError='No se pudo consultar';tree=lookup.render();assert.equal(elements(tree).find(node=>node.type==='Submit').props.label,'Reintentar consulta de denuncia');assert.ok(!elements(tree).some(node=>node.type==='Input'));
 });
 test('valoración: selector entero1..5, envío deshabilitado sin puntuación y recibo inmutable sin acciones',()=>{
  const {OwnerRating}=load('components/OwnerRating.tsx',shared),selected=[];

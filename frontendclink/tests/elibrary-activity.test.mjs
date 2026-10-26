@@ -21,6 +21,35 @@ const trade={id:'trade',publicationId:'publication',ownerId:'owner',receiverId:'
 const {agreementCopy}=load('utils/agreementPresentation.ts',{});
 const {digitalTransactionPresentation}=load('elibrary/utils/digitalTransactionPresentation.ts',{'../../utils/agreementPresentation':{agreementCopy}});
 
+test('acquired list opens the exact resource in its authorized modal and retains the list on close',()=>{
+ const h=runtime(),state={items:[{id:'original-id',title:'Original adquirido',campusName:'Origen',price:2500,acquisition:{modality:'VENTA',amount:2500,acquiredAt:'2026-10-25'}}],loading:false,page:1,reload:noop};
+ const {DigitalAcquiredActivity}=load('elibrary/components/DigitalAcquiredActivity.tsx',{react:h.react,'react/jsx-runtime':jsx,'react-native':{View:'View'},
+ '../hooks/useAcquiredDigitalResources':{useAcquiredDigitalResources:()=>state},'../../hooks/useMarketplaceRefresh':{useMarketplaceRefresh:noop},
+ '../../components/PublicationActivityUI':{PublicationActivityRow:'Row',PublicationActivitySkeleton:'Skeleton',publicationActivityUI:{}},
+ '../../components/RequestsUI':{RequestsPager:'Pager',RequestButton:'Button'},'./DigitalActivityUI':{DigitalActivityFeedback:'Feedback'},'./DigitalActivityResource':{DigitalResourceModal:'ResourceModal'}});
+ const render=()=>elements(h.render(()=>DigitalAcquiredActivity({active:true})));
+ render().find(node=>node.type==='Row').props.onPress();let modal=render().find(node=>node.type==='ResourceModal');
+ assert.equal(modal.props.id,'original-id');assert.equal(modal.props.mode,'acquired');modal.props.onClose();
+ assert.ok(!render().some(node=>node.type==='ResourceModal'));assert.equal(render().find(node=>node.type==='Row').props.title,'Original adquirido');h.unmount();
+});
+
+test('acquired detail reads the acquired endpoint and downloads its authorized original after withdrawal',async()=>{
+ const h=runtime(),reads=[],downloads=[],saved=[],busy=[];
+ const {DigitalResourceContent}=load('elibrary/components/DigitalActivityResource.tsx',{react:h.react,'react/jsx-runtime':jsx,
+ 'react-native':{Text:'Text',View:'View'},'lucide-react-native':{FileText:'Icon'},'@/components/Skeleton':{Skeleton:'Skeleton',SkeletonBlock:'Block'},
+ '../api/digitalActivityApi':{loadDigitalActivityResource:()=>assert.fail('must use acquisition')},
+ '../api/elibraryApi':{loadAcquiredDigitalResource:(...args)=>pending(reads,args),loadOwnedDigitalResource:()=>assert.fail('must use acquisition'),downloadDigitalFile:(...args)=>pending(downloads,args)},
+ '../api/saveDigitalFile':{saveDigitalFile:(...args)=>saved.push(args)},'../../components/AgreementProductUI':{AgreementProductDetails:'Details'},'../../components/AgreementStepModal':{AgreementStepModal:'Modal'},
+ '../../components/RequestsUI':{RequestButton:'Button'},'../../components/CatalogUI':{CATALOG_COLORS:{},ui:{}},'./DigitalPreview':{DigitalPreview:'Preview'}});
+ const onBusyChange=value=>busy.push(value),render=()=>elements(h.render(()=>DigitalResourceContent({id:'original-id',mode:'acquired',onBusyChange})));
+ render();assert.equal(reads[0].args[0],'original-id');const file={id:'file',name:'original.pdf',sizeBytes:100,mimeType:'application/pdf'};
+ reads[0].resolve({id:'original-id',title:'Retirado',description:'Original',isWithdrawn:true,modality:'VENTA',price:8000,files:[file],careers:[],subjects:[],acquisition:{modality:'VENTA',amount:2500,acquiredAt:'2026-10-25'}});await setImmediate();
+ let tree=render();assert.equal(tree.find(node=>node.type==='Details').props.amount,2500);assert.ok(!tree.some(node=>node.type==='Preview'));
+ tree.find(node=>node.props?.label==='Descargar archivo completo').props.onPress();tree=render();assert.equal(busy.at(-1),true);assert.equal(downloads[0].args[0],'original-id');assert.equal(downloads[0].args[1].id,'file');
+ assert.ok(tree.find(node=>node.props?.label==='Descargando…').props.disabled);downloads[0].resolve('authorized-original');await setImmediate();render();
+ assert.equal(saved[0][0],'authorized-original');assert.equal(saved[0][1].id,'file');assert.equal(busy.at(-1),false);h.unmount();assert.equal(reads[0].args[1].aborted,true);
+});
+
 test('digital transaction presentation distinguishes own action, waiting and terminal states using the correct ID and role',()=>{
  assert.equal(digitalTransactionPresentation(trade,'receiver').group,'action');
  const mine={...trade,canConfirm:false,participants:[{id:'owner',name:'Camila',role:'PROPIETARIO'}],confirmations:[{userId:'receiver',role:'RECEPTOR'}]};

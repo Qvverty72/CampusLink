@@ -7,28 +7,37 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { APP_COLORS } from '@/types/colors';
 import { RefreshScrollView, useScrollRefresh } from '@/components/RefreshScrollView';
+import { BottomNavigationIcon } from '@/components/navigation/BottomNavigationIcon';
+import { CatalogTabs } from '@/features/marketplace/components/CatalogUI';
 import { PhysicalgoodsHistory, PhysicalgoodsHistoryDetail } from '@/features/marketplace/physicalgoods/components/PhysicalgoodsHistory';
 import { PhysicalgoodsRequests } from '@/features/marketplace/physicalgoods/components/PhysicalgoodsRequests';
 import { PhysicalgoodsTransaction } from '@/features/marketplace/physicalgoods/components/PhysicalgoodsTransaction';
 import type { PhysicalgoodsHistoryTarget } from '@/features/marketplace/physicalgoods/hooks/usePhysicalgoodsHistory';
 import type { PhysicalgoodsTransactionTarget } from '@/features/marketplace/physicalgoods/types/publication';
-import { AcquiredDigitalResources } from '@/features/marketplace/elibrary/components/AcquiredDigitalResources';
+import { DigitalAcquiredActivity } from '@/features/marketplace/elibrary/components/DigitalAcquiredActivity';
+import { DigitalPublications } from '@/features/marketplace/elibrary/components/DigitalPublications';
+import { DigitalActivityRequests } from '@/features/marketplace/elibrary/components/DigitalActivityRequests';
+import { DigitalActivityTransactions } from '@/features/marketplace/elibrary/components/DigitalActivityTransactions';
+import { useDigitalActivityCounts } from '@/features/marketplace/elibrary/hooks/useDigitalActivity';
 import { PERSONAL_TITLES, type PersonalSection } from './ProfilePersonalCards';
 import { useOwnActivities } from '../hooks/useOwnActivities';
 
 export function ProfilePersonalScreen() {
   const { identity } = useAuth();
-  const { section } = useLocalSearchParams<{ section?: string | string[] }>();
+  const { section, kind, publicationId } = useLocalSearchParams<{ section?: string | string[]; kind?: string; publicationId?: string }>();
   const validSection = typeof section === 'string' && Object.hasOwn(PERSONAL_TITLES, section) ? section as PersonalSection : null;
   return <PersonalContent key={`${identity?.userId}:${identity?.campusId}:${validSection}`} section={validSection}
+    initialDigital={kind === 'digital'} initialPublicationId={typeof publicationId === 'string' ? publicationId : undefined}
     campusId={identity?.campusId ?? ''} allowed={Boolean(identity?.capabilities.general)} />;
 }
 
 /** El modal consulta datos propios; la ficha de actividades se explora desde el mapa. */
-function PersonalContent({ section, campusId, allowed }: { section: PersonalSection | null; campusId: string; allowed: boolean }) {
+function PersonalContent({ section, campusId, allowed, initialDigital = false, initialPublicationId }: { section: PersonalSection | null; campusId: string; allowed: boolean; initialDigital?: boolean; initialPublicationId?: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [received, setReceived] = useState(false);
+  const [digital, setDigital] = useState(initialDigital);
+  const digitalCounts = useDigitalActivityCounts(allowed && digital && section === 'requests');
   const [revision, setRevision] = useState(0);
   const [history, setHistory] = useState<PhysicalgoodsHistoryTarget | null>(null);
   const [agreement, setAgreement] = useState<PhysicalgoodsTransactionTarget | null>(null);
@@ -49,9 +58,14 @@ function PersonalContent({ section, campusId, allowed }: { section: PersonalSect
       <RefreshScrollView onClose={close} onHeaderVisibilityChange={setHeaderVisible}
         contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!allowed || !section ? <Text style={styles.text}>Esta consulta no está disponible para tu cuenta.</Text> : <>
-          {(section === 'publications' || section === 'transactions') && <PhysicalgoodsHistory active transactions={section === 'transactions'}
-            refreshVersion={revision} refreshEnabled={!history && !agreement} onDetail={setHistory} onAgreement={showAgreement} />}
-          {section === 'requests' && <>
+          {['publications','requests','transactions'].includes(section) && <CatalogTabs variant="underline" selected={digital?'digital':'physical'}
+            onSelect={value=>{setHistory(null);setAgreement(null);setDigital(value==='digital');}} tabs={[
+              {id:'physical',label:'Mercado',icon:<BottomNavigationIcon id="physicalgoods" size={16} color={digital?APP_COLORS.SECONDARY:APP_COLORS.PRIMARY}/>},
+              {id:'digital',label:'Biblioteca',icon:<BottomNavigationIcon id="elibrary" size={16} color={digital?APP_COLORS.PRIMARY:APP_COLORS.SECONDARY}/>},
+            ]}/>}
+          {!digital && (section === 'publications' || section === 'transactions') && <PhysicalgoodsHistory active transactions={section === 'transactions'}
+            refreshVersion={revision} refreshEnabled={!history && !agreement} showTitle={false} onDetail={setHistory} onAgreement={showAgreement} />}
+          {!digital && section === 'requests' && <>
             <View style={styles.tabs}>
               {([false, true] as const).map(value => <TouchableOpacity key={String(value)} accessibilityRole="tab" accessibilityState={{ selected: received === value }}
                 activeOpacity={0.7} style={[styles.tab, received === value && styles.selectedTab]} onPress={() => setReceived(value)}>
@@ -61,7 +75,10 @@ function PersonalContent({ section, campusId, allowed }: { section: PersonalSect
             <PhysicalgoodsRequests key={String(received)} active received={received} refreshVersion={revision} refreshEnabled={!history && !agreement} onResolved={refresh}
               onDetail={(publicationId, requestId) => setHistory({ publicationId, requestId })} onAgreement={showAgreement} />
           </>}
-          {section === 'resources' && <AcquiredDigitalResources embedded />}
+          {digital && section === 'publications' && <DigitalPublications active onRequests={()=>router.setParams({section:'requests',kind:'digital'})} onChanged={refresh}/>}
+          {digital && section === 'requests' && <DigitalActivityRequests active counts={digitalCounts.counts} countsLoading={digitalCounts.loading} onChanged={digitalCounts.reload}/>}
+          {digital && section === 'transactions' && <DigitalActivityTransactions active onChanged={refresh} onAcquired={id=>router.setParams({section:'resources',publicationId:id})}/>}
+          {section === 'resources' && <DigitalAcquiredActivity active initialPublicationId={initialPublicationId}/>}
           {section === 'activities' && <OwnActivities key={revision} campusId={campusId}
             onExplore={id => router.dismissTo({ pathname: '/map', params: { activityId: id } })} />}
         </>}
@@ -114,7 +131,7 @@ const styles = StyleSheet.create({
   panel: { width: '100%', maxWidth: 760, maxHeight: '94%', flex: 1, alignSelf: 'center', backgroundColor: '#F4F7FA', borderRadius: 22, overflow: 'hidden' },
   header: { backgroundColor: APP_COLORS.PRIMARY, flexDirection: 'row', alignItems: 'center', paddingLeft: 20, paddingRight: 10, minHeight: 64, gap: 8 },
   title: { flex: 1, fontSize: 18, fontWeight: '600', color: '#FFFFFF' }, iconButton: { minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  content: { flexGrow: 1, padding: 16, paddingBottom: 32 }, text: { color: '#617484', fontSize: 14, lineHeight: 21 },
+  content: { flexGrow: 1, padding: 16, paddingBottom: 32, gap: 16 }, text: { color: '#617484', fontSize: 14, lineHeight: 21 },
   tabs: { flexDirection: 'row', gap: 8 }, tab: { flex: 1, minHeight: 44, borderRadius: 12, backgroundColor: '#E3EAF0', alignItems: 'center', justifyContent: 'center' },
   selectedTab: { backgroundColor: APP_COLORS.PRIMARY }, tabText: { fontSize: 14, fontWeight: '600', color: APP_COLORS.PRIMARY }, selectedTabText: { color: '#FFFFFF' },
   list: { gap: 14 }, action: { color: APP_COLORS.PRIMARY, fontSize: 14, fontWeight: '600' },

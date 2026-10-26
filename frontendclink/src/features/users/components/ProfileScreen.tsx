@@ -45,7 +45,7 @@ export function ProfileScreen() {
         refreshing={refreshing}
         refreshEnabled={Boolean(identity?.capabilities.general) && !refreshing && !closing && !accountMenuOpen}
         refreshLabel="tu perfil"
-        indicatorColor={APP_COLORS.ACCENT}
+        indicatorColor={APP_COLORS.PRIMARY}
         refreshIndicatorOffset={insets.top + 8}
         contentContainerStyle={[styles.scrollContent, {
           paddingTop: safeAreaInset('top', insets.top, { offset: 24 }),
@@ -148,13 +148,13 @@ export function ProfileScreen() {
 function AcademicChip({ icon, label, kind }: { icon: LucideIcon; label: string; kind: string }) {
   return (
     <View style={styles.academicChip} accessible accessibilityLabel={`${kind}: ${label}`}>
-      <ProfileIcon icon={icon} size={14} color="#FFFFFF" />
+      <ProfileIcon icon={icon} size={14} color={APP_COLORS.SECONDARY} />
       <Text style={styles.academicChipText}>{label}</Text>
     </View>
   );
 }
 
-function ProfileIcon({ icon: Icon, color = '#FFFFFFB8', size = 20 }: { icon: LucideIcon; color?: string; size?: number }) {
+function ProfileIcon({ icon: Icon, color = APP_COLORS.SECONDARY, size = 20 }: { icon: LucideIcon; color?: string; size?: number }) {
   return (
     <View style={{ pointerEvents: 'none' }} accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Icon size={size} color={color} strokeWidth={1.7} />
@@ -173,37 +173,37 @@ function ProfileMenuItem({ href, icon, label, divider = false }: { href: Href; i
       >
         <ProfileIcon icon={icon} size={18} />
         <Text style={styles.menuLabel}>{label}</Text>
-        <ProfileIcon icon={ChevronRight} size={16} color="#FFFFFF80" />
+        <ProfileIcon icon={ChevronRight} size={16} />
       </TouchableOpacity>
     </Link>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: APP_COLORS.PRIMARY },
+  screen: { flex: 1, backgroundColor: '#F4F7F9' },
   scroll: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   content: { width: '100%', maxWidth: 560, alignSelf: 'center', gap: 20 },
   profileHeader: { gap: 14 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 68, height: 68, borderRadius: 34, borderWidth: 3, borderColor: APP_COLORS.SECONDARY, flexShrink: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: APP_COLORS.ACCENT },
+  avatar: { width: 68, height: 68, borderRadius: 34, borderWidth: 3, borderColor: '#E0E8ED', flexShrink: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: APP_COLORS.ACCENT },
   avatarText: { color: APP_COLORS.PRIMARY, fontSize: 26, fontWeight: '600' },
   identity: { flex: 1, minWidth: 0, gap: 4 },
-  name: { color: '#FFFFFF', fontSize: 20, fontWeight: '600', lineHeight: 26 },
-  email: { color: '#FFFFFFB8', fontSize: 13, lineHeight: 19 },
+  name: { color: APP_COLORS.PRIMARY, fontSize: 20, fontWeight: '600', lineHeight: 26 },
+  email: { color: '#607485', fontSize: 13, lineHeight: 19 },
   academicSummary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  academicChip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: `${APP_COLORS.SECONDARY}66` },
-  academicChipText: { flexShrink: 1, color: '#FFFFFF', fontSize: 12, fontWeight: '500', lineHeight: 16 },
-  academicError: { color: '#FFB4AB', fontSize: 11, lineHeight: 17 },
+  academicChip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: '#E9F0F6' },
+  academicChipText: { flexShrink: 1, color: APP_COLORS.PRIMARY, fontSize: 12, fontWeight: '500', lineHeight: 16 },
+  academicError: { color: '#B42318', fontSize: 11, lineHeight: 17 },
   retryButton: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: 4 },
-  retryText: { color: APP_COLORS.ACCENT, fontSize: 12, fontWeight: '600' },
+  retryText: { color: APP_COLORS.PRIMARY, fontSize: 12, fontWeight: '600' },
   notificationButton: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, alignSelf: 'flex-start' },
-  notificationBadge: { position: 'absolute', top: 1, right: 0, minWidth: 20, minHeight: 20, paddingHorizontal: 4, borderRadius: 12, borderWidth: 2, borderColor: APP_COLORS.PRIMARY, backgroundColor: APP_COLORS.ACCENT, alignItems: 'center', justifyContent: 'center' },
+  notificationBadge: { position: 'absolute', top: 1, right: 0, minWidth: 20, minHeight: 20, paddingHorizontal: 4, borderRadius: 12, borderWidth: 2, borderColor: '#F4F7F9', backgroundColor: APP_COLORS.ACCENT, alignItems: 'center', justifyContent: 'center' },
   notificationBadgeText: { color: APP_COLORS.PRIMARY, fontSize: 10, fontWeight: '700', lineHeight: 14 },
   section: { gap: 10 },
-  sectionTitle: { color: '#FFFFFFB8', fontSize: 10, fontWeight: '600', letterSpacing: 1.2, lineHeight: 16, marginLeft: 3 },
-  menu: { backgroundColor: `${APP_COLORS.SECONDARY}66`, borderRadius: 16, overflow: 'hidden' },
+  sectionTitle: { color: '#607485', fontSize: 10, fontWeight: '600', letterSpacing: 1.2, lineHeight: 16, marginLeft: 3 },
+  menu: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E8ED', borderRadius: 16, overflow: 'hidden' },
   menuItem: { minHeight: 50, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#FFFFFF1A' },
-  menuLabel: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '500', lineHeight: 20 },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E0E8ED' },
+  menuLabel: { flex: 1, color: APP_COLORS.PRIMARY, fontSize: 13, fontWeight: '500', lineHeight: 20 },
 });

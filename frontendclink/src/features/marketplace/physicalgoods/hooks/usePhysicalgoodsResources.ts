@@ -18,7 +18,7 @@ function reconcilePage(previous:PhysicalgoodsPage|null,next:PhysicalgoodsPage):P
 }
 
 /** Coordina filtros, paginación, galería, imágenes y mutaciones de publicaciones físicas. */
-export function usePhysicalgoodsResources() {
+export function usePhysicalgoodsResources(catalogActive = true) {
   const auth = useAuth();
   const [options, setOptions] = useState<PublicationOptions | null>(null), [page, setPage] = useState<PhysicalgoodsPage | null>(null);
   const [filters, setFilters] = useState({ ...emptyPhysicalgoodsFilters }), [applied, setApplied] = useState({ ...emptyPhysicalgoodsFilters }), [number, setNumber] = useState(1);
@@ -45,11 +45,11 @@ export function usePhysicalgoodsResources() {
     setLoading(true); setError(null); setPage(null);
     async function read(silent=false){
       try {
-        const [catalog,result]=await Promise.all([silent?Promise.resolve(null):loadPublicationOptions(abort.signal),loadPhysicalgoodsResources(applied,number,abort.signal)]);
+        const [catalog,result]=await Promise.all([silent?Promise.resolve(null):loadPublicationOptions(abort.signal),catalogActive?loadPhysicalgoodsResources(applied,number,abort.signal):Promise.resolve(null)]);
         if(abort.signal.aborted)return;
         if(catalog)setOptions(catalog);
-        setPage(previous=>reconcilePage(previous,result));
-        renew=result.data.some(resource=>resource.imageUrl);
+        if(result)setPage(previous=>reconcilePage(previous,result));
+        renew=Boolean(result?.data.some(resource=>resource.imageUrl));
       } catch(reason){
         if(abort.signal.aborted)return;
         if(!silent||reason instanceof AuthApiError&&[401,403].includes(reason.status)){
@@ -64,7 +64,7 @@ export function usePhysicalgoodsResources() {
     }
     void read();
     return () => { abort.abort(); if (timer) clearTimeout(timer); };
-  }, [applied, number, revision]);
+  }, [applied, number, revision, catalogActive]);
   useEffect(() => {
     if (!selectedId) return;
     const abort = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined,renew=false;

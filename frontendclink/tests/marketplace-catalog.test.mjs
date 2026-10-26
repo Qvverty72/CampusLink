@@ -35,7 +35,7 @@ function runtime() {
 class AuthApiError extends Error {}
 const auth = { identity: { userId: 'owner', campusId: 'campus' }, refreshIdentity() {} };
 const emptyPhysicalgoodsFilters = { q: '', categoryId: '', modality: '', condition: '', careerId: '', subjectId: '', minPrice: '', maxPrice: '', mine: false };
-function fixture(kind) {
+function fixture(kind,catalogActive=true) {
   const h = runtime(), calls = [], details = [],optionReads=[];
   const { useDebouncedValue } = load('hooks/useDebouncedValue.ts', { react: h.react }, h.globals);
   const shared = { react: h.react, '@/features/auth/hooks/useAuth': { useAuth: () => auth },
@@ -58,8 +58,16 @@ function fixture(kind) {
     }, h.globals));
   }
   let state;
-  return { h, calls, details,optionReads, render() { for (let i = 0; i < 3; i++) state = h.render(hook); return state; } };
+  return { h, calls, details,optionReads, render() { for (let i = 0; i < 3; i++) state = h.render(()=>hook(catalogActive)); return state; } };
 }
+
+test('physical: standalone administration loads options and the chosen gallery without exploring the catalog',async()=>{
+ const f=fixture('physical',false);f.render();await setImmediate();let state=f.render();
+ assert.equal(f.calls.length,0);assert.equal(f.optionReads.length,1);assert.equal(state.loading,false);
+ state.open('mine');f.render();assert.equal(f.details.length,1);assert.equal(f.details[0].id,'mine');
+ f.details[0].resolve({id:'mine',category:{id:'books'},images:[],canEdit:true});await setImmediate();state=f.render();
+ assert.equal(state.gallery.id,'mine');assert.equal(f.calls.length,0);f.h.unmount();assert.equal(f.details[0].signal.aborted,true);
+});
 
 test('physical: automatic renewal keeps the loaded page, reconciles changes and discards a stale background response',async()=>{
  const f=fixture('physical');let state=f.render();f.calls[0].resolve({data:[],meta:{hasMore:true}});await setImmediate();state=f.render();state.setNumber(2);state=f.render();

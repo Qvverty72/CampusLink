@@ -151,12 +151,13 @@ export function PublishFAB({ onPress }: { onPress: () => void }) {
   </View>;
 }
 
-export function CatalogTabs<T extends string>({ tabs, selected, onSelect, variant = 'chips' }: { tabs: { id: T; label: string;badgeCount?:number;badgeLabel?:string }[]; selected: T; onSelect: (id: T) => void; variant?: 'chips' | 'underline' }) {
+export function CatalogTabs<T extends string>({ tabs, selected, onSelect, variant = 'chips' }: { tabs: { id: T; label: string;icon?:ReactNode;badgeCount?:number;badgeLabel?:string }[]; selected: T; onSelect: (id: T) => void; variant?: 'chips' | 'underline' }) {
   const underline = variant === 'underline';
-  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={underline ? [ui.tabRow,tabs.some(tab=>(tab.badgeCount??0)>0)&&ui.tabRowWithBadges] : ui.chipRow} accessibilityRole="tablist">
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={underline ? [ui.tabRow,tabs.some(tab=>(tab.badgeCount??0)>0)&&ui.tabRowWithBadges] : ui.chipRow} accessibilityRole="tablist">
     {tabs.map(tab => <Pressable key={tab.id} accessibilityRole="tab" accessibilityState={{ selected: selected === tab.id }} aria-selected={selected === tab.id}
       accessibilityLabel={tab.badgeCount!==undefined?`${tab.label}, ${tab.badgeCount} ${tab.badgeLabel??'pendientes'}`:tab.label}
       onPress={() => onSelect(tab.id)} style={underline ? [ui.tab, selected === tab.id && ui.selectedTab] : [ui.chip, selected === tab.id && ui.activeChip]}>
+      {tab.icon&&<View accessible={false} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{tab.icon}</View>}
       <Text style={underline ? [ui.tabText, selected === tab.id && ui.selectedTabText] : [ui.chipText, selected === tab.id && ui.activeChipText]}>{tab.label}</Text>
       {typeof tab.badgeCount==='number'&&Number.isFinite(tab.badgeCount)&&tab.badgeCount>0&&<View accessible={false} aria-hidden style={ui.tabBadge}><Text style={ui.tabBadgeText}>{tab.badgeCount>99?'99+':tab.badgeCount}</Text></View>}
       </Pressable>)}

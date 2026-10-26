@@ -22,7 +22,7 @@ export function PhysicalgoodsRequestPrices({request,showSelected=false,compact=f
 }
 const styles=StyleSheet.create({
   priceBlock:{gap:2},
-  prices:{flexDirection:'row',flexWrap:'wrap',alignItems:'baseline',columnGap:7,rowGap:2,flexShrink:1},
+  prices:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',columnGap:7,rowGap:2,flexShrink:1},
   current:{color:colors.primary,fontSize:22,lineHeight:28,fontWeight:'800'},
   previousValue:{position:'relative'},strike:{position:'absolute',left:0,right:0,top:'50%',height:1.5,backgroundColor:colors.muted,transform:[{translateY:-0.75}]},
   previous:{color:colors.muted,fontSize:15,lineHeight:22,fontWeight:'400'},

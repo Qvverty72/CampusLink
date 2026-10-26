@@ -7,7 +7,8 @@ import { physicalgoodsSnapshot } from '../marketplace/physicalgoods/physicalgood
 import { findPhysicalgoodsTransaction, lockPhysicalgoodsTransactionResource, physicalgoodsConfirmations,
   physicalgoodsTransactionDetail } from '../marketplace/physicalgoods/physicalgoods.transactions.repository.js';
 import { physicalgoodsId } from '../marketplace/physicalgoods/physicalgoods.validation.js';
-import { insertContentReport } from './reports.repository.js';
+import { insertContentReport,selectOwnPublicationReport } from './reports.repository.js';
+import {withPhysicalgoodsHistory} from '../marketplace/physicalgoods/physicalgoods.history.service.js';
 import { parseContentReport } from './reports.validation.js';
 import type { ContentReportInput, PhysicalgoodsReportReceipt } from './reports.types.js';
 
@@ -26,6 +27,8 @@ export async function reportPhysicalgoods(auth:VerifiedAuthConnection,publicatio
       requireCampusCapability(current,current.campusId,'general');
       const resource=agreement?await lockPhysicalgoodsTransactionResource(client,id,current.campusId):await findPhysicalgoodsMedia(client,id,current.campusId,true);
       if(!resource)throw new ApiError(404,'NOT_FOUND','No se encontró un elemento disponible para denunciar en tu campus.');
+      if(!agreement&&'propietario_id' in resource&&resource.propietario_id===current.userId)throw new ApiError(403,'FORBIDDEN','No puedes denunciar tu propia publicación.');
+      if(!agreement){const previous=await selectOwnPublicationReport(client,current.userId,current.campusId,'PUBLICACION_FISICA',id);if(previous)return previous;}
       const transaction=agreement?await findPhysicalgoodsTransaction(client,id,agreement):null;
       if(agreement&&(!transaction||![transaction.propietario_id,transaction.receptor_id].includes(current.userId)))throw new ApiError(404,'NOT_FOUND','No se encontró un acuerdo propio para denunciar.');
       const snapshot={publication:await physicalgoodsSnapshot(client,id),...(transaction?{
@@ -33,10 +36,23 @@ export async function reportPhysicalgoods(auth:VerifiedAuthConnection,publicatio
       }:{})};
       const receipt=await insertContentReport(client,{...parsed.data as ContentReportInput,userId:current.userId,campusId:current.campusId,
         entityType:agreement?'TRANSACCION':'PUBLICACION_FISICA',entityId:agreement??id,snapshot});
-      return {...receipt,publicationId:id,transactionId:agreement};
+      const input=parsed.data as ContentReportInput;
+      return {...receipt,publicationId:id,transactionId:agreement,reason:input.reason,description:input.description??null};
     });
   } catch(error) {
     if(error instanceof ApiError)throw error;
     throw new ApiError(503,'DEPENDENCY_UNAVAILABLE','No se pudo confirmar el envío de la denuncia.');
   }
+}
+
+export async function getOwnPhysicalgoodsReport(auth:VerifiedAuthConnection,publicationId:unknown){
+  const id=physicalgoodsId(publicationId,'publicationId');
+  return withPhysicalgoodsHistory(auth,async(client,current)=>{
+    const previous=await selectOwnPublicationReport(client,current.userId,current.campusId,'PUBLICACION_FISICA',id);
+    if(previous)return previous;
+    const resource=await findPhysicalgoodsMedia(client,id,current.campusId);
+    if(!resource)throw new ApiError(404,'NOT_FOUND','No se encontró la publicación.');
+    if(resource.propietario_id===current.userId)throw new ApiError(403,'FORBIDDEN','No puedes denunciar tu propia publicación.');
+    return null;
+  });
 }

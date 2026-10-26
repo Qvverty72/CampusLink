@@ -5,7 +5,7 @@ import { validateRequest } from '../../middleware/validateRequest.js';
 import { parseActivityId, parseEmptyActivityInput } from '../activities/activities.validation.js';
 import { parseActivityReport, parseContentReport } from './reports.validation.js';
 import type { ReportsDependencies } from './reports.types.js';
-import { createDigitalReportController } from './reports.controller.js';
+import { createDigitalReportController,getOwnPhysicalgoodsReportController,getOwnDigitalReportController } from './reports.controller.js';
 import { downloadReportedOriginalController, getReportReviewController, listReportReviewsController } from './reports.controller.js';
 import { resolveReportController, listReportResolutionsController, getReportResolutionController } from './reports.controller.js';
 
@@ -30,6 +30,8 @@ export function createReportsRouter(diagnosticsEnabled: boolean, dependencies: R
   router.post('/activities/:activityId', requireAuthentication,
     validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseActivityReport }),
     createActivityReportController(dependencies));
+  router.get('/physicalgoods/:publicationId/own',requireAuthentication,validateRequest({query:parseEmptyActivityInput,body:parseEmptyActivityInput}),getOwnPhysicalgoodsReportController);
+  router.get('/elibrary/:publicationId/own',requireAuthentication,validateRequest({query:parseEmptyActivityInput,body:parseEmptyActivityInput}),getOwnDigitalReportController);
   router.post('/physicalgoods/:publicationId',requireAuthentication,
     validateRequest({query:parseEmptyActivityInput,body:parseContentReport}),createPhysicalgoodsReportController);
   router.post('/physicalgoods/:publicationId/transactions/:transactionId',requireAuthentication,

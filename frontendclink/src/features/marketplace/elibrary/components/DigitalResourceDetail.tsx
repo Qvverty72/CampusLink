@@ -40,9 +40,9 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests,onBusyCh
     else library.closeDetail();
   };
   return <View style={detailUI.page}>
-    <ScrollView style={{flex:1,minHeight:0}} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }), paddingBottom: 24 }]}>
+    <ScrollView automaticallyAdjustKeyboardInsets style={{flex:1,minHeight:0}} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }), paddingBottom: 24 }]}>
       <DetailHeader onBack={goBack} disabled={busy} title={reporting ? 'Denunciar recurso' : managing ? 'Administrar publicación' : requesting ? 'Solicitar recurso' : 'Biblioteca'}
-        onReport={resource && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} />
+        onReport={resource && !library.isOwner && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} />
       {!resource ? library.detailLoading ? <ResourceDetailSkeleton /> : <View style={detailUI.card}>
         <Text accessibilityRole="alert" style={detailUI.error}>{library.error || 'No pudimos abrir el recurso.'}</Text>
         <Pressable accessibilityRole="button" onPress={() => { if (library.selectedId) void library.openDetail(library.selectedId); }} style={ui.outlined}><Text style={ui.link}>Reintentar detalle</Text></Pressable>

@@ -4,7 +4,7 @@ import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
 import { digitalConfirmations,findDigitalTrade } from '../marketplace/elibrary/elibrary.trades.repository.js';
 import { withDigitalTradeContext } from '../marketplace/elibrary/elibrary.trades.service.js';
 import { findDigitalPublications } from '../marketplace/elibrary/elibrary.repository.js';
-import { insertContentReport } from './reports.repository.js';
+import { insertContentReport,selectOwnPublicationReport } from './reports.repository.js';
 import { digitalReportSnapshot } from './reports.elibrary.repository.js';
 import { parseContentReport } from './reports.validation.js';
 import type { ContentReportInput } from './reports.types.js';
@@ -13,11 +13,24 @@ export async function reportDigitalResource(auth:VerifiedAuthConnection,rawId:un
   if(!parsed.success)throw new ApiError(400,'VALIDATION_ERROR','Revisa los datos de la denuncia.',{details:parsed.issues});
   const input=parsed.data as ContentReportInput;
   return withDigitalTradeContext(auth,id,async(client,resource,current)=>{
+    if(!tradeId&&resource.propietario_id===current.userId)throw new ApiError(403,'FORBIDDEN','No puedes denunciar tu propia publicación.');
+    if(!tradeId){const previous=await selectOwnPublicationReport(client,current.userId,resource.campus_id,'PUBLICACION_DIGITAL',id);if(previous)return previous;}
     if(!tradeId&&!(await findDigitalPublications(client,resource.institucion_id,id)).length)throw new ApiError(404,'NOT_FOUND','La publicación no está disponible para denunciar.');
     const trade=tradeId?await findDigitalTrade(client,id,tradeId):null;
     if(tradeId&&(!trade||![trade.propietario_id,trade.receptor_id].includes(current.userId)))throw new ApiError(404,'NOT_FOUND','No se encontró un acuerdo propio para denunciar.');
     const snapshot={publication:await digitalReportSnapshot(client,id,resource.institucion_id),...(trade?{transaction:trade,confirmations:await digitalConfirmations(client,trade.id)}:{})};
     const receipt=await insertContentReport(client,{...input,userId:current.userId,campusId:resource.campus_id,entityType:tradeId?'TRANSACCION':'PUBLICACION_DIGITAL',entityId:tradeId??id,snapshot});
-    return {...receipt,publicationId:id,transactionId:tradeId};
+    return {...receipt,publicationId:id,transactionId:tradeId,reason:input.reason,description:input.description??null};
   },tradeId?{tradeId}:{});
+}
+
+export async function getOwnDigitalReport(auth:VerifiedAuthConnection,rawId:unknown){
+  const id=digitalId(rawId);
+  return withDigitalTradeContext(auth,id,async(client,resource,current)=>{
+    const previous=await selectOwnPublicationReport(client,current.userId,resource.campus_id,'PUBLICACION_DIGITAL',id);
+    if(previous)return previous;
+    if(resource.propietario_id===current.userId)throw new ApiError(403,'FORBIDDEN','No puedes denunciar tu propia publicación.');
+    if(!(await findDigitalPublications(client,resource.institucion_id,id)).length)throw new ApiError(404,'NOT_FOUND','La publicación no está disponible para denunciar.');
+    return null;
+  });
 }

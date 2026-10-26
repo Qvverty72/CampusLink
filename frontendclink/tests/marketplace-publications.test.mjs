@@ -49,12 +49,15 @@ test('previous-campus publications stay historical and empty state filters do no
  q.history.page.data=[];q.props.tab='reserved';q.props.onPublish=()=>assert.fail('must not publish from a filter refresh');all=q.page();const feedback=all.find(node=>node.type==='Feedback');assert.equal(feedback.props.onEmptyAction,undefined);feedback.props.onReload();assert.ok(q.calls.includes('reload'));q.h.unmount();
 });
 
-test('publication product uses authorized owner reader and current fields, retaining management and active transaction',()=>{
+test('publication product uses owner reader and opens the real administrator without old links',()=>{
  const reads=[],state={product:{title:'Nombre actualizado',status:'RESERVADO',modality:'VENTA',price:2000,canView:true,activeTransaction:{id:'tx',status:'RESERVADA'}},loading:false,error:null,unavailable:false},calls=[];
- const {PhysicalgoodsPublicationProduct}=load('physicalgoods/components/PhysicalgoodsPublicationProduct.tsx',{'react/jsx-runtime':jsx,'react-native':{Text:'Text',View:'View'},'../../components/AgreementProductUI':{AgreementProductModal:'Modal'},'../../components/PersonalUI':{PersonalStatus:'Status'},'../../components/RequestsUI':{RequestButton:'Action'},'../../components/ResourceDetailUI':{detailUI:{}},'./PhysicalgoodsPriceHistory':{PhysicalgoodsOriginalPrice:'OriginalPrice'},'./PhysicalgoodsAgreementProduct':{PhysicalgoodsProductCard:'Card'},'../hooks/usePhysicalgoodsAgreementProduct':{usePhysicalgoodsAgreementProduct:(...args)=>{reads.push(args);return state;}}});
- const render=()=>nodes(PhysicalgoodsPublicationProduct({publication:row('resource'),onClose:noop,onManage:()=>calls.push('manage'),onAgreement:(...args)=>calls.push(args)}));
+ const h=runtime();state.reload=()=>calls.push('reload');
+ const {PhysicalgoodsPublicationProduct}=load('physicalgoods/components/PhysicalgoodsPublicationProduct.tsx',{'react/jsx-runtime':jsx,react:h.react,'react-native':{Text:'Text',View:'View'},'./PhysicalgoodsPublicationManagement':{PhysicalgoodsPublicationManagement:'Management'},'../../components/AgreementProductUI':{AgreementProductModal:'Modal'},'../../components/PersonalUI':{PersonalStatus:'Status'},'../../components/RequestsUI':{RequestButton:'Action'},'../../components/ResourceDetailUI':{detailUI:{}},'./PhysicalgoodsPriceHistory':{PhysicalgoodsOriginalPrice:'OriginalPrice'},'./PhysicalgoodsAgreementProduct':{PhysicalgoodsProductCard:'Card'},'../hooks/usePhysicalgoodsAgreementProduct':{usePhysicalgoodsAgreementProduct:(...args)=>{reads.push(args);return state;}}});
+ const render=()=>nodes(h.render(()=>PhysicalgoodsPublicationProduct({publication:row('resource'),onClose:noop,onChanged:()=>calls.push('changed')})));
  let all=render();assert.equal(reads[0][0].role,'PROPIETARIO');assert.equal(all[0].props.title,'Recurso de la publicación');const card=all.find(node=>node.type==='Card');assert.equal(card.props.detail.publication.title,'Nombre actualizado');assert.equal(card.props.detail.amount,2000);assert.match(card.props.dateLabel,/Publicado el/);
- all.find(node=>node.props?.label==='Gestionar publicación').props.onPress();all.find(node=>node.props?.label==='Ver transacción').props.onPress();assert.deepEqual(calls,['manage',['resource','tx']]);
+ assert.ok(!all.some(node=>['Gestionar publicación','Ver transacción'].includes(node.props?.label)));
+ all.find(node=>node.props?.label==='Administrar publicación').props.onPress();all=render();
+ const management=all.find(node=>node.type==='Management');assert.equal(management.props.id,'resource');management.props.onClose();assert.deepEqual(calls,['reload','changed']);
  state.product={...state.product,canView:false,isWithdrawn:true,activeTransaction:null};all=render();assert.ok(!all.some(node=>node.type==='Action'));assert.equal(all.find(node=>node.type==='Status').props.status,'RETIRADA');
 });
 
@@ -69,7 +72,7 @@ test('publication reads abort on filter and identity changes and ignore late ser
 test('real publications screen and shared modal render loading, history and authorized detail states',()=>{
  const options={mode:'personal',variant:'mine'};
  const ready=renderCatalog('physical',options).markup;for(const text of ['Mis publicaciones','Todas','Activas','Reservadas','Finalizadas','REQUIERE TU ACCIÓN','HISTORIAL'])assert.ok(ready.includes(text),text);
- const product=renderCatalog('physical',{...options,publicationOpen:'physical-0'}).markup;assert.match(product,/Recurso de la publicación/);assert.match(product,/Gestionar publicación/);assert.doesNotMatch(product,/Confirmar que se realizó|Participantes/);
- const loading=renderCatalog('physical',{...options,publicationOpen:'physical-0',publicationProductState:'loading'}).markup;assert.match(loading,/Recurso de la publicación/);assert.doesNotMatch(loading,/Gestionar publicación/);
- const history=renderCatalog('physical',{...options,publicationOpen:'physical-2'}).markup;assert.match(history,/Retirada/);assert.doesNotMatch(history,/Gestionar publicación/);
+ const product=renderCatalog('physical',{...options,publicationOpen:'physical-0'}).markup;assert.match(product,/Recurso de la publicación/);assert.match(product,/Administrar publicación/);assert.doesNotMatch(product,/Gestionar publicación|Ver transacción|Confirmar que se realizó|Participantes/);
+ const loading=renderCatalog('physical',{...options,publicationOpen:'physical-0',publicationProductState:'loading'}).markup;assert.match(loading,/Recurso de la publicación/);assert.doesNotMatch(loading,/Administrar publicación/);
+ const history=renderCatalog('physical',{...options,publicationOpen:'physical-2'}).markup;assert.match(history,/Retirada/);assert.doesNotMatch(history,/Administrar publicación/);
 });

@@ -26,13 +26,14 @@ const digitalRows = ['Guía de cálculo integral', 'Resumen de bases de datos', 
 }));
 
 /** Render aislado de las pantallas reales con datos sintéticos. Nunca conecta a APIs o sesiones. */
-export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null, sentScenario = null, sentOpen = null, sentResource = null, receivedScenario = null, receivedOpen = null, receivedResource = false, receivedOrder = 'oldest', receivedPage = 1, receivedSelected = null, receivedLoading = false, receivedError = false, receivedDecision = null, requestCounts = null, requestCountsLoading = false, publicationTab = 'all', publicationOpen = null, publicationProductState = 'ready',managementPanel=null,managementRead='ready',priceHistory=false } = {}) {
+export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'catalog', variant = 'available', refreshing = false, filterQuery = '', agreementTab = 'active', agreementPanel = 'overview', inlinePanel = null, transactionState = state, ratingScore = 4, submitting = null, rechecking = false, ratingSent = false, agreementPage = 1, transactionCounts = null, sentScenario = null, sentOpen = null, sentResource = null, receivedScenario = null, receivedOpen = null, receivedResource = false, receivedOrder = 'oldest', receivedPage = 1, receivedSelected = null, receivedLoading = false, receivedError = false, receivedDecision = null, requestCounts = null, requestCountsLoading = false, publicationTab = 'all', publicationOpen = null, publicationProductState = 'ready',managementPanel=null,managementRead='ready',priceHistory=false,profileSection=null,profileDigital=false } = {}) {
   const physical = screen === 'physical';
   const historyTerms=priceHistory==='donation'?{modality:'DONACION',amount:null,currency:'CLP'}:{modality:'VENTA',amount:5000,currency:'CLP'};
   const detailMode = mode === 'detail' || mode === 'request';
   const mocks = new Map();
   const add = (file, value) => mocks.set(path.join(sourceRoot, file), value);
   const nil = () => null;
+  add('features/users/hooks/useOwnActivities.ts',{useOwnActivities:()=>({result:null,loading:false,reload:noop})});
   add('features/auth/hooks/useAuth.ts', { useAuth: () => ({ status: 'ready', identity: { userId: 'qa', campusId: 'qa', capabilities: { general: true } } }) });
   add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts', { usePhysicalgoodsResources: () => ({
     filters: { q: state === 'empty' ? 'sin coincidencias' : '', categoryId: '', modality: '', condition: '', careerId: '', subjectId: '', minPrice: '', maxPrice: '', mine: false },
@@ -177,12 +178,12 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       requestRows.splice(0,requestRows.length,first,finished);
     }
   }
-  if(physical&&priceHistory){const row=requestRows[0];Object.assign(row,{requestedTerms:historyTerms,publication:{...row.publication,modality:'VENTA',price:8000}});if(row.transaction)Object.assign(row.transaction,{modality:'VENTA',amount:8000,currency:'CLP'});}
+  if(physical&&priceHistory){const row=requestRows[0];Object.assign(row,{requestedTerms:historyTerms,publication:{...row.publication,modality:'VENTA',price:8000,originalTerms:historyTerms}});if(row.transaction)Object.assign(row.transaction,{modality:'VENTA',amount:8000,currency:'CLP'});}
   const requestState = { open: true, received: variant !== 'sent', rows: state === 'empty' || state === 'error' ? [] : requestRows, number: 1, page: { data: state === 'empty' || state === 'error' ? [] : requestRows, meta: { hasMore: false } },
     loading: state === 'loading', error: state === 'error' ? 'No se pudo conectar. Revisa tu conexión e inténtalo otra vez.' : null, busy: false, selection: null, hasMore: false,
     reload: noop, mode: noop, select: noop, resolve: noop, cancel: noop, cancelSelection: noop, previous: noop, next: noop, setNumber: noop,
   };
-  if (mode === 'requests' || (mode === 'personal' && ['sent', 'received'].includes(variant))) mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx'));
+  if (profileSection || mode === 'requests' || (mode === 'personal' && ['sent', 'received'].includes(variant))) mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsRequests.tsx'));
   add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsRequestCounts.ts',{usePhysicalgoodsRequestCounts:()=>({counts:requestCountsLoading?undefined:requestCounts??{sentAccepted:variant==='sent'?requestRows.filter(row=>row.status==='ACEPTADA'&&['RESERVADA','PENDIENTE_CONFIRMACION'].includes(row.transaction?.status)).length:0,receivedPending:requestRows.filter(row=>(row.status==='PENDIENTE'&&!row.transaction)||(row.status==='ACEPTADA'&&['RESERVADA','PENDIENTE_CONFIRMACION'].includes(row.transaction?.status))).length,pendingRequests:requestRows.filter(row=>row.status==='PENDIENTE'&&!row.transaction).length,pendingTransactions:requestRows.filter(row=>['RESERVADA','PENDIENTE_CONFIRMACION'].includes(row.transaction?.status)).length},loading:requestCountsLoading,reload:noop})});
   add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsRequests.ts', { usePhysicalgoodsRequests: (_active,_onChanged,_received,_version,publicationId) => publicationId?{
     ...requestState,loading:requestState.loading||receivedLoading,error:receivedError?'No se pudo conectar. Revisa tu conexión e inténtalo otra vez.':requestState.error,
@@ -191,7 +192,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   add('components/RefreshScrollView.tsx', { useScrollRefresh: noop, RefreshScrollView: ({ children, contentContainerStyle, style }) => React.createElement(native.ScrollView, { contentContainerStyle, style }, children) });
   const personalMode = ['personal', 'owned', 'acquired', 'acquired-detail', 'transactions', 'agreements'].includes(mode);
   if (mode === 'request-detail') mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx'));
-  if (personalMode) {
+  if (personalMode || profileSection) {
     mocks.delete(path.join(sourceRoot, 'features/marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx'));
     mocks.delete(path.join(sourceRoot, 'features/marketplace/elibrary/components/DigitalPersonalLibrary.tsx'));
   }
@@ -331,7 +332,8 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   }
   if(publicationOpen){const selected=physicalOwn.find(row=>row.id===publicationOpen)??physicalOwn[0];add('features/marketplace/physicalgoods/hooks/usePhysicalgoodsAgreementProduct.ts',{usePhysicalgoodsAgreementProduct:()=>({product:publicationProductState==='ready'?{...selected,description:'Recurso en buen estado para tus estudios.',images:[],expiresIn:60,activeTransaction:selected.status==='RESERVADO'?{id:'active-trade',status:'RESERVADA'}:null}:null,loading:publicationProductState==='loading',error:publicationProductState==='error'?'No se pudo cargar la información del recurso. Puedes reintentar.':null,unavailable:false,reload:noop})});}
   if (mode === 'report' || (inlinePanel && variant === 'report-form')) add('features/reports/hooks/useContentReport.ts', { useContentReport: () => ({ busy: state === 'busy', error: state === 'error' ? 'No se pudo confirmar el envío. Si se guardó, reenviarla podría crear otra denuncia.' : null,
-    receipt: variant === 'receipt' ? { id: 'receipt', status: 'PENDIENTE', reportedAt: '2026-10-24T12:35:00Z' } : null, submit: noop }) });
+    checking:variant==='checking',lookupError:variant==='lookup-error'?'No se pudo consultar tu denuncia.':null,retryLookup:noop,
+    receipt: ['receipt','receipt-review','receipt-resolved','receipt-dismissed'].includes(variant) ? { id: 'receipt', status: variant==='receipt-review'?'EN_REVISION':variant==='receipt-resolved'?'RESUELTO':variant==='receipt-dismissed'?'DESESTIMADO':'PENDIENTE', reportedAt: '2026-10-25T21:12:00-03:00',reason:'Información engañosa',description:'Prueba de denuncia del recurso.' } : null, submit: noop }) });
   if (refreshing) mocks.delete(path.join(sourceRoot, 'components/RefreshScrollView.tsx'));
   if(physical&&priceHistory){
     const originalTerms=historyTerms;
@@ -346,7 +348,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   const browserNative = { ...native, useWindowDimensions: () => ({ width, height: 844, scale: 1, fontScale: 1 }) };
   // SSR cannot create RN Modal portals. The HTML fixture moves these wrappers to body,
   // preserving stacking order and preventing nested dialogs from clipping other modals.
-  if ((!physical&&detailMode) || mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || mode==='acquired-detail' || inlinePanel || sentResource || receivedResource || receivedOpen || publicationOpen || managementPanel) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
+  if (profileSection || (!physical&&detailMode) || mode === 'transaction' || mode === 'filters' || mode === 'request-detail' || mode==='acquired-detail' || inlinePanel || sentResource || receivedResource || receivedOpen || publicationOpen || managementPanel) browserNative.Modal = ({ visible, children }) => visible ? React.createElement(native.View, { dataSet: { qaModalPortal: 'true' }, style: { position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1000 } }, children) : null;
   const originalLoad = Module._load;
   Module._load = function(name, parent, isMain) {
     if (name === 'react-native') return native;
@@ -395,7 +397,7 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
       if (name === 'react' && refreshing && /[\\/]components[\\/]RefreshScrollView\.tsx$/.test(filename)) return { ...React, useState: initial => React.useState(requestStateIndex++ === 0 ? { onRefresh: noop, refreshing: true, enabled: true, label: physical ? 'mi actividad' : 'mi biblioteca' } : initial === false ? true : initial) };
       if (name === 'react-native') return browserNative;
       if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) };
-      if (name === 'expo-router') return { useLocalSearchParams: () => ({}), usePathname: () => physical ? '/physicalgoods' : '/elibrary', router: { replace: noop } };
+      if (name === 'expo-router') return { Link:({children})=>children,useRouter:()=>({canGoBack:()=>true,back:noop,replace:noop,setParams:noop,dismissTo:noop}),useLocalSearchParams: () => profileSection?{section:profileSection,kind:profileDigital?'digital':'physical',publicationId:mode==='acquired-detail'?'digital-1':undefined}:{}, usePathname: () => physical ? '/physicalgoods' : '/elibrary', router: { replace: noop } };
       if (name === 'expo-blur') return { BlurView: () => null };
       if (name.startsWith('.') || name.startsWith('@/')) {
         const base = name.startsWith('@/') ? path.join(sourceRoot, name.slice(2)) : path.resolve(path.dirname(filename), name);
@@ -409,8 +411,8 @@ export function renderCatalog(screen, { width = 390, state = 'ready', mode = 'ca
   try {
     const target = managementPanel ? 'physicalgoods/components/PhysicalgoodsManagement.tsx' : mode === 'request-detail' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'filters' ? physical ? 'physicalgoods/components/PhysicalgoodsSearchFilters.tsx' : 'elibrary/components/DigitalSearchForm.tsx' : mode === 'report' ? 'components/MarketplaceReportForm.tsx' : mode === 'transaction' ? physical ? 'physicalgoods/components/PhysicalgoodsTransaction.tsx' : 'elibrary/components/DigitalTradeCenter.tsx' : !physical && personalMode ? 'elibrary/components/DigitalPersonalLibrary.tsx' : mode === 'transactions' ? 'physicalgoods/components/PhysicalgoodsHistory.tsx' : mode === 'requests' ? physical ? 'physicalgoods/components/PhysicalgoodsRequests.tsx' : 'elibrary/components/DigitalRequests.tsx'
       : physical ? detailMode ? 'physicalgoods/components/PhysicalgoodsDetail.tsx' : 'physicalgoods/components/PublishPhysicalgoods.tsx' : 'elibrary/components/DigitalLibraryScreen.tsx';
-    const exports = load(path.join(sourceRoot, 'features/marketplace', target));
-    const Screen = managementPanel ? () => React.createElement(exports.PhysicalgoodsManagement,{resources:mocks.get(path.join(sourceRoot,'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources(),onClose:noop}) : mode === 'request-detail' ? () => React.createElement(exports.PhysicalgoodsHistoryDetail, { target: { publicationId: 'physical-0', requestId: 'request-0' }, onClose: noop, onOpen: noop, onAgreement: noop }) : mode === 'filters' ? () => {
+    const exports = load(profileSection?path.join(sourceRoot,'features/users/components',profileSection==='cards'?'ProfilePersonalCards.tsx':'ProfilePersonalScreen.tsx'):path.join(sourceRoot, 'features/marketplace', target));
+    const Screen = profileSection ? profileSection==='cards'?()=>React.createElement(native.View,{style:{padding:16,backgroundColor:'#052F50'}},React.createElement(exports.ProfilePersonalCards,{overview:{activePublications:3,pendingRequests:2,transactions:4,acquiredResources:1},activities:0,loading:false,failed:false,retry:noop})):exports.ProfilePersonalScreen : managementPanel ? () => React.createElement(exports.PhysicalgoodsManagement,{resources:mocks.get(path.join(sourceRoot,'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources(),onClose:noop}) : mode === 'request-detail' ? () => React.createElement(exports.PhysicalgoodsHistoryDetail, { target: { publicationId: 'physical-0', requestId: 'request-0' }, onClose: noop, onOpen: noop, onAgreement: noop }) : mode === 'filters' ? () => {
       const careers = [{ id: 'career', name: 'Ingeniería en Informática', code: 'INF' }, { id: 'adm', name: 'Ingeniería en Administración', code: 'ADM' }, { id: 'design', name: 'Diseño gráfico', code: 'DIS' }, { id: 'construction', name: 'Construcción civil', code: 'CON' }, { id: 'tourism', name: 'Turismo', code: 'TUR' }];
       const subjects = [{ id: 'subject', name: 'Cálculo integral', code: 'MAT' }, { id: 'db', name: 'Bases de datos', code: 'BD' }, { id: 'prog', name: 'Programación de aplicaciones', code: 'PROG' }, { id: 'algebra', name: 'Álgebra lineal', code: 'ALG' }];
       const resourceState = mocks.get(path.join(sourceRoot, 'features/marketplace/physicalgoods/hooks/usePhysicalgoodsResources.ts')).usePhysicalgoodsResources();

@@ -5,13 +5,15 @@ import { sendSuccess } from '../../services/api-response.js';
 import { getValidatedRequest } from '../../middleware/validateRequest.js';
 import type { AuthLocals } from '../auth/auth.types.js';
 import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
-import { reportPhysicalgoods } from './reports.physicalgoods.service.js';
-import { reportDigitalResource } from './reports.elibrary.service.js';
+import { getOwnPhysicalgoodsReport,reportPhysicalgoods } from './reports.physicalgoods.service.js';
+import { getOwnDigitalReport,reportDigitalResource } from './reports.elibrary.service.js';
 import { getReportedOriginal, getReportReview, listReportReviews, listReportResolutions, getReportResolution } from './reports.review.service.js';
 import { sendSuccess as sendEnvelope } from '../../services/apiResponse.js';
 import { resolveReport } from './reports.resolution.service.js';
 
 type ReviewHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const getOwnPhysicalgoodsReportController:ReviewHandler=async(request,response)=>{sendSuccess(response,await getOwnPhysicalgoodsReport(response.locals.auth,request.params.publicationId));};
+export const getOwnDigitalReportController:ReviewHandler=async(request,response)=>{sendSuccess(response,await getOwnDigitalReport(response.locals.auth,request.params.publicationId));};
 export const listReportResolutionsController: ReviewHandler = async (request, response) => {
   const result = await listReportResolutions(response.locals.auth, request.params.campusId, request.query);
   sendEnvelope(response, result.data, { meta: result.meta });

@@ -16,11 +16,11 @@ export interface ResourceRequestItem{
   canAccept:boolean;canReject:boolean;onAccept:()=>void;onReject:()=>void;onDetails?:()=>void;onTransaction?:()=>void;
 }
 
-export function ResourceRequestsRow({title,summary,count,statusLabel,onPress,disabled=false,digital=false}:{title:string;summary:string;count:number;statusLabel:string;onPress:()=>void;disabled?:boolean;digital?:boolean}){
+export function ResourceRequestsRow({title,summary,summaryContent,count,statusLabel,onPress,disabled=false,digital=false}:{title:string;summary?:string;summaryContent?:ReactNode;count:number;statusLabel:string;onPress:()=>void;disabled?:boolean;digital?:boolean}){
   const Icon=digital?FileText:Package;
   return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ver ${count} solicitud${count===1?'':'es'} de ${title}`} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} activeOpacity={0.75} style={styles.resourceRow}>
     <View accessible={false} aria-hidden style={styles.resourceIcon}><Icon size={20} color={colors.primary}/></View>
-    <View style={{flex:1,minWidth:0,gap:4}}><Text style={styles.resourceTitle}>{title}</Text><Text style={styles.meta}>{summary}</Text><Text style={styles.resourceCount}>{count} solicitud{count===1?'':'es'} · {statusLabel}</Text></View>
+    <View style={{flex:1,minWidth:0,gap:4}}><Text style={styles.resourceTitle}>{title}</Text>{summaryContent??<Text style={styles.meta}>{summary}</Text>}<Text style={styles.resourceCount}>{count} solicitud{count===1?'':'es'} · {statusLabel}</Text></View>
     <View accessible={false} aria-hidden><ChevronRight size={20} color={colors.secondary}/></View>
   </TouchableOpacity>;
 }
@@ -34,8 +34,8 @@ export function resourceRequestAge(value:string,now=Date.now()){
 }
 
 /** Consulta/decisión genérica: no importa contratos ni hooks de physicalgoods. */
-export function ResourceRequestsModal({title,summary,requests,loading,error,feedback,blocked=false,onRefresh,onClose,overlay,notice,pagination,digital=false}:{
-  title:string;summary:string;requests:ResourceRequestItem[];loading:boolean;error:string|null;feedback?:string|null;blocked?:boolean;
+export function ResourceRequestsModal({title,summary,summaryContent,requests,loading,error,feedback,blocked=false,onRefresh,onClose,overlay,notice,pagination,digital=false}:{
+  title:string;summary?:string;summaryContent?:ReactNode;requests:ResourceRequestItem[];loading:boolean;error:string|null;feedback?:string|null;blocked?:boolean;
   onRefresh:()=>void;onClose:()=>void;overlay?:ReactNode;notice?:string;digital?:boolean;
   pagination?:{page:number;total:number;order:'oldest'|'newest';onPageChange:(page:number)=>void;onOrderChange:(order:'oldest'|'newest')=>void};
 }){
@@ -52,7 +52,7 @@ export function ResourceRequestsModal({title,summary,requests,loading,error,feed
   return <AgreementStepModal title="Solicitudes recibidas" closeLabel="Cerrar solicitudes del recurso" onClose={onClose} closeDisabled={blocked} fillHeight
     contentStyle={styles.content} contentKey={`${order}:${current}`} overlay={overlay} footer={pager}
     refresh={{onRefresh,refreshing:loading,enabled:!blocked&&!loading&&!overlay,label:'las solicitudes de este recurso'}}>
-    <View style={styles.resource}><View accessible={false} aria-hidden style={styles.resourceIcon}><Icon size={20} color={colors.primary}/></View><View style={{flex:1,minWidth:0,gap:3}}><Text accessibilityRole="header" style={styles.resourceTitle}>{title}</Text><Text style={styles.meta}>{summary} · {total} solicitud{total===1?'':'es'}</Text></View></View>
+    <View style={styles.resource}><View accessible={false} aria-hidden style={styles.resourceIcon}><Icon size={20} color={colors.primary}/></View><View style={{flex:1,minWidth:0,gap:3}}><Text accessibilityRole="header" style={styles.resourceTitle}>{title}</Text>{summaryContent}<Text style={styles.meta}>{summaryContent?null:`${summary} · `}{total} solicitud{total===1?'':'es'}</Text></View></View>
     <View accessibilityRole="tablist" accessibilityLabel="Orden de solicitudes" style={styles.orders}>{[{value:'oldest',label:'Más antiguas'},{value:'newest',label:'Más recientes'}].map(tab=><TouchableOpacity key={tab.value} accessibilityRole="tab" accessibilityState={{selected:order===tab.value,disabled:locked}} aria-selected={order===tab.value} disabled={locked} onPress={()=>{setOrder(tab.value as 'oldest'|'newest');setPage(1);setSelected(null);}} style={[styles.order,order===tab.value&&styles.orderActive]}><Text style={[styles.orderText,order===tab.value&&styles.orderTextActive]}>{tab.label}</Text></TouchableOpacity>)}</View>
     {feedback&&<Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
     {notice&&<Text style={styles.meta}>{notice}</Text>}

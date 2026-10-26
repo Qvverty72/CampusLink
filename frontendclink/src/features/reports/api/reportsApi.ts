@@ -65,7 +65,7 @@ export async function submitPhysicalgoodsReport(campusId:string,target:Extract<C
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal,
   });
   if(!receipt||!validId(receipt.id)||receipt.campusId!==campusId||receipt.publicationId!==target.publicationId.toLowerCase()
-    ||receipt.transactionId!==transactionId||receipt.status!=='PENDIENTE'||!Number.isFinite(Date.parse(receipt.reportedAt)))throw new Error('No se pudo confirmar el envío de la denuncia.');
+    ||receipt.transactionId!==transactionId||!['PENDIENTE','EN_REVISION','RESUELTO','DESESTIMADO'].includes(receipt.status)||!Number.isFinite(Date.parse(receipt.reportedAt)))throw new Error('No se pudo confirmar el envío de la denuncia.');
   return receipt;
 }
 /** El caso digital corresponde al campus de origen del recurso, derivado y comprobado por el backend. */
@@ -75,6 +75,19 @@ export async function submitDigitalReport(target:Extract<ContentReportTarget,{ty
   if(!validId(target.publicationId)||!validId(target.campusId)||(transactionId&&!validId(transactionId)))throw new Error('Identificador inválido para denunciar.');
   const path='/api/v1/reports/elibrary/'+target.publicationId+(transactionId?'/transactions/'+transactionId:'');
   const {data:receipt}=await authenticatedEnvelopeRequest<PhysicalgoodsReportReceipt>(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal});
-  if(!receipt||!validId(receipt.id)||receipt.campusId!==target.campusId||receipt.publicationId!==target.publicationId.toLowerCase()||receipt.transactionId!==transactionId||receipt.status!=='PENDIENTE'||!Number.isFinite(Date.parse(receipt.reportedAt)))throw new Error('No se pudo confirmar el envío de la denuncia.');
+  if(!receipt||!validId(receipt.id)||receipt.campusId!==target.campusId||receipt.publicationId!==target.publicationId.toLowerCase()||receipt.transactionId!==transactionId||!['PENDIENTE','EN_REVISION','RESUELTO','DESESTIMADO'].includes(receipt.status)||!Number.isFinite(Date.parse(receipt.reportedAt)))throw new Error('No se pudo confirmar el envío de la denuncia.');
   return receipt;
+}
+
+/** Solo el primer envío del usuario actual; el campus digital sigue siendo el de origen. */
+export async function fetchOwnPublicationReport(campusId:string,target:Extract<ContentReportTarget,{type:'PUBLICACION_FISICA'|'PUBLICACION_DIGITAL'}>,signal?:AbortSignal):Promise<PhysicalgoodsReportReceipt|null>{
+  const validId=(id:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if(!validId(target.publicationId))throw new Error('Identificador de publicación inválido.');
+  const source=target.type==='PUBLICACION_DIGITAL'?'elibrary':'physicalgoods',expectedCampus=target.type==='PUBLICACION_DIGITAL'?target.campusId:campusId;
+  const{data}=await authenticatedEnvelopeRequest<PhysicalgoodsReportReceipt|null>(`/api/v1/reports/${source}/${target.publicationId}/own`,{signal});
+  if(data===null)return null;
+  if(!data||!validId(data.id)||data.publicationId!==target.publicationId.toLowerCase()||data.transactionId!==null||data.campusId!==expectedCampus
+    ||!['PENDIENTE','EN_REVISION','RESUELTO','DESESTIMADO'].includes(data.status)||!Number.isFinite(Date.parse(data.reportedAt))
+    ||typeof data.reason!=='string'||!data.reason.trim()||(data.description!==null&&typeof data.description!=='string'))throw new Error('No se pudo consultar tu denuncia.');
+  return data;
 }

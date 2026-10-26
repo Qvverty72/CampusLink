@@ -224,21 +224,29 @@ test('personal sections retain their flows while enrolled activities only offer 
   const h = hooks(), names = ['publications', 'requests', 'transactions', 'resources', 'activities'];
   const titles = Object.fromEntries(names.map(name => [name, name])); let section = 'activities', backs = 0; const maps = [];
   const history = () => null, detail = () => null, transaction = () => null, requests = () => null, acquired = () => null, activity = () => null;
+  const digitalPublications=()=>null,digitalRequests=()=>null,digitalTransactions=()=>null;
+  const destinations=[],countsEnabled=[];
   let registration;
   const own = { result: null, page: 1, loading: false, error: 'offline', reload: () => backs++, setPage: () => {} };
   const { ProfilePersonalScreen } = load('components/ProfilePersonalScreen.tsx', {
     'react/jsx-runtime': jsx, react: h.react,
-    'expo-router': { useLocalSearchParams: () => ({ section }), useRouter: () => ({ canGoBack: () => true, back() { backs++; }, dismissTo(target) { maps.push(target); } }) },
+    'expo-router': { useLocalSearchParams: () => ({ section }), useRouter: () => ({ setParams:target=>destinations.push(target), canGoBack: () => true, back() { backs++; }, dismissTo(target) { maps.push(target); } }) },
     'react-native': { View: 'View', Text: 'Text', TouchableOpacity: 'Button', ActivityIndicator: 'Spinner', StyleSheet: { create: value => value } },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 20, bottom: 20 }) },
     'lucide-react-native': Object.fromEntries(['CalendarCheck', 'MapPin', 'X'].map(name => [name, () => null])),
     '@/types/colors': { APP_COLORS: { PRIMARY: '#002E56', SECONDARY: '#3F6A8E' } },
     '@/features/auth/hooks/useAuth': { useAuth: () => ({ identity: { userId: 'user', campusId: 'campus', capabilities: { general: true } } }) },
     '@/components/RefreshScrollView': { RefreshScrollView: 'Scroll', useScrollRefresh: (...args) => { registration = args; } },
+    '@/components/navigation/BottomNavigationIcon':{BottomNavigationIcon:'NavigationIcon'},
+    '@/features/marketplace/components/CatalogUI':{CatalogTabs:'DomainTabs'},
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsHistory': { PhysicalgoodsHistory: history, PhysicalgoodsHistoryDetail: detail },
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsRequests': { PhysicalgoodsRequests: requests },
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsTransaction': { PhysicalgoodsTransaction: transaction },
-    '@/features/marketplace/elibrary/components/AcquiredDigitalResources': { AcquiredDigitalResources: acquired },
+    '@/features/marketplace/elibrary/components/DigitalAcquiredActivity': { DigitalAcquiredActivity: acquired },
+    '@/features/marketplace/elibrary/components/DigitalPublications': { DigitalPublications: digitalPublications },
+    '@/features/marketplace/elibrary/components/DigitalActivityRequests': { DigitalActivityRequests: digitalRequests },
+    '@/features/marketplace/elibrary/components/DigitalActivityTransactions': { DigitalActivityTransactions: digitalTransactions },
+    '@/features/marketplace/elibrary/hooks/useDigitalActivity': { useDigitalActivityCounts:active=>{countsEnabled.push(active);return {counts:null,loading:false,reload(){}};} },
     './ProfilePersonalCards': { PERSONAL_TITLES: titles }, '../hooks/useOwnActivities': { useOwnActivities: () => own },
   });
   const root = ProfilePersonalScreen(); const render = () => h.render(() => root.type(root.props));
@@ -273,10 +281,23 @@ test('personal sections retain their flows while enrolled activities only offer 
   tree.find(node => node.props?.accessibilityLabel === 'Cerrar consulta personal').props.onPress(); assert.equal(backs, 1);
   for (section of ['publications', 'requests', 'transactions', 'resources', 'invalid', ['activities']]) {
     const next = ProfilePersonalScreen(); tree = elements(h.render(() => next.type(next.props)));
-    if (section === 'resources') assert.equal(tree.find(node => node.type === acquired).props.embedded, true);
+    if (section === 'resources') assert.equal(tree.find(node => node.type === acquired).props.active, true);
     if (section === 'publications') assert.equal(tree.find(node => node.type === history).props.transactions, false);
     if (section === 'transactions') assert.equal(tree.find(node => node.type === history).props.transactions, true);
     if (section === 'requests') assert.equal(tree.find(node => node.type === requests).props.onOpen, undefined);
+    if(['publications','requests','transactions'].includes(section)){
+      const domainTabs=tree.find(node=>node.type==='DomainTabs');
+      assert.equal(domainTabs.props.variant,'underline');assert.equal(domainTabs.props.tabs[0].label,'Mercado');assert.equal(domainTabs.props.tabs[1].label,'Biblioteca');
+      assert.equal(domainTabs.props.tabs[0].icon.props.id,'physicalgoods');assert.equal(domainTabs.props.tabs[1].icon.props.id,'elibrary');
+      domainTabs.props.onSelect('digital');
+      tree=elements(h.render(()=>next.type(next.props)));
+      const component={publications:digitalPublications,requests:digitalRequests,transactions:digitalTransactions}[section];
+      assert.ok(tree.some(node=>node.type===component));assert.ok(!tree.some(node=>node.type===history||node.type===requests));
+      assert.equal(countsEnabled.at(-1),section==='requests');
+      if(section==='publications'){tree.find(node=>node.type===component).props.onRequests();assert.deepEqual(JSON.parse(JSON.stringify(destinations.at(-1))),{section:'requests',kind:'digital'});}
+      if(section==='transactions'){tree.find(node=>node.type===component).props.onAcquired('acquired-id');assert.deepEqual(JSON.parse(JSON.stringify(destinations.at(-1))),{section:'resources',publicationId:'acquired-id'});}
+      tree.find(node=>node.type==='DomainTabs').props.onSelect('physical');
+    }
     assert.equal(tree.some(node => node.type === activity), false);
   }
 });
@@ -287,6 +308,7 @@ test('personal modal lists register their own queries and protect confirmation a
   const native = { View: 'View', Text: 'Text', Pressable: 'Button', TouchableOpacity: 'Button', ActivityIndicator: 'Spinner', StyleSheet: { create: value => value } };
   const shared = { 'react/jsx-runtime': jsx,react:{useCallback:fn=>fn}, 'react-native': native, '@/components/RefreshScrollView': scroll,
     '../../components/ActivityUI': { activityUI: {}, ActivityHeader: 'Header', ActivityFeedback: 'Feedback', ActivityPager: 'Pager', ActivityAction: 'Action' },
+    '../utils/requestTerms':{},'./PhysicalgoodsPriceHistory':{},
     '../../components/ResourceDetailUI': { detailUI: {} }, '../../components/CatalogUI': { CATALOG_COLORS: {} }, 'lucide-react-native': {} };
   const reload = () => {}, history = { reload, loading: false, page: null, number: 1 };
   const { PhysicalgoodsHistory } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,react:{useCallback:fn=>fn},'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'./PhysicalgoodsPublications':{PhysicalgoodsPublications:'Publications'},
@@ -324,6 +346,7 @@ test('personal modal lists register their own queries and protect confirmation a
 test('nested history/agreement modals use universal refresh and wait for their data without interrupting confirmations', () => {
   const native = { Modal: 'Modal', View: 'View', Text: 'Text', Pressable: 'Button', ActivityIndicator: 'Spinner', StyleSheet: { create: value => value } };
   const shared = { 'react/jsx-runtime': jsx, 'react-native': native, '@/components/RefreshScrollView': { RefreshScrollView: 'UniversalScroll' },
+    '../utils/requestTerms':{},'./PhysicalgoodsPriceHistory':{},
     '../../components/ActivityUI': {}, '../../components/ResourceDetailUI': { detailUI: {}, ResourceDetailSkeleton: 'Skeleton' }, '../../components/CatalogUI': { CATALOG_COLORS: {} } };
   const reload = () => {}, history = { detail: null, reload, loading: false };
   const { PhysicalgoodsHistoryDetail } = load('../marketplace/physicalgoods/components/PhysicalgoodsHistory.tsx', { ...shared,react:{useCallback:fn=>fn},'./PhysicalgoodsAgreements':{PhysicalgoodsAgreements:'Agreements'},'./PhysicalgoodsPublications':{PhysicalgoodsPublications:'Publications'},

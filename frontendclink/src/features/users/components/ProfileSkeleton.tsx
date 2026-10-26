@@ -1,12 +1,11 @@
 import { StyleSheet, View } from 'react-native';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
-import { APP_COLORS } from '@/types/colors';
 
 /** Solo sustituye los datos académicos pendientes; la identidad ya conocida sigue disponible. */
 export function ProfileAcademicSkeleton() {
   return <Skeleton label="Cargando perfil académico" style={styles.academic} contentStyle={styles.chips}>
-    <SkeletonBlock width="38%" height={28} borderRadius={20} style={styles.darkBlock} />
-    <SkeletonBlock width="48%" height={28} borderRadius={20} style={styles.darkBlock} />
+    <SkeletonBlock width="38%" height={28} borderRadius={20} />
+    <SkeletonBlock width="48%" height={28} borderRadius={20} />
   </Skeleton>;
 }
 
@@ -34,9 +33,9 @@ export function ProfilePersonalCardsSkeleton() {
 }
 
 const styles = StyleSheet.create({
-  academic: { width: '100%' }, chips: { flexDirection: 'row', gap: 8 }, darkBlock: { backgroundColor: '#FFFFFF26' },
+  academic: { width: '100%' }, chips: { flexDirection: 'row', gap: 8 },
   notificationBadge: { position: 'absolute', top: 1, right: 0, width: 20, height: 20, borderRadius: 12, borderWidth: 2,
-    borderColor: APP_COLORS.PRIMARY, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' },
+    borderColor: '#F4F7F9', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' },
   section: { gap: 12, marginTop: 4 }, row: { flexDirection: 'row', gap: 12 },
   card: { flex: 1, minWidth: 0, minHeight: 150, padding: 14, gap: 18, borderRadius: 18, backgroundColor: '#FFFFFF' },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 }, lines: { gap: 10 },

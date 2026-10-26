@@ -37,11 +37,18 @@ export async function findPhysicalgoodsRequestTerms(client:PoolClient,requestIds
 
 /** Precio de alta verificable; no llama «original» al estado actual de una publicación antigua sin evidencia. */
 export async function findPhysicalgoodsOriginalTerms(client:PoolClient,publicationId:string):Promise<PhysicalgoodsTerms|null> {
-  const row=(await client.query<TermsRow>(`SELECT p.id,a.datos_despues->>'modalidad' AS modalidad,
+  return (await findPhysicalgoodsOriginalTermsBatch(client,[publicationId])).get(publicationId)??null;
+}
+/** IDs de publicaciones ya autorizadas; una sola consulta para todas las filas del historial. */
+export async function findPhysicalgoodsOriginalTermsBatch(client:PoolClient,publicationIds:string[]) {
+  const result=new Map<string,PhysicalgoodsTerms>();
+  if(!publicationIds.length)return result;
+  const rows=(await client.query<TermsRow>(`SELECT DISTINCT ON (p.id) p.id,a.datos_despues->>'modalidad' AS modalidad,
       a.datos_despues->>'precio' AS precio,a.datos_despues->>'moneda' AS moneda
     FROM public.publicacion_recurso p JOIN public.auditoria a ON a.entidad_id=p.id::text
       AND a.entidad_tipo='publicacion_recurso' AND a.campus_id=p.campus_id AND a.accion='PUBLICAR_PUBLICACION'
       AND a.datos_despues->>'id'=p.id::text AND a.datos_despues->>'tipo_recurso'='FISICO'
-    WHERE p.id=$1 AND p.tipo_recurso='FISICO' ORDER BY a.created_at,a.id LIMIT 1`,[publicationId])).rows[0];
-  return row?terms(row):null;
+    WHERE p.id=ANY($1::uuid[]) AND p.tipo_recurso='FISICO' ORDER BY p.id,a.created_at,a.id`,[[...new Set(publicationIds)]])).rows;
+  for(const row of rows){const value=terms(row);if(value)result.set(row.id,value);}
+  return result;
 }

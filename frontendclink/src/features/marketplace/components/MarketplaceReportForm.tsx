@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Check, Flag } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useContentReport } from '@/features/reports/hooks/useContentReport';
+import {ContentReportConfirmation} from '@/features/reports/components/ContentReportConfirmation';
+import {Skeleton,SkeletonBlock} from '@/components/Skeleton';
 import { MARKETPLACE_REPORT_REASONS, type MarketplaceReportTarget } from '../types/report';
 import { CATALOG_COLORS as c } from './CatalogUI';
 import { PublicationFeedback, PublicationSubmit, publicationUI as f } from './PublicationFormUI';
@@ -21,20 +23,19 @@ function ReportFields({ target, title, onBack, onBusyChange, showHeading = true,
   const reason = selected?.id === 'other' ? customReason.trim() : selected?.label ?? '';
   useEffect(() => { onBusyChange?.(report.busy); return () => onBusyChange?.(false); }, [report.busy, onBusyChange]);
   function send() {
-    if (report.busy || report.receipt) return;
+    if (report.busy || report.receipt || report.checking || report.lookupError) return;
     if (!reason || reason.length > 200 || description.trim().length > 2000) { setValidation('Selecciona un motivo o escribe otro de hasta 200 caracteres.'); return; }
-    setValidation(null); void report.submit({ reason, ...(description.trim() ? { description: description.trim() } : {}) });
+    setValidation(null); void Promise.resolve(report.submit({ reason, ...(description.trim() ? { description: description.trim() } : {}) })).then(receipt=>{if(receipt)Keyboard.dismiss();});
   }
+  const back=backLabel!==null&&<Pressable accessibilityRole="button" disabled={report.busy} onPress={onBack} style={f.secondary}><Text style={f.actionText}>{backLabel??(transaction?'Volver al acuerdo':'Volver al detalle')}</Text></Pressable>;
+  if(report.checking)return <View style={f.section}><Skeleton label="Consultando tu denuncia" contentStyle={{gap:12}}><SkeletonBlock width="65%" height={24}/><SkeletonBlock height={160} borderRadius={14}/><SkeletonBlock height={72} borderRadius={12}/></Skeleton>{back}</View>;
+  if(report.lookupError)return <View style={f.section}><PublicationFeedback error={report.lookupError}/><PublicationSubmit label="Reintentar consulta de denuncia" disabled={false} onPress={report.retryLookup}/>{back}</View>;
+  if(report.receipt)return <View style={f.section}><ContentReportConfirmation title={title} transaction={transaction} receipt={report.receipt} reason={report.receipt.reason??reason} description={report.receipt.description===undefined?description:report.receipt.description}/>{back}</View>;
   return <View style={f.form}>
     <View style={f.section}>
       {showHeading && <View style={styles.heading}><Flag size={20} color={c.primary} /><Text accessibilityRole="header" style={f.title}>{transaction ? 'Denunciar transacción' : 'Denunciar publicación'}</Text></View>}
       <Text style={f.label}>{title}</Text>
-      {report.receipt ? <>
-        <Text accessibilityLiveRegion="polite" style={styles.receipt}>Denuncia enviada</Text>
-        <Text style={f.hint}>Quedó pendiente de revisión.</Text>
-        <Text style={f.hint}>Fecha: {new Date(report.receipt.reportedAt).toLocaleString('es-CL')}</Text>
-        <Text style={f.notice}>La administración del campus de origen revisará el caso. La denuncia no oculta el recurso ni modifica el acuerdo.</Text>
-      </> : <>
+      <>
         <Text style={f.notice}>La denuncia no elimina el contenido ni modifica la transacción. La revisará un administrador con permisos en el campus de origen.</Text>
         <Text style={f.label}>Selecciona un motivo *</Text>
         <View accessibilityRole="radiogroup" accessibilityLabel="Motivos de la denuncia" style={styles.options}>{options.map(option => <Pressable key={option.id}
@@ -50,8 +51,8 @@ function ReportFields({ target, title, onBack, onBusyChange, showHeading = true,
           <Text style={f.hint}>{description.length}/2000 caracteres</Text></View>
         <PublicationFeedback error={validation ?? report.error} />
         <PublicationSubmit label={report.busy ? 'Enviando denuncia…' : 'Enviar denuncia'} busy={report.busy} disabled={report.busy || !reason} onPress={send} />
-      </>}
-      {backLabel !== null && <Pressable accessibilityRole="button" disabled={report.busy} onPress={onBack} style={f.secondary}><Text style={f.actionText}>{backLabel ?? (transaction ? 'Volver al acuerdo' : 'Volver al detalle')}</Text></Pressable>}
+      </>
+      {back}
     </View>
   </View>;
 }
@@ -59,5 +60,5 @@ const styles = StyleSheet.create({
   heading: { flexDirection: 'row', gap: 10, alignItems: 'center' }, options: { gap: 8 },
   option: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderWidth: 1, borderColor: c.border, borderRadius: 12 },
   optionText: { flex: 1, minWidth: 0 }, radio: { height: 22, width: 22, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  radioSelected: { borderColor: c.primary }, receipt: { color: c.primary, fontWeight: '700', fontSize: 21 },
+  radioSelected: { borderColor: c.primary },
 });

@@ -423,12 +423,30 @@ test('profile overview counts only legitimate digital acquisitions and preserves
   await db.query("INSERT INTO confirmacion_transaccion(transaccion_id,usuario_id,rol_confirmante) VALUES($1,$2,'RECEPTOR')", [transactionId, receiver.userId]);
   assert.equal((await getProfileOverview(receiver)).acquiredResources, 1);
   assert.equal((await getProfileOverview(other)).acquiredResources, 0);
-  assert.equal((await getProfileOverview(auth)).activePublications, 0);
+  assert.equal((await getProfileOverview(auth)).activePublications, 1);
   await db.query("UPDATE publicacion_recurso SET deleted_at=now(),estado_publicacion='OCULTO' WHERE id=$1", [saved.id]);
   await db.query("UPDATE perfil_usuario SET estado_cuenta='DESACTIVADA' WHERE id=$1", [auth.userId]);
   assert.equal((await getProfileOverview(receiver)).acquiredResources, 1);
   await db.query('DELETE FROM acceso_recurso_digital WHERE transaccion_id=$1', [transactionId]);
   assert.equal((await getProfileOverview(receiver)).acquiredResources, 0);
+});
+
+test('profile overview adds both domains once and separates received requests from accepted transactions',async()=>{
+ const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
+ const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+ const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();
+ await requestAndAccept(saved,receiver);await trades.createDigitalRequest(other,saved.id,{messageCode:'LIB_QA_INTERES'});
+ const physical=randomUUID(),category=randomUUID(),pending=randomUUID(),accepted=randomUUID(),transaction=randomUUID();
+ await db.query("INSERT INTO categoria_recurso_fisico(id,nombre) VALUES($1,'QA física')",[category]);
+ await db.query("INSERT INTO publicacion_recurso(id,campus_id,propietario_id,tipo_recurso,titulo,modalidad,estado_publicacion) VALUES($1,$2,$3,'FISICO','Donación física','DONACION','RESERVADO')",[physical,campus,auth.userId]);
+ await db.query("INSERT INTO recurso_fisico(publicacion_id,categoria_id,estado_uso) VALUES($1,$2,'USADO')",[physical,category]);
+ await db.query("INSERT INTO solicitud_recurso(id,publicacion_id,solicitante_id,codigo_mensaje,estado_solicitud) VALUES($1,$3,$4,'LIB_QA_INTERES','PENDIENTE'),($2,$3,$5,'LIB_QA_INTERES','ACEPTADA')",[pending,accepted,physical,other.userId,receiver.userId]);
+ await db.query("INSERT INTO transaccion_recurso(id,solicitud_id,publicacion_id,propietario_id,receptor_id,estado_transaccion,modalidad_acordada) VALUES($1,$2,$3,$4,$5,'RESERVADA','DONACION')",[transaction,accepted,physical,auth.userId,receiver.userId]);
+ const owner=await getProfileOverview(auth);assert.equal(owner.activePublications,2);assert.equal(owner.pendingRequests,2);assert.equal(owner.transactions,2);
+ const recipient=await getProfileOverview(receiver);assert.equal(recipient.pendingRequests,0);assert.equal(recipient.transactions,2);
+ const waiting=await getProfileOverview(other);assert.equal(waiting.pendingRequests,0);assert.equal(waiting.transactions,0);
+ await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[physical]);
+ const withdrawn=await getProfileOverview(auth);assert.equal(withdrawn.activePublications,1);assert.equal(withdrawn.transactions,2);
 });
 async function attach(id: string, bytes: Buffer | null = pdf, extra = false) {
   const body = new FormData(); if (bytes) body.append('file', new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), 'segundo.pdf');
@@ -674,6 +692,7 @@ async function requestAndAccept(saved:{id:string},receiver:VerifiedAuthConnectio
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,requested.id,{decision:'ACEPTAR'});assert.ok(accepted.transactionId);return {trades,requested,accepted,tradeId:accepted.transactionId!};
 }
 test('digital activity counts and grouped resources cover all requests before pagination, with independent receiver trades',async()=>{
+ const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
  const saved=await service.createDigitalPublication(auth,input(),file()),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
  const receivers=[];
  for(let i=0;i<11;i++){const receiver=await peer();receivers.push(receiver);await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});}
@@ -683,8 +702,10 @@ test('digital activity counts and grouped resources cover all requests before pa
  const last=await get(`/activity/requests?received=true&resourceId=${saved.id}&limit=10&page=2&order=oldest`);const tail=await last.json();assert.equal(tail.data.length,1);assert.ok(!page.data.some((row:{id:string})=>row.id===tail.data[0].id));
  const accepted=await trades.resolveDigitalRequest(auth,saved.id,page.data[0].id,{decision:'ACEPTAR'});
  const counts=await (await get('/activity/counts')).json();assert.equal(counts.data.pendingRequests,10);assert.equal(counts.data.receivedPending,11);assert.equal(counts.data.pendingTransactions,1);
+ const overview=await getProfileOverview(auth);assert.equal(overview.pendingRequests,counts.data.pendingRequests);assert.equal(overview.transactions,counts.data.pendingTransactions);assert.equal(overview.activePublications,1);
  const active=await (await get('/activity/transactions?tab=active&limit=5')).json();assert.equal(active.meta.total,1);assert.equal(active.data[0].id,accepted.transactionId);assert.equal(active.data[0].participants.length,2);
  current=receivers[0];const own=await (await get('/activity/counts')).json();assert.equal(own.data.sentAccepted,1);assert.equal(own.data.pendingTransactions,1);assert.equal(own.data.receivedPending,0);
+ const recipientOverview=await getProfileOverview(receivers[0]);assert.equal(recipientOverview.pendingRequests,0);assert.equal(recipientOverview.transactions,own.data.pendingTransactions);
  assert.equal((await (await get('/activity/resources')).json()).data.length,0);
 });
 test('digital activity resource reads remain private and preserve original amounts after withdrawal without granting original access',async()=>{
@@ -698,6 +719,7 @@ test('digital activity resource reads remain private and preserve original amoun
  current=structuredClone(auth);await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
  const finished=await (await get('/activity/transactions?tab=finished')).json();assert.equal(finished.meta.total,1);assert.equal(finished.data[0].amount,2500);
  assert.equal((await (await get('/activity/counts')).json()).data.pendingTransactions,0);
+ const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');assert.equal((await getProfileOverview(auth)).transactions,0);assert.equal((await getProfileOverview(receiver)).transactions,0);
 });
 test('digital activity validates query contracts, authorization and publication filters',async()=>{
  const saved=await service.createDigitalPublication(auth,input(),file());
@@ -1022,8 +1044,22 @@ test('digital publication reports share storage/form contract, retain private ev
   assert.equal(row.contenido_reportado_json.publication.titulo,saved.title);assert.doesNotMatch(JSON.stringify(row.contenido_reportado_json),/storage_path|bucket_id|https:|%PDF|digital-resources/);
   await db.query("UPDATE publicacion_recurso SET titulo='Cambiado después',deleted_at=now() WHERE id=$1",[saved.id]);
   assert.equal((await db.query('SELECT contenido_reportado_json FROM reporte_contenido WHERE id=$1',[receipt.id])).rows[0].contenido_reportado_json.publication.titulo,saved.title);
-  assert.equal((await digitalReport(saved.id,{reason:'Otro'})).status,404);
+  const repeated=await digitalReport(saved.id,{reason:'Otro'});assert.equal(repeated.status,201);assert.deepEqual((await repeated.json()).data,receipt);
 });
+test('digital publication reports reject owners and recover the first private receipt instead of inserting again',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();
+  current=structuredClone(auth);assert.equal((await digitalReport(saved.id,{reason:'Propia'})).status,403);
+  const own=()=>originalFetch(base.replace('/marketplace/elibrary','/reports/elibrary')+'/'+saved.id+'/own',{headers:{Authorization:'Bearer '+token}});
+  assert.equal((await own()).status,403);current=receiver;assert.equal((await (await own()).json()).data,null);
+  const responses=await Promise.all([digitalReport(saved.id,{reason:'Primero',description:'Comentario'}),digitalReport(saved.id,{reason:'Segundo'})]);
+  assert.ok(responses.every(row=>row.status===201));const receipts=await Promise.all(responses.map(row=>row.json()));assert.equal(receipts[0].data.id,receipts[1].data.id);
+  const receipt=receipts[0].data;await db.query("UPDATE reporte_contenido SET estado_reporte='EN_REVISION' WHERE id=$1",[receipt.id]);
+  const response=await own();assert.equal(response.headers.get('cache-control'),'no-store');const savedReceipt=(await response.json()).data;assert.equal(savedReceipt.status,'EN_REVISION');assert.equal(savedReceipt.reason,receipt.reason);assert.equal(savedReceipt.description,receipt.description);
+  assert.doesNotMatch(JSON.stringify(savedReceipt),/snapshot|storage_path|reportante|resuelto_por/);
+  const replay=await digitalReport(saved.id,{reason:'No reemplazar'});assert.deepEqual((await replay.json()).data,savedReceipt);assert.equal((await db.query('SELECT * FROM reporte_contenido WHERE entidad_id=$1',[saved.id])).rows.length,1);
+  current=other;assert.equal((await (await own()).json()).data,null);current=await peer(foreignCampus,foreignInstitution);assert.equal((await own()).status,404);
+});
+
 test('digital transaction reports require participation even after withdrawal, and do not grant files or mutate agreement',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
   const before=(await db.query('SELECT * FROM transaccion_recurso WHERE id=$1',[tradeId])).rows[0];await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[saved.id]);current=receiver;

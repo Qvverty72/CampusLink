@@ -102,7 +102,7 @@ export interface PhysicalgoodsRequestCounts {sentAccepted:number;receivedPending
 export interface PhysicalgoodsReceivedRequest {
   requestedTerms?:PhysicalgoodsTerms|null;
   id: string;
-  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean;isWithdrawn:boolean;publishedAt?:string };
+  publication: Pick<PhysicalgoodsResource,'id'|'title'|'status'|'modality'|'price'> & { canView:boolean;isWithdrawn:boolean;publishedAt?:string;originalTerms?:PhysicalgoodsTerms|null };
   campus:{id:string;name:string};
   owner:{id:string;fullName:string};
   canResolve:boolean;

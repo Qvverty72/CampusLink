@@ -4,7 +4,7 @@ import type { DependencyChecks } from '../../types/api.types.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { ApiError } from '../../services/apiError.js';
 import type { PoolClient } from 'pg';
-import type { ActivityReportReceipt, ContentReportReceipt, NewActivityReport, NewContentReport } from './reports.types.js';
+import type { ActivityReportReceipt, ContentReportReceipt, PhysicalgoodsReportReceipt, NewActivityReport, NewContentReport } from './reports.types.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
@@ -23,6 +23,14 @@ export async function insertContentReport(client:PoolClient,report:NewContentRep
     [report.userId,report.campusId,report.entityType,report.entityId,report.reason,report.description??null,JSON.stringify(report.snapshot)]);
   const row=result.rows[0];
   return {id:row.id,campusId:report.campusId,status:'PENDIENTE',reportedAt:new Date(row.reportado_en).toISOString()};
+}
+
+/** Primer acuse propio de publicación, en cualquier estado; nunca expone evidencia ni notas de moderación. */
+export async function selectOwnPublicationReport(client:PoolClient,userId:string,campusId:string,entityType:'PUBLICACION_FISICA'|'PUBLICACION_DIGITAL',publicationId:string):Promise<PhysicalgoodsReportReceipt|null>{
+  const row=(await client.query<{id:string;reportado_en:Date|string;estado_reporte:ContentReportReceipt['status'];motivo:string;descripcion:string|null}>(
+    `SELECT id,reportado_en,estado_reporte,motivo,descripcion FROM public.reporte_contenido
+      WHERE reportante_id=$1 AND campus_id=$2 AND entidad_tipo=$3 AND entidad_id=$4 ORDER BY reportado_en,id LIMIT 1`,[userId,campusId,entityType,publicationId])).rows[0];
+  return row?{id:row.id,campusId,publicationId,transactionId:null,status:row.estado_reporte,reportedAt:new Date(row.reportado_en).toISOString(),reason:row.motivo,description:row.descripcion}:null;
 }
 
 /** Revalida cuenta, institución y roles persistidos antes de leer o guardar un acuse. */

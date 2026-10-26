@@ -10,6 +10,14 @@ const noop=()=>{},nodes=node=>!node||typeof node!=='object'?[]:[node,...[node.pr
 function load(file,deps){const module={exports:{}};const code=ts.transpileModule(fs.readFileSync(new URL('../src/features/marketplace/'+file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;vm.runInNewContext(code,{module,exports:module.exports,AbortController,require:name=>{assert.ok(Object.hasOwn(deps,name),name);return deps[name];}});return module.exports;}
 function runtime(){const slots=[];let index=0,effects=[];const react={useState(initial){const i=index++;slots[i]??={value:typeof initial==='function'?initial():initial};return[slots[i].value,value=>slots[i].value=typeof value==='function'?value(slots[i].value):value];},useRef(initial){const i=index++;return slots[i]??={current:initial};},useEffect(fn,deps){const i=index++,old=slots[i];if(!old||deps.some((v,j)=>!Object.is(v,old.deps[j])))effects.push(()=>{old?.cleanup?.();slots[i]={deps,cleanup:fn()};});}};return{react,render:fn=>{index=0;effects=[];const result=fn();effects.forEach(fn=>fn());return result;}};}
 const native={View:'View',Text:'Text',Pressable:'Button',TextInput:'Input',Image:'Image',ScrollView:'Scroll',ActivityIndicator:'Busy',StyleSheet:{create:v=>v}};
+test('personal publication administration opens only its gallery and returns after withdrawal',()=>{
+ const h=runtime(),reads=[],closed=[],resources={selectedId:null,open:id=>{reads.push(id);resources.selectedId=id;}};
+ const {PhysicalgoodsPublicationManagement}=load('physicalgoods/components/PhysicalgoodsPublicationManagement.tsx',{react:h.react,'react/jsx-runtime':jsx,
+ '../hooks/usePhysicalgoodsResources':{usePhysicalgoodsResources:catalogActive=>{assert.equal(catalogActive,false);return resources;}},'./PhysicalgoodsManagement':{PhysicalgoodsManagement:'Management'}});
+ const onClose=()=>closed.push(true),render=()=>h.render(()=>PhysicalgoodsPublicationManagement({id:'mine',onClose}));
+ let tree=render();assert.equal(tree.type,'Management');assert.equal(tree.props.resources,resources);assert.deepEqual(reads,['mine']);assert.equal(closed.length,0);
+ render();resources.selectedId=null;render();assert.equal(closed.length,1);
+});
 function fixture(){
  const h=runtime(),calls=[],resource={id:'resource',owner:{id:'owner'},title:'Calculadora',description:'Con cubierta',condition:'BUEN_ESTADO',modality:'VENTA',price:12000,updatedAt:'original-version',canEdit:true,status:'DISPONIBLE',campus:{name:'San Andrés'},category:{id:'books',name:'Libros'},images:[{id:'photo-a',url:'a',principal:false},{id:'photo-b',url:'b',principal:true}]};
  const r={gallery:resource,selectedId:'resource',galleryLoading:false,galleryError:null,busy:false,options:{categories:[{id:'other',name:'Otros'},{id:'books',name:'Libros'}]},editCategory:'books',draftImages:[],remainingImageSlots:1,

@@ -257,17 +257,20 @@ test('physical reserved and historical cards preserve detail access and prevent 
 
 test('received resources open a single modal that survives refresh, preserves decisions and stays scoped to the page and user',()=>{
  const h=runtime(),calls=[],rows=Array.from({length:10},(_,index)=>physicalRow(`request-${index}`));
+ rows.forEach(row=>{row.publication.price=8000;row.publication.originalTerms={modality:'VENTA',amount:5000,currency:'CLP'};row.requestedTerms={modality:'VENTA',amount:7000,currency:'CLP'};});
  rows.push({...physicalRow('different'),publication:{...physicalRow().publication,id:'different-publication'}});
  const state={page:{data:rows},number:1,scope:'owner:campus',loading:false,busy:false,selection:null,select:(...args)=>calls.push(args),reload:()=>calls.push('reload'),resolve:()=>calls.push('resolved'),cancel:()=>{state.selection=null;}};
- const {PhysicalgoodsReceivedRequests,groupReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'../utils/requestTerms':requestTerms,'./PhysicalgoodsPriceHistory':{PhysicalgoodsRequestPrices:'Prices'},'react/jsx-runtime':jsx,react:h.react,'react-native':native,
+ const {PhysicalgoodsReceivedRequests,groupReceivedRequests}=load('physicalgoods/components/PhysicalgoodsReceivedRequests.tsx',{'../utils/requestTerms':requestTerms,'./PhysicalgoodsPriceHistory':{PhysicalgoodsRequestPrices:'Prices',PhysicalgoodsOriginalPrice:'OriginalPrice'},'react/jsx-runtime':jsx,react:h.react,'react-native':native,
   '../hooks/usePhysicalgoodsRequests':{usePhysicalgoodsRequests:()=>state},
   '../utils/receivedRequestIndicators':indicators,
   '../../components/ResourceRequestsModal':{ResourceRequestsModal:'ResourceModal',ResourceRequestsRow:'ResourceRow'},'../../components/RequestAccordionCard':{RequestAccordionSkeleton:'Skeleton'},
   '../../components/CatalogUI':{CATALOG_COLORS:{}},'../../components/ResourceDetailUI':{detailUI:{}},'../../components/RequestsUI':requestsUI});
  const render=()=>{const base=elements(h.render(()=>PhysicalgoodsReceivedRequests({state,onDetail:noop,onAgreement:noop})));const controller=base.find(n=>typeof n.type==='function'&&n.type.name==='PhysicalgoodsReceivedResource');return [...base,...(controller?elements(controller.type(controller.props)):[])];};
  let resources=render().filter(n=>n.type==='ResourceRow');assert.equal(resources.length,2);assert.equal(resources[0].props.count,10);assert.equal(render().some(n=>n.type==='ResourceModal'),false);
+ const cardPrice=resources[0].props.summaryContent;let prices=cardPrice.type(cardPrice.props);assert.equal(prices.props.current.amount,8000);assert.equal(prices.props.original.amount,5000);assert.equal(resources[0].props.summary,undefined);
  assert.deepEqual(Array.from(groupReceivedRequests(rows),group=>group.length),[10,1]);resources[0].props.onPress();
  let modal=render().find(n=>n.type==='ResourceModal');assert.equal(modal.props.requests.length,10);modal.props.requests[9].onAccept();assert.equal(calls[0][0].id,'request-9');assert.equal(calls[0][1],'ACEPTAR');
+ const modalPrice=modal.props.summaryContent;prices=modalPrice.type(modalPrice.props);assert.equal(prices.props.original.amount,5000);assert.equal(modal.props.summary,undefined);assert.equal(modal.props.requests[0].priceDetails.props.request.requestedTerms.amount,7000);
  state.selection={request:rows[9],decision:'ACEPTAR'};modal=render().find(n=>n.type==='ResourceModal');assert.equal(modal.props.overlay.props.embedded,true);modal.props.overlay.props.onConfirm();assert.equal(calls.at(-1),'resolved');modal.props.onClose();assert.equal(state.selection,null);assert.ok(render().some(n=>n.type==='ResourceModal'));
  state.loading=true;state.page=null;modal=render().find(n=>n.type==='ResourceModal');assert.equal(modal.props.loading,true);assert.equal(modal.props.requests.length,10);
  state.loading=false;state.page={data:rows};modal=render().find(n=>n.type==='ResourceModal');state.busy=true;modal.props.onClose();assert.ok(render().some(n=>n.type==='ResourceModal'));state.busy=false;

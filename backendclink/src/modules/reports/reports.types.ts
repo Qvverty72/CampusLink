@@ -31,9 +31,10 @@ export interface ReportResolutionInput { decision: 'DESESTIMAR' | 'ACOGER'; just
 
 export interface ContentReportInput { reason: string; description?: string }
 export type ReportActivityInput = ContentReportInput;
-export interface ContentReportReceipt { id:string;campusId:string;status:'PENDIENTE';reportedAt:string }
+export interface ContentReportReceipt { id:string;campusId:string;status:'PENDIENTE'|'EN_REVISION'|'RESUELTO'|'DESESTIMADO';reportedAt:string }
 export interface PhysicalgoodsReportReceipt extends ContentReportReceipt {
   publicationId:string; transactionId:string|null;
+  reason?:string;description?:string|null;
 }
 export interface NewContentReport extends ContentReportInput {
   userId:string;campusId:string;entityType:'ACTIVIDAD'|'PUBLICACION_FISICA'|'PUBLICACION_DIGITAL'|'TRANSACCION';entityId:string;snapshot:unknown;

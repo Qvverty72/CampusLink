@@ -49,6 +49,6 @@ export function PhysicalgoodsPublicationsPage({active,refreshVersion,refreshEnab
     return <PublicationActivityRow key={row.id} title={row.title} amount={row.modality==='DONACION'?'Donación':row.price===null?'Precio no disponible':`$${row.price.toLocaleString('es-CL')}`} subtitle={`${row.campus.name} · ${dateLabel}`} status={status.label} statusTone={status.tone} featured={group.featured} last={index===group.rows.length-1} onPress={()=>setOpened(row)} onRequests={onRequests}/>;
    })}</View></View>)}
   <ActivityPager page={h.number} hasMore={Boolean(page?.meta.hasMore)} disabled={h.loading||Boolean(opened)} onPrevious={()=>h.setNumber(h.number-1)} onNext={()=>h.setNumber(h.number+1)}/>
-  {opened&&<PhysicalgoodsPublicationProduct key={opened.id} publication={opened} onClose={()=>setOpened(null)} onManage={()=>{setOpened(null);if(onOpen)onOpen(opened.id);else onDetail({publicationId:opened.id});}} onAgreement={(id,transactionId)=>{setOpened(null);onAgreement(id,transactionId);}}/>}
+  {opened&&<PhysicalgoodsPublicationProduct key={opened.id} publication={opened} onClose={()=>setOpened(null)} onChanged={refreshAll}/>}
  </View>;
 }

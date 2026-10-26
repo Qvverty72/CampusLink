@@ -19,7 +19,7 @@ export function ProfilePersonalCards({ overview, activities, failed, retry, load
       <PersonalCard section="requests" icon={ClipboardClock} subtitle="Estado de intercambios" count={overview?.pendingRequests} unit="pendientes" accent />
     </View>
     <View style={styles.row}>
-      <PersonalCard section="transactions" icon={ReceiptText} subtitle="Historial completo" />
+      <PersonalCard section="transactions" icon={ReceiptText} subtitle="Historial completo" count={overview?.transactions} unit="pendientes" />
       <PersonalCard section="resources" icon={FolderDown} subtitle="Guías y apuntes" count={overview?.acquiredResources} unit="adquiridos" />
     </View>
     <PersonalCard section="activities" icon={CalendarCheck} subtitle="Talleres, deportes y grupos" count={activities} unit="inscripciones" wide />
@@ -65,5 +65,5 @@ const styles = StyleSheet.create({
   subtitle: { color: '#617484', fontSize: 12, lineHeight: 18 },
   wide: { flex: 0, minHeight: 96, flexDirection: 'row', alignItems: 'center', gap: 12 },
   wideTop: { flexShrink: 0 }, wideBadge: { color: APP_COLORS.SECONDARY, fontSize: 11, lineHeight: 17, fontWeight: '600' },
-  retry: { minHeight: 44, justifyContent: 'center' }, retryText: { color: APP_COLORS.ACCENT, fontSize: 12, lineHeight: 18 },
+  retry: { minHeight: 44, justifyContent: 'center' }, retryText: { color: APP_COLORS.PRIMARY, fontSize: 12, lineHeight: 18 },
 });

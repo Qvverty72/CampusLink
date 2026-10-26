@@ -42,9 +42,9 @@ export function PhysicalgoodsDetail({ resources: r, onClose, onBusyChange, onReq
     : gallery && !gallery.acceptsRequests ? `El recurso está ${statusLabel(gallery.status).toLowerCase()} y no admite nuevas solicitudes.`
       : request.loading ? 'Comprobando disponibilidad y solicitudes…' : request.error ? 'No pudimos comprobar si puedes solicitarlo. Reintenta la consulta.' : null;
   return <View style={detailUI.page}>
-    <ScrollView style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingBottom: 24, paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }) }]}>
+    <ScrollView automaticallyAdjustKeyboardInsets style={{ flex: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={[detailUI.content, { paddingBottom: 24, paddingTop: safeAreaInset('top', insets.top, { min: 16, offset: 8 }) }]}>
       <DetailHeader onBack={() => { if (reporting) setReporting(false); else if (requesting) setRequesting(false); else if (managing) setManaging(false); else onClose(); }}
-        onReport={gallery && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} disabled={busy} title={reporting ? 'Denunciar recurso' : requesting ? 'Solicitar recurso' : 'Mercado'} />
+        onReport={gallery && !isOwner && !reporting && !requesting && !managing ? () => setReporting(true) : undefined} disabled={busy} title={reporting ? 'Denunciar recurso' : requesting ? 'Solicitar recurso' : 'Mercado'} />
       {reporting && gallery ? <MarketplaceReportForm target={{ type: 'PUBLICACION_FISICA', publicationId: gallery.id }} title={gallery.title} onBusyChange={setReportBusy} onBack={() => setReporting(false)} />
         : requesting ? <>
           {gallery && !active && <RequestResourceSummary title={gallery.title} modality={gallery.modality} price={gallery.price} />}

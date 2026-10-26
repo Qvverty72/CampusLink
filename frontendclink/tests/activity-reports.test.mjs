@@ -38,8 +38,20 @@ test('activity own/submit transport accepts original resolved receipts and valid
 });
 
 class AuthApiError extends Error { constructor(status) { super(); this.status = status; } }
+test('publication own-receipt transport verifies target, origin campus and persisted metadata for both domains',async()=>{
+ const publicationId='12345678-1234-1234-1234-123456789abc',origin='origin-campus',calls=[];let data=null;
+ const api=load('../src/features/reports/api/reportsApi.ts',{'@/lib/api/authenticated-request':{authenticatedEnvelopeRequest:async(...args)=>{calls.push(args);return {data};}}});
+ for(const type of ['PUBLICACION_FISICA','PUBLICACION_DIGITAL']){
+  const target={type,publicationId,campusId:origin},expected=type==='PUBLICACION_DIGITAL'?origin:campusId;
+  data=null;assert.equal(await api.fetchOwnPublicationReport(campusId,target),null);assert.ok(calls.at(-1)[0].includes(type==='PUBLICACION_DIGITAL'?'/elibrary/':'/physicalgoods/'));
+  const own={id:publicationId,campusId:expected,publicationId,transactionId:null,status:'RESUELTO',reportedAt:receipt.reportedAt,reason:'Original',description:'Comentario'};
+  data=own;assert.equal(await api.fetchOwnPublicationReport(campusId,target),own);
+  for(const patch of [{campusId:'other'},{publicationId:'other'},{transactionId:publicationId},{status:'UNKNOWN'},{reason:''},{description:{}},{reportedAt:'bad'}]){data={...own,...patch};await assert.rejects(api.fetchOwnPublicationReport(campusId,target));}
+ }
+});
+
 function harness(target = { type: 'ACTIVIDAD', activityId }) {
-  const slots = [], calls = { lookups: [], submits: [], physical: [] }; let cursor = 0, effects = [], refreshes = 0;
+  const slots = [], calls = { lookups: [], submits: [], physical: [],publications:[],digital:[] }; let cursor = 0, effects = [], refreshes = 0;
   const auth = { identity: { userId: 'user-a', campusId }, session: {}, refreshIdentity() { refreshes++; } };
   const react = {
     useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial;
@@ -56,8 +68,10 @@ function harness(target = { type: 'ACTIVIDAD', activityId }) {
     '@/lib/api/authenticated-request': { AuthApiError },
     '../api/reportsApi': {
       fetchOwnActivityReport: (...args) => pending(calls.lookups, args),
+      fetchOwnPublicationReport:(...args)=>pending(calls.publications,args),
       submitActivityReport: (...args) => pending(calls.submits, args),
       submitPhysicalgoodsReport: (...args) => pending(calls.physical, args),
+      submitDigitalReport:(...args)=>pending(calls.digital,args),
     },
   });
   return { auth, calls, get refreshes() { return refreshes; },
@@ -90,10 +104,19 @@ test('failed lookup stays closed to submission, retries explicitly and discards 
   h.unmount();
 });
 
-test('physical report submission keeps the existing flow without an activity receipt lookup', async () => {
+test('physical report submission requires a successful own-publication lookup and blocks repeats', async () => {
   const h = harness({ type: 'PUBLICACION_FISICA', publicationId: 'publication-a' }); let state = h.render();
-  assert.equal(h.calls.lookups.length, 0); assert.equal(state.checking, false);
-  state = h.render(); const send = state.submit({ reason: 'Motivo libre' });
+  assert.equal(h.calls.lookups.length, 0); assert.equal(state.checking, true);await state.submit({reason:'Motivo'});assert.equal(h.calls.physical.length,0);
+  h.calls.publications[0].resolve(null);await setImmediate();state=h.render();const send = state.submit({ reason: 'Motivo libre' });
   assert.equal(h.calls.physical.length, 1); h.calls.physical[0].resolve(receipt); await send;
   assert.equal(h.render().receipt, receipt); h.unmount();
+});
+
+test('publication reports recover a persisted status in both domains and discard another account response',async()=>{
+ for(const type of ['PUBLICACION_FISICA','PUBLICACION_DIGITAL']){
+  const h=harness({type,publicationId:'publication-a',campusId:'origin'});let state=h.render();const stale=h.calls.publications[0];
+  h.auth.identity={userId:'user-b',campusId};state=h.render();assert.equal(stale.args[2].aborted,true);stale.resolve(receipt);await setImmediate();assert.equal(h.render().receipt,null);
+  h.calls.publications.at(-1).reject(new Error('offline'));await setImmediate();state=h.render();assert.ok(state.lookupError);await state.submit({reason:'other'});assert.equal(h.calls.physical.length+h.calls.digital.length,0);
+  state.retryLookup();h.render();const saved={...receipt,status:'RESUELTO',reason:'Original',description:'Comentario'};h.calls.publications.at(-1).resolve(saved);await setImmediate();state=h.render();assert.equal(state.receipt,saved);await state.submit({reason:'changed'});assert.equal(h.calls.physical.length+h.calls.digital.length,0);h.unmount();
+ }
 });

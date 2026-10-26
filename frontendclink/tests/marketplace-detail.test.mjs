@@ -62,6 +62,7 @@ test('physical detail blocks own/reserved requests, routes the existing request,
   request.options.activeRequest = { id: 'my-request', status: 'PENDIENTE' }; nodes = render(); footer = nodes.find(node => node.type === 'DetailActionBar');
   assert.equal(footer.props.label, 'Ver mi solicitud'); assert.equal(footer.props.disabled, false); footer.props.onPress(); assert.deepEqual(opened, [['resource', 'my-request']]);
   resources.gallery.owner.id = 'reader'; nodes = render(); assert.equal(nodes.find(node => node.type === 'DetailActionBar').props.disabled, true);
+  assert.equal(nodes.find(node=>node.type==='DetailHeader').props.onReport,undefined);assert.equal(nodes.find(node=>node.type==='Scroll').props.automaticallyAdjustKeyboardInsets,true);
   assert.match(nodes.find(node => node.type === 'DetailActionBar').props.helper, /propia publicación/);
   resources.gallery.canEdit=true;nodes.find(node=>node.type==='DetailHeader').props.onBack();nodes=render();nodes.find(node=>node.type==='Button'&&elements(node).some(child=>child.type==='Text'&&child.props.children==='Administrar publicación')).props.onPress();nodes=render();assert.ok(nodes.some(node=>node.type==='Management'));assert.ok(!nodes.some(node=>node.type==='DetailActionBar'));nodes.find(node=>node.type==='Management').props.onClose();assert.ok(!render().some(node=>node.type==='Management'));h.unmount();
 });
@@ -84,7 +85,7 @@ test('digital detail uses protected preview, blocks own requests and opens the a
   resource.acquired = true; nodes = render(); let footer = nodes.find(node => node.type === 'DetailActionBar');
   assert.equal(footer.props.label, 'Abrir en mis materiales'); footer.props.onPress(); assert.deepEqual(acquired, ['digital']);
   resource.acquired = false; request.options.activeRequestId = 'request'; nodes = render(); nodes.find(node => node.type === 'DetailActionBar').props.onPress(); assert.equal(requests, 1);
-  library.isOwner = true; nodes = render(); assert.equal(nodes.find(node => node.type === 'DetailActionBar').props.disabled, true); h.unmount();
+  library.isOwner = true; nodes = render(); assert.equal(nodes.find(node => node.type === 'DetailActionBar').props.disabled, true);assert.equal(nodes.find(node=>node.type==='DetailHeader').props.onReport,undefined);assert.equal(nodes.find(node=>node.type==='Scroll').props.automaticallyAdjustKeyboardInsets,true); h.unmount();
 });
 
 test('automatic digital preview cancels changed files and never restores an obsolete fragment or downloads originals', async () => {
