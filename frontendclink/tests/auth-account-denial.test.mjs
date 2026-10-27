@@ -33,10 +33,12 @@ test('authenticated errors retain bounded machine codes, without trusting arbitr
 
 function login(code, overrides = {}) {
   const auth = { status: 'forbidden', session: { user: { id: 'actor' } }, denialCode: code, error: null, refreshIdentity() {}, signOut() {}, ...overrides };
-  const native = Object.fromEntries(['ActivityIndicator', 'KeyboardAvoidingView', 'Pressable', 'SafeAreaView', 'ScrollView', 'Text', 'TextInput'].map(name => [name, name]));
+  const native = Object.fromEntries(['ActivityIndicator', 'KeyboardAvoidingView', 'Pressable', 'SafeAreaView', 'ScrollView', 'Text', 'TextInput', 'View'].map(name => [name, name]));
   const { LoginScreen } = load('features/auth/components/LoginScreen.tsx', {
     'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': { ...native, Platform: { OS: 'web' } },
-    'expo-router': { Link: 'Link', Redirect: 'Redirect' }, './form.styles': { authStyles: {} },
+    'expo-router': { Link: 'Link', Redirect: 'Redirect' }, './form.styles': { authStyles: {}, AUTH_COLORS: {} },
+    'lucide-react-native': { LockKeyhole: 'Icon', LogIn: 'Icon', Mail: 'Icon', UserRoundPlus: 'Icon' },
+    './AuthUI': { AuthButton: 'AuthButton', AuthHeading: 'AuthHeading', AuthInput: 'AuthInput', AuthMessage: 'AuthMessage', AuthScaffold: 'AuthScaffold' },
     '../hooks/useLogin': { useLogin: () => ({ auth, busy: false, error: null }) },
   });
   const nodes = [], text = [];

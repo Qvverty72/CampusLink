@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Keyboard } from 'react-native';
 import { requestRecovery, resetPassword } from '../api/sessionApi';
+import { useResendCooldown } from './useResendCooldown';
 
 /** Coordina solicitud del código y confirmación de cambio de contraseña. */
 export function useRecovery() {
@@ -11,27 +13,29 @@ export function useRecovery() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const cooldown = useResendCooldown('recovery', pendingEmail ?? email);
 
   async function request() {
-    if (busy) return;
+    if (busy || cooldown.remaining() > 0) return;
     const address = pendingEmail ?? email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) { setError('Ingresa un correo válido.'); return; }
-    setBusy(true); setError(null); setNotice(null);
+    cooldown.start();
+    Keyboard.dismiss();
+    setBusy(true); setError(null);
     try {
       await requestRecovery(address);
       setPendingEmail(address); setCode('');
-      setNotice('Si existe una cuenta asociada a ese correo y el envío está disponible, recibirás un código de recuperación. Revisa también el correo no deseado.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo solicitar la recuperación.'); }
     finally { setBusy(false); }
   }
 
   async function confirm() {
     if (busy || !pendingEmail) return;
-    setError(null); setNotice(null);
+    setError(null);
     if (!/^\d{6,10}$/.test(code.trim()) || !password || password !== confirmation) {
       setError('Ingresa el código y una nueva contraseña; ambas contraseñas deben coincidir.'); return;
     }
+    Keyboard.dismiss();
     setBusy(true);
     try {
       await resetPassword(pendingEmail, code.trim(), password);
@@ -42,5 +46,6 @@ export function useRecovery() {
   }
 
   return { email, setEmail, pendingEmail, setPendingEmail, code, setCode, password, setPassword,
-    confirmation, setConfirmation, busy, done, error, setError, notice, setNotice, request, confirm };
+    confirmation, setConfirmation, busy, done, error, setError, request, confirm,
+    resendSeconds: cooldown.seconds };
 }

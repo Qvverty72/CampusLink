@@ -1,7 +1,9 @@
 ﻿import { Link, Redirect } from 'expo-router';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { LockKeyhole, Mail, UserRoundPlus } from 'lucide-react-native';
 
-import { authStyles as styles } from './form.styles';
+import { AUTH_COLORS, authStyles as styles } from './form.styles';
+import { AuthButton, AuthHeading, AuthInput, AuthMessage, AuthScaffold } from './AuthUI';
 import { useLogin } from '../hooks/useLogin';
 
 /** Formulario de acceso conectado al hook que intercambia credenciales por sesión. */
@@ -17,38 +19,36 @@ export function LoginScreen() {
       : auth.denialCode === 'REGISTRATION_REQUIRED'
         ? 'Falta completar tu registro institucional.'
         : 'Tu cuenta no tiene acceso. Contacta a la administración de tu campus.';
-  return <SafeAreaView style={styles.page}>
-    <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.brand}>CampusLink</Text>
-        <Text style={styles.title}>Iniciar sesión</Text>
-        <Text style={styles.description}>Ingresa con el correo y la contraseña de tu cuenta.</Text>
-        {loading ? <ActivityIndicator color="#74C69D" accessibilityLabel="Consultando tu cuenta" />
+  return <AuthScaffold>
+        <AuthHeading title="Iniciar sesión" description="Qué bueno verte de nuevo. Ingresa a tu comunidad con tu correo y contraseña." />
+        {loading ? <ActivityIndicator color={AUTH_COLORS.PRIMARY} accessibilityLabel="Consultando tu cuenta" />
           : auth.session ? <>
             <Text accessibilityRole={denied ? 'alert' : undefined} style={styles.description}>{denied
               ? denialMessage
               : 'No se pudo validar el acceso de tu cuenta.'}</Text>
-            <Pressable accessibilityRole="button" onPress={auth.refreshIdentity} style={styles.button}><Text style={styles.buttonText}>Reintentar</Text></Pressable>
+            <AuthButton onPress={auth.refreshIdentity}>Reintentar</AuthButton>
             {denied && auth.denialCode === 'REGISTRATION_REQUIRED' && <Link href="/register" style={styles.link}>Completar registro institucional</Link>}
             <Pressable accessibilityRole="button" disabled={busy} onPress={async () => {
               if (busy) return; setBusy(true); await auth.signOut(); setBusy(false);
-            }}><Text style={styles.link}>Cerrar sesión</Text></Pressable>
+            }} style={styles.linkButton}><Text style={styles.link}>Cerrar sesión</Text></Pressable>
           </> : <>
-            <Text style={styles.label}>Correo</Text>
-            <TextInput accessibilityLabel="Correo" style={styles.input} value={email} onChangeText={setEmail}
-              keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} editable={!busy} />
-            <Text style={styles.label}>Contraseña</Text>
-            <TextInput accessibilityLabel="Contraseña" style={styles.input} value={password} onChangeText={setPassword}
-              secureTextEntry autoComplete="current-password" maxLength={4096} editable={!busy} onSubmitEditing={submit} />
-            <Pressable accessibilityRole="button" disabled={busy || auth.status === 'unconfigured'} onPress={submit}
-              style={[styles.button, (busy || auth.status === 'unconfigured') && styles.disabled]}><Text style={styles.buttonText}>Iniciar sesión</Text></Pressable>
-            <Link href="/recover" style={styles.link}>Olvidé mi contraseña</Link>
-            <Link href="/register" style={styles.link}>Crear cuenta institucional</Link>
+            <View style={styles.form}>
+              <AuthInput label="Correo" icon={Mail} value={email} onChangeText={setEmail} placeholder="tu@correo.cl"
+                keyboardType="email-address" autoComplete="email" maxLength={254} editable={!busy} />
+              <AuthInput label="Contraseña" icon={LockKeyhole} password value={password} onChangeText={setPassword} placeholder="Ingresa tu contraseña"
+                autoComplete="current-password" maxLength={4096} editable={!busy} onSubmitEditing={submit} returnKeyType="go" />
+              <AuthButton disabled={auth.status === 'unconfigured'} busy={busy} onPress={submit}>Iniciar sesión</AuthButton>
+            </View>
+            <Link href="/recover" asChild><Pressable accessibilityRole="link" style={styles.linkButton}><Text style={styles.link}>Olvidé mi contraseña</Text></Pressable></Link>
+            <View style={styles.divider} />
+            <View style={styles.actions}>
+              <Text style={styles.mutedCenter}>¿Primera vez en CampusLink?</Text>
+              <Link href="/register" asChild><Pressable accessibilityRole="link" style={styles.secondaryButton}>
+                <UserRoundPlus size={18} color={AUTH_COLORS.PRIMARY} /><Text style={styles.secondaryText}>Crear cuenta institucional</Text>
+              </Pressable></Link>
+            </View>
           </>}
-        {busy && <ActivityIndicator color="#74C69D" accessibilityLabel="Procesando" />}
-        {(error || auth.error) && <Text accessibilityRole="alert" style={styles.error}>{error || auth.error}</Text>}
-        {auth.status === 'unconfigured' && <Text style={styles.error}>La autenticación no está configurada.</Text>}
-      </ScrollView>
-    </KeyboardAvoidingView>
-  </SafeAreaView>;
+        <AuthMessage error>{error || auth.error}</AuthMessage>
+        {auth.status === 'unconfigured' && <AuthMessage error>La autenticación no está configurada.</AuthMessage>}
+  </AuthScaffold>;
 }

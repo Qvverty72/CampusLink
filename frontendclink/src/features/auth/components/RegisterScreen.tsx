@@ -1,96 +1,80 @@
-import { Link, type Href } from 'expo-router';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Link } from 'expo-router';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Check, ChevronDown, Circle, CircleCheck, KeyRound, LockKeyhole, Mail, MapPin, ShieldCheck, UserRound } from 'lucide-react-native';
 
 import { useRegistration } from '../hooks/useRegistration';
+import { AUTH_COLORS, authStyles as styles } from './form.styles';
+import { AuthButton, AuthHeading, AuthInput, AuthMessage, AuthScaffold, ResendCodeButton } from './AuthUI';
 
-/** Flujo institucional con selección de campus, verificación y finalización de perfil. */
+/** Registro institucional, campus del catálogo y verificación de correo con un mismo lenguaje visual. */
 export function RegisterScreen() {
   const { auth, options, catalogLoading, setCatalogRevision, email, setEmail, fullName, setFullName,
     password, setPassword, setCampusId, pendingEmail, setPendingEmail, code, setCode, busy,
-    confirmingProfile, error, setError, notice, setNotice, campuses, selectedCampus,
-    submit, verify, resend, retryCompletion } = useRegistration();
-  return <SafeAreaView style={styles.page}>
-    <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Link href={'/login' as Href} style={styles.link}>← Volver</Link>
-        <Text style={styles.brand}>CampusLink</Text>
-        {auth.status === 'ready' ? <>
-          <Text style={styles.title}>Cuenta verificada</Text>
-          <Text style={styles.description}>Hola, {auth.identity?.profile.nombre_completo}. Tu cuenta institucional está lista.</Text>
-          <Text style={styles.description}>Campus: {options.find(option => option.campus_id === auth.identity?.campusId)?.campus_nombre ?? 'Asignado a tu cuenta'}</Text>
-          <Link href={'/map' as Href} replace asChild>
-            <Pressable accessibilityRole="button" style={styles.button}><Text style={styles.buttonText}>Continuar</Text></Pressable>
-          </Link>
-        </> : confirmingProfile ? <>
-          <Text style={styles.title}>Correo confirmado</Text>
-          {auth.status === 'loading' ? <ActivityIndicator color="#74C69D" accessibilityLabel="Cargando cuenta" /> : <>
-            <Text style={styles.description}>Falta completar o consultar tu cuenta. Puedes reintentar sin volver a registrarte.</Text>
-            <Pressable accessibilityRole="button" disabled={busy} onPress={retryCompletion} style={[styles.button, busy && styles.disabled]}><Text style={styles.buttonText}>Completar cuenta</Text></Pressable>
-          </>}
-        </> : pendingEmail ? <>
-          <Text style={styles.title}>Verifica tu correo</Text>
-          <Text style={styles.description}>Ingresa el código enviado a {pendingEmail}. Revisa también el correo no deseado.</Text>
-          <Text style={styles.label}>Código de verificación</Text>
-          <TextInput accessibilityLabel="Código de verificación" style={styles.input} value={code} onChangeText={setCode}
-            keyboardType="number-pad" autoComplete="one-time-code" maxLength={10} editable={!busy} onSubmitEditing={verify} />
-          <Pressable accessibilityRole="button" disabled={busy} onPress={verify} style={[styles.button, busy && styles.disabled]}>
-            <Text style={styles.buttonText}>Verificar correo</Text>
+    confirmingProfile, error, setError, campuses, selectedCampus,
+    submit, verify, resend, retryCompletion, resendSeconds } = useRegistration();
+  const [campusOpen, setCampusOpen] = useState(false);
+  return <AuthScaffold back stepKey={auth.status === 'ready' ? 'ready' : confirmingProfile ? 'profile' : pendingEmail ? 'code' : 'register'}>
+    {auth.status === 'ready' ? <>
+      <AuthHeading icon={CircleCheck} title="Cuenta verificada" description={<>Hola, {auth.identity?.profile.nombre_completo}. Tu cuenta institucional está lista.</>} />
+      <AuthMessage>Campus: {options.find(option => option.campus_id === auth.identity?.campusId)?.campus_nombre ?? 'Asignado a tu cuenta'}</AuthMessage>
+      <Link href="/map" replace asChild><Pressable accessibilityRole="link" style={styles.button}><Text style={styles.buttonText}>Continuar</Text></Pressable></Link>
+    </> : confirmingProfile ? <>
+      <AuthHeading icon={ShieldCheck} title="Correo confirmado" description="Tu correo ya está verificado. Falta completar o consultar tu cuenta; puedes reintentar sin registrarte de nuevo." />
+      {auth.status === 'loading' ? <ActivityIndicator color={AUTH_COLORS.PRIMARY} accessibilityLabel="Cargando cuenta" />
+        : <AuthButton busy={busy} onPress={retryCompletion}>Completar cuenta</AuthButton>}
+    </> : pendingEmail ? <>
+      <AuthHeading title="Verifica tu correo" description={<>Ingresa el código enviado a <Text style={styles.email}>{pendingEmail}</Text> para activar tu cuenta institucional.</>} />
+      <View style={styles.form}>
+        <AuthInput label="Código de verificación" icon={KeyRound} code value={code} onChangeText={setCode} placeholder="000000"
+          keyboardType="number-pad" autoComplete="one-time-code" maxLength={10} editable={!busy} onSubmitEditing={verify} returnKeyType="go" />
+        <AuthButton busy={busy} onPress={verify}>Verificar correo</AuthButton>
+      </View>
+      <Text style={styles.description}>¿No ves el correo? Revisa también la carpeta de correo no deseado.</Text>
+      <View style={styles.divider} />
+      <View style={styles.actions}>
+        <ResendCodeButton seconds={resendSeconds} busy={busy} onPress={resend} />
+        <Pressable accessibilityRole="button" disabled={busy} style={[styles.linkButton, busy && styles.disabled]} onPress={() => {
+          setPendingEmail(null); setCode(''); setPassword(''); setCampusOpen(false); setError(null);
+        }}><Text style={styles.link}>Usar otro correo</Text></Pressable>
+      </View>
+    </> : <>
+      <AuthHeading title="Crea tu cuenta" description="Sé parte de tu comunidad. Usa tu correo institucional para comenzar." />
+      <View style={styles.form}>
+        <AuthInput label="Nombre completo" icon={UserRound} value={fullName} onChangeText={setFullName} placeholder="Tu nombre y apellido"
+          autoCapitalize="words" autoComplete="name" maxLength={200} editable={!busy} />
+        <AuthInput label="Correo institucional" icon={Mail} value={email} onChangeText={value => { setEmail(value); setCampusId(''); setCampusOpen(false); }}
+          keyboardType="email-address" autoComplete="email" maxLength={254} editable={!busy} placeholder="nombre@duocuc.cl" />
+        <AuthInput label="Contraseña" icon={LockKeyhole} password value={password} onChangeText={setPassword}
+          placeholder="Crea tu contraseña" autoComplete="new-password" maxLength={4096} editable={!busy} />
+        {catalogLoading ? null : campuses.length > 0 ? <View style={styles.field}>
+          <Text style={styles.label}>Campus</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Campus: ${selectedCampus?.campus_nombre ?? 'Selecciona tu campus'}`}
+            accessibilityState={{ expanded: campusOpen, disabled: busy }} disabled={busy} onPress={() => setCampusOpen(open => !open)} style={styles.campusTrigger}>
+            <MapPin size={18} color={AUTH_COLORS.SECONDARY} />
+            <Text style={styles.campusValue}>{selectedCampus?.campus_nombre ?? 'Selecciona tu campus'}</Text>
+            <ChevronDown size={18} color={AUTH_COLORS.SECONDARY} />
           </Pressable>
-          <Pressable accessibilityRole="button" disabled={busy} onPress={resend}><Text style={styles.link}>Reenviar código</Text></Pressable>
-          <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setPendingEmail(null); setCode(''); setNotice(null); setError(null); }}>
-            <Text style={styles.link}>Usar otro correo</Text>
-          </Pressable>
-        </> : <>
-          <Text style={styles.title}>Crea tu cuenta</Text>
-          <Text style={styles.description}>Usa tu correo institucional y elige tu campus. Deberás verificar el correo para activar tu cuenta.</Text>
-          <Text style={styles.label}>Nombre completo</Text>
-          <TextInput accessibilityLabel="Nombre completo" style={styles.input} value={fullName} onChangeText={setFullName} autoComplete="name" maxLength={200} editable={!busy} />
-          <Text style={styles.label}>Correo institucional</Text>
-          <TextInput accessibilityLabel="Correo institucional" style={styles.input} value={email} onChangeText={value => { setEmail(value); setCampusId(''); }}
-            keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} editable={!busy} placeholder="nombre@duocuc.cl" placeholderTextColor="#8198A8" />
-          <Text style={styles.label}>Contraseña</Text>
-          <TextInput accessibilityLabel="Contraseña" style={styles.input} value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" maxLength={4096} editable={!busy} />
-          <Text style={styles.label}>Campus {campuses[0] ? `· ${campuses[0].institucion_nombre}` : ''}</Text>
-          {catalogLoading ? <ActivityIndicator color="#74C69D" accessibilityLabel="Cargando campus" /> : <>
-            {campuses.length === 0 && <Text style={styles.description}>{options.length ? 'Ingresa un correo de una institución admitida para ver sus campus.' : 'No hay campus disponibles para registro.'}</Text>}
-            {campuses.map(campus => <Pressable key={campus.campus_id} accessibilityRole="radio" accessibilityState={{ checked: selectedCampus?.campus_id === campus.campus_id }}
-              disabled={busy} onPress={() => setCampusId(campus.campus_id)} style={[styles.campus, selectedCampus?.campus_id === campus.campus_id && styles.selected]}>
-              <Text style={styles.campusText}>{selectedCampus?.campus_id === campus.campus_id ? '●' : '○'} {campus.campus_nombre}</Text>
-            </Pressable>)}
-            {!options.length && <Pressable accessibilityRole="button" onPress={() => setCatalogRevision(value => value + 1)}><Text style={styles.link}>Actualizar campus</Text></Pressable>}
-          </>}
-          <Pressable accessibilityRole="button" disabled={busy || catalogLoading || !selectedCampus} onPress={submit}
-            style={[styles.button, (busy || catalogLoading || !selectedCampus) && styles.disabled]}><Text style={styles.buttonText}>Crear cuenta</Text></Pressable>
-          <Pressable accessibilityRole="button" disabled={busy || catalogLoading} onPress={() => {
-            const address = email.trim().toLowerCase();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || !campuses.length) {
-              setError('Ingresa tu correo institucional para continuar con la verificación.'); return;
-            }
-            setPassword(''); setPendingEmail(address); setError(null); setNotice(null);
-          }}><Text style={styles.link}>Ya tengo un código de verificación</Text></Pressable>
-        </>}
-        {busy && <ActivityIndicator color="#74C69D" accessibilityLabel="Procesando" />}
-        {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-        {notice && <Text accessibilityLiveRegion="polite" style={styles.description}>{notice}</Text>}
-      </ScrollView>
-    </KeyboardAvoidingView>
-  </SafeAreaView>;
+          <Text style={styles.description}>{campuses[0].institucion_nombre}</Text>
+          {campusOpen && <View accessibilityRole="radiogroup" accessibilityLabel="Campus disponibles" style={styles.campusList}>
+            {campuses.map(campus => {
+              const selected = selectedCampus?.campus_id === campus.campus_id;
+              return <Pressable key={campus.campus_id} accessibilityRole="radio" accessibilityLabel={campus.campus_nombre}
+                accessibilityState={{ checked: selected, disabled: busy }} disabled={busy}
+                onPress={() => { setCampusId(campus.campus_id); setCampusOpen(false); }} style={[styles.campus, selected && styles.selectedCampus]}>
+                {selected ? <CircleCheck size={18} color={AUTH_COLORS.PRIMARY} /> : <Circle size={18} color={AUTH_COLORS.muted} />}
+                <Text style={styles.campusText}>{campus.campus_nombre}</Text>{selected && <Check size={17} color={AUTH_COLORS.PRIMARY} />}
+              </Pressable>;
+            })}
+          </View>}
+        </View> : !options.length ? <Text style={styles.description}>No hay campus disponibles para registro.</Text> : null}
+        {!catalogLoading && !options.length && <Pressable accessibilityRole="button" disabled={busy} style={styles.linkButton}
+          onPress={() => setCatalogRevision(value => value + 1)}><Text style={styles.link}>Actualizar campus</Text></Pressable>}
+        <AuthButton busy={busy} disabled={catalogLoading || !fullName.trim() || !password || !selectedCampus || resendSeconds > 0} onPress={submit}>
+          {resendSeconds > 0 ? `Crear cuenta en ${resendSeconds} s` : 'Crear cuenta'}
+        </AuthButton>
+      </View>
+    </>}
+    <AuthMessage error>{error}</AuthMessage>
+  </AuthScaffold>;
 }
-
-const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#071A2B' },
-  container: { padding: 28, gap: 14, width: '100%', maxWidth: 560, alignSelf: 'center' },
-  brand: { color: '#74C69D', fontSize: 20, fontWeight: '700', marginTop: 12 },
-  title: { color: '#FFFFFF', fontSize: 32, fontWeight: '800', marginTop: 8 },
-  description: { color: '#B9CAD6', fontSize: 15, lineHeight: 23 },
-  label: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginTop: 8 },
-  input: { color: '#FFFFFF', borderWidth: 1, borderColor: '#486476', borderRadius: 12, padding: 14, minHeight: 52, fontSize: 16 },
-  campus: { padding: 16, borderWidth: 1, borderColor: '#486476', borderRadius: 12 },
-  selected: { borderColor: '#74C69D', backgroundColor: '#123742' },
-  campusText: { color: '#FFFFFF', fontSize: 16 },
-  button: { backgroundColor: '#FFFFFF', padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 12 },
-  buttonText: { color: '#09243A', fontSize: 17, fontWeight: '700' },
-  disabled: { opacity: 0.5 },
-  link: { color: '#74C69D', fontSize: 15, paddingVertical: 8 },
-  error: { color: '#FFB4AB', fontSize: 15, lineHeight: 23 },
-});

@@ -7,7 +7,7 @@ export default function LoginLayout() {
       screenOptions={{
         headerShown: false,
         gestureEnabled: false,
-        contentStyle: { backgroundColor: '#071A2B' },
+        contentStyle: { backgroundColor: '#F4F7F9' },
       }}
     />
   );

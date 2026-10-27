@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Keyboard } from 'react-native';
 import { useAuth } from './useAuth';
 import { loginAccount } from '../api/sessionApi';
 
@@ -17,6 +18,7 @@ export function useLogin() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || !password) {
       setError('Ingresa tu correo y contraseña.'); return;
     }
+    Keyboard.dismiss();
     setBusy(true);
     try { await loginAccount(address, password); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo iniciar sesión.'); }
