@@ -65,7 +65,7 @@ export function useHistoricalReports() {
   const error = allowed && listing?.key === key ? listing.error : '';
   const currentDetail = allowed && detail?.key === detailKey ? detail : null;
   return {
-    allowed, filters, page, error, loading: allowed && !page && !error,
+    allowed, identityKey, filters, page, error, loading: allowed && !page && !error,
     options: allowed && catalog?.key === identityKey ? catalog.data : null,
     reports: currentDetail?.data ?? [], detailError: currentDetail?.error ?? '',
     detailLoading: allowed && Boolean(selected?.ids.length) && !currentDetail,
@@ -76,6 +76,9 @@ export function useHistoricalReports() {
     },
     nextPage() {
       if (page?.nextCursor) setQuery({ identity: identityKey, filters, cursor: page.nextCursor, revision: (currentQuery?.revision ?? 0) + 1 });
+    },
+    firstPage() {
+      setQuery({ identity: identityKey, filters, cursor: null, revision: (currentQuery?.revision ?? 0) + 1 });
     },
     open(id: string, compare = false) {
       setSelection({ key: identityKey, ids: compare && selected?.ids.length ? [...new Set([selected.ids[0], id])] : [id], revision: (selected?.revision ?? 0) + 1 });

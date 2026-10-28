@@ -1,96 +1,114 @@
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { BottomNavigationBar } from '@/components/navigation/BottomNavigationBar';
-import { useAnalyticsDashboard } from '@/features/analytics/hooks/useAnalyticsDashboard';
-import type { DashboardGrouping } from '@/features/analytics/types/dashboard';
-
+import { useEffect, useState } from 'react';
 import { Link } from 'expo-router';
+import { ArrowLeft, ChevronDown, ChevronUp, FilePlus2, SlidersHorizontal } from 'lucide-react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAnalyticsDashboard } from '@/features/analytics/hooks/useAnalyticsDashboard';
 import { AnalyticsResults } from '@/features/analytics/components/AnalyticsResults';
+import { AnalyticsFilters } from '@/features/analytics/components/AnalyticsFilters';
+import { AnalyticsButton, AnalyticsMessage, AnalyticsPage, AnalyticsSkeleton } from '@/features/analytics/components/AnalyticsUI';
+import { colors as c, styles as s } from '@/features/analytics/components/analytics.styles';
+import { compactPeriodLabel, monthRange, periodLabel } from '@/features/analytics/utils/presentation';
+import { ANALYTICS_COPY as copy } from '@/features/analytics/utils/copy';
 
-const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-const monthStart = () => `${today().slice(0, 7)}-01`;
-/** Opciones autorizadas y períodos calculados por API, comunes a los cuatro indicadores. */
+/** Consulta actual y generación explícita comparten ámbito, pero conservan resultados separados. */
 export default function AnalyticsScreen() {
-  const [from, setFrom] = useState(monthStart);
-  const [to, setTo] = useState(today);
-  const [grouping, setGrouping] = useState<DashboardGrouping>('month');
-  const { dashboard: liveDashboard, report, reportRequested, generateReport, loading, error, consult, options, filters, selectFilters } = useAnalyticsDashboard({ from, to });
-  const dashboard = report ?? liveDashboard;
-  const institution = options?.institutions.find(row => row.id === filters?.institutionId);
-  const careers = institution?.careers.filter(row => row.campusIds.some(id => filters?.campusIds.includes(id))) ?? [];
-
-  return <View style={styles.screen}>
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text style={styles.eyebrow}>CAMPUSLINK · REPORTERÍA</Text>
-      <Text style={styles.title}>Tablero de indicadores</Text>
-      <Link href="/(analytics)/history" style={styles.scope}>Consultar reportes históricos</Link>
-      <Text style={styles.description}>Selecciona tus sedes autorizadas y una carrera opcional. Cada cifra indica el período y ámbito usado.</Text>
-      <View style={styles.filters}>
-        <Text style={styles.label}>Institución</Text>
-        {options?.institutions.map(row => <Pressable key={row.id} accessibilityRole="radio" accessibilityState={{ selected: row.id === filters?.institutionId }}
-          onPress={() => selectFilters({ institutionId: row.id, campusIds: [row.campuses[0].id] })} style={[styles.option, row.id === filters?.institutionId && styles.selected]}>
-          <Text style={styles.optionText}>{row.name}</Text>
-        </Pressable>)}
-        <Text style={styles.label}>Campus (uno o varios)</Text>
-        {institution?.campuses.map(row => {
-          const selected = filters!.campusIds.includes(row.id);
-          return <Pressable key={row.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected }}
-            onPress={() => {
-              const campusIds = selected ? filters!.campusIds.filter(id => id !== row.id) : [...filters!.campusIds, row.id];
-              const careerId = institution.careers.find(c => c.id === filters?.careerId && c.campusIds.some(id => campusIds.includes(id)))?.id;
-              selectFilters({ institutionId: institution.id, campusIds, careerId });
-            }} style={[styles.option, selected && styles.selected]}>
-            <Text style={styles.optionText}>{selected ? '☑' : '☐'} {row.name}</Text>
-          </Pressable>;
-        })}
-        {filters && filters.campusIds.length === 0 && <Text accessibilityRole="alert" style={styles.error}>Selecciona al menos un campus.</Text>}
-        {institution && <>
-          <Text style={styles.label}>Carrera</Text>
-          <Pressable accessibilityRole="radio" accessibilityState={{ selected: !filters?.careerId }}
-            onPress={() => selectFilters({ ...filters!, careerId: undefined })} style={[styles.option, !filters?.careerId && styles.selected]}>
-            <Text style={styles.optionText}>Todas las carreras / sin filtro de carrera</Text>
-          </Pressable>
-          {careers.map(row => <Pressable key={row.id} accessibilityRole="radio" accessibilityState={{ selected: row.id === filters?.careerId }}
-            onPress={() => selectFilters({ ...filters!, careerId: row.id })} style={[styles.option, row.id === filters?.careerId && styles.selected]}>
-            <Text style={styles.optionText}>{row.name}</Text>
-          </Pressable>)}
-        </>}
-        <View style={styles.field}><Text style={styles.label}>Desde (America/Santiago)</Text><TextInput accessibilityLabel="Fecha inicial" value={from} onChangeText={setFrom} placeholder="AAAA-MM-DD" style={styles.input} autoCapitalize="none" /></View>
-        <View style={styles.field}><Text style={styles.label}>Hasta (America/Santiago)</Text><TextInput accessibilityLabel="Fecha final" value={to} onChangeText={setTo} placeholder="AAAA-MM-DD" style={styles.input} autoCapitalize="none" /></View>
-        <Text style={styles.label}>Agrupar por</Text>
-        {(['week', 'month'] as const).map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: grouping === value }}
-          onPress={() => setGrouping(value)} style={[styles.option, grouping === value && styles.selected]}>
-          <Text style={styles.optionText}>{value === 'week' ? 'Semana (lunes a domingo)' : 'Mes calendario'}</Text>
-        </Pressable>)}
-        <Text style={styles.note}>Referencia institucional: America/Santiago. Hasta 260 intervalos por consulta.</Text>
-        <Pressable accessibilityRole="button" disabled={Boolean(filters && !filters.campusIds.length)} onPress={() => consult(from, to, grouping)} style={styles.button}><Text style={styles.buttonText}>{error ? 'Reintentar consulta' : 'Consultar'}</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={loading || !filters?.campusIds.length} onPress={() => generateReport(from, to, grouping)} style={styles.button}>
-          <Text style={styles.buttonText}>{reportRequested && error ? 'Reintentar reporte' : 'Generar reporte'}</Text>
+  const [initial] = useState(() => monthRange());
+  const state = useAnalyticsDashboard(initial);
+  const [filterIdentity, setFilterIdentity] = useState<string | null>(null);
+  const [contextIdentity, setContextIdentity] = useState<string | null>(null);
+  const contextExpanded = contextIdentity === state.identityKey;
+  useEffect(() => { setFilterIdentity(null); setContextIdentity(null); }, [state.identityKey]);
+  const dashboard = state.report ?? state.dashboard;
+  const institution = state.options?.institutions.find(row => row.id === state.filters?.institutionId);
+  const scope = dashboard?.scope;
+  const names = institution?.campuses.filter(row => state.filters?.campusIds.includes(row.id)).map(row => row.name).join(', ');
+  const career = institution?.careers.find(row => row.id === state.filters?.careerId)?.name;
+  const institutionLabel = scope?.institutionName ?? institution?.name ?? 'Tu institución';
+  const campusLabel = scope?.campusName || names || 'Campus autorizados';
+  const contextPeriod = dashboard?.period ?? state.range;
+  const grouping = dashboard?.grouping ?? state.range.grouping;
+  const contextRows = [
+    [(scope?.campuses?.length ?? state.filters?.campusIds.length ?? 0) > 1 ? 'Sedes' : 'Sede', campusLabel],
+    ['Carreras', scope ? scope.career?.name ?? copy.allCareers : career ?? copy.allCareers],
+    ['Período', periodLabel(contextPeriod)],
+    ['Agrupación', grouping === 'week' ? 'Por semana' : 'Por mes'],
+  ];
+  const activeFilters = (state.filters?.campusIds.length ? 1 : 0) + (state.filters?.careerId ? 1 : 0)
+    + (state.range.from && state.range.to ? 1 : 0) + (state.range.grouping ? 1 : 0);
+  const saveDisabledReason = state.loading ? 'Espera a que termine la consulta.' : state.error
+    ? 'Actualiza la consulta antes de guardar un reporte.' : !state.filters?.campusIds.length ? 'Elige al menos un campus en Filtros.' : undefined;
+  const consult = () => state.consult(state.range.from, state.range.to, state.range.grouping);
+  const filtersDisabledReason = !state.options ? state.error ? 'Actualiza la consulta para cargar los filtros.' : 'Cargando filtros…' : undefined;
+  return <AnalyticsPage refresh={{ onRefresh: consult, refreshing: state.loading,
+    enabled: state.allowed && !state.loading && !state.reportRequested && !state.report && filterIdentity !== state.identityKey,
+    label: 'la consulta de analítica' }}>
+    <View style={v.context}>
+      <View style={v.contextActions}>
+      {state.allowed && state.report && <AnalyticsButton quiet disabled={state.loading} disabledReason="Espera a que termine la consulta." onPress={consult}
+        hint="Consulta las cifras actuales sin modificar el reporte guardado." icon={<ArrowLeft size={16} color={c.PRIMARY} />}>Volver a consulta actual</AnalyticsButton>}
+      <View style={v.filtersControl}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Abrir filtros de analítica, ${activeFilters} filtros activos`}
+          accessibilityState={{ disabled: !state.options }} accessibilityHint={filtersDisabledReason ?? 'Cambiar campus, carrera, fechas y agrupación.'} disabled={!state.options}
+          onPress={() => setFilterIdentity(state.identityKey)} style={[v.filtersButton, !state.options && s.disabled]}>
+          <SlidersHorizontal size={17} color={c.PRIMARY} aria-hidden />
+          <View style={v.filterCount}><Text style={v.filterCountText}>{activeFilters}</Text></View>
         </Pressable>
+        {!!filtersDisabledReason && <Text style={s.small}>{filtersDisabledReason}</Text>}
       </View>
-      {loading && <ActivityIndicator accessibilityLabel={reportRequested ? 'Generando reporte' : 'Cargando indicadores'} color="#0B6E75" style={styles.loading} />}
-      {Boolean(error) && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      {!loading && dashboard && <AnalyticsResults dashboard={dashboard} report={report} />}
-    </ScrollView>
-    <BottomNavigationBar />
-  </View>;
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={contextExpanded ? 'Contraer filtros aplicados' : 'Expandir filtros aplicados'}
+        accessibilityHint={`${institutionLabel}. ${campusLabel}. ${periodLabel(contextPeriod)}. Muestra sede, carreras, período y agrupación de los datos consultados.`} accessibilityState={{ expanded: contextExpanded }} aria-expanded={contextExpanded}
+        onPress={() => setContextIdentity(contextExpanded ? null : state.identityKey)} style={v.contextBar}>
+        <Text style={v.barText}>{institutionLabel} · {campusLabel} · {compactPeriodLabel(contextPeriod)}</Text>
+        {contextExpanded ? <ChevronUp size={17} color={c.PRIMARY} aria-hidden /> : <ChevronDown size={17} color={c.PRIMARY} aria-hidden />}
+      </Pressable>
+      {contextExpanded && <View style={v.contextDetails}>{contextRows.map(([label, value], index) => <View key={label} style={[v.contextRow, index < contextRows.length - 1 && v.rowDivider]}>
+        <Text style={v.contextLabel}>{label}</Text><Text selectable style={v.contextValue}>{value}</Text>
+      </View>)}</View>}
+    </View>
+    {state.allowed && !state.loading && !state.error && dashboard && <AnalyticsResults key={`results-${state.identityKey}`} dashboard={dashboard} report={state.report}
+      onEditFilters={state.report || !state.options ? undefined : () => setFilterIdentity(state.identityKey)} />}
+    {state.loading && <AnalyticsSkeleton label={state.reportRequested ? 'Generando reporte' : 'Cargando indicadores'} />}
+    {!state.allowed && <AnalyticsMessage title="Acceso a analítica">{copy.states.permission}</AnalyticsMessage>}
+    {!!state.error && <View style={s.stack}>
+      <AnalyticsMessage error title={state.reportRequested ? 'Revisa tus reportes guardados' : 'No pudimos cargar las cifras'} onRetry={state.reportRequested ? undefined : consult}>{state.reportRequested ? copy.states.generation : copy.states.error}</AnalyticsMessage>
+      {state.reportRequested && <Link href="/(analytics)/history" style={s.link}>Revisar Reportes guardados</Link>}
+    </View>}
+    {state.allowed && <View style={v.saveActions}>
+      <Pressable accessibilityRole="button" accessibilityLabel={state.report ? 'Guardar otro reporte' : 'Guardar reporte'}
+        accessibilityState={{ disabled: !!saveDisabledReason }} disabled={!!saveDisabledReason}
+        accessibilityHint={saveDisabledReason ?? 'Vuelve a calcular con estos filtros y guarda un nuevo reporte permanente.'}
+        onPress={() => state.generateReport(state.range.from, state.range.to, state.range.grouping)}
+        style={StyleSheet.flatten([v.saveButton, !!saveDisabledReason && s.disabled])}>
+        <FilePlus2 size={17} color="#FFFFFF" aria-hidden />
+        <Text style={v.saveButtonText}>{state.report ? 'Guardar otro reporte' : 'Guardar reporte'}</Text>
+      </Pressable>
+      {!!saveDisabledReason && <Text style={s.small}>{saveDisabledReason}</Text>}
+    </View>}
+    {state.allowed && state.options && filterIdentity === state.identityKey && <AnalyticsFilters key={`filters-${state.identityKey}`} options={state.options}
+      value={{ ...state.filters, ...state.range }} onClose={() => setFilterIdentity(null)} onApply={value => {
+        state.applyQuery({ institutionId: value.institutionId!, campusIds: value.campusIds!, careerId: value.careerId }, value.from!, value.to!, value.grouping!);
+        setFilterIdentity(null);
+      }} />}
+  </AnalyticsPage>;
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F4F7F9' },
-  content: { paddingHorizontal: 24, paddingTop: 40, paddingBottom: 115, gap: 14 },
-  eyebrow: { color: '#0B6E75', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-  title: { color: '#09243A', fontSize: 30, fontWeight: '800' },
-  description: { color: '#607485', fontSize: 15, lineHeight: 22 },
-  filters: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, gap: 12 },
-  field: { gap: 5 }, label: { color: '#345267', fontWeight: '700' },
-  input: { borderWidth: 1, borderColor: '#CBD9E0', borderRadius: 10, padding: 10, color: '#09243A' },
-  button: { backgroundColor: '#0B6E75', borderRadius: 10, padding: 13, alignItems: 'center' },
-  buttonText: { color: '#FFFFFF', fontWeight: '800' },
-  option: { borderWidth: 1, borderColor: '#CBD9E0', borderRadius: 10, padding: 10 },
-  selected: { borderColor: '#0B6E75', backgroundColor: '#E6F4F2' },
-  optionText: { color: '#09243A' },
-  loading: { marginTop: 30 }, error: { color: '#A12626', padding: 12 },
-  scope: { color: '#345267', fontWeight: '700', marginTop: 8 },
-  note: { color: '#607485', fontSize: 12, lineHeight: 18 },
+const v = StyleSheet.create({
+  context: { gap: 10 },
+  contextBar: { minHeight: 44, borderWidth: 1, borderColor: '#B6C6D2', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 10 },
+  barText: { flex: 1, color: c.PRIMARY, fontSize: 12, lineHeight: 18 },
+  contextDetails: { borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#FFFFFF' },
+  contextRow: { minHeight: 36, flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 8 },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: c.border },
+  contextLabel: { maxWidth: '40%', flexShrink: 1, color: c.SECONDARY, fontSize: 12, lineHeight: 18 },
+  contextValue: { flex: 1, color: c.PRIMARY, fontSize: 12, lineHeight: 18, textAlign: 'right' },
+  contextActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'flex-start', gap: 12 },
+  filtersControl: { alignItems: 'flex-end', gap: 4, maxWidth: '100%' },
+  filtersButton: { minHeight: 44, minWidth: 64, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: c.PRIMARY, borderRadius: 10, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  filterCount: { minWidth: 20, minHeight: 20, paddingHorizontal: 4, borderRadius: 10, backgroundColor: c.PRIMARY, alignItems: 'center', justifyContent: 'center' },
+  filterCountText: { color: '#FFFFFF', fontSize: 11, lineHeight: 16, fontWeight: '700' },
+  saveActions: { gap: 8, paddingTop: 8 },
+  saveButton: { width: '100%', maxWidth: '100%', minHeight: 44, borderRadius: 28, paddingHorizontal: 18, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.PRIMARY },
+  saveButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14, lineHeight: 21, flexShrink: 1, textAlign: 'center' },
 });

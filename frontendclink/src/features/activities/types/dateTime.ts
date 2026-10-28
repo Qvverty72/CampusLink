@@ -1,4 +1,8 @@
+import type { ReactNode } from 'react';
+
 export interface ActivityDateTimeFieldProps {
+  compact?: boolean;
+  trailingIcon?: ReactNode;
   displayValue?: string;
   label: string;
   mode: 'date' | 'time';

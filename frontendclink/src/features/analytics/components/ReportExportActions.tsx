@@ -1,25 +1,22 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { FileDown, Sheet } from 'lucide-react-native';
 import { useReportExport } from '../hooks/useReportExport';
+import { AnalyticsButton } from './AnalyticsUI';
+import { colors as c, styles as s } from './analytics.styles';
 
 export function ReportExportActions({ reportId }: { reportId: string }) {
   const state = useReportExport(reportId);
   if (!state.allowed) return null;
-  return <View style={styles.container}>
-    <Text style={styles.note}>Exporta esta instantánea con sus cifras originales.</Text>
-    <View style={styles.actions}>
-      {(['pdf', 'xlsx'] as const).map(format => <Pressable key={format} accessibilityRole="button"
-        accessibilityLabel={`Exportar reporte ${reportId} en ${format === 'pdf' ? 'PDF' : 'Excel'}`}
-        disabled={Boolean(state.exporting)} style={[styles.button, Boolean(state.exporting) && styles.disabled]}
-        onPress={() => state.exportFile(format)}><Text style={styles.buttonText}>Exportar {format === 'pdf' ? 'PDF' : 'Excel'}</Text></Pressable>)}
-    </View>
-    {state.exporting && <ActivityIndicator accessibilityLabel={`Preparando ${state.exporting === 'pdf' ? 'PDF' : 'Excel'}`} />}
-    {Boolean(state.error) && <Text accessibilityRole="alert" style={styles.error}>{state.error}</Text>}
+  return <View style={{ gap: 10 }}>
+    <Text style={s.small}>Descarga las cifras de este reporte guardado, sin volver a calcularlas.</Text>
+    <View style={s.wrap}>{(['pdf', 'xlsx'] as const).map(format => <AnalyticsButton key={format} secondary
+      label={`Descargar reporte ${reportId} en ${format === 'pdf' ? 'PDF' : 'Excel'}`} disabled={!!state.exporting}
+      disabledReason={state.exporting ? `Espera a que termine la descarga de ${state.exporting === 'pdf' ? 'PDF' : 'Excel'}.` : undefined} onPress={() => state.exportFile(format)}
+      icon={format === 'pdf' ? <FileDown size={17} color={c.PRIMARY} /> : <Sheet size={17} color={c.PRIMARY} />}>
+      {`Descargar ${format === 'pdf' ? 'PDF' : 'Excel'}`}
+    </AnalyticsButton>)}</View>
+    {state.exporting && <View style={s.row}><ActivityIndicator accessibilityLabel={`Preparando ${state.exporting === 'pdf' ? 'PDF' : 'Excel'}`} color={c.PRIMARY} />
+      <Text accessibilityLiveRegion="polite" style={s.small}>Preparando {state.exporting === 'pdf' ? 'PDF' : 'Excel'}…</Text></View>}
+    {!!state.error && <Text accessibilityRole="alert" style={s.error}>{state.error}</Text>}
   </View>;
 }
-
-const styles = StyleSheet.create({
-  container: { gap: 10 }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  button: { backgroundColor: '#0B6E75', borderRadius: 10, padding: 13, alignItems: 'center' },
-  buttonText: { color: '#FFFFFF', fontWeight: '800' }, disabled: { opacity: 0.55 },
-  note: { color: '#607485', fontSize: 12, lineHeight: 18 }, error: { color: '#A12626' },
-});

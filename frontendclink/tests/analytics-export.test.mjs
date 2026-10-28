@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import { setImmediate } from 'node:timers/promises';
 import test from 'node:test';
+import { analyticsRenderer } from './helpers/analytics-render.mjs';
 import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -106,15 +107,16 @@ test('report changes, identity/permission changes and unmount cancel late export
 test('export buttons select PDF/Excel, show progress/errors and respect reporting access', () => {
   const require = createRequire(import.meta.url), native = require('react-native-web'), actions = [], calls = [];
   const state = { allowed: true, exporting: null, error: '', exportFile: format => calls.push(format) };
-  const { ReportExportActions } = load('../src/features/analytics/components/ReportExportActions.tsx', {
-    'react/jsx-runtime': require('react/jsx-runtime'), '../hooks/useReportExport': { useReportExport: id => { assert.equal(id, 'saved-id'); return state; } },
-    'react-native': { ...native, Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); } },
-  });
+  const { ReportExportActions } = analyticsRenderer({
+    '@/features/analytics/hooks/useReportExport': { useReportExport: id => { assert.equal(id, 'saved-id'); return state; } },
+  }, actions).load('src/features/analytics/components/ReportExportActions.tsx');
   const render = () => renderToStaticMarkup(React.createElement(ReportExportActions, { reportId: 'saved-id' }));
-  let html = render(); assert.ok(html.includes('Exportar PDF')); assert.ok(html.includes('Exportar Excel'));
+  let html = render(); assert.ok(html.includes('Descargar PDF')); assert.ok(html.includes('Descargar Excel'));
+  assert.ok(html.includes('reporte guardado, sin volver a calcularlas'));
   actions[0].onPress(); actions[1].onPress(); assert.deepEqual(calls, ['pdf', 'xlsx']);
   state.exporting = 'xlsx'; actions.length = 0; html = render();
   assert.ok(html.includes('Preparando Excel')); assert.ok(actions.every(action => action.disabled));
+  assert.ok(html.includes('Espera a que termine la descarga de Excel.'));
   state.exporting = null; state.error = 'Permiso revocado'; html = render(); assert.ok(html.includes('role="alert"')); assert.ok(html.includes(state.error));
   state.allowed = false; assert.equal(render(), '');
 });

@@ -2,7 +2,7 @@ import { safeAreaInset } from '@/lib/layout/safeArea';
 import { Skeleton, SkeletonBlock } from '@/components/Skeleton';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP_COLORS } from '@/types/colors';
@@ -68,18 +68,20 @@ export function FilterChips({ modality, onModality, onMore, moreLabel = 'Filtros
   </View>;
 }
 
-export function FilterSheet({ visible, title, onClose, onConfirm, children, confirmLabel = 'Ver resultados', fillHeight = false, compact = false, preferredHeight }: { visible: boolean; title: string; onClose: () => void; onConfirm?: () => void; children: ReactNode; confirmLabel?: string | null; fillHeight?: boolean; compact?: boolean; preferredHeight?: number }) {
+export function FilterSheet({ visible, title, onClose, onConfirm, children, confirmLabel = 'Ver resultados', confirmDisabled = false, fillHeight = false, compact = false, preferredHeight, subtitle, footer, sheetStyle }: { visible: boolean; title: string; onClose: () => void; onConfirm?: () => void; children: ReactNode; confirmLabel?: string | null; confirmDisabled?: boolean; fillHeight?: boolean; compact?: boolean; preferredHeight?: number; subtitle?: string; footer?: ReactNode; sheetStyle?: StyleProp<ViewStyle> }) {
   const insets = useSafeAreaInsets();
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <KeyboardAvoidingView style={ui.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={StyleSheet.absoluteFill} />
-      <View accessibilityViewIsModal style={[ui.sheet, fillHeight && ui.fullSheet, fillHeight && preferredHeight !== undefined && { height: preferredHeight }, compact && ui.compactSheet, { paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 20 }), marginTop: safeAreaInset('top', insets.top, { min: 24 }) }]}>
+      <View accessibilityViewIsModal onAccessibilityEscape={onClose} style={[ui.sheet, fillHeight && ui.fullSheet, fillHeight && preferredHeight !== undefined && { height: preferredHeight }, compact && ui.compactSheet, sheetStyle, { paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 20 }), marginTop: safeAreaInset('top', insets.top, { min: 24 }) }]}>
         {!compact && <View style={ui.handle} />}
-        <View style={ui.headingRow}><Text accessibilityRole="header" style={ui.sectionTitle}>{title}</Text>
+        <View style={ui.headingRow}><View style={{ flex: 1, minWidth: 0 }}><Text accessibilityRole="header" style={ui.sectionTitle}>{title}</Text>
+          {!!subtitle && <Text accessibilityLiveRegion="polite" style={ui.subtitle}>{subtitle}</Text>}</View>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={ui.iconButton}><X color={CATALOG_COLORS.primary} size={22} /></Pressable>
         </View>
         <ScrollView style={fillHeight ? ui.sheetBody : undefined} bounces={fillHeight ? false : undefined} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={ui.sheetContent}>{children}</ScrollView>
-        {confirmLabel !== null && <Pressable accessibilityRole="button" onPress={onConfirm ?? onClose} style={[ui.primary, compact && ui.filterConfirm]}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>}
+        {footer ?? (confirmLabel !== null && <Pressable accessibilityRole="button" accessibilityLabel={confirmLabel} accessibilityState={{ disabled: confirmDisabled }} disabled={confirmDisabled}
+          onPress={onConfirm ?? onClose} style={[ui.primary, compact && ui.filterConfirm, confirmDisabled && ui.disabled]}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>)}
       </View>
     </KeyboardAvoidingView>
   </Modal>;

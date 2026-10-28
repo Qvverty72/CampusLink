@@ -4,16 +4,16 @@ import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { browserDateSelection, browserDateValue, formatPickerValue, pickerDate, type ActivityDateTimeFieldProps } from '../types/dateTime';
 
 /** Selector nativo del navegador dentro de un modal; aplica cambios al aceptar. */
-export function ActivityDateTimeField({ label, mode, value, disabled, onChange, displayValue }: ActivityDateTimeFieldProps) {
+export function ActivityDateTimeField({ label, mode, value, disabled, onChange, displayValue, compact = false, trailingIcon }: ActivityDateTimeFieldProps) {
   const [selection, setSelection] = useState<string | null>(null);
   useEffect(() => { if (disabled) setSelection(null); }, [disabled]);
   return <View style={styles.field}>
-    <Text style={styles.label}>{label}</Text>
+    <Text style={[styles.label, compact && styles.compactLabel]}>{label}</Text>
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} accessibilityValue={{ text: displayValue || value || 'Sin seleccionar' }}
       accessibilityState={{ disabled, expanded: selection !== null }} disabled={disabled} activeOpacity={0.75}
-      onPress={() => setSelection(value || formatPickerValue(pickerDate('', mode), mode))} style={[styles.trigger, disabled && styles.disabled]}>
+      onPress={() => setSelection(value || formatPickerValue(pickerDate('', mode), mode))} style={[styles.trigger, compact && styles.compactInput, disabled && styles.disabled]}>
       <Text style={value ? styles.value : styles.placeholder}>{displayValue || value || (mode === 'date' ? 'Seleccionar fecha' : 'Seleccionar hora')}</Text>
-      <Text aria-hidden style={styles.placeholder}>▾</Text>
+      {trailingIcon ?? <Text aria-hidden style={styles.placeholder}>▾</Text>}
     </TouchableOpacity>
     {selection !== null && !disabled ? <Modal visible transparent animationType="fade" onRequestClose={() => setSelection(null)}>
       <View style={styles.overlay}>
@@ -40,6 +40,8 @@ export function ActivityDateTimeField({ label, mode, value, disabled, onChange, 
 }
 
 const styles = StyleSheet.create({
+  compactLabel: { fontSize: 12, fontWeight: '400', color: '#607485' },
+  compactInput: { minHeight: 44, padding: 10, gap: 6, borderColor: '#B6C6D2', borderRadius: 10 },
   field: { gap: 8 }, label: { fontWeight: '600', color: '#0F172A' },
   trigger: { minHeight: 48, borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import { setImmediate } from 'node:timers/promises';
 import test from 'node:test';
+import { analyticsRenderer } from './helpers/analytics-render.mjs';
 import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -27,6 +28,7 @@ function harness(historical = false) {
   const auth = { identity: { userId: 'user-a', campusId: 'campus-a', profile: { institucion_id: 'institution-a', estado_cuenta: 'ACTIVA', deleted_at: null },
     roles: [{ name: 'ADMINISTRADOR', campusId: 'campus-a' }], permissions: [], capabilities: { reports: true } }, refreshIdentity() { refreshes++; } };
   const react = {
+    useRef(initial) { const index = cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
     useState(initial) {
       const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;
       return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }];
@@ -116,6 +118,36 @@ test('history compares fresh saved reports across pages and never calls calculat
     assert.equal(h.calls.length, 0); assert.equal(h.refreshes, 0);
     h.render().close(); assert.equal(h.render().reports.length, 0);
     h.render().open('a'); h.render(); assert.equal(h.detailCalls.length, 4); // Reabrir exige autorización nueva.
+  } finally { h.dispose(); }
+});
+
+test('returning to the first historical page preserves A and its snapshot, while filter searches clear selection', async () => {
+  const h = harness(true);
+  try {
+    h.render(); h.listCalls[0].resolve({ items: [{ id: 'b' }], nextCursor: 'page-two' }); await setImmediate();
+    h.render().nextPage(); h.render();
+    assert.equal(h.listCalls[1].cursor, 'page-two');
+    h.listCalls[1].resolve({ items: [{ id: 'a' }], nextCursor: null }); await setImmediate();
+    h.render().open('a'); h.render();
+    h.detailCalls[0].resolve({ id: 'a', marker: 'original saved A' }); await setImmediate();
+    assert.equal(h.render().hasPrevious, true);
+    h.render().firstPage();
+    const returning = h.render();
+    assert.equal(returning.page, null); assert.equal(returning.hasPrevious, false);
+    assert.deepEqual([...returning.selectedIds], ['a']); assert.equal(returning.reports[0].marker, 'original saved A');
+    assert.equal(h.listCalls[2].cursor, null); assert.equal(h.detailCalls.length, 1);
+    h.listCalls[2].resolve({ items: [{ id: 'b' }], nextCursor: 'page-two' }); await setImmediate();
+    h.render().open('b', true); h.render();
+    assert.deepEqual(h.detailCalls.slice(1).map(call => call.id), ['a', 'b']);
+    h.detailCalls[1].resolve({ id: 'a', marker: 'fresh authorized saved A' });
+    h.detailCalls[2].resolve({ id: 'b', marker: 'saved B' }); await setImmediate();
+    assert.deepEqual(Array.from(h.render().reports, report => report.id), ['a', 'b']);
+    assert.equal(h.calls.length, 0); // Navegar y comparar nunca calcula ni genera reportes.
+    h.render().search({ grouping: 'week' });
+    const filtered = h.render();
+    assert.equal(filtered.selectedIds.length, 0); assert.equal(filtered.reports.length, 0);
+    assert.equal(h.listCalls[3].cursor, null); assert.equal(h.listCalls[3].filters.grouping, 'week');
+    assert.equal(h.detailCalls[2].signal.aborted, true); assert.equal(h.calls.length, 0);
   } finally { h.dispose(); }
 });
 
@@ -255,38 +287,43 @@ test('visual access considers reporting grants in other campuses, with role and 
   identity.roles = []; assert.equal(canAccessAnalytics(identity), false);
 });
 
-function exportActionsComponent(require, actions) {
-  const native = require('react-native-web');
-  return load('../src/features/analytics/components/ReportExportActions.tsx', {
-    'react/jsx-runtime': require('react/jsx-runtime'),
-    'react-native': { ...native, Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); } },
-    '../hooks/useReportExport': { useReportExport: () => ({ allowed: true, exporting: null, error: '', exportFile() {} }) },
-  });
+function renderDashboard(state, actions = [], overrides = {}) {
+  const renderer = analyticsRenderer({
+    '@/features/analytics/hooks/useAnalyticsDashboard': { useAnalyticsDashboard: () => ({
+      consult() {}, generateReport() {}, applyQuery() {}, allowed: true, identityKey: 'session',
+      range: { from: '2026-10-01', to: '2026-10-10', grouping: 'month' }, options,
+      filters: { institutionId: 'institution-a', campusIds: ['campus-a'] }, ...state,
+    }) },
+    ...overrides,
+  }, actions);
+  return renderer.render('app/(analytics)/analytics.tsx');
 }
 
-function renderDashboard(state, actions = []) {
-  const require = createRequire(import.meta.url);
-  const native = require('react-native-web');
-  const results = load('../src/features/analytics/components/AnalyticsResults.tsx', {
-    react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': native,
-    './ReportExportActions': exportActionsComponent(require, actions),
-  });
-  const { default: Screen } = load('../app/(analytics)/analytics.tsx', {
-    react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': { ...native,
-      Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); } },
-    '@/components/navigation/BottomNavigationBar': { BottomNavigationBar: () => null },
-    '@/features/analytics/hooks/useAnalyticsDashboard': { useAnalyticsDashboard: () => ({ consult() {}, ...state }) },
-    'expo-router': { Link: native.Text },
-    '@/features/analytics/components/AnalyticsResults': results,
-  });
-  const messages = [], originalError = console.error;
-  console.error = (...args) => messages.push(args.join(' '));
-  try {
-    const html = renderToStaticMarkup(React.createElement(Screen));
-    assert.deepEqual(messages.filter(message => message.includes('Unexpected text node')), []);
-    return html;
-  } finally { console.error = originalError; }
+// Cambia únicamente el almacenamiento de useState; JSX y componentes siguen siendo reales.
+// Permite abrir divulgaciones progresivas sin fingir sus resultados en el render SSR.
+function statefulPresentation(file, exportName, props, overrides = {}) {
+  const slots = [], actions = []; let cursor = 0;
+  const renderer = analyticsRenderer({ react: { ...React, useState(initial) {
+    const index = cursor++;
+    if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;
+    return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }];
+  } }, ...overrides }, actions);
+  return { actions, render() { cursor = 0; actions.length = 0; return renderer.render(file, exportName, props); } };
 }
+
+test('analytics navigation satisfies native Slot style constraints with either tab active', () => {
+  for (const history of [false, true]) {
+    const actions = [];
+    const html = analyticsRenderer({}, actions).render('src/features/analytics/components/AnalyticsUI.tsx', 'AnalyticsPage', { history, children: null });
+    assert.ok(html.includes('Resumen')); assert.ok(html.includes('Reportes guardados'));
+    const links = actions.filter(row => row.href);
+    assert.equal(links.length, 3);
+    assert.ok(links.every(row => !Array.isArray(row.style)));
+    const selected = links.find(row => row.accessibilityState?.selected);
+    assert.equal(selected.href, history ? '/(analytics)/history' : '/(analytics)/analytics');
+    assert.equal(selected.style.borderBottomColor, '#002E56');
+  }
+});
 
 test('real dashboard renders four KPI with scope and period, separate demand counts and participation meaning', () => {
   const scope = { institutionName: 'Institución de prueba', campusName: 'Sede de prueba' };
@@ -297,52 +334,265 @@ test('real dashboard renders four KPI with scope and period, separate demand cou
     subjectDemand: { ...metric(5), views: 3, requests: 2, subjects: [{ subjectId: 'subject-a', subjectName: 'Álgebra', views: 3, requests: 2 }] },
     activityParticipation: { ...metric(7), legacyEvents: 1 }, notes: ['Cobertura parcial de prueba.'],
   } });
-  for (const title of ['Usuarios activos al corte', 'Demanda de recursos', 'Demanda de asignaturas', 'Participación en actividades']) assert.ok(html.includes(title), title);
-  assert.equal(html.split('2026-10-01 al 2026-10-10').length - 1, 4);
-  assert.equal(html.split('Institución de prueba').length - 1, 5);
+  for (const title of ['Cuentas activas', 'Recursos vistos y pedidos', 'Interés por asignaturas', 'Inscripciones a actividades']) assert.ok(html.includes(title), title);
+  assert.ok(html.split('2026').length - 1 >= 8);
+  assert.ok(html.includes('Institución de prueba'));
   assert.ok(html.includes('vistas')); assert.ok(html.includes('solicitudes')); assert.ok(html.includes('Álgebra'));
-  assert.ok(html.includes('no representa asistencia presencial')); assert.ok(html.includes('historial importado parcialmente'));
-  assert.ok(html.includes('Cobertura parcial de prueba.'));
+  assert.ok(html.includes('Expandir tarjeta Inscripciones a actividades'));
+  assert.ok(!html.includes('El historial puede estar incompleto')); assert.ok(html.includes('Interés por asignatura'));
 });
 
 test('real dashboard error/loading states keep filters and retry available without rendering misleading KPI', () => {
   const failed = renderDashboard({ dashboard: null, error: 'No se pudo consultar el tablero.', loading: false });
   assert.ok(failed.includes('Reintentar consulta')); assert.ok(failed.includes('role="alert"'));
-  assert.ok(!failed.includes('Usuarios activos al corte'));
+  assert.ok(!failed.includes('Cuentas activas'));
   const loading = renderDashboard({ dashboard: null, error: '', loading: true });
-  assert.ok(loading.includes('Cargando indicadores')); assert.ok(loading.includes('Fecha inicial'));
-  assert.ok(!loading.includes('Participación en actividades'));
+  assert.ok(loading.includes('Cargando indicadores')); assert.ok(loading.includes('Abrir filtros de analítica')); assert.ok(!loading.includes('Fecha inicial'));
+  assert.ok(!loading.includes('Inscripciones a actividades'));
 });
 
-test('real selectors toggle multiple campuses, select/reset career and block empty-campus submission', () => {
-  const state = { options, filters: { institutionId: 'institution-a', campusIds: ['campus-a'] }, loading: false, error: '', dashboard: null,
-    selectFilters(next) { state.filters = next; } };
-  let actions = []; const html = renderDashboard(state, actions);
-  assert.ok(html.includes('Principal')); assert.ok(html.includes('Otra')); assert.ok(html.includes('Informática'));
-  assert.ok(!html.includes('Ajena'));
-  actions.find(p => p.accessibilityRole === 'checkbox' && !p.accessibilityState.checked).onPress();
-  assert.deepEqual([...state.filters.campusIds], ['campus-a', 'campus-b']);
-  actions = []; renderDashboard(state, actions);
-  actions.find(p => p.accessibilityRole === 'radio' && p.children.props.children === 'Informática').onPress();
-  assert.equal(state.filters.careerId, 'career-a');
-  for (const id of ['campus-a', 'campus-b']) {
-    actions = []; renderDashboard(state, actions);
-    actions.filter(p => p.accessibilityRole === 'checkbox').find((p, i) => i === (id === 'campus-a' ? 0 : 1)).onPress();
+test('disabled actions explain why, and uncertain report generation directs to history without automatic retry', () => {
+  const actions = [], html = renderDashboard({ dashboard: null, error: '', loading: true, options: null }, actions);
+  const save = actions.find(row => row.accessibilityLabel === 'Guardar reporte');
+  assert.equal(save.disabled, true); assert.equal(save.accessibilityHint, 'Espera a que termine la consulta.');
+  assert.ok(html.includes('Espera a que termine la consulta.'));
+  assert.ok(html.includes('Cargando filtros…'));
+  const uncertainActions = [], uncertain = renderDashboard({ dashboard: null, error: 'Network timeout', loading: false, reportRequested: true }, uncertainActions);
+  assert.ok(uncertain.includes('No pudimos confirmar si se guardó; revisa Reportes guardados antes de intentar otra vez.'));
+  assert.ok(uncertain.includes('Revisar Reportes guardados'));
+  assert.ok(!uncertain.includes('Network timeout'));
+  assert.ok(!uncertainActions.some(row => row.accessibilityLabel === 'Reintentar consulta'));
+  assert.equal(uncertainActions.find(row => row.accessibilityLabel === 'Guardar reporte').disabled, true);
+});
+
+test('save report appears once after subject demand, stays explicit and is absent without reporting access', () => {
+  const actions = [], generated = [];
+  const html = renderDashboard({ dashboard: chartFixture([3]), loading: false, error: '', generateReport(...args) { generated.push(args); } }, actions);
+  assert.equal(actions.filter(row => row.accessibilityLabel === 'Guardar reporte').length, 1);
+  assert.ok(html.indexOf('aria-label="Guardar reporte"') > html.lastIndexOf('Interés por asignatura'), 'saving follows the complete results');
+  assert.ok(!html.includes('Guardar recalcula las cifras y crea un nuevo reporte.'));
+  assert.equal(generated.length, 0, 'mounting does not generate a report');
+  actions.find(row => row.accessibilityLabel === 'Guardar reporte').onPress();
+  assert.deepEqual(generated, [['2026-10-01', '2026-10-10', 'month']]);
+  const denied = [];
+  renderDashboard({ allowed: false, dashboard: null, options: null, loading: false, error: '' }, denied);
+  assert.ok(!denied.some(row => row.accessibilityLabel === 'Guardar reporte'));
+});
+
+test('summary context bar starts collapsed, expands applied filters and keeps the filters button above in either state', () => {
+  let filterPanel;
+  const queries = [], state = { allowed: true, identityKey: 'session', loading: false, error: '', options,
+    filters: { institutionId: 'institution-a', campusIds: ['campus-a'], careerId: 'career-a' },
+    range: { from: '2026-10-01', to: '2026-10-28', grouping: 'month' },
+    applyQuery(filters, from, to, grouping) { queries.push({ filters, from, to, grouping }); state.filters = filters; state.range = { from, to, grouping }; },
+    consult() {}, generateReport() { throw Error('no implicit generation'); },
+  };
+  const h = statefulPresentation('app/(analytics)/analytics.tsx', 'default', {}, {
+    '@/features/analytics/hooks/useAnalyticsDashboard': { useAnalyticsDashboard: () => state },
+    '@/features/analytics/components/AnalyticsFilters': { AnalyticsFilters: props => { filterPanel = props; return null; } },
+  });
+  let html = h.render(); assert.ok(!html.includes('Agrupación')); assert.ok(!html.includes('Informática'));
+  assert.ok(html.indexOf('aria-label="Abrir filtros de analítica') < html.indexOf('aria-label="Expandir filtros aplicados'));
+  assert.ok(html.includes('1–28 oct')); assert.ok(html.includes('Principal'));
+  h.actions.find(row => row.accessibilityLabel === 'Expandir filtros aplicados').onPress();
+  html = h.render();
+  for (const text of ['Sede', 'Principal', 'Carreras', 'Informática', 'Período', 'Agrupación', 'Por mes']) assert.ok(html.includes(text), text);
+  assert.ok(html.indexOf('aria-label="Abrir filtros de analítica') < html.indexOf('aria-label="Contraer filtros aplicados'));
+  assert.equal(h.actions.find(row => row.accessibilityLabel === 'Contraer filtros aplicados')['aria-expanded'], true);
+  h.actions.find(row => row.accessibilityLabel?.startsWith('Abrir filtros de analítica')).onPress(); h.render();
+  assert.equal(queries.length, 0);
+  filterPanel.onApply({ institutionId: 'institution-a', campusIds: ['campus-b'], from: '2026-09-01', to: '2026-09-30', grouping: 'week' });
+  html = h.render(); assert.ok(html.includes('Otra')); assert.ok(html.includes('Por semana')); assert.ok(!html.includes('Informática'));
+  assert.ok(!html.includes('Filtros aplicados.'));
+  assert.equal(queries.length, 1);
+  h.actions.find(row => row.accessibilityLabel === 'Contraer filtros aplicados').onPress(); html = h.render();
+  assert.ok(!html.includes('Agrupación')); assert.ok(h.actions.some(row => row.accessibilityLabel?.startsWith('Abrir filtros de analítica')));
+  h.actions.find(row => row.accessibilityLabel === 'Expandir filtros aplicados').onPress(); h.render();
+  assert.ok(h.actions.some(row => row.accessibilityLabel === 'Contraer filtros aplicados'));
+  state.identityKey = 'other-session'; html = h.render(); assert.ok(h.actions.some(row => row.accessibilityLabel === 'Expandir filtros aplicados'));
+});
+
+test('summary uses shared pull refresh for the applied query without a manual refresh button or report generation', () => {
+  let refresh;
+  const queried = [], generated = [], actions = [];
+  const overrides = {
+    '@/components/RefreshScrollView': { RefreshScrollView: props => { refresh = props; return props.children; } },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) },
+  };
+  const state = { loading: false, error: '', dashboard: chartFixture([3]),
+    range: { from: '2026-08-03', to: '2026-09-27', grouping: 'week' },
+    consult(...args) { queried.push(args); }, generateReport(...args) { generated.push(args); } };
+  renderDashboard(state, actions, overrides);
+  assert.equal(refresh.refreshEnabled, true);
+  assert.equal(refresh.refreshing, false);
+  assert.equal(refresh.refreshIndicatorOffset, 67);
+  assert.equal(refresh.refreshLabel, 'la consulta de analítica');
+  assert.ok(!actions.some(row => row.accessibilityLabel === 'Actualizar'));
+  assert.equal(queried.length, 0);
+  refresh.onRefresh();
+  assert.deepEqual(queried, [['2026-08-03', '2026-09-27', 'week']]);
+  assert.equal(generated.length, 0);
+  for (const blocked of [{ loading: true }, { allowed: false }, { reportRequested: true },
+    { report: { ...chartFixture([3]), id: 'saved', generatedBy: { name: 'Ana' }, calculationVersion: 'v1' } }]) {
+    renderDashboard({ ...state, ...blocked }, [], overrides);
+    assert.equal(refresh.refreshEnabled, false);
+    assert.equal(refresh.refreshing, !!blocked.loading);
   }
-  assert.deepEqual([...state.filters.campusIds], []); assert.equal(state.filters.careerId, undefined);
-  actions = []; const empty = renderDashboard(state, actions);
-  assert.ok(empty.includes('Selecciona al menos un campus.'));
-  assert.equal(actions.find(p => p.accessibilityRole === 'button').disabled, true);
+  renderDashboard({ ...state, error: 'Error de consulta', dashboard: null }, [], overrides);
+  assert.equal(refresh.refreshEnabled, true, 'query failures can be retried with the gesture');
 });
 
-test('each card displays the selected career alongside all-campus scope', () => {
+test('opening filters blocks pull refresh until the draft is closed', () => {
+  let refresh, close;
+  const page = statefulPresentation('app/(analytics)/analytics.tsx', 'default', {}, {
+    '@/components/RefreshScrollView': { RefreshScrollView: props => { refresh = props; return props.children; } },
+    '@/features/analytics/hooks/useAnalyticsDashboard': { useAnalyticsDashboard: () => ({
+      allowed: true, loading: false, error: '', identityKey: 'session', options,
+      filters: { institutionId: 'institution-a', campusIds: ['campus-a'] },
+      range: { from: '2026-10-01', to: '2026-10-10', grouping: 'month' }, consult() {},
+    }) },
+    '@/features/analytics/components/AnalyticsFilters': { AnalyticsFilters: ({ onClose }) => { close = onClose; return null; } },
+  });
+  page.render(); assert.equal(refresh.refreshEnabled, true);
+  page.actions.find(row => row.accessibilityLabel?.startsWith('Abrir filtros de analítica')).onPress();
+  page.render(); assert.equal(refresh.refreshEnabled, false);
+  close(); page.render(); assert.equal(refresh.refreshEnabled, true);
+});
+
+test('KPI disclosures retain definitions and imported history without repeating cutoff, context or timezone', () => {
+  const scope = { institutionName: 'Institución original', campusName: 'Campus original', career: { id: 'career', name: 'Carrera original' } };
+  const period = { from: '2026-09-01', to: '2026-09-30', cutoff: '2026-10-01T03:00:00Z', timeZone: 'America/Santiago' };
+  const metric = { value: 7, scope, period };
+  const metrics = { scope, period, activeUsers: metric, resourceDemand: { ...metric, views: 5, requests: 2 },
+    subjectDemand: { ...metric, views: 5, requests: 2, subjects: [] }, activityParticipation: { ...metric, legacyEvents: 1 } };
+  const expectations = [
+    ['activeUsers', 'Cuentas activas', 'no son personas conectadas ni inicios de sesión'],
+    ['resourceDemand', 'Recursos vistos y pedidos', 'no son recursos únicos'],
+    ['subjectDemand', 'Interés por asignaturas', 'los resultados por asignatura no son conjuntos exclusivos'],
+    ['activityParticipation', 'Inscripciones a actividades', 'no es asistencia presencial ni participantes actuales', 'historial importado parcialmente'],
+  ];
+  for (const [kind, title, definition, detail] of expectations) {
+    const h = statefulPresentation('src/features/analytics/components/AnalyticsResults.tsx', 'KpiCard', { kind, metrics });
+    const initial = h.render(); assert.ok(!initial.includes(definition));
+    for (const text of [title, '2026']) assert.ok(initial.includes(text), `${kind}: ${text}`);
+    for (const text of ['Institución original', 'Campus original', 'Carrera original']) assert.ok(!initial.includes(text), `${kind}: collapsed ${text}`);
+    const trigger = h.actions.find(row => row.accessibilityLabel === `Expandir tarjeta ${title}`);
+    assert.equal(trigger.accessibilityState.expanded, false); trigger.onPress();
+    const expanded = h.render(); assert.ok(expanded.includes(definition), kind);
+    for (const text of ['Institución original', 'Campus original', 'Carrera original', 'Cierre del período:', 'America/Santiago']) assert.ok(!expanded.includes(text), `${kind}: removed ${text}`);
+    if (detail) assert.ok(expanded.includes(detail), detail);
+    const collapse = h.actions.find(row => row.accessibilityLabel === `Contraer tarjeta ${title}`);
+    assert.equal(collapse.accessibilityState.expanded, true); collapse.onPress();
+    assert.ok(!h.render().includes('Institución original'));
+    assert.equal(h.actions.find(row => row.accessibilityLabel === `Expandir tarjeta ${title}`).accessibilityState.expanded, false);
+  }
+});
+
+test('compact saved report expands original context and metadata without recalculating or displaying IDs upfront', () => {
+  const report = { id: 'immutable-report-id', scope: { institutionId: 'original-institution-id', institutionName: 'Institución original', campusName: 'Campus original',
+    campuses: [{ id: 'original-campus-id', name: 'Campus original' }], career: { id: 'original-career-id', name: 'Carrera original' } },
+    period: { from: '2026-09-01', to: '2026-09-30', cutoff: '2026-10-01T03:00:00Z', timeZone: 'America/Santiago' },
+    grouping: 'week', generatedAt: '2026-10-22T16:35:42Z', generatedBy: { userId: 'original-user-id', name: 'Responsable original' }, calculationVersion: 'campuslink-kpi-v1' };
+  const h = statefulPresentation('src/features/analytics/components/AnalyticsResults.tsx', 'ReportSummary', { report, compact: true, exportActions: false });
+  let html = h.render(); assert.ok(html.includes('Campus original')); assert.ok(html.includes('2026'));
+  assert.ok(!html.includes('immutable-report-id')); assert.ok(!html.includes('Responsable original')); assert.ok(!html.includes('Descargar'));
+  h.actions.find(row => row.accessibilityLabel?.startsWith('Ver contexto completo del reporte')).onPress();
+  html = h.render();
+  for (const text of ['Institución original', 'Carrera original', 'Responsable original', 'Semanal · lunes a domingo', 'America/Santiago', '13:35:42']) assert.ok(html.includes(text), text);
+  h.actions.find(row => row.children?.[0]?.props?.children === 'Detalles del reporte').onPress();
+  html = h.render();
+  for (const text of ['immutable-report-id', 'original-institution-id', 'original-campus-id', 'original-career-id', 'original-user-id', '2026-10-01T03:00:00Z', 'campuslink-kpi-v1']) assert.ok(html.includes(text), text);
+});
+
+test('results omit the removed coverage notice without changing original notes', () => {
+  const scope = { institutionName: 'Institución', campusName: 'Campus' };
+  const period = { from: '2026-09-01', to: '2026-09-30', timeZone: 'America/Santiago' }, metric = { value: 0, scope, period };
+  const dashboard = { scope, period, activeUsers: metric, resourceDemand: { ...metric, views: 0, requests: 0 },
+    subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] }, activityParticipation: { ...metric, legacyEvents: 0 },
+    intervals: [], notes: ['Nota original conservada por el servidor.'] };
+  const h = statefulPresentation('src/features/analytics/components/AnalyticsResults.tsx', 'AnalyticsResults', { dashboard });
+  const html = h.render();
+  assert.ok(!html.includes('El historial puede estar incompleto'));
+  assert.ok(!h.actions.some(row => row.accessibilityLabel === 'Más información sobre el historial disponible'));
+  assert.deepEqual(dashboard.notes, ['Nota original conservada por el servidor.']);
+});
+
+test('filters show authorized multi-campus choices, submit a copy atomically and block empty campus selection', () => {
+  const value = { institutionId: 'institution-a', campusIds: ['campus-a'], careerId: 'career-a', from: '2026-10-01', to: '2026-10-10', grouping: 'week' };
+  const calls = [];
+  const panel = statefulPresentation('src/features/analytics/components/AnalyticsFilters.tsx', 'AnalyticsFilters', { value, options, onApply: next => calls.push(next), onClose: () => calls.push('closed') });
+  const actions = panel.actions;
+  let html = panel.render();
+  assert.equal(actions.filter(row => row.accessibilityRole === 'checkbox').length, 0);
+  actions.find(row => row.accessibilityLabel === 'Seleccionar campus').onPress();
+  html = panel.render();
+  for (const text of ['Principal', 'Otra', 'Informática', 'Desde', 'Hasta']) assert.ok(html.includes(text), text);
+  assert.ok(!html.includes('Ajena'));
+  assert.equal(actions.filter(row => row.accessibilityRole === 'checkbox').length, 2);
+  actions.find(row => row.accessibilityLabel === 'Guardar filtros').onPress();
+  assert.equal(calls[0].grouping, 'week'); assert.deepEqual([...calls[0].campusIds], ['campus-a']);
+  assert.notEqual(calls[0].campusIds, value.campusIds);
+  actions.find(row => row.accessibilityLabel === 'Cerrar filtros').onPress(); assert.equal(calls[1], 'closed');
+  const emptyActions = []; const empty = analyticsRenderer({}, emptyActions).render('src/features/analytics/components/AnalyticsFilters.tsx', 'AnalyticsFilters', { value: { ...value, campusIds: [] }, options, onApply() { throw Error('invalid submission'); }, onClose() {} });
+  assert.ok(empty.includes('Selecciona al menos un campus.'));
+  const submit = emptyActions.find(row => row.accessibilityLabel === 'Guardar filtros'); assert.equal(submit.disabled, true); submit.onPress();
+});
+
+test('campus dropdown edits a draft and clears a career that becomes incompatible before atomic apply', () => {
+  const value = { institutionId: 'institution-a', campusIds: ['campus-a'], careerId: 'career-a', from: '2026-09-01', to: '2026-09-30', grouping: 'month' };
+  const localOptions = { institutions: [{ ...options.institutions[0], careers: [{ id: 'career-a', name: 'Carrera de Principal', campusIds: ['campus-a'] }] }] };
+  const calls = [];
+  const panel = statefulPresentation('src/features/analytics/components/AnalyticsFilters.tsx', 'AnalyticsFilters', { value, options: localOptions, onApply: (...args) => calls.push(args), onClose() {} });
+  panel.render(); panel.actions.find(row => row.accessibilityLabel === 'Seleccionar campus').onPress(); panel.render();
+  panel.actions.find(row => row.accessibilityLabel === 'Otra').onPress(); panel.render();
+  panel.actions.find(row => row.accessibilityLabel === 'Principal').onPress();
+  const html = panel.render(); assert.ok(html.includes('Se quitó la carrera')); assert.equal(calls.length, 0);
+  assert.equal(value.careerId, 'career-a'); assert.deepEqual(value.campusIds, ['campus-a']);
+  panel.actions.find(row => row.accessibilityLabel === 'Semana (lunes a domingo)').onPress(); panel.render();
+  assert.equal(panel.actions.find(row => row.accessibilityLabel === 'Semana (lunes a domingo)').accessibilityState.checked, true);
+  panel.actions.find(row => row.accessibilityLabel === 'Guardar filtros').onPress();
+  assert.deepEqual([...calls[0][0].campusIds], ['campus-b']); assert.equal(calls[0][0].careerId, undefined);
+  assert.equal(calls[0][0].from, '2026-09-01'); assert.equal(calls[0][0].grouping, 'week');
+  assert.equal(calls[0][1].careerCleared, true);
+});
+
+test('clear only resets the filter draft, with valid dashboard defaults and optional history filters', () => {
+  const value = { institutionId: 'institution-a', campusIds: ['campus-b'], careerId: 'career-a', from: '2026-01-05', to: '2026-01-11', grouping: 'week' };
+  for (const historical of [false, true]) {
+    const calls = [];
+    const panel = statefulPresentation('src/features/analytics/components/AnalyticsFilters.tsx', 'AnalyticsFilters', { value, options, historical, onApply: next => calls.push(next), onClose() {} });
+    panel.render(); panel.actions.find(row => row.accessibilityLabel === 'Limpiar filtros').onPress(); panel.render();
+    assert.equal(calls.length, 0); assert.equal(value.careerId, 'career-a');
+    assert.equal(panel.actions.find(row => row.accessibilityLabel === 'Guardar filtros').disabled, false);
+    panel.actions.find(row => row.accessibilityLabel === 'Guardar filtros').onPress();
+    assert.equal(calls[0].careerId, undefined);
+    if (historical) { assert.equal(calls[0].campusIds.length, 0); assert.equal(calls[0].from, undefined); assert.equal(calls[0].grouping, undefined); }
+    else { assert.deepEqual([...calls[0].campusIds], ['campus-a']); assert.match(calls[0].from, /^\d{4}-\d{2}-01$/); assert.equal(calls[0].grouping, 'month'); }
+  }
+});
+
+test('each collapsed card keeps scope in its accessible hint and the dashboard retains the applied context', () => {
   const scope = { institutionName: 'Institución', campusName: 'Principal, Otra', career: { id: 'career-a', name: 'Informática' } };
   const period = { from: '2026-10-01', to: '2026-10-10' }, metric = { value: 0, scope, period };
   const html = renderDashboard({ loading: false, error: '', dashboard: { scope, period,
     activeUsers: metric, resourceDemand: { ...metric, views: 0, requests: 0 },
     subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] }, activityParticipation: { ...metric, legacyEvents: 0 }, notes: [] } });
-  assert.equal(html.split('Carrera: Informática').length - 1, 4);
-  assert.equal(html.split('Principal, Otra').length - 1, 5);
+  const renderer = analyticsRenderer();
+  const { KPI_KINDS } = renderer.load('src/features/analytics/components/AnalyticsResults.tsx');
+  for (const kind of KPI_KINDS) {
+    const actions = [];
+    const card = analyticsRenderer({}, actions).render('src/features/analytics/components/AnalyticsResults.tsx', 'KpiCard', { kind, metrics: {
+      activeUsers: metric, resourceDemand: { ...metric, views: 0, requests: 0 }, subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] },
+      activityParticipation: { ...metric, legacyEvents: 0 },
+    } });
+    const expand = actions.find(row => row.accessibilityLabel?.startsWith('Expandir tarjeta'));
+    for (const text of ['Institución', 'Principal, Otra', 'Informática']) {
+      assert.ok(!card.includes(text), `${kind}: hidden scope ${text}`);
+      assert.ok(expand.accessibilityHint.includes(text), `${kind}: accessible scope ${text}`);
+    }
+    assert.ok(card.includes('2026'));
+  }
+  assert.ok(html.includes('Principal, Otra'));
 });
 
 test('changing grouping with the same dates retires monthly data and ignores its late response', async () => {
@@ -369,9 +619,238 @@ test('weekly evolution renders observed zeroes, unavailable intervals, subject d
     { key: '2026-08-31', label: 'Semana del 2026-08-31', period, metrics, status: 'no_activity', coverage: 'partial' },
     { key: '2026-09-07', label: 'Semana del 2026-09-07', period: { ...period, from: '2026-09-07', to: '2026-09-13' }, metrics: null, status: 'unavailable', coverage: 'unavailable' },
   ] } });
-  for (const text of ['Semana (lunes a domingo)', 'Mes calendario', 'Evolución semanal', 'Semana del 2026-08-31',
-    'America/Santiago', 'Usuarios activos al corte: 8', 'Sin actividad registrada: 0', 'Sin datos disponibles para este intervalo.',
-    'Cobertura histórica parcial', 'no se suman entre períodos']) assert.ok(html.includes(text), text);
+  for (const text of ['Evolución semanal', 'Semana del 2026-08-31',
+    'America/Santiago', 'Vistas: 0', 'No se registraron vistas ni solicitudes', 'Espacio vacío = sin datos disponibles',
+    'Gráfico', 'Tabla', 'Ver período Semana del 2026-08-31']) assert.ok(html.includes(text), text);
+  assert.ok(!html.includes('El historial puede estar incompleto'));
+});
+
+test('tapping chart intervals and switching to table preserves original values and unavailable gaps', () => {
+  const scope = { institutionName: 'Institución', campusName: 'Campus' };
+  const period = { from: '2026-09-01', to: '2026-09-07', timeZone: 'America/Santiago' };
+  const metric = { value: 0, scope, period };
+  const metrics = { scope, period, activeUsers: { ...metric, value: 8 }, resourceDemand: { ...metric, value: 5, views: 3, requests: 2 },
+    subjectDemand: { ...metric, value: 5, views: 3, requests: 2, subjects: [] }, activityParticipation: { ...metric, value: 1, legacyEvents: 0 } };
+  const second = { ...metrics, activeUsers: { ...metric, value: 11 }, resourceDemand: { ...metric, value: 9, views: 5, requests: 4 } };
+  const intervals = [
+    { key: 'first', label: 'Primer período', period, metrics, status: 'recorded', coverage: 'partial' },
+    { key: 'second', label: 'Segundo período', period: { ...period, from: '2026-09-08', to: '2026-09-14' }, metrics: second, status: 'recorded', coverage: 'partial' },
+    { key: 'future', label: 'Período futuro', period: { ...period, from: '2026-09-15', to: '2026-09-21' }, metrics: null, status: 'unavailable', coverage: 'unavailable' },
+  ];
+  const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: { ...metrics, grouping: 'week', intervals } });
+  let html = h.render(); assert.ok(html.includes('Vistas: 3 · Solicitudes: 2')); assert.ok(html.includes('<svg'));
+  h.actions.find(row => row.accessibilityLabel?.startsWith('Ver período Segundo período:')).onPress();
+  html = h.render(); assert.ok(html.includes('Vistas: 5 · Solicitudes: 4')); assert.ok(!html.includes('Cuentas activas: 11'));
+  h.actions.find(row => row.accessibilityLabel === 'Tabla').onPress();
+  html = h.render(); assert.ok(!html.includes('<svg')); assert.ok(html.includes('Vistas: 5 · Solicitudes: 4'));
+  assert.equal(h.actions.find(row => row.accessibilityLabel === 'Tabla').accessibilityState.selected, true);
+  const future = h.actions.find(row => row.accessibilityLabel?.startsWith('Ver período Período futuro:'));
+  assert.ok(future.accessibilityLabel.includes('No hay datos disponibles')); future.onPress();
+  html = h.render(); assert.ok(selectedDetail(html).includes('No hay datos disponibles')); assert.ok(!html.includes('Cuentas activas: 0'));
+  assert.equal(h.actions.find(row => row.accessibilityLabel?.startsWith('Ver período Período futuro:')).accessibilityState.selected, true);
+  h.actions.find(row => row.accessibilityLabel === 'Gráfico').onPress();
+  html = h.render(); assert.ok(html.includes('<svg'));
+  assert.equal(h.actions.find(row => row.accessibilityLabel?.startsWith('Ver período Período futuro:')).accessibilityState.selected, true);
+});
+
+function chartFixture(values) {
+  const scope = { institutionName: 'Institución con nombre largo', campusName: 'Campus principal', career: null };
+  const intervals = values.map((value, index) => {
+    const date = new Date(Date.UTC(2021, 0, 4 + index * 7)).toISOString().slice(0, 10);
+    const period = { from: date, to: date, timeZone: 'America/Santiago', cutoff: `${date}T23:59:59Z` };
+    const metric = { value: value ?? 0, scope, period };
+    return { key: String(index), label: `Observación ${index + 1}`, period, status: value === null ? 'unavailable' : 'recorded', coverage: 'partial',
+      metrics: value === null ? null : { scope, period, activeUsers: metric, resourceDemand: { ...metric, value: value * 2, views: value, requests: value },
+        subjectDemand: { ...metric, value: value * 2, views: value, requests: value, subjects: [] }, activityParticipation: { ...metric, legacyEvents: 0 } } };
+  });
+  const totals = intervals.find(row => row.metrics)?.metrics ?? Object.fromEntries(Object.entries(chartFixture([0])).filter(([key]) => ['scope','period','activeUsers','resourceDemand','subjectDemand','activityParticipation'].includes(key)).map(([key,value]) => [key, value && typeof value === 'object' && 'value' in value ? { ...value, value: null } : value]));
+  return { ...totals, intervals, grouping: 'week', generatedAt: '2026-10-28T12:00:00Z', notes: [] };
+}
+const selectedDetail = html => html.slice(html.search(/Período elegido|Semana elegida|Mes elegido/));
+const plotMarkup = html => html.match(/<svg[^>]*height="220"[^>]*>([\s\S]*?)<\/svg>/)?.[1] ?? '';
+
+test('evolution table uses original range totals, keeps null distinct from zero and never sums account balances', () => {
+  const data = chartFixture([0, 4, null, 7, 8, 9, 10]);
+  data.period = { from: '2021-01-04', to: '2021-02-15', timeZone: 'America/Santiago' };
+  data.resourceDemand = { ...data.resourceDemand, value: 777, views: 700, requests: 77 };
+  data.subjectDemand = { ...data.subjectDemand, value: 555, views: 500, requests: 55 };
+  data.activityParticipation = { ...data.activityParticipation, value: 333 };
+  data.activeUsers = { ...data.activeUsers, value: 222 };
+  const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: data });
+  h.render(); h.actions.find(row => row.accessibilityLabel === 'Tabla').onPress();
+  let html = h.render();
+  assert.ok(html.includes('Semana')); assert.ok(html.includes('Solicitudes')); assert.ok(html.includes('Sin datos'));
+  assert.ok(html.includes('—')); assert.ok(html.includes('700')); assert.ok(html.includes('77'));
+  assert.ok(html.includes('Total del rango completo, incluidas las demás páginas'));
+  assert.equal(h.actions.filter(row => row.accessibilityLabel?.startsWith('Ver período ')).length, 6);
+  h.actions.find(row => row.accessibilityLabel === 'Períodos siguientes').onPress(); html = h.render();
+  assert.equal(h.actions.filter(row => row.accessibilityLabel?.startsWith('Ver período ')).length, 1);
+  assert.ok(html.includes('700')); assert.ok(html.includes('77'), 'range total is unchanged by the visible page');
+  for (const [kind, value] of [['cuentas', '222'], ['asignaturas', '500'], ['actividades', '333']]) {
+    h.actions.find(row => row.accessibilityLabel === `Evolución de ${kind}`).onPress(); html = h.render();
+    assert.ok(html.includes(value));
+    if (kind === 'cuentas') { assert.ok(html.includes('Al cierre del rango')); assert.ok(html.includes('no se suman')); assert.ok(!html.includes('Total del rango')); }
+  }
+  data.activityParticipation.value = null; html = h.render();
+  assert.ok(html.includes('No hay datos disponibles para el total del rango'));
+});
+
+test('monthly table preserves clipped dates and weekly rows preserve cross-month periods', () => {
+  const data = chartFixture([3, 5]); data.grouping = 'month';
+  data.intervals[0].period = { ...data.period, from: '2025-12-20', to: '2025-12-31' };
+  data.intervals[1].period = { ...data.period, from: '2026-01-01', to: '2026-01-12' };
+  const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: data });
+  h.render(); h.actions.find(row => row.accessibilityLabel === 'Tabla').onPress();
+  let html = h.render(); assert.ok(html.includes('2025–2026')); assert.ok(html.includes('diciembre')); assert.ok(html.includes('enero'));
+  assert.ok(html.includes('20–31 dic')); assert.ok(html.includes('1–12 ene')); assert.ok(selectedDetail(html).includes('Mes elegido'));
+  data.grouping = 'week'; data.intervals[0].period = { ...data.period, from: '2026-09-28', to: '2026-10-04' };
+  html = h.render(); assert.ok(html.includes('28 sept–4 oct')); assert.ok(selectedDetail(html).includes('Semana elegida'));
+});
+
+test('selected period shows only the chosen indicator in graph and table, with subject exploration limited to subjects', () => {
+  const kinds = [
+    ['recursos', 'Recursos vistos y pedidos', 'Vistas: 4 · Solicitudes: 4'],
+    ['cuentas', 'Cuentas activas', 'Cuentas activas: 4'],
+    ['asignaturas', 'Interés por asignaturas', 'Vistas: 4 · Solicitudes: 4'],
+    ['actividades', 'Inscripciones a actividades', 'Inscripciones a actividades: 4'],
+  ];
+  for (const mode of ['Gráfico', 'Tabla']) {
+    const data = chartFixture([4]);
+    data.intervals[0].metrics.subjectDemand.subjects = [{ subjectId: 'algebra', subjectName: 'Curso del período', views: 3, requests: 1 }];
+    const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: data });
+    h.render(); h.actions.find(row => row.accessibilityLabel === mode).onPress(); h.render();
+    for (const [short, title, value] of kinds) {
+      h.actions.find(row => row.accessibilityLabel === `Evolución de ${short}`).onPress();
+      const html = h.render(), detail = selectedDetail(html);
+      if (mode === 'Gráfico') { assert.ok(detail.includes(title)); assert.ok(detail.includes('America/Santiago')); }
+      assert.ok(detail.includes(value));
+      for (const [, other] of kinds) if (other !== title) assert.ok(!detail.includes(other), `${mode}/${short}: unrelated ${other}`);
+      const subjects = h.actions.find(row => row.accessibilityLabel === 'Ver asignaturas del período');
+      assert.equal(!!subjects, short === 'asignaturas');
+      if (subjects) { subjects.onPress(); assert.ok(h.render().includes('Curso del período')); }
+      else assert.ok(!detail.includes('Curso del período'));
+    }
+    h.actions.find(row => row.accessibilityLabel === 'Evolución de asignaturas').onPress();
+    const html = h.render(); assert.ok(!html.includes('Curso del período'), 'switching indicators resets the subject expansion');
+    assert.ok(h.actions.some(row => row.accessibilityLabel === 'Ver asignaturas del período'));
+  }
+});
+
+test('selected metric null stays unavailable while other metrics exist, and no-activity wording follows the selected event', () => {
+  for (const mode of ['Gráfico', 'Tabla']) {
+    const data = chartFixture([0]);
+    data.intervals[0].metrics.resourceDemand = { ...data.intervals[0].metrics.resourceDemand, value: null, views: 99, requests: 88 };
+    data.intervals[0].metrics.activeUsers.value = 7; data.intervals[0].status = 'no_activity';
+    const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: data });
+    const detail = () => { const html = h.render(); return selectedDetail(html); };
+    h.render(); h.actions.find(row => row.accessibilityLabel === mode).onPress();
+    let text = detail(); assert.ok(text.includes('No hay datos disponibles')); assert.ok(!text.includes('99')); assert.ok(!text.includes('Cuentas activas'));
+    h.actions.find(row => row.accessibilityLabel === 'Evolución de cuentas').onPress();
+    text = detail(); assert.ok(text.includes('Cuentas activas: 7')); assert.ok(!text.includes('No se registraron'));
+    h.actions.find(row => row.accessibilityLabel === 'Evolución de actividades').onPress();
+    text = detail(); assert.ok(text.includes('Inscripciones a actividades: 0')); assert.ok(text.includes('No se registraron inscripciones'));
+    assert.ok(!text.includes('vistas')); assert.ok(!text.includes('No hay datos disponibles'));
+  }
+});
+
+test('both demand lines and gradient areas stop at null metrics and unavailable periods without relying only on color', () => {
+  for (const unavailableWithMetrics of [false, true]) {
+    const data = chartFixture([120, 180, null, 90, 140, 160]);
+    if (unavailableWithMetrics) data.intervals[2].metrics = data.intervals[0].metrics;
+    const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: data });
+    const html = h.render(), plot = plotMarkup(html);
+    const areas = [...plot.matchAll(/<path[^>]*d="([^"]+)"[^>]*fill="url/g)].map(match => match[1]);
+    assert.equal(areas.length, 4, 'two independent areas for each of two series');
+    const bounds = areas.map(path => [...path.matchAll(/([\d.]+),([\d.]+)/g)].map(match => Number(match[1]))).map(xs => [Math.min(...xs), Math.max(...xs)]);
+    const gapX = (bounds[0][1] + bounds[1][0]) / 2;
+    for (const [min, max] of bounds) assert.ok(max < gapX || min > gapX, 'no filled area crosses the gap');
+    for (const match of plot.matchAll(/<polyline[^>]*points="([^"]+)"/g)) {
+      const xs = match[1].split(' ').map(point => Number(point.split(',')[0]));
+      assert.ok(Math.max(...xs) < gapX || Math.min(...xs) > gapX, 'no stroke crosses the gap');
+    }
+    assert.ok(plot.includes('stroke="#002E56"')); assert.ok(plot.includes('stroke="#FDBB30"'));
+    assert.ok(plot.includes('stroke-dasharray="7 5"')); assert.ok(plot.includes('<polygon'));
+    assert.ok(plot.includes('stroke="#795519"'), 'yellow has contrasting outline');
+    const graphLabels = h.actions.filter(row => row.accessibilityLabel?.startsWith('Ver período ')).map(row => row.accessibilityLabel);
+    h.actions.find(row => row.accessibilityLabel?.startsWith('Ver período Observación 3:')).onPress();
+    assert.equal((plotMarkup(h.render()).match(/<circle/g) ?? []).length, 0, 'no halo or point at unavailable period');
+    h.actions.find(row => row.accessibilityLabel === 'Tabla').onPress(); h.render();
+    assert.deepEqual(h.actions.filter(row => row.accessibilityLabel?.startsWith('Ver período ')).map(row => row.accessibilityLabel), graphLabels);
+  }
+});
+
+test('activity zero stays on baseline and very large values keep original numeric detail', () => {
+  for (const value of [0, 1, 9_000_000_000_000]) {
+    const data = chartFixture([value, value]);
+    const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: data });
+    h.render(); h.actions.find(row => row.accessibilityLabel === 'Evolución de actividades').onPress();
+    const html = h.render(), plot = plotMarkup(html);
+    assert.ok(!/NaN|Infinity/.test(plot)); assert.ok(!html.includes('El rango incluye una sola semana'));
+    assert.ok(h.actions.find(row => row.accessibilityLabel?.startsWith('Ver período ')).accessibilityLabel.includes(new Intl.NumberFormat('es-CL').format(value)));
+    if (value === 0) assert.equal((plot.match(/<path/g) ?? []).length, 0, 'zero never becomes a short positive bar');
+    else assert.ok(/<path[^>]*d="[^"]* Q /.test(plot), 'top corners of positive bars are rounded');
+  }
+});
+
+test('a single month or week gives guidance instead of an isolated graph and preserves zero, values and unavailable data', () => {
+  for (const grouping of ['month', 'week']) for (const value of [0, 7, 9_000_000_000_000, null]) {
+    let edits = 0;
+    const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', {
+      dashboard: { ...chartFixture([value]), grouping }, onEditFilters() { edits++; },
+    });
+    let html = h.render(); assert.ok(!html.includes('<svg'));
+    assert.ok(html.includes(grouping === 'month' ? 'al menos dos meses' : 'al menos dos semanas'));
+    const detail = selectedDetail(html);
+    if (value === null) { assert.ok(detail.includes('No hay datos disponibles')); assert.ok(!detail.includes('Vistas: 0')); }
+    else assert.ok(detail.includes(`Vistas: ${new Intl.NumberFormat('es-CL').format(value)}`));
+    assert.equal(edits, 0); h.actions.find(row => row.accessibilityLabel === 'Cambiar período de analítica').onPress(); assert.equal(edits, 1);
+    h.actions.find(row => row.accessibilityLabel === 'Tabla').onPress(); html = h.render();
+    assert.ok(!html.includes('<svg')); assert.equal(h.actions.filter(row => row.accessibilityLabel?.startsWith('Ver período ')).length, 1);
+    assert.ok(selectedDetail(html).includes(value === null ? 'No hay datos disponibles' : `Vistas: ${new Intl.NumberFormat('es-CL').format(value)}`));
+  }
+});
+
+test('single-period dashboard action opens the existing filter draft without consulting or generating and saved reports offer no edit action', () => {
+  let panel;
+  const calls = [], state = { allowed: true, loading: false, error: '', options, identityKey: 'session',
+    filters: { institutionId: 'institution-a', campusIds: ['campus-a'] }, range: { from: '2026-10-01', to: '2026-10-28', grouping: 'month' },
+    dashboard: { ...chartFixture([3]), grouping: 'month' }, consult() { calls.push('consult'); }, generateReport() { calls.push('generate'); }, applyQuery(...args) { calls.push(args); },
+  };
+  const h = statefulPresentation('app/(analytics)/analytics.tsx', 'default', {}, {
+    '@/features/analytics/hooks/useAnalyticsDashboard': { useAnalyticsDashboard: () => state },
+    '@/features/analytics/components/AnalyticsFilters': { AnalyticsFilters: props => { panel = props; return null; } },
+  });
+  h.render(); h.actions.find(row => row.accessibilityLabel === 'Cambiar período de analítica').onPress(); h.render();
+  assert.equal(panel.value.from, '2026-10-01'); assert.equal(panel.value.to, '2026-10-28'); assert.deepEqual(calls, []);
+  panel.onApply({ ...panel.value, from: '2026-09-01' });
+  assert.equal(calls.length, 1); assert.equal(calls[0][1], '2026-09-01'); assert.equal(calls[0][3], 'month');
+  const actions = [];
+  renderDashboard({ loading: false, error: '', dashboard: null, report: { ...chartFixture([3]), id: 'saved', generatedBy: { name: 'Ana' }, calculationVersion: 'v1' } }, actions);
+  assert.ok(!actions.some(row => row.accessibilityLabel === 'Cambiar período de analítica'));
+});
+
+test('six and twelve period windows preserve all 260 observations and 44 px touch targets', () => {
+  const native = createRequire(import.meta.url)('react-native-web');
+  for (const width of [390, 1200]) {
+    let onLayout; const controls = [];
+    const h = statefulPresentation('src/features/analytics/components/AnalyticsTrends.tsx', 'AnalyticsTrends', { dashboard: chartFixture(Array.from({ length: 260 }, (_, index) => index)) }, {
+      'react-native': { ...native, View: props => { if (props.onLayout) onLayout = props.onLayout; return React.createElement(native.View, props); },
+        Pressable: props => { controls.push(props); return React.createElement(native.Pressable, props); } },
+    });
+    const render = () => { controls.length = 0; return h.render(); };
+    render(); onLayout({ nativeEvent: { layout: { width } } }); render();
+    assert.equal(controls.filter(row => row.accessibilityLabel?.startsWith('Ver período ')).length, width < 700 ? 6 : 12);
+    const seen = new Set();
+    for (let page = 0; page < 260; page++) {
+      for (const control of controls.filter(row => row.accessibilityLabel?.startsWith('Ver período '))) {
+        seen.add(control.accessibilityLabel); assert.equal(control.style.minWidth, 44);
+      }
+      const next = controls.find(row => row.accessibilityLabel === 'Períodos siguientes');
+      if (next.disabled) break;
+      next.onPress(); render();
+    }
+    assert.equal(seen.size, 260, 'no sampling, repeated or skipped observation');
+  }
 });
 
 test('future totals render Sin datos and hide numerical demand details', () => {
@@ -381,7 +860,7 @@ test('future totals render Sin datos and hide numerical demand details', () => {
   const html = renderDashboard({ loading: false, error: '', dashboard: { scope, period, activeUsers: metric,
     resourceDemand: { ...metric, views: 0, requests: 0 }, subjectDemand: { ...metric, views: 0, requests: 0, subjects: [] },
     activityParticipation: { ...metric, legacyEvents: 0 }, notes: [], intervals: [] } });
-  assert.equal(html.split('Sin datos').length - 1, 4);
+  assert.ok(html.split('Sin datos').length - 1 >= 4);
   assert.ok(!html.includes('0 vistas')); assert.ok(!html.includes('0 solicitudes'));
 });
 
@@ -467,11 +946,11 @@ test('report view presents server scope, period, grouping, generation time and r
   let argumentsReceived;
   const actions = [], html = renderDashboard({ report, loading: false, error: '', dashboard: null, options,
     filters: { institutionId: 'institution-a', campusIds: ['campus-a'] }, generateReport(...args) { argumentsReceived = args; } }, actions);
-  for (const text of ['Reporte analítico guardado', 'Identificador: saved-report-id', 'Esta instantánea conserva sus cifras.',
-    'Para obtener resultados actualizados, genera un nuevo reporte.', 'Institución del reporte', 'Principal, Otra', 'Sin filtro de carrera',
-    '2026-09-01 al 2026-09-30', 'Semanal (lunes a domingo)', 'Generado el', '13:35:42', 'America/Santiago',
-    'Responsable del servidor', 'Usuarios activos al corte', 'Participación en actividades']) assert.ok(html.includes(text), text);
-  const button = actions.find(p => p.children.props.children === 'Generar reporte');
+  for (const text of ['Reporte guardado', 'Detalles del reporte', 'Conserva las cifras calculadas al guardarlo;',
+    'no cambia al actualizar la consulta.', 'Institución del reporte', 'Principal, Otra', 'Todas las carreras (incluye sin clasificar)',
+    'Semanal · lunes a domingo', 'Generado el', '13:35:42', 'America/Santiago',
+    'Responsable del servidor', 'Cuentas activas', 'Inscripciones a actividades']) assert.ok(html.includes(text), text);
+  const button = actions.find(p => p.accessibilityLabel === 'Guardar otro reporte');
   assert.equal(button.disabled, false); button.onPress();
   assert.equal(argumentsReceived[2], 'month'); // El formulario se envía; no se copian los metadatos del reporte anterior.
   const loading = renderDashboard({ report: null, reportRequested: true, loading: true, error: '', dashboard: null });
@@ -479,25 +958,9 @@ test('report view presents server scope, period, grouping, generation time and r
 });
 
 function renderHistory(state, actions = [], fields = []) {
-  const require = createRequire(import.meta.url), native = require('react-native-web');
-  const results = load('../src/features/analytics/components/AnalyticsResults.tsx', {
-    react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-native': native,
-    './ReportExportActions': exportActionsComponent(require, actions),
-  });
-  const { default: Screen } = load('../app/(analytics)/history.tsx', {
-    react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
-    'react-native': { ...native,
-      Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); },
-      TextInput: props => { fields.push(props); return React.createElement(native.TextInput, props); },
-    },
-    'expo-router': { Link: native.Text },
-    '@/components/navigation/BottomNavigationBar': { BottomNavigationBar: () => null },
-    '@/features/analytics/components/AnalyticsResults': results,
-    '@/features/analytics/hooks/useHistoricalReports': { useHistoricalReports: () => ({
-      allowed: true, page: null, options: null, selectedIds: [], reports: [], ...state,
-    }) },
-  });
-  return renderToStaticMarkup(React.createElement(Screen));
+  return analyticsRenderer({ '@/features/analytics/hooks/useHistoricalReports': { useHistoricalReports: () => ({
+    identityKey: 'session', allowed: true, filters: {}, page: null, options: null, selectedIds: [], reports: [], ...state,
+  }) } }, actions, fields).render('app/(analytics)/history.tsx');
 }
 
 test('history screen renders original metadata and both saved results; actions open/compare without generation', () => {
@@ -515,35 +978,117 @@ test('history screen renders original metadata and both saved results; actions o
     selectedIds: ['snapshot-a', 'snapshot-b'], reports: [report, other],
     open(...args) { opened.push(args); }, nextPage() {}, close() {}, search() {},
   }, actions);
-  for (const text of ['Reportes históricos', 'Institución histórica', 'Sede original', 'Carrera original', 'Responsable original',
-    '2026-09-01 al 2026-09-30', 'America/Santiago', '13:35:42', 'Comparación de instantáneas',
-    'snapshot-a', 'snapshot-b', 'campuslink-kpi-v1', 'Semana guardada', 'Nota histórica guardada']) assert.ok(html.includes(text), text);
-  assert.equal(html.split('Usuarios activos al corte').length - 1, 2);
+  for (const text of ['Reportes guardados', 'Institución histórica', 'Sede original', 'Carrera original', 'Responsable original',
+    'America/Santiago', '13:35:42']) assert.ok(html.includes(text), text);
   assert.ok(!html.includes('Generar reporte'));
-  actions.find(action => action.children.props.children === 'Abrir reporte').onPress();
-  actions.find(action => action.children.props.children === 'Comparar con el reporte abierto').onPress();
-  assert.deepEqual(opened, [['snapshot-a'], ['snapshot-b', true]]);
+  actions.find(action => action.accessibilityLabel === 'Abrir reporte snapshot-a').onPress();
+  actions.find(action => action.accessibilityLabel === 'Comparar con reporte snapshot-b').onPress();
+  assert.deepEqual(opened, [['snapshot-a', false], ['snapshot-b', true]]);
+  const comparison = analyticsRenderer().render('src/features/analytics/components/ReportComparison.tsx', 'ReportComparison', { reports: [report, other] });
+  assert.ok(comparison.includes('Cuentas activas'));
+  assert.ok(comparison.includes('>7<')); assert.ok(comparison.includes('>9<'));
+  assert.ok(comparison.includes('Reporte A')); assert.ok(comparison.includes('Reporte B'));
+  assert.ok(comparison.includes('Las cifras no se recalculan.'));
 });
 
-test('history screen exposes search/reset/pagination, empty results, denied access, errors and retries', () => {
+test('each history card starts comparison and the persistent A selection survives another list page', () => {
+  const scope = { institutionName: 'Institución', campusName: 'Campus', campuses: [{ id: 'campus', name: 'Campus' }], career: null };
+  const period = { from: '2026-09-01', to: '2026-09-30', timeZone: 'America/Santiago' };
+  const report = { id: 'a', scope, period, grouping: 'week', generatedAt: '2026-10-22T16:35:42Z', generatedBy: { name: 'Responsable' } };
+  const other = { ...report, id: 'b' }, actions = [], opened = [];
+  renderHistory({ page: { items: [report, other], nextCursor: 'page-two' }, open(...args) { opened.push(args); } }, actions);
+  assert.equal(actions.filter(row => row.accessibilityLabel?.startsWith('Comparar con reporte ')).length, 2);
+  actions.find(row => row.accessibilityLabel === 'Comparar con reporte a').onPress();
+  assert.deepEqual(opened, [['a']]);
+  const nextActions = [], page = renderHistory({ selectedIds: ['a'], reports: [report], page: { items: [other], nextCursor: null },
+    open(...args) { opened.push(args); }, close() { opened.push('closed'); } }, nextActions);
+  assert.ok(page.includes('A elegido · Elegir B')); assert.ok(page.includes('incluso en otra página'));
+  nextActions.find(row => row.accessibilityLabel === 'Comparar con reporte b').onPress();
+  assert.deepEqual(opened.at(-1), ['b', true]);
+  nextActions.find(row => row.accessibilityLabel === 'Quitar selección').onPress(); assert.equal(opened.at(-1), 'closed');
+});
+
+test('history exposes cursor navigation, clear filters, denied access, loading, empty and errors without figures', () => {
   const calls = [], actions = [], fields = [];
-  let html = renderHistory({ options, page: { items: [], nextCursor: 'next' }, hasPrevious: true,
-    search(filters) { calls.push(filters); }, nextPage() { calls.push('next'); },
+  let html = renderHistory({ options, filters: { from: '2026-10-01' }, page: { items: [], nextCursor: 'next' }, hasPrevious: true,
+    search(filters) { calls.push(filters); }, nextPage() { calls.push('next'); }, firstPage() { calls.push('first'); },
   }, actions, fields);
-  assert.ok(html.includes('No hay reportes guardados')); assert.equal(fields.length, 2);
-  actions.find(action => action.children.props.children === 'Buscar reportes').onPress();
-  actions.find(action => action.children.props.children === 'Limpiar filtros').onPress();
-  actions.find(action => action.children.props.children === 'Siguiente página').onPress();
-  actions.find(action => action.children.props.children === 'Volver a la primera página').onPress();
-  assert.deepEqual(calls.map(value => value && typeof value === 'object' ? Object.keys(value) : value), [[], [], 'next', undefined]);
-  html = renderHistory({ allowed: false }); assert.ok(html.includes('Necesitas permiso de reportería')); assert.ok(!html.includes('Buscar reportes'));
+  assert.ok(html.includes('Sin coincidencias')); assert.equal(fields.length, 0);
+  actions.find(row => row.accessibilityLabel === 'Limpiar filtros').onPress();
+  actions.find(row => row.accessibilityLabel === 'Siguiente página').onPress();
+  actions.find(row => row.accessibilityLabel === 'Volver a la primera página').onPress();
+  assert.deepEqual(calls.map(value => value && typeof value === 'object' ? Object.keys(value) : value), [[], 'next', 'first']);
+  html = renderHistory({ allowed: false }); assert.ok(html.includes('Ya no tienes acceso a estas cifras'));
   html = renderHistory({ loading: true }); assert.ok(html.includes('Cargando historial'));
-  html = renderHistory({ selectedIds: ['a'], detailLoading: true }); assert.ok(html.includes('Abriendo instantáneas'));
-  const errors = []; html = renderHistory({ error: 'Sin conexión', detailError: 'Acceso revocado', selectedIds: ['a'],
-    search() { errors.push('list'); }, retryDetail() { errors.push('detail'); },
-  }, errors);
-  assert.ok(html.includes('Sin conexión')); assert.ok(html.includes('Acceso revocado')); assert.ok(!html.includes('Usuarios activos al corte'));
-  errors.find(action => action.children?.props.children === 'Reintentar historial').onPress();
-  errors.find(action => action.children?.props.children === 'Reintentar apertura').onPress();
-  assert.deepEqual(errors.filter(item => typeof item === 'string'), ['list', 'detail']);
+  html = renderHistory({ page: { items: [], nextCursor: null } }); assert.ok(html.includes('Aún no hay reportes guardados'));
+  const errors = []; html = renderHistory({ error: 'Sin conexión', search() { errors.push('list'); } }, errors);
+  assert.ok(html.includes('Sin conexión')); assert.ok(!html.includes('Cuentas activas'));
+  errors.find(row => row.accessibilityLabel === 'Reintentar consulta').onPress();
+  assert.deepEqual(errors.filter(row => typeof row === 'string'), ['list']);
+});
+
+test('applying the entire query retires old scope and dates together and performs one new calculation', async () => {
+  const h = harness();
+  try {
+    await h.ready(); const old = h.calls[0];
+    h.render().applyQuery({ institutionId: 'institution-a', campusIds: ['campus-b'], careerId: 'career-a' }, '2026-08-01', '2026-09-30', 'week');
+    assert.equal(h.render().dashboard, null); assert.ok(old.signal.aborted);
+    assert.equal(h.calls.length, 1);
+    await h.ready(); assert.equal(h.calls.length, 2);
+    const next = h.calls[1]; assert.equal(next.from, '2026-08-01'); assert.equal(next.to, '2026-09-30'); assert.equal(next.grouping, 'week');
+    assert.deepEqual([...next.filters.campusIds], ['campus-b']); assert.equal(next.filters.careerId, 'career-a');
+    old.resolve({ marker: 'old-scope' }); await setImmediate(); assert.equal(h.render().dashboard, null);
+  } finally { h.dispose(); }
+});
+
+test('repeated clicks and renders cannot duplicate a pending explicit report generation', async () => {
+  const h = harness();
+  try {
+    await h.ready(); const state = h.render();
+    state.generateReport('2026-09-01', '2026-09-30', 'month');
+    state.generateReport('2026-09-01', '2026-09-30', 'month');
+    await h.ready(); h.render(); h.render();
+    assert.equal(h.calls.filter(row => row.report).length, 1);
+    const job = h.calls.find(row => row.report);
+    h.render().generateReport('2026-09-01', '2026-09-30', 'month');
+    assert.equal(h.calls.filter(row => row.report).length, 1);
+    job.resolve({ marker: 'saved-once' }); await setImmediate(); assert.equal(h.render().report.marker, 'saved-once');
+  } finally { h.dispose(); }
+});
+
+test('catalog failure during explicit generation sends no POST and finishes loading', async () => {
+  const h = harness();
+  try {
+    await h.ready(); h.render().generateReport('2026-09-01', '2026-09-30', 'month'); h.render();
+    h.optionCalls.at(-1).reject(new Error('unavailable')); await setImmediate();
+    assert.equal(h.calls.filter(row => row.report).length, 0);
+    assert.equal(h.render().loading, false); assert.ok(h.render().error); assert.equal(h.render().report, null);
+  } finally { h.dispose(); }
+});
+
+test('civil dates, calendar adapters and institutional shortcuts preserve dates across device zones and year boundaries', () => {
+  const { validCivilDate, pickerValue, civilValue, monthRange, rangeError, compactPeriodLabel } = analyticsRenderer().load('src/features/analytics/utils/presentation.ts');
+  assert.equal(validCivilDate('2026-02-29'), false); assert.equal(validCivilDate('2024-02-29'), true);
+  assert.equal(civilValue('31/02/2026'), ''); assert.equal(civilValue('06/09/2026'), '2026-09-06');
+  assert.equal(pickerValue('2026-09-06'), '06/09/2026');
+  assert.equal(compactPeriodLabel({ from: '2026-10-01', to: '2026-10-28' }), '1–28 oct');
+  assert.equal(compactPeriodLabel({ from: '2026-10-28', to: '2026-10-28' }), '28 oct');
+  assert.equal(compactPeriodLabel({ from: '2026-10-31', to: '2026-11-01' }), '31 oct–1 nov');
+  assert.match(compactPeriodLabel({ from: '2025-12-31', to: '2026-01-01' }), /2025.*2026/);
+  const october = monthRange(false, new Date('2026-11-01T02:30:00Z'));
+  assert.equal(october.from, '2026-10-01'); assert.equal(october.to, '2026-10-31');
+  const december = monthRange(true, new Date('2026-01-15T12:00:00Z'));
+  assert.equal(december.from, '2025-12-01'); assert.equal(december.to, '2025-12-31');
+  assert.equal(monthRange(true, new Date('2024-03-15T12:00:00Z')).to, '2024-02-29');
+  assert.ok(rangeError('2026-10-31', '2026-10-01')); assert.equal(rangeError('', '', true), '');
+});
+
+test('historical filters accept no campus or dates even when the current catalog is unavailable', () => {
+  const calls = [], actions = [];
+  const html = analyticsRenderer({}, actions).render('src/features/analytics/components/AnalyticsFilters.tsx', 'AnalyticsFilters', {
+    value: {}, options: null, historical: true, onApply: value => calls.push(value), onClose() {},
+  });
+  assert.ok(html.includes('también los históricos')); assert.ok(!html.includes('Selecciona al menos un campus.'));
+  const apply = actions.find(row => row.accessibilityLabel === 'Guardar filtros'); assert.equal(apply.disabled, false); apply.onPress();
+  assert.equal(calls[0].campusIds.length, 0); assert.equal(calls[0].from, undefined); assert.equal(calls[0].to, undefined);
 });

@@ -5,7 +5,7 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { formatPickerValue, pickerDate, type ActivityDateTimeFieldProps } from '../types/dateTime';
 
 /** Bloquea el formulario mientras se elige: diálogo del sistema en Android y modal en iOS. */
-export function ActivityDateTimeField({ label, mode, value, disabled, onChange, displayValue }: ActivityDateTimeFieldProps) {
+export function ActivityDateTimeField({ label, mode, value, disabled, onChange, displayValue, compact = false, trailingIcon }: ActivityDateTimeFieldProps) {
   const [selection, setSelection] = useState<Date | null>(null);
   const androidOpen = useRef(false);
   const mounted = useRef(true);
@@ -39,12 +39,12 @@ export function ActivityDateTimeField({ label, mode, value, disabled, onChange, 
     } else setSelection(date);
   };
   return <View style={styles.field}>
-    <Text style={styles.label}>{label}</Text>
+    <Text style={[styles.label, compact && styles.compactLabel]}>{label}</Text>
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={label}
       accessibilityValue={{ text: displayValue || value || 'Sin seleccionar' }} accessibilityState={{ disabled, expanded: selection !== null }}
-      disabled={disabled} activeOpacity={0.75} onPress={open} style={[styles.input, disabled && styles.disabled]}>
+      disabled={disabled} activeOpacity={0.75} onPress={open} style={[styles.input, compact && styles.compactInput, disabled && styles.disabled]}>
       <Text style={value ? styles.value : styles.placeholder}>{displayValue || value || (mode === 'date' ? 'Seleccionar fecha' : 'Seleccionar hora')}</Text>
-      <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.placeholder}>▾</Text>
+      {trailingIcon ?? <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.placeholder}>▾</Text>}
     </TouchableOpacity>
     {selection && !disabled ? <Modal visible transparent animationType="fade" presentationStyle="overFullScreen"
       onRequestClose={() => setSelection(null)}>
@@ -69,6 +69,8 @@ export function ActivityDateTimeField({ label, mode, value, disabled, onChange, 
 }
 
 const styles = StyleSheet.create({
+  compactLabel: { fontSize: 12, fontWeight: '400', color: '#607485' },
+  compactInput: { minHeight: 44, padding: 10, gap: 6, borderColor: '#B6C6D2', borderRadius: 10 },
   field: { gap: 8 }, label: { fontWeight: '600', color: '#0F172A' },
   input: { minHeight: 48, borderWidth: 1, borderColor: '#94A3B8', borderRadius: 8, padding: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

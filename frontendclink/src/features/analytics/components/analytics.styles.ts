@@ -1,0 +1,44 @@
+import { StyleSheet } from 'react-native';
+import { APP_COLORS } from '@/types/colors';
+
+export const colors = { ...APP_COLORS, ink: '#17364D', muted: '#607485', border: '#DFE7ED', tint: '#EAF0F6', background: '#F4F7F9', danger: '#A43228', warning: '#795519' };
+/** El amarillo lleva borde oscuro en datos/leyenda: conserva contraste sobre blanco y una segunda señal por trazo/forma. */
+export const chartColors = { primary: '#002E56', accent: '#FDBB30', accentEdge: '#795519', grid: '#E8EEF3', selection: '#F2F6FA' };
+export const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { width: '100%', maxWidth: 1200, alignSelf: 'center', gap: 16 },
+  stack: { gap: 16 }, row: { flexDirection: 'row', alignItems: 'center', gap: 10 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
+  spread: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  grow: { flex: 1, minWidth: 0 },
+  back: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
+  eyebrow: { fontSize: 10, lineHeight: 16, letterSpacing: 1.4, fontWeight: '700', color: colors.SECONDARY },
+  title: { fontSize: 26, lineHeight: 32, letterSpacing: -0.5, fontWeight: '700', color: colors.PRIMARY },
+  heading: { fontSize: 18, lineHeight: 25, fontWeight: '600', color: colors.PRIMARY },
+  label: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: colors.ink },
+  body: { color: colors.ink, fontSize: 14, lineHeight: 21 },
+  muted: { color: colors.muted, fontSize: 13, lineHeight: 20 },
+  small: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  link: { color: colors.PRIMARY, fontSize: 13, lineHeight: 20, fontWeight: '600' },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', borderBottomWidth: 1, borderBottomColor: colors.border, gap: 20 },
+  tab: { minHeight: 44, paddingVertical: 10, borderBottomWidth: 3, borderBottomColor: 'transparent', justifyContent: 'center', flexShrink: 1 },
+  tabActive: { borderBottomColor: colors.PRIMARY },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: colors.border, padding: 20, gap: 16 },
+  button: { minHeight: 44, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 12, backgroundColor: colors.PRIMARY, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  buttonSecondary: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border },
+  buttonQuiet: { backgroundColor: 'transparent', paddingHorizontal: 0, alignSelf: 'flex-start' },
+  buttonText: { color: '#FFFFFF', fontSize: 13, lineHeight: 20, fontWeight: '600', flexShrink: 1 },
+  disabled: { opacity: 0.45 },
+  chip: { minHeight: 44, paddingHorizontal: 13, paddingVertical: 9, borderRadius: 22, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFFFF', justifyContent: 'center' },
+  chipActive: { borderColor: colors.PRIMARY, backgroundColor: colors.tint },
+  badge: { paddingVertical: 5, paddingHorizontal: 9, borderRadius: 8, backgroundColor: colors.tint, alignSelf: 'flex-start', maxWidth: '100%' },
+  badgeText: { color: colors.PRIMARY, fontSize: 11, fontWeight: '600', lineHeight: 16 },
+  input: { minHeight: 48, borderWidth: 1, borderColor: '#B6C6D2', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, lineHeight: 21, color: colors.ink, backgroundColor: '#FFFFFF' },
+  option: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 12 },
+  selected: { borderColor: colors.PRIMARY, backgroundColor: colors.tint },
+  notice: { backgroundColor: '#FFF8E8', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  error: { color: colors.danger, fontSize: 13, lineHeight: 20 },
+  divider: { height: 1, backgroundColor: colors.border },
+  modal: { flex: 1, backgroundColor: colors.background },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#FFFFFF' },
+  iconButton: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 22 },
+});

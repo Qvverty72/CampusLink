@@ -8,7 +8,7 @@ export default function AnalyticsLayout() {
         gestureEnabled: false,
         headerShown: false,
         headerStyle: { backgroundColor: '#FFFFFF' },
-        headerTintColor: '#09243A',
+        headerTintColor: '#002E56',
         headerShadowVisible: false,
         contentStyle: { backgroundColor: '#F4F7F9' },
       }}
