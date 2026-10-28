@@ -1,5 +1,5 @@
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import type { AccessAssignment, AccessCampus, AccessCatalogItem, AccessConnection, AccessKind, AccessProfile, AccessSnapshot, AccountStateUpdate, PhysicalPublication } from './access.types.js';
+import type { AccessAccountProfile, AccessAssignment, AccessCampus, AccessCatalogItem, AccessConnection, AccessKind, AccessProfile, AccessSnapshot, AccountStateUpdate, PhysicalPublication } from './access.types.js';
 import type { AuthAssignment } from '../auth/auth.types.js';
 import type { AuditEntry, AuditDetail, AuditReferenceName, AuditReferenceRequest, AuditActorRow, AuditResponsibleProfile, AuditSearch } from './access.types.js';
 import { accessAuditKey, accessAuditPredicate } from './audit.access-groups.js';
@@ -8,6 +8,18 @@ import { auditSnapshot } from './audit.snapshot.js';
 
 const auditColumns = `id,actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion,
   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at`;
+// Misma proyección acotada para auditoría y cuentas; no incluye secretos ni una carrera principal.
+const registeredProfileColumns = `p.nombre_completo AS "fullName",NULLIF(btrim(u.email),'') AS email,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',c.id::text,'name',c.nombre) ORDER BY c.nombre,c.id)
+    FROM public.usuario_carrera uc JOIN public.carrera c ON c.id=uc.carrera_id
+    WHERE uc.perfil_usuario_id=p.id AND c.institucion_id=$2),'[]'::jsonb) AS careers`;
+const registeredProfileScope = `FROM public.perfil_usuario p LEFT JOIN auth.users u ON u.id=p.id
+  WHERE p.campus_id=$1 AND p.institucion_id=$2 AND p.id=$3`;
+// Listado y total comparten ámbito y búsqueda antes de paginar.
+const accessUsersScope = `FROM public.perfil_usuario p
+  WHERE p.campus_id=$1 AND p.institucion_id=$2 AND p.deleted_at IS NULL
+  AND ($3::text='' OR position(lower($3) in lower(p.nombre_completo))>0 OR EXISTS(
+    SELECT 1 FROM auth.users u WHERE u.id=p.id AND position(lower($3) in lower(COALESCE(u.email,'')))>0))`;
 // Mismo alcance, filtros y agrupación para la página y su total de cards.
 const publicationTypes = `('publicacion_recurso','PUBLICACION_FISICA','PUBLICACION_DIGITAL')`;
 const auditTargetUuid = `CASE WHEN a.entidad_id ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' THEN a.entidad_id::uuid END`;
@@ -99,12 +111,11 @@ export function accessRepository(client: AccessConnection) {
       [campus.id,campus.institucion_id,JSON.stringify(entries.map(entry => ({ id: entry.id, actor_id: entry.actor_usuario_id, occurred_at: entry.created_at })))])).rows;
     },
     auditResponsibleProfile: async (campus: AccessCampus, userId: string) => (await client.query<AuditResponsibleProfile>(
-      `SELECT p.nombre_completo AS "fullName",NULLIF(btrim(u.email),'') AS email,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('id',c.id::text,'name',c.nombre) ORDER BY c.nombre,c.id)
-          FROM public.usuario_carrera uc JOIN public.carrera c ON c.id=uc.carrera_id
-          WHERE uc.perfil_usuario_id=p.id AND c.institucion_id=$2),'[]'::jsonb) AS careers
-       FROM public.perfil_usuario p LEFT JOIN auth.users u ON u.id=p.id
-       WHERE p.campus_id=$1 AND p.institucion_id=$2 AND p.id=$3`, [campus.id,campus.institucion_id,userId])).rows[0] ?? null,
+      `SELECT ${registeredProfileColumns} ${registeredProfileScope}`, [campus.id,campus.institucion_id,userId])).rows[0] ?? null,
+    accountProfile: async (campus: AccessCampus, userId: string) => (await client.query<AccessAccountProfile>(
+      `SELECT ${registeredProfileColumns},
+        to_char(u.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "registeredAt"
+       ${registeredProfileScope}`, [campus.id,campus.institucion_id,userId])).rows[0] ?? null,
     auditParticipantNames: async (campus: AccessCampus, ids: string[]) => (await client.query<{ id: string; name: string }>(
       `SELECT id::text AS id,nombre_completo AS name FROM public.perfil_usuario
        WHERE campus_id=$1 AND institucion_id=$2 AND id=ANY($3::uuid[])`, [campus.id,campus.institucion_id,ids])).rows,
@@ -153,9 +164,11 @@ export function accessRepository(client: AccessConnection) {
       roles: (await client.query<AccessCatalogItem>('SELECT id,nombre FROM public.rol ORDER BY nombre FOR SHARE')).rows,
       permissions: (await client.query<AccessCatalogItem>('SELECT id,nombre FROM public.permiso ORDER BY nombre FOR SHARE')).rows,
     }),
-    users: async (campusId: string, limit: number, offset: number) => (await client.query<Omit<AccessProfile, 'updated_at'>>(
-      `SELECT id, institucion_id, campus_id, nombre_completo, estado_cuenta, deleted_at FROM public.perfil_usuario
-       WHERE campus_id=$1 AND deleted_at IS NULL ORDER BY nombre_completo,id LIMIT $2 OFFSET $3`, [campusId, limit, offset])).rows,
+    users: async (campus: AccessCampus, limit: number, offset: number, search = '') => (await client.query<Omit<AccessProfile, 'updated_at'>>(
+      `SELECT p.id,p.institucion_id,p.campus_id,p.nombre_completo,p.estado_cuenta,p.deleted_at ${accessUsersScope}
+       ORDER BY p.nombre_completo,p.id LIMIT $4 OFFSET $5`, [campus.id,campus.institucion_id,search,limit,offset])).rows,
+    userCount: async (campus: AccessCampus, search = '') => Number((await client.query<{ total: string }>(
+      `SELECT count(*)::text AS total ${accessUsersScope}`, [campus.id,campus.institucion_id,search])).rows[0].total),
     snapshot: async (userId: string, campusId: string): Promise<AccessSnapshot> => ({
       roles: (await client.query<AccessAssignment>(
         `SELECT ur.id,ur.rol_id AS catalog_id,r.nombre,ur.campus_id FROM public.usuario_rol ur

@@ -32,6 +32,10 @@ Perfil académico F2.3-04: API, validaciones, guardado transaccional y migració
 
 Roles y permisos por campus F2.3-05: administración mediante `/api/v1/users/access`, con alcance vigente, listado paginado y auditoría atómica. Requiere `SUPABASE_DB_URL`, administrador previamente incorporado y `src/database/supabase/migrations/f2_3_05_roles_permisos.sql`. Guía local.
 
+El detalle administrativo de cuenta (GET y respuestas PATCH) incluye `email`, `careers` y `registeredAt`. El correo y la fecha original de registro provienen de `auth.users`; las carreras son las asociaciones vigentes del perfil en su institución. Para conexiones con el rol mínimo `service_role`, aplicar también `src/database/supabase/migrations/f2_3_05_account_profile_read.sql`: concede únicamente las columnas de lectura necesarias al servidor, sin permisos nuevos para clientes públicos ni acceso a contraseñas. El listado general conserva su contrato.
+
+El listado `/api/v1/users/access/campuses/:campusId/users` admite `q` opcional (cadena única de hasta 254 caracteres) para buscar parte del nombre de perfil o del correo, sin distinguir mayúsculas y tratando los caracteres literalmente. La búsqueda se aplica en PostgreSQL antes de paginar, dentro del campus/institución autorizados; la respuesta sigue sin incluir correos ni otros datos del detalle. `meta.total` devuelve el total real de cuentas con esos mismos filtros, además de `page`, `limit` y `hasMore`, para el componente Pagination compartido.
+
 Autorización F2.3-06: políticas por ruta, comprobaciones de permiso/campus/propietario y guía para servicios futuros. El mapa ahora exige Bearer y campus vigente. No requiere SQL nuevo.
 
 Suspensión/desactivación F2.3-07: acciones de cuenta, auditoría, retirada física y conservación digital. Desde Administrar cuentas y accesos; PATCH dedicado `/users/access/campuses/:campusId/users/:userId/state`. Aplicar `src/database/supabase/migrations/f2_3_07_estado_cuenta.sql`: solo permisos/RLS sobre publicaciones existentes, sin tablas/columnas nuevas. El guardado revalida al administrador bajo transacción.

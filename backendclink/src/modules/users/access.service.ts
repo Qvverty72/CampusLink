@@ -54,9 +54,11 @@ function version(profile: AccessProfile, snapshot: AccessSnapshot) {
     accountState: profile.estado_cuenta, updatedAt: profile.updated_at, roles: snapshot.roles.map(row => row.id).sort(),
     permissions: snapshot.permissions.map(row => row.id).sort() })).digest('hex');
 }
-function detail(profile: AccessProfile, campusId: string, snapshot: AccessSnapshot) {
+async function detail(repository: Repository, profile: AccessProfile, campus: AccessCampus, snapshot: AccessSnapshot) {
+  const account = await repository.accountProfile(campus, profile.id);
   return { userId: profile.id, fullName: profile.nombre_completo, accountState: profile.estado_cuenta,
-    campusId, roles: snapshot.roles, permissions: snapshot.permissions, version: version(profile, snapshot) };
+    campusId: campus.id, roles: snapshot.roles, permissions: snapshot.permissions, version: version(profile, snapshot),
+    email: account?.email ?? null, careers: account?.careers ?? [], registeredAt: account?.registeredAt ?? null };
 }
 export function parseAccessUpdate(body: unknown): AccessUpdate {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('Revisa los roles y permisos.');
@@ -105,11 +107,19 @@ export async function listAccessUsers(auth: VerifiedAuthConnection, rawCampusId:
   const campusId = uuid(rawCampusId);
   const pagination = parsePaginationQuery(query);
   if (!pagination.success) throw invalid('Revisa la página y el tamaño del listado.');
+  const input = query as Record<string, unknown>;
+  if (Object.keys(input).some(key => key.startsWith('q[')) || (input.q !== undefined &&
+    (typeof input.q !== 'string' || input.q.length > 254 || /[\u0000-\u001f\u007f]/.test(input.q)))) {
+    throw invalid('Escribe un nombre o correo válido de hasta 254 caracteres.');
+  }
+  const search = typeof input.q === 'string' ? input.q.trim() : '';
   return transaction(async repository => {
     requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
-    await authorizedCampus(repository, auth, campusId);
-    const users = await repository.users(campusId, pagination.data.limit + 1, pagination.data.offset);
-    return createPaginatedResult(users.map(row => ({ userId: row.id, fullName: row.nombre_completo, accountState: row.estado_cuenta, campusId })), pagination.data);
+    const campus = await authorizedCampus(repository, auth, campusId);
+    const users = await repository.users(campus, pagination.data.limit + 1, pagination.data.offset, search);
+    const result = createPaginatedResult(users.map(row => ({ userId: row.id, fullName: row.nombre_completo, accountState: row.estado_cuenta, campusId })), pagination.data);
+    const total = await repository.userCount(campus, search);
+    return { ...result, meta: { ...result.meta, total } };
   });
 }
 /** Lista snapshots históricos del campus sin reconstruirlos desde los datos actuales. */
@@ -305,8 +315,8 @@ async function target(repository: Repository, auth: VerifiedAuthConnection, camp
 export async function getUserAccess(auth: VerifiedAuthConnection, rawCampusId: unknown, rawUserId: unknown) {
   const campusId = uuid(rawCampusId), userId = uuid(rawUserId);
   return transaction(async repository => {
-    const { profile } = await target(repository, auth, campusId, userId);
-    return detail(profile, campusId, await repository.snapshot(userId, campusId));
+    const { campus, profile } = await target(repository, auth, campusId, userId);
+    return detail(repository, profile, campus, await repository.snapshot(userId, campusId));
   });
 }
 /**
@@ -336,7 +346,7 @@ export async function updateUserAccess(auth: VerifiedAuthConnection, rawCampusId
     }
     const after = await repository.snapshot(userId, campusId);
     for (const change of changes) await repository.audit(auth.userId, campus, userId, change.action, before, after, change);
-    return detail(profile, campusId, after);
+    return detail(repository, profile, campus, after);
   });
 }
 
@@ -361,7 +371,7 @@ export async function updateAccountState(auth: VerifiedAuthConnection, rawCampus
     const { campus, profile } = await target(repository, auth, campusId, userId);
     const snapshot = await repository.snapshot(userId, campusId);
     if (version(profile, snapshot) !== input.version) throw new ApiError(409, 'CONFLICT', 'El usuario o sus accesos cambiaron. Recarga antes de confirmar.');
-    if (profile.estado_cuenta === input.accountState) return detail(profile, campusId, snapshot);
+    if (profile.estado_cuenta === input.accountState) return detail(repository, profile, campus, snapshot);
     if (profile.estado_cuenta === 'DESACTIVADA') throw new ApiError(409, 'CONFLICT', 'La cuenta ya está desactivada. Recarga el usuario.');
     // Incluye publicaciones de campus anteriores: la desactivación alcanza todas las publicaciones físicas
     // activas, aunque conserva el campus de origen y su historial.
@@ -372,6 +382,6 @@ export async function updateAccountState(auth: VerifiedAuthConnection, rawCampus
     const retired = publications.length ? await repository.retirePhysicalPublications(publications.map(row => row.id), changedAt) : [];
     await repository.auditAccountState(auth.userId, campus, userId,
       input.accountState === 'SUSPENDIDA' ? 'SUSPENDER_CUENTA' : 'DESACTIVAR_CUENTA', profile, after, publications, retired);
-    return detail(after, campusId, snapshot);
+    return detail(repository, after, campus, snapshot);
   });
 }

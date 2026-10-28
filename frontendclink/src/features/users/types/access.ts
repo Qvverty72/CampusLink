@@ -1,6 +1,10 @@
 export interface AccessUser { userId: string; fullName: string; accountState: string; campusId: string }
 export interface AccessAssignment { id: string; catalog_id: string; nombre: string; campus_id: string }
-export interface UserAccess extends AccessUser { roles: AccessAssignment[]; permissions: AccessAssignment[]; version: string }
+export interface UserAccess extends AccessUser {
+  roles: AccessAssignment[]; permissions: AccessAssignment[]; version: string;
+  /** Opcionales para tolerar una API anterior durante la actualización. */
+  email?: string | null; careers?: { id: string; name: string }[]; registeredAt?: string | null;
+}
 export interface AccessCatalog { roles: { id: string; nombre: string }[]; permissions: { id: string; nombre: string }[] }
 export interface AccessInput { roleIds: string[]; permissionIds: string[]; version: string }
 /** Determina si la identidad actual contiene el rol administrativo requerido por la UI. */

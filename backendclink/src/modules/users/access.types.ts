@@ -10,6 +10,8 @@ export interface AccessAssignment {
   id: string; catalog_id: string; nombre: string; campus_id: string;
 }
 export interface AccessSnapshot { roles: AccessAssignment[]; permissions: AccessAssignment[] }
+/** Datos registrados de la cuenta, exclusivos del detalle administrativo autorizado. */
+export interface AccessAccountProfile extends AuditResponsibleProfile { registeredAt: string | null }
 export interface AccessUpdate { roleIds: string[]; permissionIds: string[]; version: string }
 export interface AccountStateUpdate { accountState: 'SUSPENDIDA' | 'DESACTIVADA'; version: string }
 export interface PhysicalPublication {

@@ -34,7 +34,7 @@ before(async () => {
     if (dbFailure && !['BEGIN','ROLLBACK'].includes(sql)) throw new Error('private database password details');
     return db.query(sql, params);
   }, release: () => {} }; });
-  await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key,email text,encrypted_password text); create function auth.uid() returns uuid language sql as $$select current_setting('test.user',true)::uuid$$; grant usage on schema public,auth to anon,authenticated,service_role; grant execute on function auth.uid() to authenticated;");
+  await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key,email text,encrypted_password text,created_at timestamptz default now()); create function auth.uid() returns uuid language sql as $$select current_setting('test.user',true)::uuid$$; grant usage on schema public,auth to anon,authenticated,service_role; grant execute on function auth.uid() to authenticated;");
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion','campus','carrera','asignatura','campus_carrera','carrera_asignatura','perfil_usuario','usuario_carrera','rol','permiso','rol_permiso','usuario_rol','usuario_permiso',
     'publicacion_recurso','categoria_recurso_fisico','recurso_fisico','recurso_digital','archivo_publicacion','mensaje_solicitud','solicitud_recurso','transaccion_recurso','acceso_recurso_digital','reporte_contenido','auditoria']) {
@@ -45,6 +45,7 @@ before(async () => {
   await db.exec(await readFile('src/database/supabase/migrations/f2_3_01_autenticacion.sql', 'utf8'));
   await db.exec('grant all on auditoria,rol_permiso,usuario_rol,usuario_permiso,rol,permiso to anon,authenticated');
   await db.exec(await migration());
+  await db.exec(await readFile('src/database/supabase/migrations/f2_3_05_account_profile_read.sql','utf8'));
   await db.exec('grant all on publicacion_recurso to anon,authenticated');
   await db.exec(await readFile('src/database/supabase/migrations/f2_3_07_estado_cuenta.sql','utf8'));
   await db.exec(await readFile('src/database/supabase/migrations/f2_3_08_auditoria.sql','utf8'));
@@ -347,10 +348,134 @@ test('catalog is separate roles/two and permissions/three; paginated users exclu
   const catalog = (await catalogResponse.json()).data;
   assert.equal(catalog.roles.length,2); assert.equal(catalog.permissions.length,3);
   const first = await request(route() + '?page=1&limit=1'), body = await first.json();
-  assert.equal(body.data.length,1); assert.deepEqual(body.meta,{page:1,limit:1,hasMore:true});
+  const count=Number((await db.query<{total:string}>('select count(*)::text as total from perfil_usuario where campus_id=$1 and institucion_id=$2 and deleted_at is null',[campus,institution])).rows[0].total);
+  assert.equal(body.data.length,1); assert.deepEqual(body.meta,{page:1,limit:1,hasMore:true,total:count});
   const all = (await (await request(route() + '?limit=100')).json()).data;
   assert.ok(all.every((row:{campusId:string;userId:string}) => row.campusId === campus && ![foreign,deleted].includes(row.userId)));
   for (const query of ['?page=0','?limit=101','?page=1&page=2']) assert.equal((await request(route() + query)).status,400);
+});
+test('access account detail projects Auth registration, email and all associated local careers without extending the user list', async () => {
+  const {user}=await fixture(),a=randomUUID(),b=randomUUID(),foreign=randomUUID(),otherInstitution=randomUUID();
+  const registration='2025-03-15T14:27:08.123456Z';
+  await db.query("update auth.users set email='  camila@duocuc.cl  ',created_at=$2::timestamptz,encrypted_password='PRIVATE AUTH HASH' where id=$1",[user,registration]);
+  await db.query("update perfil_usuario set created_at='2026-01-01',verificado_en='2026-01-02' where id=$1",[user]);
+  await db.query("insert into institucion(id,nombre) values($1,'Other account institution')",[otherInstitution]);
+  await db.query("insert into carrera(id,institucion_id,nombre,activo) values($1,$4,'Analista Programador',true),($2,$4,'Ingeniería en Informática',false),($3,$5,'PRIVATE FOREIGN CAREER',true)",[a,b,foreign,institution,otherInstitution]);
+  for(const career of [b,a,foreign])await db.query('insert into usuario_carrera(perfil_usuario_id,carrera_id) values($1,$2)',[user,career]);
+  const account=await detail(user);
+  assert.equal(account.email,'camila@duocuc.cl');assert.equal(account.registeredAt,registration);
+  assert.deepEqual(account.careers,[{id:a,name:'Analista Programador'},{id:b,name:'Ingeniería en Informática'}]);
+  assert.doesNotMatch(JSON.stringify(account),/PRIVATE AUTH HASH|encrypted_password|PRIVATE FOREIGN CAREER/);
+  const listing=await (await request(route()+'?limit=100')).json();
+  assert.ok(listing.data.every((row:object)=>!['email','careers','registeredAt'].some(key=>Object.hasOwn(row,key))));
+  assert.doesNotMatch(JSON.stringify(listing),/camila@duocuc.cl|Ingeniería en Informática/);
+  const version=account.version;
+  await db.query("update auth.users set email='nuevo@duocuc.cl' where id=$1",[user]);
+  const current=await detail(user);assert.equal(current.email,'nuevo@duocuc.cl');assert.equal(current.version,version);
+});
+test('account search matches profile OR Auth email before pagination, restricted to the authorized campus and institution', async () => {
+  const {user}=await fixture(),expected:string[]=[];
+  for(let index=0;index<25;index++){
+    const id=await profile(campus,'Cuenta filtro '+String(index).padStart(2,'0'));expected.push(id);
+    await db.query('update auth.users set email=$2 where id=$1',[id,`busqueda+${index}@duocuc.cl`]);
+  }
+  const named=await profile(campus,'BUSQUEDA por nombre');expected.push(named);
+  const foreign=await profile(otherCampus,'Busqueda privada de otra sede'),deleted=await profile(campus,'Busqueda eliminada');
+  const wrongInstitution=randomUUID();await db.query("insert into institucion(id,nombre) values($1,'Foreign search institution')",[wrongInstitution]);
+  const wrong=await profile(campus,'Busqueda privada de otra institución');await db.query('update perfil_usuario set institucion_id=$2 where id=$1',[wrong,wrongInstitution]);
+  await db.query('update perfil_usuario set deleted_at=now() where id=$1',[deleted]);
+  await db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[expected[0]]);
+  const search=(page:number)=>(new URLSearchParams({page:String(page),limit:'20',q:'  BUSQUEDA  '})).toString();
+  const first=await (await request(route()+'?'+search(1))).json(),second=await (await request(route()+'?'+search(2))).json();
+  assert.equal(first.data.length,20);assert.equal(first.meta.hasMore,true);assert.equal(second.data.length,6);assert.equal(second.meta.hasMore,false);
+  assert.equal(first.meta.total,26);assert.equal(second.meta.total,26);
+  const rows=[...first.data,...second.data];assert.deepEqual(rows.map(row=>row.userId).sort(),expected.sort());assert.equal(new Set(rows.map(row=>row.userId)).size,26);
+  assert.ok(rows.every(row=>row.campusId===campus&&!['email','careers','registeredAt'].some(key=>Object.hasOwn(row,key))));
+  assert.doesNotMatch(JSON.stringify([first,second]),/busqueda\+|privada|eliminada/);
+  const fullEmail=await (await request(route()+'?'+new URLSearchParams({q:'BUSQUEDA+0@DUOCUC.CL'}))).json();
+  assert.equal(fullEmail.data.length,1);assert.equal(fullEmail.data[0].userId,expected.find(id=>id===rows.find(row=>row.fullName==='Cuenta filtro 00').userId));
+  const moved=rows.find(row=>row.userId!==named).userId;await db.query('update perfil_usuario set campus_id=$2 where id=$1',[moved,otherCampus]);
+  const afterMove=await (await request(route()+'?'+new URLSearchParams({q:'busqueda',limit:'100'}))).json();assert.equal(afterMove.data.length,25);assert.equal(afterMove.meta.total,25);assert.ok(afterMove.data.every(row=>row.userId!==moved));
+  const unchanged=await detail(user);assert.equal(unchanged.roles.length,0);
+});
+test('account name/email search treats special characters literally and accepts empty queries without extending the response', async () => {
+  const {user}=await fixture();await db.query("update auth.users set email=$2 where id=$1",[user,"o'connor%_+@duocuc.cl"]);
+  for(const q of ["%_+","O'CONNOR",'@DUOCUC.CL']){
+    const result=await (await request(route()+'?'+new URLSearchParams({q,limit:'100'}))).json();assert.ok(result.data.some(row=>row.userId===user),q);
+    if(q!=='@DUOCUC.CL')assert.equal(result.data.length,1);
+  }
+  const injection=await (await request(route()+'?'+new URLSearchParams({q:"' OR 1=1 --"}))).json();assert.deepEqual(injection.data,[]);
+  const plain=await (await request(route()+'?limit=100')).json(),empty=await (await request(route()+'?limit=100&q=%20%20')).json();assert.deepEqual(empty,plain);
+});
+test('account pagination reports exact scoped totals for numbered pages, out-of-range, shrinking and empty results', async () => {
+  const {actor}=await fixture(),scoped=randomUUID();
+  await db.query("insert into campus(id,institucion_id,nombre) values($1,$2,'Pagination campus')",[scoped,institution]);
+  await db.query('insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) values($1,$2,$3)',[actor,roles.ADMINISTRADOR,scoped]);
+  const expected:string[]=[];
+  for(let index=0;index<41;index++)expected.push(await profile(scoped,'Paginar cuenta '+String(index).padStart(2,'0')));
+  await profile(scoped,'Otro nombre');const deleted=await profile(scoped,'Paginar eliminada');await db.query('update perfil_usuario set deleted_at=now() where id=$1',[deleted]);
+  const all:string[]=[];
+  for(const page of [1,2,3,9]){
+    const result=await (await request(route(undefined,scoped)+'?'+new URLSearchParams({page:String(page),limit:'20',q:'PAGINAR'}))).json();
+    assert.deepEqual(result.meta,{page,limit:20,hasMore:page<3,total:41});
+    assert.equal(result.data.length,page<3?20:page===3?1:0);if(page<=3)all.push(...result.data.map(row=>row.userId));
+  }
+  assert.deepEqual(all.sort(),expected.sort());assert.equal(new Set(all).size,41);
+  const empty=await (await request(route(undefined,scoped)+'?q=sin-coincidencia')).json();assert.deepEqual(empty.data,[]);assert.equal(empty.meta.total,0);assert.equal(empty.meta.hasMore,false);
+  await db.query('update perfil_usuario set deleted_at=now() where id=any($1::uuid[])',[expected.slice(0,2)]);
+  const reduced=await (await request(route(undefined,scoped)+'?page=3&limit=20&q=paginar')).json();assert.deepEqual(reduced.data,[]);assert.equal(reduced.meta.total,39);
+});
+test('account search rejects malformed queries and rechecks administrator/campus authorization', async () => {
+  const {actor,user}=await fixture();
+  for(const query of ['q=a&q=b','q[]=a','q[name]=a','q='+ 'x'.repeat(255),'q=a%00b','q=a%0Ab','q=a%7Fb'])assert.equal((await request(route()+'?'+query)).status,400,query);
+  assert.equal((await request(route()+'?q=mail',undefined,'')).status,401);
+  assert.equal((await request(route(undefined,otherCampus)+'?q=mail')).status,403);
+  authUser=user;assert.equal((await request(route()+'?q=mail')).status,403);authUser=actor;
+  beforeTransaction=()=>db.query('update usuario_rol set revocado_en=now() where perfil_usuario_id=$1',[actor]).then(()=>{});
+  assert.equal((await request(route()+'?q=mail')).status,403);
+});
+test('access profile metadata survives role saves, account-state changes and state no-ops', async () => {
+  const {user}=await fixture(),career=randomUUID();
+  await db.query("update auth.users set email='perfil@duocuc.cl',created_at='2025-05-01T12:00:00Z' where id=$1",[user]);
+  await db.query("insert into carrera(id,institucion_id,nombre) values($1,$2,'Diseño')",[career,institution]);
+  await db.query('insert into usuario_carrera(perfil_usuario_id,carrera_id) values($1,$2)',[user,career]);
+  const original=await detail(user);
+  const check=(value:any)=>{assert.equal(value.email,original.email);assert.equal(value.registeredAt,original.registeredAt);assert.deepEqual(value.careers,original.careers)};
+  let response=await request(route(user),payload(original.version,[roles.USUARIO_AUTORIZADO],[permissions.PUBLICAR_EVENTO]));
+  assert.equal(response.status,200);let current=(await response.json()).data;check(current);
+  for(const state of ['SUSPENDIDA','SUSPENDIDA','DESACTIVADA']){
+    response=await request(stateRoute(user),stateBody(current.version,state));assert.equal(response.status,200);current=(await response.json()).data;check(current);
+  }
+  check(await detail(user));
+});
+test('access detail distinguishes missing email, registration and empty careers without inventing values', async () => {
+  const {user}=await fixture();await db.query("update auth.users set email='  ',created_at=null where id=$1",[user]);
+  const account=await detail(user);assert.equal(account.email,null);assert.equal(account.registeredAt,null);assert.deepEqual(account.careers,[]);
+});
+test('account profile grants are repeatable, column-limited and restricted to the trusted server', async () => {
+  const migration=await readFile('src/database/supabase/migrations/f2_3_05_account_profile_read.sql','utf8');
+  await db.exec(migration);await db.exec(migration);
+  for(const role of ['anon','authenticated','service_role']){
+    for(const column of ['id','email','created_at','encrypted_password']){
+      const {rows}=await db.query<{allowed:boolean}>("select has_column_privilege($1,'auth.users',$2,'SELECT') as allowed",[role,column]);
+      assert.equal(rows[0].allowed,role==='service_role'&&column!=='encrypted_password');
+    }
+  }
+});
+test('account metadata is withheld from unauthorized, foreign, moved, wrong-institution and deleted targets', async () => {
+  const {actor,user}=await fixture(),foreign=await profile(otherCampus);
+  for(const id of [user,foreign])await db.query("update auth.users set email='PRIVATE ACCOUNT EMAIL',encrypted_password='PRIVATE AUTH HASH' where id=$1",[id]);
+  const deny=async(path:string,status:number,authorization?:string)=>{const response=await request(path,undefined,authorization);assert.equal(response.status,status);assert.doesNotMatch(await response.text(),/PRIVATE ACCOUNT EMAIL|PRIVATE AUTH HASH|registeredAt|careers/)};
+  await deny(route(user),401,'');await deny(route(user,otherCampus),403);await deny(route(foreign),404);
+  authUser=user;await deny(route(actor),403);authUser=actor;
+  beforeTransaction=()=>db.query('update perfil_usuario set campus_id=$2 where id=$1',[user,otherCampus]).then(()=>{});
+  await deny(route(user),404);
+  await db.query('update perfil_usuario set campus_id=$2,deleted_at=now() where id=$1',[user,campus]);await deny(route(user),404);
+  const wrongInstitution=randomUUID();await db.query("insert into institucion(id,nombre) values($1,'Foreign private institution')",[wrongInstitution]);
+  await db.query('update perfil_usuario set deleted_at=null,institucion_id=$2 where id=$1',[user,wrongInstitution]);await deny(route(user),404);
+  await db.query('update perfil_usuario set institucion_id=$2 where id=$1',[user,institution]);
+  beforeTransaction=()=>db.query('update usuario_rol set revocado_en=now() where perfil_usuario_id=$1',[actor]).then(()=>{});
+  await deny(route(user),403);
 });
 test('grant, modify, revoke and regrant preserve history, actors and complete before/after audit', async () => {
   const {actor,user} = await fixture();
