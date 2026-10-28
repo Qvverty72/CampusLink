@@ -5,7 +5,7 @@ import { getUsersHealthController } from './users.controller.js';
 import { getAcademicProfileController, getAcademicOptionsController, updateAcademicProfileController } from './users.controller.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
 import { getAccessCampusesController, getAccessCatalogController, listAccessUsersController, getUserAccessController, updateUserAccessController, updateAccountStateController } from './access.controller.js';
-import { listAuditEntriesController, getAuditEntryController } from './access.controller.js';
+import { listAuditEntriesController, getAuditEntryController, getAuditImageController, getAuditParticipationController, getAuditOccurrencesController, getAuditEditsController } from './access.controller.js';
 import { createNotificationsRouter } from './notifications.routes.js';
 
 // Los diagnósticos son técnicos; las rutas de negocio verifican identidad y contexto.
@@ -23,6 +23,10 @@ export function createUsersRouter(diagnosticsEnabled: boolean): Router {
   router.get('/access/campuses', requireAuthentication, getAccessCampusesController);
   router.get('/access/campuses/:campusId/audit', requireAuthentication, listAuditEntriesController);
   router.get('/access/campuses/:campusId/audit/:auditId', requireAuthentication, getAuditEntryController);
+  router.get('/access/campuses/:campusId/audit/:auditId/images/:imageId', requireAuthentication, getAuditImageController);
+  router.get('/access/campuses/:campusId/audit/:auditId/participation', requireAuthentication, getAuditParticipationController);
+  router.get('/access/campuses/:campusId/audit/:auditId/occurrences', requireAuthentication, getAuditOccurrencesController);
+  router.get('/access/campuses/:campusId/audit/:auditId/edits', requireAuthentication, getAuditEditsController);
   router.get('/access/campuses/:campusId/catalog', requireAuthentication, getAccessCatalogController);
   router.get('/access/campuses/:campusId/users', requireAuthentication, listAccessUsersController);
   router.get('/access/campuses/:campusId/users/:userId', requireAuthentication, getUserAccessController);

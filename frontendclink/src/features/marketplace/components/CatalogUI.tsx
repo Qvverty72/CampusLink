@@ -68,7 +68,7 @@ export function FilterChips({ modality, onModality, onMore, moreLabel = 'Filtros
   </View>;
 }
 
-export function FilterSheet({ visible, title, onClose, children, confirmLabel = 'Ver resultados', fillHeight = false, compact = false, preferredHeight }: { visible: boolean; title: string; onClose: () => void; children: ReactNode; confirmLabel?: string | null; fillHeight?: boolean; compact?: boolean; preferredHeight?: number }) {
+export function FilterSheet({ visible, title, onClose, onConfirm, children, confirmLabel = 'Ver resultados', fillHeight = false, compact = false, preferredHeight }: { visible: boolean; title: string; onClose: () => void; onConfirm?: () => void; children: ReactNode; confirmLabel?: string | null; fillHeight?: boolean; compact?: boolean; preferredHeight?: number }) {
   const insets = useSafeAreaInsets();
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <KeyboardAvoidingView style={ui.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -79,7 +79,7 @@ export function FilterSheet({ visible, title, onClose, children, confirmLabel = 
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar filtros" onPress={onClose} style={ui.iconButton}><X color={CATALOG_COLORS.primary} size={22} /></Pressable>
         </View>
         <ScrollView style={fillHeight ? ui.sheetBody : undefined} bounces={fillHeight ? false : undefined} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={ui.sheetContent}>{children}</ScrollView>
-        {confirmLabel !== null && <Pressable accessibilityRole="button" onPress={onClose} style={[ui.primary, compact && ui.filterConfirm]}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>}
+        {confirmLabel !== null && <Pressable accessibilityRole="button" onPress={onConfirm ?? onClose} style={[ui.primary, compact && ui.filterConfirm]}><Text style={ui.primaryText}>{confirmLabel}</Text></Pressable>}
       </View>
     </KeyboardAvoidingView>
   </Modal>;

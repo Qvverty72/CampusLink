@@ -3,15 +3,28 @@ import { ApiError } from '../../services/api-response.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../services/pagination.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { withAccessTransaction, type accessRepository } from './access.repository.js';
-import type { AccessProfile, AccessSnapshot, AccessUpdate, AccountStateUpdate } from './access.types.js';
+import type { AccessProfile, AccessSnapshot, AccessUpdate, AccountStateUpdate, AccessCampus, AuditDetail, AuditEntry } from './access.types.js';
 import { requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
 import { auditSnapshot } from './audit.snapshot.js';
+import { auditReferenceRequests, auditReferences } from './audit.references.js';
+import { auditActor } from './audit.actor.js';
+import { AUDIT_ACTIONS, ACTIVITY_AUDIT_ACTIONS } from './access.types.js';
+import { activityAuditRepository, activityAuditDetail, activityEditHistory, parseActivityAuditId } from './audit.activities.repository.js';
+import { auditTimeline } from './audit.timeline.js';
+import { auditLocationReferences } from './audit.location.references.js';
+import { auditContainsImage, auditImageStorage, isAuditImageFile } from './audit.images.js';
+import { ACCESS_AUDIT_ACTIONS, auditAccessGroup, presentAuditAccessGroup } from './audit.access-groups.js';
+import { isAuditEdit, presentAuditEditGroup } from './audit.edit-groups.js';
 
 const ROLE_NAMES = ['ADMINISTRADOR', 'USUARIO_AUTORIZADO'];
 const PERMISSION_NAMES = ['PUBLICAR_EVENTO', 'ACCEDER_ANALITICA', 'ACCEDER_REPORTERIA'];
 const invalid = (message: string) => new ApiError(400, 'VALIDATION_ERROR', message);
 const forbidden = () => new ApiError(403, 'FORBIDDEN', 'Se requiere un administrador con alcance vigente sobre este campus.');
 type Repository = ReturnType<typeof accessRepository>;
+async function auditEntryActors(repository: Repository, campus: AccessCampus, entries: AuditEntry[]) {
+  const actors = new Map((await repository.auditActors(campus,entries)).map(row=>[row.audit_id,row]));
+  return entries.map(entry=>({...entry,actor:auditActor(actors.get(entry.id))}));
+}
 
 function uuid(value: unknown): string {
   if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) throw invalid('Identificador inválido.');
@@ -104,21 +117,178 @@ export async function listAuditEntries(auth: VerifiedAuthConnection, rawCampusId
   const campusId = uuid(rawCampusId);
   const pagination = parsePaginationQuery(query);
   if (!pagination.success) throw invalid('Revisa la página y el tamaño del historial.');
+  const input = query as Record<string, unknown>;
+  const action = input.action;
+  if (Object.keys(input).some(key => key.startsWith('action[')) ||
+    (action !== undefined && (typeof action !== 'string' || !(AUDIT_ACTIONS as readonly string[]).includes(action)))) {
+    throw invalid('Selecciona un tipo de acción válido.');
+  }
+  const boundary = (key: 'from' | 'before') => {
+    const value = input[key];
+    if (Object.keys(input).some(name => name.startsWith(key + '['))) throw invalid('Selecciona fechas válidas.');
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || !/^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) throw invalid('Selecciona fechas válidas.');
+    return value;
+  };
+  const from = boundary('from'), before = boundary('before');
+  if (from && before && from >= before) throw invalid('La fecha inicial debe ser anterior al límite final.');
+  const nameFilter = (key: 'contentName' | 'userName') => {
+    const value = input[key];
+    if (Object.keys(input).some(name => name.startsWith(key + '[')) || (value !== undefined &&
+      (typeof value !== 'string' || value.length > 100 || /[\u0000-\u001f\u007f]/.test(value)))) throw invalid('Escribe un nombre válido de hasta 100 caracteres.');
+    return typeof value === 'string' ? value.trim() || undefined : undefined;
+  };
+  const contentName = nameFilter('contentName'), userName = nameFilter('userName');
   return transaction(async repository => {
     requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
     const campus = await authorizedCampus(repository, auth, campusId);
-    return createPaginatedResult(await repository.auditEntries(campus, pagination.data.limit + 1, pagination.data.offset), pagination.data);
+    const users = userName && (!action || (ACTIVITY_AUDIT_ACTIONS as readonly unknown[]).includes(action))
+      ? await repository.auditSearchUsers(campus,userName) : undefined;
+    const search = { contentName,userName,users };
+    const sql = async (limit: number, offset: number) => (await repository.auditEntries(campus, limit, offset, action, from, before,search)).map(presentAuditAccessGroup).map(presentAuditEditGroup);
+    const mongo = (limit: number, offset: number) => activityAuditRepository.list(campus, limit, offset, action as string | undefined, from, before,search);
+    const result = action
+      ? createPaginatedResult(await ((ACTIVITY_AUDIT_ACTIONS as readonly unknown[]).includes(action) ? mongo : sql)(pagination.data.limit + 1, pagination.data.offset), pagination.data)
+      : await auditTimeline(pagination.data, sql, mongo);
+    const countSql = () => repository.auditEntryCount(campus,action as string | undefined,from,before,search);
+    const countMongo = () => activityAuditRepository.count(campus,action as string | undefined,from,before,search);
+    const total = action
+      ? await ((ACTIVITY_AUDIT_ACTIONS as readonly unknown[]).includes(action) ? countMongo : countSql)()
+      : (await Promise.all([countSql(),countMongo()])).reduce((sum,count) => sum + count,0);
+    return { ...result, meta: { ...result.meta,total }, data: await auditEntryActors(repository,campus,result.data) };
   });
 }
 /** Lee una auditoría del campus autorizado y filtra sus campos antes de exponerla. */
 export async function getAuditEntry(auth: VerifiedAuthConnection, rawCampusId: unknown, rawAuditId: unknown) {
-  const campusId = uuid(rawCampusId), auditId = uuid(rawAuditId);
+  const campusId = uuid(rawCampusId);
+  const activityKey = typeof rawAuditId === 'string' ? parseActivityAuditId(rawAuditId) : null;
+  const auditId = activityKey ? rawAuditId as string : uuid(rawAuditId);
   return transaction(async repository => {
     requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
     const campus = await authorizedCampus(repository, auth, campusId);
-    const entry = await repository.auditEntry(campus,auditId);
+    const document = activityKey ? await activityAuditRepository.find(campus,activityKey.activityId) : null;
+    const entry = activityKey ? document && activityAuditDetail(document,auditId,campus) : await repository.auditEntry(campus,auditId);
     if (!entry) throw new ApiError(404, 'NOT_FOUND', 'El registro no está disponible en este campus.');
-    return { ...entry, datos_antes: auditSnapshot(entry.datos_antes), datos_despues: auditSnapshot(entry.datos_despues) };
+    if (document?.seriesId && activityKey?.suffix === 'created') {
+      const group = await activityAuditRepository.occurrences(campus,document,1,0);
+      if (group.total) entry.activitySeries = { seriesId: document.seriesId.toHexString(), count: group.total };
+    }
+    if (entry.entidad_tipo === 'perfil_usuario' && entry.actor_usuario_id && (ACCESS_AUDIT_ACTIONS as readonly string[]).includes(entry.accion)) {
+      const peers = await repository.auditAccessPeers(campus, entry);
+      const group = auditAccessGroup(peers.map(row => row.accion), peers.map(row => row.id));
+      if (group) entry.accessGroup = group;
+    }
+    if (isAuditEdit(entry)) {
+      const total = document ? activityEditHistory(document,campus,0,0).total : await repository.auditEditsCount(campus,entry.entidad_id);
+      if (total > 1) entry.editGroup = {count:total};
+    }
+    return enrichAuditDetail(repository,campus,entry);
+  });
+}
+/** Versiones originales de la entidad de una edición real; filtros del listado no limitan esta cronología. */
+export async function getAuditEdits(auth: VerifiedAuthConnection, rawCampusId: unknown, rawAuditId: unknown, query: unknown) {
+  const campusId = uuid(rawCampusId), pagination = parsePaginationQuery(query);
+  if (!pagination.success) throw invalid('Revisa la página del historial de ediciones.');
+  const key = typeof rawAuditId === 'string' ? parseActivityAuditId(rawAuditId) : null;
+  const auditId = key ? rawAuditId as string : uuid(rawAuditId);
+  return transaction(async repository=>{
+    requireActiveActor(await repository.lockProfiles([auth.userId]),auth);
+    const campus = await authorizedCampus(repository,auth,campusId);
+    const document = key ? await activityAuditRepository.find(campus,key.activityId) : null;
+    const anchor = key ? document && activityAuditDetail(document,auditId,campus) : await repository.auditEntry(campus,auditId);
+    if (!anchor || !isAuditEdit(anchor)) throw new ApiError(404,'NOT_FOUND','El historial de ediciones no está disponible en este registro.');
+    const {limit,offset} = pagination.data;
+    const result = document ? activityEditHistory(document,campus,limit+1,offset)
+      : {data:await repository.auditEdits(campus,anchor.entidad_id,limit+1,offset),total:await repository.auditEditsCount(campus,anchor.entidad_id)};
+    const page = createPaginatedResult(result.data,pagination.data);
+    return {...page,meta:{...page.meta,total:result.total},data:await auditEntryActors(repository,campus,page.data)};
+  });
+}
+/** Firma solo fotos referenciadas por la auditoría y vinculadas a su publicación/campus, incluidas retiradas. */
+export async function getAuditImage(auth: VerifiedAuthConnection, rawCampusId: unknown, rawAuditId: unknown, rawImageId: unknown) {
+  const campusId = uuid(rawCampusId), auditId = uuid(rawAuditId), imageId = uuid(rawImageId);
+  const file = await transaction(async repository => {
+    requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
+    const campus = await authorizedCampus(repository, auth, campusId);
+    const entry = await repository.auditEntry(campus, auditId);
+    const unavailable = () => new ApiError(404, 'NOT_FOUND', 'La imagen no está disponible en este registro.');
+    if (!entry || !['publicacion_recurso', 'PUBLICACION_FISICA'].includes(entry.entidad_tipo) || !auditContainsImage(entry, imageId)) throw unavailable();
+    const file = await repository.auditPublicationImage(campus, entry.entidad_id, imageId);
+    if (!file || !isAuditImageFile(campus.id, file)) throw unavailable();
+    return file;
+  });
+  // Como la galería, firma después de liberar los bloqueos y conexión SQL de esta lectura autorizada.
+  try { return { url: await auditImageStorage.sign(file.storage_path), expiresIn: 60 }; }
+  catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo cargar la vista previa de la imagen.'); }
+}
+
+/** Todas las ocurrencias de la misma publicación, tras revalidar administrador y campus. */
+export async function getAuditOccurrences(auth: VerifiedAuthConnection, rawCampusId: unknown, rawAuditId: unknown, query: unknown) {
+  const campusId = uuid(rawCampusId), pagination = parsePaginationQuery(query);
+  if (!pagination.success) throw invalid('Revisa la página de las ocurrencias.');
+  const key = typeof rawAuditId === 'string' ? parseActivityAuditId(rawAuditId) : null;
+  return transaction(async repository => {
+    requireActiveActor(await repository.lockProfiles([auth.userId]),auth);
+    const campus = await authorizedCampus(repository,auth,campusId);
+    const unavailable = () => new ApiError(404,'NOT_FOUND','La serie no está disponible en este registro.');
+    if (!key || key.suffix !== 'created') throw unavailable();
+    const document = await activityAuditRepository.find(campus,key.activityId);
+    if (!document?.seriesId || !activityAuditDetail(document,rawAuditId as string,campus)) throw unavailable();
+    const result = await activityAuditRepository.occurrences(campus,document,pagination.data.limit+1,pagination.data.offset);
+    if (!result.total) throw unavailable();
+    const page = createPaginatedResult(result.occurrences,pagination.data);
+    return { ...page, data: { seriesId: document.seriesId.toHexString(), occurrences: page.data } };
+  });
+}
+
+async function enrichAuditDetail(repository: Repository, campus: AccessCampus, entry: AuditDetail) {
+  const before = entry.activity ? entry.datos_antes as Record<string, unknown> | null : auditSnapshot(entry.datos_antes);
+  const after = entry.activity ? entry.datos_despues as Record<string, unknown> | null : auditSnapshot(entry.datos_despues);
+  const requests = auditReferenceRequests(entry,before,after);
+  const references = auditReferences(requests,await repository.auditReferenceNames(campus,requests));
+  if (entry.activity) Object.assign(references, auditLocationReferences(campus.id,before,after,await activityAuditRepository.map(campus.id)));
+  if (entry.activity?.snapshotSource === 'current') for (const reference of Object.values(references)) {
+    if (reference.kind === 'activity' && reference.name) reference.source = 'current';
+  }
+  const actor = auditActor((await repository.auditActors(campus,[entry]))[0]);
+  const responsibleProfile = entry.actor_usuario_id && actor.source === 'assignment_history'
+    ? await repository.auditResponsibleProfile(campus,entry.actor_usuario_id) : null;
+  let publicationOwners: AuditDetail['publicationOwners'];
+  if (['publicacion_recurso','PUBLICACION_FISICA','PUBLICACION_DIGITAL'].includes(entry.entidad_tipo)
+    && ['PUBLICAR_PUBLICACION','EDITAR_PUBLICACION','RETIRAR_PUBLICACION'].includes(entry.accion)) {
+    const ids = [...new Set([before?.propietario_id,after?.propietario_id].filter((id): id is string =>
+      typeof id === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)).map(id=>id.toLowerCase()))];
+    if (ids.length) {
+      publicationOwners = {};
+      const otherIds = ids.filter(id=>id !== entry.actor_usuario_id?.toLowerCase());
+      const rows = new Map((await repository.auditActors(campus,otherIds.map(id=>({...entry,id,actor_usuario_id:id})))).map(row=>[row.audit_id,row]));
+      for (const id of ids) {
+        const sameActor = id === entry.actor_usuario_id?.toLowerCase(), assignments = sameActor ? actor : auditActor(rows.get(id));
+        const profile = sameActor ? responsibleProfile : assignments.source === 'assignment_history' ? await repository.auditResponsibleProfile(campus,id) : null;
+        publicationOwners[id] = { profile, assignments };
+      }
+    }
+  }
+  return { ...entry, datos_antes: before, datos_despues: after, references, actor, responsibleProfile, ...(publicationOwners ? { publicationOwners } : {}) };
+}
+
+/** Histórico nominativo exclusivo de administración, incluso para actividades eliminadas o finalizadas. */
+export async function getAuditParticipation(auth: VerifiedAuthConnection, rawCampusId: unknown, rawAuditId: unknown, query: unknown) {
+  const campusId = uuid(rawCampusId), pagination = parsePaginationQuery(query);
+  if (!pagination.success) throw invalid('Revisa la página del historial de participación.');
+  const key = typeof rawAuditId === 'string' ? parseActivityAuditId(rawAuditId) : null;
+  return transaction(async repository => {
+    requireActiveActor(await repository.lockProfiles([auth.userId]), auth);
+    const campus = await authorizedCampus(repository, auth, campusId);
+    if (!key || key.suffix !== 'created') throw new ApiError(404, 'NOT_FOUND', 'El historial de participación no está disponible.');
+    const document = await activityAuditRepository.find(campus,key.activityId);
+    if (!document || !activityAuditDetail(document,rawAuditId as string,campus)) throw new ApiError(404, 'NOT_FOUND', 'El historial de participación no está disponible.');
+    const result = await activityAuditRepository.participation(campus,key.activityId,pagination.data.limit + 1,pagination.data.offset);
+    const page = createPaginatedResult(result.events,pagination.data);
+    const names = new Map((await repository.auditParticipantNames(campus,[...new Set(page.data.map(row => row.userId))])).map(row => [row.id,row.name]));
+    return { ...page, data: { activityId: key.activityId, summary: result.summary,
+      events: page.data.map(row => ({ ...row, name: names.get(row.userId.toLowerCase()) ?? null })) } };
   });
 }
 async function target(repository: Repository, auth: VerifiedAuthConnection, campusId: string, userId: string) {

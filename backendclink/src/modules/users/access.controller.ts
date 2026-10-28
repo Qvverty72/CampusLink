@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import type { AuthLocals } from '../auth/auth.types.js';
 import { sendSuccess } from '../../services/apiResponse.js';
 import { getAccessCampuses, getAccessCatalog, listAccessUsers, getUserAccess, updateUserAccess, updateAccountState } from './access.service.js';
-import { listAuditEntries, getAuditEntry } from './access.service.js';
+import { listAuditEntries, getAuditEntry, getAuditImage, getAuditParticipation, getAuditOccurrences, getAuditEdits } from './access.service.js';
 
 type Handler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, unknown>, AuthLocals>;
 export const getAccessCampusesController: Handler = async (_request, response) => {
@@ -30,4 +30,19 @@ export const listAuditEntriesController: Handler = async (request, response) => 
 };
 export const getAuditEntryController: Handler = async (request, response) => {
   sendSuccess(response,await getAuditEntry(response.locals.auth,request.params.campusId,request.params.auditId));
+};
+export const getAuditImageController: Handler = async (request, response) => {
+  sendSuccess(response,await getAuditImage(response.locals.auth,request.params.campusId,request.params.auditId,request.params.imageId));
+};
+export const getAuditParticipationController: Handler = async (request, response) => {
+  const result = await getAuditParticipation(response.locals.auth,request.params.campusId,request.params.auditId,request.query);
+  sendSuccess(response,result.data,{ meta: result.meta });
+};
+export const getAuditOccurrencesController: Handler = async (request, response) => {
+  const result = await getAuditOccurrences(response.locals.auth,request.params.campusId,request.params.auditId,request.query);
+  sendSuccess(response,result.data,{ meta: result.meta });
+};
+export const getAuditEditsController: Handler = async (request,response)=>{
+  const result = await getAuditEdits(response.locals.auth,request.params.campusId,request.params.auditId,request.query);
+  sendSuccess(response,result.data,{meta:result.meta});
 };
