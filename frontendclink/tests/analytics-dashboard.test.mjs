@@ -151,6 +151,38 @@ test('returning to the first historical page preserves A and its snapshot, while
   } finally { h.dispose(); }
 });
 
+test('history revisits opaque cursors, retires changed boundaries and refreshes filters without replacing selected A', async () => {
+  const h = harness(true);
+  try {
+    h.render(); h.render().search({ from: '2026-09-01', campusIds: ['campus-a'] }); h.render();
+    h.listCalls.at(-1).resolve({ items: [{ id: 'a' }], nextCursor: 'opaque-two' }); await setImmediate();
+    h.render().open('a'); h.render(); h.detailCalls[0].resolve({ id: 'a', marker: 'original' }); await setImmediate();
+    h.render().goToPage(2); h.render(); assert.equal(h.listCalls.at(-1).cursor, 'opaque-two');
+    h.listCalls.at(-1).resolve({ items: [{ id: 'b' }], nextCursor: 'opaque-three' }); await setImmediate();
+    h.render().goToPage(3); h.render(); assert.equal(h.listCalls.at(-1).cursor, 'opaque-three');
+    h.listCalls.at(-1).reject(new Error('offline')); await setImmediate();
+    assert.equal(h.render().pageNumber, 3); assert.equal(h.render().visitedPages, 3); assert.ok(h.render().error);
+    h.render().goToPage(1); h.render(); assert.equal(h.listCalls.at(-1).cursor, null);
+    h.listCalls.at(-1).resolve({ items: [{ id: 'new' }], nextCursor: 'changed-two' }); await setImmediate();
+    h.render().goToPage(2); h.render(); assert.equal(h.listCalls.at(-1).cursor, 'changed-two');
+    assert.equal(h.render().visitedPages, 2); // El tercer límite pertenecía a la serie anterior.
+    h.listCalls.at(-1).resolve({ items: [{ id: 'last' }], nextCursor: null }); await setImmediate();
+    const count = h.listCalls.length;
+    for (const value of [0, -1, 1.5, 99, 2]) h.render().goToPage(value);
+    h.render(); assert.equal(h.listCalls.length, count);
+    h.render().refresh(); const refreshing = h.render();
+    assert.equal(refreshing.pageNumber, 1); assert.equal(refreshing.visitedPages, 1); assert.equal(refreshing.page, null);
+    assert.equal(h.listCalls.at(-1).cursor, null); assert.equal(h.listCalls.at(-1).filters.from, '2026-09-01');
+    assert.deepEqual([...h.listCalls.at(-1).filters.campusIds], ['campus-a']);
+    assert.deepEqual([...refreshing.selectedIds], ['a']); assert.equal(refreshing.reports[0].marker, 'original');
+    assert.equal(h.detailCalls.length, 1); assert.equal(h.calls.length, 0);
+    h.render().search({ grouping: 'month' }); h.render();
+    const abortedRefresh = h.listCalls.at(-2); assert.ok(abortedRefresh.signal.aborted);
+    abortedRefresh.resolve({ items: [{ id: 'late' }], nextCursor: 'wrong' }); await setImmediate();
+    assert.equal(h.render().page, null); assert.equal(h.render().visitedPages, 1); assert.equal(h.render().selectedIds.length, 0);
+  } finally { h.dispose(); }
+});
+
 test('historical filter changes, rapid opens and identity changes discard late lists and snapshots', async () => {
   const h = harness(true);
   try {
@@ -488,7 +520,7 @@ test('KPI disclosures retain definitions and imported history without repeating 
   }
 });
 
-test('compact saved report expands original context and metadata without recalculating or displaying IDs upfront', () => {
+test('compact saved report expands original human context without technical details', () => {
   const report = { id: 'immutable-report-id', scope: { institutionId: 'original-institution-id', institutionName: 'Institución original', campusName: 'Campus original',
     campuses: [{ id: 'original-campus-id', name: 'Campus original' }], career: { id: 'original-career-id', name: 'Carrera original' } },
     period: { from: '2026-09-01', to: '2026-09-30', cutoff: '2026-10-01T03:00:00Z', timeZone: 'America/Santiago' },
@@ -499,9 +531,7 @@ test('compact saved report expands original context and metadata without recalcu
   h.actions.find(row => row.accessibilityLabel?.startsWith('Ver contexto completo del reporte')).onPress();
   html = h.render();
   for (const text of ['Institución original', 'Carrera original', 'Responsable original', 'Semanal · lunes a domingo', 'America/Santiago', '13:35:42']) assert.ok(html.includes(text), text);
-  h.actions.find(row => row.children?.[0]?.props?.children === 'Detalles del reporte').onPress();
-  html = h.render();
-  for (const text of ['immutable-report-id', 'original-institution-id', 'original-campus-id', 'original-career-id', 'original-user-id', '2026-10-01T03:00:00Z', 'campuslink-kpi-v1']) assert.ok(html.includes(text), text);
+  for (const text of ['Detalles técnicos', 'immutable-report-id', 'original-institution-id', 'original-campus-id', 'original-career-id', 'original-user-id', '2026-10-01T03:00:00Z', 'campuslink-kpi-v1']) assert.ok(!html.includes(text), text);
 });
 
 test('results omit the removed coverage notice without changing original notes', () => {
@@ -946,9 +976,9 @@ test('report view presents server scope, period, grouping, generation time and r
   let argumentsReceived;
   const actions = [], html = renderDashboard({ report, loading: false, error: '', dashboard: null, options,
     filters: { institutionId: 'institution-a', campusIds: ['campus-a'] }, generateReport(...args) { argumentsReceived = args; } }, actions);
-  for (const text of ['Reporte guardado', 'Detalles del reporte', 'Conserva las cifras calculadas al guardarlo;',
-    'no cambia al actualizar la consulta.', 'Institución del reporte', 'Principal, Otra', 'Todas las carreras (incluye sin clasificar)',
-    'Semanal · lunes a domingo', 'Generado el', '13:35:42', 'America/Santiago',
+  for (const text of ['Estas cifras son una copia fija: no cambian al actualizar el tablero.',
+     'Institución del reporte', 'Principal, Otra', 'Todas, incluye sin clasificar',
+    'Tipo', 'Carreras', 'Semanal', 'Guardado el', '13:35:42', 'America/Santiago',
     'Responsable del servidor', 'Cuentas activas', 'Inscripciones a actividades']) assert.ok(html.includes(text), text);
   const button = actions.find(p => p.accessibilityLabel === 'Guardar otro reporte');
   assert.equal(button.disabled, false); button.onPress();
@@ -959,9 +989,105 @@ test('report view presents server scope, period, grouping, generation time and r
 
 function renderHistory(state, actions = [], fields = []) {
   return analyticsRenderer({ '@/features/analytics/hooks/useHistoricalReports': { useHistoricalReports: () => ({
-    identityKey: 'session', allowed: true, filters: {}, page: null, options: null, selectedIds: [], reports: [], ...state,
+    identityKey: 'session', allowed: true, filters: {}, page: null, pageNumber: 1, visitedPages: 1, options: null, selectedIds: [], reports: [], ...state,
   }) } }, actions, fields).render('app/(analytics)/history.tsx');
 }
+
+test('shared pagination preserves known totals and supports cursor pages without announcing a fabricated total', () => {
+  const actions = [], changes = [];
+  let html = analyticsRenderer({}, actions).render('src/components/Pagination.tsx', 'Pagination', {
+    page: 2, visitedPages: 3, hasNextPage: true, onPageChange: page => changes.push(page),
+  });
+  assert.ok(html.includes('Página 2, actual')); assert.ok(!html.includes(' de '));
+  actions.find(row => row.accessibilityLabel === 'Página siguiente').onPress();
+  actions.find(row => row.accessibilityLabel === 'Página 1').onPress(); assert.deepEqual(changes, [3, 1]);
+  const last = [];
+  analyticsRenderer({}, last).render('src/components/Pagination.tsx', 'Pagination', { page: 3, visitedPages: 3,
+    hasNextPage: false, onPageChange() {} });
+  assert.equal(last.find(row => row.accessibilityLabel === 'Página siguiente').disabled, true);
+  const blocked = [];
+  analyticsRenderer({}, blocked).render('src/components/Pagination.tsx', 'Pagination', { page: 2, totalPages: 4,
+    disabled: true, onPageChange() { throw Error('Navigation must stay blocked'); } });
+  assert.ok(blocked.every(row => row.disabled)); blocked.forEach(row => row.onPress());
+  const total = [];
+  html = analyticsRenderer({}, total).render('src/components/Pagination.tsx', 'Pagination', { page: 2, totalPages: 4,
+    onPageChange: page => changes.push(page) });
+  assert.ok(html.includes('Página 2 de 4, actual')); assert.ok(html.includes('Página 2 de 4'));
+  total.find(row => row.accessibilityLabel === 'Página anterior').onPress(); assert.equal(changes.at(-1), 1);
+});
+
+test('history connects shared refresh, blocks it during loading or denied access and renders card skeletons', () => {
+  let refresh, count = 0;
+  const state = { identityKey: 'session', allowed: true, loading: false, filters: {}, pageNumber: 1, visitedPages: 1,
+    options: null, selectedIds: [], reports: [], page: { items: [], nextCursor: null }, refresh() { count++; } };
+  const overrides = { '@/features/analytics/hooks/useHistoricalReports': { useHistoricalReports: () => state },
+    '@/components/RefreshScrollView': { RefreshScrollView: props => { refresh = props; return props.children; } } };
+  let html = analyticsRenderer(overrides).render('app/(analytics)/history.tsx');
+  assert.equal(refresh.refreshEnabled, true); assert.equal(refresh.refreshLabel, 'los reportes guardados');
+  refresh.onRefresh(); assert.equal(count, 1);
+  state.loading = true; state.page = null;
+  html = analyticsRenderer(overrides).render('app/(analytics)/history.tsx');
+  assert.equal(refresh.refreshEnabled, false); assert.equal(refresh.refreshing, true);
+  assert.ok(html.includes('Cargando historial')); assert.ok(html.includes('aria-busy="true"')); assert.ok(!html.includes('Cuentas activas'));
+  state.loading = false; state.allowed = false;
+  analyticsRenderer(overrides).render('app/(analytics)/history.tsx'); assert.equal(refresh.refreshEnabled, false);
+});
+
+test('saved report cards expose unique human labels, civil filter dates and honest cursor counts', () => {
+  const report = { ...chartFixture([3]), id: '11111111-1111-4111-8111-111111111111', generatedBy: { name: 'Original', email: 'original@duocuc.cl' }, calculationVersion: 'campuslink-kpi-v1' };
+  report.scope.campuses = [{ id: 'one', name: 'San Andrés' }]; report.scope.campusName = 'San Andrés';
+  const actions = [], html = renderHistory({ filters: { from: '2026-09-01' }, page: { items: [report, { ...report, id: '22222222-2222-4222-8222-222222222222' }], nextCursor: 'more' } }, actions);
+  const labels = actions.filter(row => /^Abrir reporte|^Comparar con reporte/.test(row.accessibilityLabel ?? '')).map(row => row.accessibilityLabel);
+  assert.equal(new Set(labels).size, 4); assert.ok(labels.every(label => !label.includes(report.id)));
+  assert.ok(html.includes('Período analizado')); assert.ok(html.includes('Guardado el')); assert.ok(html.includes('Mostrando los 2 más recientes'));
+  assert.ok(html.includes('original@duocuc.cl')); assert.ok(!html.includes('Correo no registrado'));
+  assert.ok(html.includes('Desde el 1 sept 2026')); assert.ok(!html.includes('2026-09-01')); assert.ok(!html.includes('Hasta hoy'));
+  assert.ok(html.includes('Página siguiente')); assert.ok(!html.includes('Página 1 de')); assert.ok(!html.includes('Filtros aplicados.'));
+});
+
+test('historical applied-filter disclosure shows optional bounds and original applied scope without querying or clearing comparison', () => {
+  let queries = 0;
+  const state = { identityKey: 'session', allowed: true, filters: { campusIds: ['one', 'retired'], careerId: 'career', from: '2026-09-01', grouping: 'week' },
+    options: { institutions: [{ id: 'institution', name: 'Institución', campuses: [{ id: 'one', name: 'Campus conocido' }], careers: [{ id: 'career', name: 'Carrera aplicada' }] }] },
+    page: { items: [], nextCursor: 'next' }, selectedIds: ['report-a'], reports: [], search() { queries++; } };
+  const h = statefulPresentation('app/(analytics)/history.tsx', 'default', {}, { '@/features/analytics/hooks/useHistoricalReports': { useHistoricalReports: () => state } });
+  let html = h.render();
+  assert.ok(!html.includes('Por semana')); assert.ok(html.includes('Desde el 1 sept 2026'));
+  h.actions.find(row => row.accessibilityLabel === 'Expandir filtros aplicados').onPress(); html = h.render();
+  for (const text of ['Sedes', 'Campus conocido', 'Campus seleccionado (fuera del catálogo actual)', 'Carreras', 'Carrera aplicada', 'Período', 'Agrupación', 'Por semana']) assert.ok(html.includes(text), text);
+  assert.equal(h.actions.find(row => row.accessibilityLabel === 'Contraer filtros aplicados')['aria-expanded'], true);
+  state.filters = { to: '2026-10-28' }; html = h.render();
+  for (const text of ['Todos los campus autorizados', 'Todas las carreras (incluye sin clasificar)', 'Hasta el 28 oct 2026', 'Semana y mes']) assert.ok(html.includes(text), text);
+  assert.equal(queries, 0); assert.deepEqual(state.selectedIds, ['report-a']); assert.equal(state.page.nextCursor, 'next');
+  h.actions.find(row => row.accessibilityLabel === 'Contraer filtros aplicados').onPress(); h.render();
+  assert.ok(h.actions.some(row => row.accessibilityLabel === 'Expandir filtros aplicados'));
+  h.actions.find(row => row.accessibilityLabel === 'Expandir filtros aplicados').onPress(); h.render();
+  state.identityKey = 'other-session'; h.render();
+  assert.ok(h.actions.some(row => row.accessibilityLabel === 'Expandir filtros aplicados'));
+});
+
+test('historical detail puts original figures before downloads and ends with return, without X or compare action', () => {
+  const report = { ...chartFixture([3]), id: 'saved-original', generatedBy: { name: 'Autor original', userId: 'user-original' }, calculationVersion: 'campuslink-kpi-v1' };
+  report.scope.institutionId = 'institution-original'; report.scope.campuses = [{ id: 'campus-original', name: 'Campus original' }];
+  const state = { identityKey: 'session', allowed: true, filters: {}, page: { items: [report], nextCursor: null }, selectedIds: [], reports: [], options: null,
+    open(id) { this.selectedIds = [id]; this.reports = [report]; }, close() { this.selectedIds = []; this.reports = []; } };
+  const h = statefulPresentation('app/(analytics)/history.tsx', 'default', {}, { '@/features/analytics/hooks/useHistoricalReports': { useHistoricalReports: () => state } });
+  h.render(); h.actions.find(row => row.accessibilityLabel?.startsWith('Abrir reporte 1,')).onPress(); let html = h.render();
+  const download = html.indexOf('Descargar este reporte');
+  assert.ok(html.indexOf('Cuentas activas') < download); assert.ok(html.lastIndexOf('Interés por asignatura') < download);
+  assert.ok(html.includes('Estas cifras son una copia fija')); assert.ok(!html.includes('Corte exclusivo:'));
+  assert.ok(!html.includes('Detalles técnicos'));
+  assert.ok(!h.actions.some(row => row.accessibilityLabel === 'Cambiar período de analítica'));
+  const back = html.indexOf('Volver a reportes guardados');
+  assert.ok(!html.includes('Elegir otro reporte para comparar')); assert.ok(back > download);
+  assert.ok(!h.actions.some(row => row.accessibilityLabel === 'Cerrar reporte guardado'));
+  const originalPage = state.page, originalFilters = state.filters;
+  h.actions.find(row => row.accessibilityLabel === 'Volver a reportes guardados').onPress(); html = h.render();
+  assert.deepEqual(state.selectedIds, []); assert.deepEqual(state.reports, []);
+  assert.equal(state.page, originalPage); assert.equal(state.filters, originalFilters);
+  assert.ok(!html.includes('Detalles técnicos'));
+  assert.ok(h.actions.some(row => row.accessibilityLabel?.startsWith('Abrir reporte 1,')));
+});
 
 test('history screen renders original metadata and both saved results; actions open/compare without generation', () => {
   const scope = { institutionName: 'Institución histórica', campusName: 'Sede original',
@@ -979,10 +1105,10 @@ test('history screen renders original metadata and both saved results; actions o
     open(...args) { opened.push(args); }, nextPage() {}, close() {}, search() {},
   }, actions);
   for (const text of ['Reportes guardados', 'Institución histórica', 'Sede original', 'Carrera original', 'Responsable original',
-    'America/Santiago', '13:35:42']) assert.ok(html.includes(text), text);
+    '13:35:42', 'Correo no registrado']) assert.ok(html.includes(text), text);
   assert.ok(!html.includes('Generar reporte'));
-  actions.find(action => action.accessibilityLabel === 'Abrir reporte snapshot-a').onPress();
-  actions.find(action => action.accessibilityLabel === 'Comparar con reporte snapshot-b').onPress();
+  actions.find(action => action.accessibilityLabel?.startsWith('Abrir reporte 1,')).onPress();
+  actions.find(action => action.accessibilityLabel?.startsWith('Comparar con reporte 2,')).onPress();
   assert.deepEqual(opened, [['snapshot-a', false], ['snapshot-b', true]]);
   const comparison = analyticsRenderer().render('src/features/analytics/components/ReportComparison.tsx', 'ReportComparison', { reports: [report, other] });
   assert.ok(comparison.includes('Cuentas activas'));
@@ -998,30 +1124,30 @@ test('each history card starts comparison and the persistent A selection survive
   const other = { ...report, id: 'b' }, actions = [], opened = [];
   renderHistory({ page: { items: [report, other], nextCursor: 'page-two' }, open(...args) { opened.push(args); } }, actions);
   assert.equal(actions.filter(row => row.accessibilityLabel?.startsWith('Comparar con reporte ')).length, 2);
-  actions.find(row => row.accessibilityLabel === 'Comparar con reporte a').onPress();
+  actions.find(row => row.accessibilityLabel?.startsWith('Comparar con reporte 1,')).onPress();
   assert.deepEqual(opened, [['a']]);
   const nextActions = [], page = renderHistory({ selectedIds: ['a'], reports: [report], page: { items: [other], nextCursor: null },
     open(...args) { opened.push(args); }, close() { opened.push('closed'); } }, nextActions);
-  assert.ok(page.includes('A elegido · Elegir B')); assert.ok(page.includes('incluso en otra página'));
-  nextActions.find(row => row.accessibilityLabel === 'Comparar con reporte b').onPress();
+  assert.ok(page.includes('Falta elegir B')); assert.ok(page.includes('incluso en otra página'));
+  nextActions.find(row => row.accessibilityLabel?.startsWith('Comparar con reporte 1,')).onPress();
   assert.deepEqual(opened.at(-1), ['b', true]);
   nextActions.find(row => row.accessibilityLabel === 'Quitar selección').onPress(); assert.equal(opened.at(-1), 'closed');
 });
 
 test('history exposes cursor navigation, clear filters, denied access, loading, empty and errors without figures', () => {
   const calls = [], actions = [], fields = [];
-  let html = renderHistory({ options, filters: { from: '2026-10-01' }, page: { items: [], nextCursor: 'next' }, hasPrevious: true,
-    search(filters) { calls.push(filters); }, nextPage() { calls.push('next'); }, firstPage() { calls.push('first'); },
+  let html = renderHistory({ options, filters: { from: '2026-10-01' }, page: { items: [], nextCursor: 'next' }, hasPrevious: true, pageNumber: 2, visitedPages: 2,
+    search(filters) { calls.push(filters); }, goToPage(page) { calls.push(page); },
   }, actions, fields);
   assert.ok(html.includes('Sin coincidencias')); assert.equal(fields.length, 0);
   actions.find(row => row.accessibilityLabel === 'Limpiar filtros').onPress();
-  actions.find(row => row.accessibilityLabel === 'Siguiente página').onPress();
-  actions.find(row => row.accessibilityLabel === 'Volver a la primera página').onPress();
-  assert.deepEqual(calls.map(value => value && typeof value === 'object' ? Object.keys(value) : value), [[], 'next', 'first']);
+  actions.find(row => row.accessibilityLabel === 'Página siguiente').onPress();
+  actions.find(row => row.accessibilityLabel === 'Página anterior').onPress();
+  assert.deepEqual(calls.map(value => value && typeof value === 'object' ? Object.keys(value) : value), [[], 3, 1]);
   html = renderHistory({ allowed: false }); assert.ok(html.includes('Ya no tienes acceso a estas cifras'));
   html = renderHistory({ loading: true }); assert.ok(html.includes('Cargando historial'));
   html = renderHistory({ page: { items: [], nextCursor: null } }); assert.ok(html.includes('Aún no hay reportes guardados'));
-  const errors = []; html = renderHistory({ error: 'Sin conexión', search() { errors.push('list'); } }, errors);
+  const errors = []; html = renderHistory({ error: 'Sin conexión', refresh() { errors.push('list'); } }, errors);
   assert.ok(html.includes('Sin conexión')); assert.ok(!html.includes('Cuentas activas'));
   errors.find(row => row.accessibilityLabel === 'Reintentar consulta').onPress();
   assert.deepEqual(errors.filter(row => typeof row === 'string'), ['list']);
@@ -1067,7 +1193,7 @@ test('catalog failure during explicit generation sends no POST and finishes load
 });
 
 test('civil dates, calendar adapters and institutional shortcuts preserve dates across device zones and year boundaries', () => {
-  const { validCivilDate, pickerValue, civilValue, monthRange, rangeError, compactPeriodLabel } = analyticsRenderer().load('src/features/analytics/utils/presentation.ts');
+  const { validCivilDate, pickerValue, civilValue, monthRange, rangeError, compactPeriodLabel, savedReportPeriodLabel, savedReportTimeLabel, savedReportListTimeLabel } = analyticsRenderer().load('src/features/analytics/utils/presentation.ts');
   assert.equal(validCivilDate('2026-02-29'), false); assert.equal(validCivilDate('2024-02-29'), true);
   assert.equal(civilValue('31/02/2026'), ''); assert.equal(civilValue('06/09/2026'), '2026-09-06');
   assert.equal(pickerValue('2026-09-06'), '06/09/2026');
@@ -1075,6 +1201,14 @@ test('civil dates, calendar adapters and institutional shortcuts preserve dates 
   assert.equal(compactPeriodLabel({ from: '2026-10-28', to: '2026-10-28' }), '28 oct');
   assert.equal(compactPeriodLabel({ from: '2026-10-31', to: '2026-11-01' }), '31 oct–1 nov');
   assert.match(compactPeriodLabel({ from: '2025-12-31', to: '2026-01-01' }), /2025.*2026/);
+  assert.equal(savedReportPeriodLabel({ from: '2026-10-01', to: '2026-10-28' }), '1–28 oct 2026');
+  assert.equal(savedReportPeriodLabel({ from: '2026-10-28', to: '2026-10-28' }), '28 oct 2026');
+  assert.match(savedReportPeriodLabel({ from: '2025-12-31', to: '2026-01-01' }), /2025.*2026/);
+  assert.equal(savedReportTimeLabel('2026-10-29T01:05:00Z', 'America/Santiago', new Date('2026-10-28T23:30:00Z')), 'Hoy 22:05');
+  assert.equal(savedReportTimeLabel('2026-10-29T03:05:00Z', 'America/Santiago', new Date('2026-10-29T02:30:00Z')), '29 oct 2026 00:05');
+  assert.match(savedReportListTimeLabel('2025-10-22T16:35:42Z', 'America/Santiago', new Date('2026-10-28T12:00:00Z')), /2025.*13:35/);
+  const sameYear = savedReportListTimeLabel('2026-10-22T16:35:42Z', 'America/Santiago', new Date('2026-10-28T12:00:00Z'));
+  assert.ok(sameYear.includes('13:35')); assert.ok(!sameYear.includes('2026'));
   const october = monthRange(false, new Date('2026-11-01T02:30:00Z'));
   assert.equal(october.from, '2026-10-01'); assert.equal(october.to, '2026-10-31');
   const december = monthRange(true, new Date('2026-01-15T12:00:00Z'));

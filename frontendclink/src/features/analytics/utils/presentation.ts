@@ -1,4 +1,4 @@
-import type { DashboardGrouping, DashboardPeriod } from '../types/dashboard';
+import type { DashboardGrouping, DashboardPeriod, HistoricalReportSummary } from '../types/dashboard';
 
 export const ANALYTICS_ZONE = 'America/Santiago';
 export const formatNumber = (value: number | null) => value === null ? 'Sin datos' : new Intl.NumberFormat('es-CL').format(value);
@@ -26,6 +26,34 @@ export function compactPeriodLabel(period: Pick<DashboardPeriod, 'from' | 'to'>)
   return from.slice(0, 7) === to.slice(0, 7) ? `${Number(from.slice(-2))}–${label(to)}` : `${label(from)}–${label(to)}`;
 }
 export const groupingLabel = (value?: DashboardGrouping) => value === 'week' ? 'Semanal · lunes a domingo' : 'Mensual';
+/** La cabecera de un reporte histórico siempre conserva el año. */
+export function savedReportPeriodLabel(period: Pick<DashboardPeriod, 'from' | 'to'>): string {
+  return validCivilDate(period.from) && validCivilDate(period.to) && period.from.slice(0, 4) === period.to.slice(0, 4)
+    ? `${compactPeriodLabel(period)} ${period.to.slice(0, 4)}` : periodLabel(period);
+}
+export function savedReportTimeLabel(value: string, timeZone: string, now = new Date()): string {
+  const saved = new Date(value);
+  if (!Number.isFinite(saved.getTime())) return value || 'No registrado';
+  const day = new Intl.DateTimeFormat('sv-SE', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const today = Number.isFinite(now.getTime()) && day.format(saved) === day.format(now);
+  const time = new Intl.DateTimeFormat('es-CL', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(saved);
+  const date = new Intl.DateTimeFormat('es-CL', { timeZone, day: 'numeric', month: 'short', year: 'numeric' }).format(saved);
+  return `${today ? 'Hoy' : date} ${time}`;
+}
+export function savedReportListTimeLabel(value: string, timeZone: string, now = new Date()): string {
+  const saved = new Date(value);
+  if (!Number.isFinite(saved.getTime())) return value || 'No registrado';
+  const year = new Intl.DateTimeFormat('en', { timeZone, year: 'numeric' });
+  return new Intl.DateTimeFormat('es-CL', { timeZone, day: 'numeric', month: 'short',
+    year: year.format(saved) === year.format(now) ? undefined : 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(saved);
+}
+export const shortGroupingLabel = (value: DashboardGrouping) => value === 'week' ? 'Semanal' : 'Mensual';
+export const savedReportLabel = (report: HistoricalReportSummary, position?: number) =>
+  `${position ? `reporte ${position}, ` : 'reporte '}${shortGroupingLabel(report.grouping).toLocaleLowerCase('es')}, período ${periodLabel(report.period)}, ${report.scope.campusName}, guardado el ${savedTimestampLabel(report.generatedAt, report.period.timeZone)}`;
+export function savedTimestampLabel(value: string, timeZone: string): string {
+  if (!Number.isFinite(new Date(value).getTime())) return value || 'No registrado';
+  return new Intl.DateTimeFormat('es-CL', { timeZone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(value));
+}
 export const pickerValue = (value: string) => validCivilDate(value) ? value.split('-').reverse().join('/') : '';
 export const civilValue = (value: string) => {
   const civil = /^\d{2}\/\d{2}\/\d{4}$/.test(value) ? value.split('/').reverse().join('-') : '';

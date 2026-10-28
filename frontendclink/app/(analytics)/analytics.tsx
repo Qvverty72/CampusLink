@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'expo-router';
-import { ArrowLeft, ChevronDown, ChevronUp, FilePlus2, SlidersHorizontal } from 'lucide-react-native';
+import { ArrowLeft, FilePlus2, SlidersHorizontal } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAnalyticsDashboard } from '@/features/analytics/hooks/useAnalyticsDashboard';
 import { AnalyticsResults } from '@/features/analytics/components/AnalyticsResults';
 import { AnalyticsFilters } from '@/features/analytics/components/AnalyticsFilters';
+import { AppliedFiltersSummary } from '@/features/analytics/components/AppliedFiltersSummary';
 import { AnalyticsButton, AnalyticsMessage, AnalyticsPage, AnalyticsSkeleton } from '@/features/analytics/components/AnalyticsUI';
 import { colors as c, styles as s } from '@/features/analytics/components/analytics.styles';
 import { compactPeriodLabel, monthRange, periodLabel } from '@/features/analytics/utils/presentation';
@@ -15,9 +16,7 @@ export default function AnalyticsScreen() {
   const [initial] = useState(() => monthRange());
   const state = useAnalyticsDashboard(initial);
   const [filterIdentity, setFilterIdentity] = useState<string | null>(null);
-  const [contextIdentity, setContextIdentity] = useState<string | null>(null);
-  const contextExpanded = contextIdentity === state.identityKey;
-  useEffect(() => { setFilterIdentity(null); setContextIdentity(null); }, [state.identityKey]);
+  useEffect(() => { setFilterIdentity(null); }, [state.identityKey]);
   const dashboard = state.report ?? state.dashboard;
   const institution = state.options?.institutions.find(row => row.id === state.filters?.institutionId);
   const scope = dashboard?.scope;
@@ -49,22 +48,16 @@ export default function AnalyticsScreen() {
       <View style={v.filtersControl}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Abrir filtros de analítica, ${activeFilters} filtros activos`}
           accessibilityState={{ disabled: !state.options }} accessibilityHint={filtersDisabledReason ?? 'Cambiar campus, carrera, fechas y agrupación.'} disabled={!state.options}
-          onPress={() => setFilterIdentity(state.identityKey)} style={[v.filtersButton, !state.options && s.disabled]}>
+          onPress={() => setFilterIdentity(state.identityKey)} style={[s.filtersButton, !state.options && s.disabled]}>
           <SlidersHorizontal size={17} color={c.PRIMARY} aria-hidden />
-          <View style={v.filterCount}><Text style={v.filterCountText}>{activeFilters}</Text></View>
+          <View style={s.filterCount}><Text style={s.filterCountText}>{activeFilters}</Text></View>
         </Pressable>
         {!!filtersDisabledReason && <Text style={s.small}>{filtersDisabledReason}</Text>}
       </View>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={contextExpanded ? 'Contraer filtros aplicados' : 'Expandir filtros aplicados'}
-        accessibilityHint={`${institutionLabel}. ${campusLabel}. ${periodLabel(contextPeriod)}. Muestra sede, carreras, período y agrupación de los datos consultados.`} accessibilityState={{ expanded: contextExpanded }} aria-expanded={contextExpanded}
-        onPress={() => setContextIdentity(contextExpanded ? null : state.identityKey)} style={v.contextBar}>
-        <Text style={v.barText}>{institutionLabel} · {campusLabel} · {compactPeriodLabel(contextPeriod)}</Text>
-        {contextExpanded ? <ChevronUp size={17} color={c.PRIMARY} aria-hidden /> : <ChevronDown size={17} color={c.PRIMARY} aria-hidden />}
-      </Pressable>
-      {contextExpanded && <View style={v.contextDetails}>{contextRows.map(([label, value], index) => <View key={label} style={[v.contextRow, index < contextRows.length - 1 && v.rowDivider]}>
-        <Text style={v.contextLabel}>{label}</Text><Text selectable style={v.contextValue}>{value}</Text>
-      </View>)}</View>}
+      <AppliedFiltersSummary identityKey={state.identityKey} rows={contextRows}
+        summary={`${institutionLabel} · ${campusLabel} · ${compactPeriodLabel(contextPeriod)}`}
+        hint={`${institutionLabel}. ${campusLabel}. ${periodLabel(contextPeriod)}. Muestra sede, carreras, período y agrupación de los datos consultados.`} />
     </View>
     {state.allowed && !state.loading && !state.error && dashboard && <AnalyticsResults key={`results-${state.identityKey}`} dashboard={dashboard} report={state.report}
       onEditFilters={state.report || !state.options ? undefined : () => setFilterIdentity(state.identityKey)} />}
@@ -95,18 +88,8 @@ export default function AnalyticsScreen() {
 
 const v = StyleSheet.create({
   context: { gap: 10 },
-  contextBar: { minHeight: 44, borderWidth: 1, borderColor: '#B6C6D2', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', gap: 10 },
-  barText: { flex: 1, color: c.PRIMARY, fontSize: 12, lineHeight: 18 },
-  contextDetails: { borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#FFFFFF' },
-  contextRow: { minHeight: 36, flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 8 },
-  rowDivider: { borderBottomWidth: 1, borderBottomColor: c.border },
-  contextLabel: { maxWidth: '40%', flexShrink: 1, color: c.SECONDARY, fontSize: 12, lineHeight: 18 },
-  contextValue: { flex: 1, color: c.PRIMARY, fontSize: 12, lineHeight: 18, textAlign: 'right' },
   contextActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'flex-start', gap: 12 },
   filtersControl: { alignItems: 'flex-end', gap: 4, maxWidth: '100%' },
-  filtersButton: { minHeight: 44, minWidth: 64, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: c.PRIMARY, borderRadius: 10, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  filterCount: { minWidth: 20, minHeight: 20, paddingHorizontal: 4, borderRadius: 10, backgroundColor: c.PRIMARY, alignItems: 'center', justifyContent: 'center' },
-  filterCountText: { color: '#FFFFFF', fontSize: 11, lineHeight: 16, fontWeight: '700' },
   saveActions: { gap: 8, paddingTop: 8 },
   saveButton: { width: '100%', maxWidth: '100%', minHeight: 44, borderRadius: 28, paddingHorizontal: 18, paddingVertical: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.PRIMARY },

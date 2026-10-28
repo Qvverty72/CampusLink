@@ -41,4 +41,7 @@ export const styles = StyleSheet.create({
   modal: { flex: 1, backgroundColor: colors.background },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#FFFFFF' },
   iconButton: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 22 },
+  filtersButton: { minHeight: 44, minWidth: 64, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.PRIMARY, borderRadius: 10, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  filterCount: { minWidth: 20, minHeight: 20, paddingHorizontal: 4, borderRadius: 10, backgroundColor: colors.PRIMARY, alignItems: 'center', justifyContent: 'center' },
+  filterCountText: { color: '#FFFFFF', fontSize: 11, lineHeight: 16, fontWeight: '700' },
 });

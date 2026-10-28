@@ -21,6 +21,7 @@ export function analyticsRenderer(overrides = {}, actions = [], fields = []) {
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     'react-native': { ...native,
       Pressable: props => { actions.push(props); return React.createElement(native.Pressable, props); },
+      TouchableOpacity: props => { actions.push(props); return React.createElement(native.TouchableOpacity, props); },
       TextInput: props => { fields.push(props); return React.createElement(native.TextInput, props); },
       Modal: ({ children }) => React.createElement(native.View, null, children),
     },

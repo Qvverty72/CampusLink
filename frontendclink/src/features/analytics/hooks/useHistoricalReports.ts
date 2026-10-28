@@ -11,7 +11,7 @@ export function useHistoricalReports() {
   const allowed = canAccessAnalytics(identity);
   const identityKey = JSON.stringify([identity?.userId, identity?.campusId, identity?.profile.institucion_id,
     identity?.roles, identity?.permissions, allowed]);
-  const [query, setQuery] = useState<{ identity: string; filters: HistoricalReportsFilters; cursor: string | null; revision: number } | null>(null);
+  const [query, setQuery] = useState<{ identity: string; filters: HistoricalReportsFilters; cursors: (string | null)[]; pageIndex: number; revision: number } | null>(null);
   const [selection, setSelection] = useState<{ key: string; ids: string[]; revision: number } | null>(null);
   const [catalog, setCatalog] = useState<{ key: string; data: DashboardOptions } | null>(null);
   const [listing, setListing] = useState<{ key: string; data: HistoricalReportsPage | null; error: string } | null>(null);
@@ -39,7 +39,7 @@ export function useHistoricalReports() {
   useEffect(() => {
     const controller = new AbortController();
     setListing(null);
-    if (identity && allowed) void loadHistoricalReports(filters, currentQuery?.cursor ?? null, controller.signal).then(data => {
+    if (identity && allowed) void loadHistoricalReports(filters, currentQuery?.cursors[currentQuery.pageIndex] ?? null, controller.signal).then(data => {
       if (!controller.signal.aborted) setListing({ key, data, error: '' });
     }).catch(reason => {
       if (!controller.signal.aborted) {
@@ -64,21 +64,37 @@ export function useHistoricalReports() {
   const page = allowed && listing?.key === key ? listing.data : null;
   const error = allowed && listing?.key === key ? listing.error : '';
   const currentDetail = allowed && detail?.key === detailKey ? detail : null;
+  const pageIndex = currentQuery?.pageIndex ?? 0;
+  const cursors = currentQuery?.cursors ?? [null];
+  const goToPage = (number: number) => {
+    if (!allowed || !Number.isInteger(number) || number < 1 || number === pageIndex + 1) return;
+    const index = number - 1;
+    let nextCursors = cursors;
+    // Avanzar usa el límite recién recibido; si cambió, retira los límites posteriores.
+    if (index === pageIndex + 1 && page?.nextCursor) {
+      if (cursors[index] !== page.nextCursor) nextCursors = [...cursors.slice(0, index), page.nextCursor];
+    } else if (index >= cursors.length) return;
+    setQuery({ identity: identityKey, filters, cursors: nextCursors, pageIndex: index, revision: (currentQuery?.revision ?? 0) + 1 });
+  };
+  const reload = () => {
+    if (allowed) setQuery({ identity: identityKey, filters, cursors: [null], pageIndex: 0, revision: (currentQuery?.revision ?? 0) + 1 });
+  };
   return {
     allowed, identityKey, filters, page, error, loading: allowed && !page && !error,
     options: allowed && catalog?.key === identityKey ? catalog.data : null,
     reports: currentDetail?.data ?? [], detailError: currentDetail?.error ?? '',
     detailLoading: allowed && Boolean(selected?.ids.length) && !currentDetail,
-    selectedIds: selected?.ids ?? [], hasPrevious: Boolean(currentQuery?.cursor),
+    selectedIds: selected?.ids ?? [], hasPrevious: pageIndex > 0,
+    pageNumber: pageIndex + 1, visitedPages: cursors.length, goToPage, refresh: reload,
     search(next: HistoricalReportsFilters = filters) {
       setSelection(null); setDetail(null);
-      setQuery({ identity: identityKey, filters: next, cursor: null, revision: (currentQuery?.revision ?? 0) + 1 });
+      setQuery({ identity: identityKey, filters: next, cursors: [null], pageIndex: 0, revision: (currentQuery?.revision ?? 0) + 1 });
     },
     nextPage() {
-      if (page?.nextCursor) setQuery({ identity: identityKey, filters, cursor: page.nextCursor, revision: (currentQuery?.revision ?? 0) + 1 });
+      if (page?.nextCursor) goToPage(pageIndex + 2);
     },
     firstPage() {
-      setQuery({ identity: identityKey, filters, cursor: null, revision: (currentQuery?.revision ?? 0) + 1 });
+      goToPage(1);
     },
     open(id: string, compare = false) {
       setSelection({ key: identityKey, ids: compare && selected?.ids.length ? [...new Set([selected.ids[0], id])] : [id], revision: (selected?.revision ?? 0) + 1 });

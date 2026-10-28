@@ -31,7 +31,7 @@ before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://dashboard-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
     SUPABASE_DB_URL: 'postgresql://postgres:simulated@dashboard-test.invalid/postgres' });
-  await db.exec('CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);');
+  await db.exec('CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY, email text);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const table of tables) {
     const ddl = schema.match(new RegExp('CREATE TABLE public\\.' + table + ' \\([\\s\\S]*?\\n\\);'))?.[0];
@@ -124,7 +124,7 @@ after(async () => {
 });
 
 async function profile(id = randomUUID(), state = 'ACTIVA', created = '2026-01-01T00:00:00Z', at = campus) {
-  await db.query('INSERT INTO auth.users VALUES($1)', [id]);
+  await db.query('INSERT INTO auth.users(id,email) VALUES($1,$2)', [id, id === reader ? 'reader@duocuc.cl' : `${id}@duocuc.cl`]);
   await db.query(`INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo,estado_cuenta,created_at,verificado_en)
     VALUES($1,$2,$3,'Perfil',$4,$5,$5)`, [id, institution, at, state, created]);
   return id;
@@ -175,16 +175,18 @@ test('PDF and Excel export the saved snapshot without recalculation or writes af
   await view(resource, '2026-10-10T15:00:00Z');
   await db.query("UPDATE campus SET nombre='Nombre cambiado',activo=false");
   await db.query("UPDATE perfil_usuario SET nombre_completo='Otro nombre'");
+  await db.query("UPDATE auth.users SET email='changed@duocuc.cl' WHERE id=$1", [reader]);
   const reads = { metricReads, mongoReads }; mongoFailure = true; statements = [];
   const excel = await exportReport(report.id, 'xlsx'); assert.equal(excel.status, 200);
   assert.equal(excel.headers.get('content-type'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   assert.equal(excel.headers.get('cache-control'), 'no-store');
-  assert.equal(excel.headers.get('content-disposition'), `attachment; filename="campuslink-reporte-${report.id}.xlsx"`);
+  assert.equal(excel.headers.get('content-disposition'), `attachment; filename="CampusLink_Reporte_Mensual_${report.period.from}_${report.period.to}_multi-campus_${report.id.slice(0,8)}.xlsx"`);
   const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(Buffer.from(await excel.arrayBuffer()));
   const meta = new Map<string, unknown>(); workbook.getWorksheet('Reporte')!.eachRow((row, index) => { if (index > 1) meta.set(String(row.getCell(1).value), row.getCell(2).value); });
   assert.equal(meta.get('Reporte ID'), report.id); assert.equal(meta.get('Institución'), report.scope.institutionName);
   assert.equal(meta.get('Campus 1'), report.scope.campuses[0].name); assert.equal(meta.get('Campus 2'), report.scope.campuses[1].name);
   assert.equal(meta.get('Responsable'), report.generatedBy.name); assert.equal(meta.get('Fecha original de generación (ISO)'), report.generatedAt);
+  assert.equal(meta.get('Correo del responsable'), 'reader@duocuc.cl');
   assert.equal(meta.get('Desde (inclusivo)'), report.period.from); assert.equal(meta.get('Hasta (inclusivo)'), report.period.to);
   assert.equal(meta.get('Versión de cálculo'), report.calculationVersion);
   assert.equal(workbook.getWorksheet('Indicadores')!.getCell('K2').value, 1); // La vista posterior no se incluye.
@@ -322,6 +324,7 @@ test('history preserves original metadata after catalog edits and author deactiv
   await db.query("UPDATE campus SET nombre='Retirado',activo=false WHERE id=$1", [campus]);
   await db.query("UPDATE carrera SET nombre='Retirada',activo=false WHERE id=$1", [career]);
   await db.query("UPDATE perfil_usuario SET nombre_completo='Otro nombre',estado_cuenta='DESACTIVADA',deleted_at=now() WHERE id=$1", [reader]);
+  await db.query("UPDATE auth.users SET email='renamed@duocuc.cl' WHERE id=$1", [reader]);
   viewer = await profile(); await grant('ADMINISTRADOR', campus, 'rol', viewer);
   mongoFailure = true;
   const response = await history(`careerId=${career}&campusIds=${campus}`); assert.equal(response.status, 200);
@@ -370,7 +373,7 @@ test('generated report reuses all dashboard results and carries server-owned att
     const before = Date.now(), response = await generateReport(filters), after = Date.now();
     assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
     const { data } = await response.json();
-    assert.deepEqual(data.generatedBy, { userId: reader, name: 'Perfil' });
+    assert.deepEqual(data.generatedBy, { userId: reader, name: 'Perfil', email: 'reader@duocuc.cl' });
     assert.equal(data.calculationVersion, 'campuslink-kpi-v1');
     assert.ok(Date.parse(data.generatedAt) >= before && Date.parse(data.generatedAt) <= after);
     const { id, generatedBy, calculationVersion, generatedAt, ...reportData } = data;

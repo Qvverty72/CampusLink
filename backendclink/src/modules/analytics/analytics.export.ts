@@ -5,20 +5,18 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { AnalyticalReport, DashboardMetrics, DashboardPeriod } from './analytics.types.js';
+import { REPORT_KPIS, REPORT_STATES, reportPeriodLabel, reportSavedLabel } from './analytics.presentation.js';
 
 /** Interpretación histórica de la versión guardada; no consulta ni ejecuta el cálculo actual. */
 const definitions = {
   'campuslink-kpi-v1': [
-    ['Usuarios activos', 'Cuentas activas al corte exclusivo según la auditoría disponible. Es un saldo; no se suma entre períodos.'],
-    ['Demanda de recursos', 'Interacciones de recursos: vistas y solicitudes, conservadas por separado y con su total guardado.'],
-    ['Demanda de asignaturas', 'Vistas y solicitudes de recursos asociados a cada asignatura. Un recurso con varias asignaturas cuenta en cada una; no son conjuntos exclusivos.'],
-    ['Participación en actividades', 'Inscripciones registradas; no representa asistencia presencial. Se conserva el indicador de historial importado.'],
+    ...Object.values(REPORT_KPIS).map(item => [item.title, item.help]),
     ['Disponibilidad', 'Cero representa ausencia de actividad registrada. Una celda numérica vacía o Sin datos indica falta de datos, no cero. La cobertura histórica parcial no demuestra un registro completo.'],
     ['Filtros y calendario', 'Asociaciones académicas y ámbito conservados al generar. Los valores por carrera no se suman como exclusivos. Fechas civiles inclusivas y corte exclusivo; semanas de lunes a domingo y meses calendario en America/Santiago.'],
   ],
 };
 
-type SavedSection = { label: string; key: string; period: DashboardPeriod; status: string; coverage: string; metrics: DashboardMetrics | null };
+export type SavedSection = { label: string; key: string; period: DashboardPeriod; status: string; coverage: string; metrics: DashboardMetrics | null };
 
 function savedSections(report: AnalyticalReport): SavedSection[] {
   return [{ label: 'Resumen guardado', key: 'total', period: report.period,
@@ -42,7 +40,7 @@ function metadata(report: AnalyticalReport): [string, string][] {
     ['Fecha original de generación (ISO)', report.generatedAt],
     ['Fecha original de generación (local)', new Intl.DateTimeFormat('es-CL', { timeZone: report.period.timeZone,
       dateStyle: 'long', timeStyle: 'long', hourCycle: 'h23' }).format(new Date(report.generatedAt))],
-    ['Responsable ID', report.generatedBy.userId], ['Responsable', report.generatedBy.name], ['Versión de cálculo', report.calculationVersion],
+    ['Responsable ID', report.generatedBy.userId], ['Responsable', report.generatedBy.name], ['Correo del responsable', report.generatedBy.email || 'Correo no registrado'], ['Versión de cálculo', report.calculationVersion],
   ];
 }
 
@@ -58,16 +56,33 @@ export async function renderReportExcel(report: AnalyticalReport): Promise<Buffe
     result.addRows(rows);
     result.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     result.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF09243A' } };
+    result.getRow(1).height = 32;
     result.columns.forEach((column, index) => { column.width = headers[index].includes('ID') ? 39 : 26; });
     result.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, result.rowCount), column: headers.length } };
-    result.eachRow(row => { row.alignment = { vertical: 'top', wrapText: true }; });
+    result.eachRow(row => { row.alignment = { vertical: 'top', wrapText: true }; row.eachCell(cell => { if (typeof cell.value === 'number') cell.numFmt = '#,##0'; }); });
     return result;
   }
+  const guide = sheet('Leeme', ['Guía del reporte', 'Cómo usar este archivo'], [
+    ['Qué contiene', 'Las cifras originales de un reporte guardado; descargar no las vuelve a calcular.'],
+    ['Período analizado', reportPeriodLabel(report.period)], ['Institución', report.scope.institutionName],
+    ['Campus', report.scope.campuses.map(campus => campus.name).join(', ')], ['Carrera', report.scope.career?.name ?? 'Todas las carreras (incluye sin clasificar)'],
+    ['Agrupación', report.grouping === 'week' ? 'Semanal' : 'Mensual'], ['Guardado el', reportSavedLabel(report)], ['Responsable', report.generatedBy.name],
+    ['Correo del responsable', report.generatedBy.email || 'Correo no registrado'],
+    ['Indicadores', 'Total original del reporte. No sumar Indicadores con Periodos.'],
+    ['Periodos', 'Detalle por semana o mes; conserva los límites originales de cada intervalo.'],
+    ['Asignaturas', 'Contiene resumen y detalle. Intervalo ID = total identifica el resumen; no sumar todas las filas. Una interacción puede contar en varias asignaturas.'],
+    ['Cuentas activas', 'Es un saldo al cierre: no se suma entre filas ni representa personas conectadas.'],
+    ['Disponibilidad', 'Vacío = sin datos disponibles. 0 = cero observado.'],
+    ['Reporte / Definiciones / Notas', 'Metadatos originales, significado de los indicadores y notas históricas.'],
+    ...Object.values(REPORT_KPIS).map(item => [item.title, item.help]),
+  ]);
+  guide.getColumn(1).width = 34; guide.getColumn(2).width = 100;
+  guide.eachRow((row, index) => { if (index > 1) row.height = Math.max(32, Math.ceil(String(row.getCell(2).value ?? '').length / 85) * 17); });
   const meta = sheet('Reporte', ['Parámetro', 'Valor guardado'], metadata(report));
   meta.getColumn(2).width = 95;
   const headers = ['Intervalo ID', 'Período', 'Desde', 'Hasta', 'Zona horaria', 'Corte exclusivo', 'Estado', 'Cobertura',
     'Usuarios activos', 'Recursos total', 'Recursos vistas', 'Recursos solicitudes', 'Asignaturas total', 'Asignaturas vistas',
-    'Asignaturas solicitudes', 'Inscripciones', 'Eventos importados'];
+    'Asignaturas solicitudes', 'Inscripciones'];
   const sections = savedSections(report);
   const counts = (section: SavedSection) => {
     const m = section.metrics;
@@ -75,90 +90,40 @@ export async function renderReportExcel(report: AnalyticalReport): Promise<Buffe
       section.status, section.coverage, m?.activeUsers.value ?? null, m?.resourceDemand.value ?? null,
       m?.resourceDemand.value == null ? null : m.resourceDemand.views, m?.resourceDemand.value == null ? null : m.resourceDemand.requests,
       m?.subjectDemand.value ?? null, m?.subjectDemand.value == null ? null : m.subjectDemand.views,
-      m?.subjectDemand.value == null ? null : m.subjectDemand.requests, m?.activityParticipation.value ?? null,
-      m?.activityParticipation.value == null ? null : m.activityParticipation.legacyEvents];
+      m?.subjectDemand.value == null ? null : m.subjectDemand.requests, m?.activityParticipation.value ?? null];
   };
-  sheet('Indicadores', headers, [counts(sections[0])]);
-  sheet('Periodos', headers, sections.slice(1).map(counts));
-  sheet('Asignaturas', ['Intervalo ID', 'Período', 'Desde', 'Hasta', 'Corte exclusivo', 'Estado', 'Cobertura', 'Asignatura ID', 'Asignatura', 'Vistas', 'Solicitudes'],
+  const grouped = (target: ExcelJS.Worksheet) => target.getRow(1).eachCell((cell, index) => {
+    const color = index <= 6 ? '09243A' : index <= 8 ? '495F70' : index === 9 ? '244B64' : index <= 12 ? '174F5F' : index <= 15 ? '4B476C' : '5A4930';
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${color}` } };
+  });
+  grouped(sheet('Indicadores', headers, [counts(sections[0])]));
+  grouped(sheet('Periodos', headers, sections.slice(1).map(counts)));
+  const subjectsSheet = sheet('Asignaturas', ['Intervalo ID', 'Período', 'Desde', 'Hasta', 'Corte exclusivo', 'Estado', 'Cobertura', 'Asignatura ID', 'Asignatura', 'Vistas', 'Solicitudes'],
     sections.flatMap(section => (section.metrics?.subjectDemand.subjects ?? []).map(subject => [section.key, section.label,
       section.period.from, section.period.to, section.period.cutoff, section.status, section.coverage,
       subject.subjectId, subject.subjectName, subject.views, subject.requests])));
+  subjectsSheet.getCell('A1').note = 'total = resumen guardado; cualquier otro ID = intervalo. No sumar ambos niveles.';
+  subjectsSheet.getColumn(1).eachCell((cell, index) => { if (index > 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cell.value === 'total' ? 'FFE5EFF5' : 'FFF5F8FA' } }; });
   const glossary = sheet('Definiciones', ['Indicador', 'Definición', 'Versión de cálculo'],
     savedDefinitions(report).map(([label, definition]) => [label, definition, report.calculationVersion]));
   glossary.getColumn(2).width = 110;
+  for (const [technical, human] of Object.entries(REPORT_STATES)) glossary.addRow([technical, human, report.calculationVersion]);
   const notes = sheet('Notas', ['Nota guardada'], report.notes.map(note => [note]));
   notes.getColumn(1).width = 120;
+  // Altura según contenido y anchos conservados: wrapText solo no evita recorte en Excel.
+  for (const target of workbook.worksheets) target.eachRow((row, index) => {
+    if (index === 1) return;
+    let lines = 1;
+    row.eachCell(cell => { lines = Math.max(lines, ...String(cell.value ?? '').split('\n').map(text => Math.ceil(text.length / Math.max(1, (target.getColumn(cell.col).width ?? 26) - 2)))); });
+    row.height = Math.max(row.height ?? 20, lines * 15 + 6);
+    row.alignment = { vertical: 'top', wrapText: true };
+  });
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 /** PDF paginado con ajuste real al ancho de fuente; solo presenta los valores guardados. */
 export async function renderReportPdf(report: AnalyticalReport): Promise<Buffer> {
   const glossary = savedDefinitions(report);
-  const pdf = await PDFDocument.create();
-  pdf.setTitle('Reporte analítico CampusLink');
-  pdf.setAuthor(report.generatedBy.name);
-  pdf.setCreationDate(new Date(report.generatedAt));
-  pdf.setModificationDate(new Date(report.generatedAt));
-  pdf.registerFontkit(fontkit);
-  // Fuente y licencia ya distribuidas por nuestra dependencia de producción pdfjs-dist.
-  const resolveDependency = createRequire(__filename);
-  const fonts = join(dirname(resolveDependency.resolve('pdfjs-dist/package.json')), 'standard_fonts');
-  const font = await pdf.embedFont(await readFile(join(fonts, 'LiberationSans-Regular.ttf')), { subset: true });
-  const supported = new Set(font.getCharacterSet());
-  const printable = (value: string) => Array.from(value.replace(/\r\n?/g, '\n').replace(/\t/g, '    ')).map(character =>
-    character === '\n' || supported.has(character.codePointAt(0)!) ? character : `[U+${character.codePointAt(0)!.toString(16).toUpperCase()}]`).join('');
-  const width = 595.28, height = 841.89, margin = 44;
-  let page = pdf.addPage([width, height]), y = height - 66;
-  function line(text: string, size = 10, heading = false) {
-    const clean = printable(text);
-    for (const paragraph of clean.split('\n')) {
-      let current = '';
-      // Parte incluso un nombre/UUID largo sin espacios; nunca corta ni omite texto.
-      const wrapped: string[] = [];
-      for (const character of paragraph) {
-        if (current && font.widthOfTextAtSize(current + character, size) > width - margin * 2) {
-          const space = current.lastIndexOf(' ');
-          if (space > 0) { wrapped.push(current.slice(0, space)); current = current.slice(space + 1); }
-          else { wrapped.push(current); current = ''; }
-        }
-        current += character;
-      }
-      wrapped.push(current);
-      if (heading && y < 100) { page = pdf.addPage([width, height]); y = height - 66; }
-      for (const part of wrapped) {
-        if (y < 56) { page = pdf.addPage([width, height]); y = height - 66; }
-        page.drawText(part, { x: margin, y, size, font, color: heading ? rgb(0.04, 0.27, 0.34) : rgb(0.08, 0.14, 0.19) });
-        y -= size + 5;
-      }
-    }
-    y -= heading ? 7 : 3;
-  }
-  const number = (value: number | null | undefined) => value == null ? 'Sin datos' : new Intl.NumberFormat('es-CL').format(value);
-  line('Reporte analítico guardado', 20, true);
-  for (const [key, value] of metadata(report)) line(`${key}: ${value}`);
-  for (const section of savedSections(report)) {
-    line(section.label, 14, true);
-    line(`${section.period.from} al ${section.period.to} | ${section.period.timeZone} | Corte exclusivo: ${section.period.cutoff}`);
-    line(`Estado: ${section.status} | Cobertura: ${section.coverage}`);
-    const m = section.metrics;
-    if (!m) { line('Sin datos disponibles para este intervalo.'); continue; }
-    line(`Usuarios activos al corte: ${number(m.activeUsers.value)}`);
-    line(`Demanda de recursos: ${number(m.resourceDemand.value)} | Vistas: ${number(m.resourceDemand.value === null ? null : m.resourceDemand.views)} | Solicitudes: ${number(m.resourceDemand.value === null ? null : m.resourceDemand.requests)}`);
-    line(`Demanda de asignaturas: ${number(m.subjectDemand.value)} | Vistas: ${number(m.subjectDemand.value === null ? null : m.subjectDemand.views)} | Solicitudes: ${number(m.subjectDemand.value === null ? null : m.subjectDemand.requests)}`);
-    for (const subject of m.subjectDemand.subjects) line(`  ${subject.subjectName} (${subject.subjectId}): ${number(subject.views)} vistas | ${number(subject.requests)} solicitudes`);
-    line(`Inscripciones registradas: ${number(m.activityParticipation.value)} | Eventos importados: ${number(m.activityParticipation.value === null ? null : m.activityParticipation.legacyEvents)}`);
-    if (section.status === 'no_activity') line('Sin actividad registrada; conserva los ceros y el saldo de usuarios activos.');
-  }
-  line('Definiciones de los indicadores', 14, true);
-  line(`Versión guardada: ${report.calculationVersion}`);
-  for (const [label, definition] of glossary) { line(label, 11, true); line(definition); }
-  line('Notas guardadas', 14, true);
-  for (const note of report.notes) line(note);
-  const pages = pdf.getPages();
-  pages.forEach((page, index) => {
-    page.drawText('CampusLink | Reporte guardado', { x: margin, y: height - 30, size: 9, font });
-    page.drawText(`${report.id} | ${index + 1} / ${pages.length}`, { x: margin, y: 28, size: 8, font });
-  });
-  return Buffer.from(await pdf.save());
+  const { renderSavedReportPdf } = await import('./analytics.pdf.js');
+  return renderSavedReportPdf(report, metadata(report), savedSections(report), glossary);
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp, FileCheck2 } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type { AnalyticalReport, DashboardData, DashboardMetrics } from '../types/dashboard';
-import { formatNumber as number, groupingLabel, periodLabel, timestampLabel } from '../utils/presentation';
+import { formatNumber as number, groupingLabel, periodLabel, savedReportPeriodLabel, savedReportTimeLabel, savedTimestampLabel, shortGroupingLabel } from '../utils/presentation';
 import { ANALYTICS_COPY as copy } from '../utils/copy';
 import { AnalyticsTrends, SubjectDemand } from './AnalyticsTrends';
 import { ReportExportActions } from './ReportExportActions';
@@ -48,13 +48,39 @@ export function AnalyticsKpis({ dashboard }: { dashboard: DashboardMetrics }) {
 }
 
 export function ReportSummary({ report, exportActions = true, compact = false }: { report: AnalyticalReport; exportActions?: boolean; compact?: boolean }) {
-  const [details, setDetails] = useState(false);
   const [context, setContext] = useState(false);
-  return <View style={[s.card, compact && k.compactReport]}>
-    {!compact && <View style={s.row}><View style={k.icon}><FileCheck2 size={22} color={c.PRIMARY} aria-hidden /></View>
-      <Text accessibilityRole="header" style={[s.heading, s.grow]}>{copy.savedReport}</Text></View>}
-    <Text style={s.body}>{compact ? report.scope.campusName : `${report.scope.institutionName} · ${report.scope.campusName}`}</Text>
+  const { fontScale = 1 } = useWindowDimensions();
+  if (!compact) {
+    const saved = `${savedReportTimeLabel(report.generatedAt, report.period.timeZone)} por ${report.generatedBy.name}`;
+    const rows = [
+      ['Tipo', shortGroupingLabel(report.grouping)],
+      ['Carreras', report.scope.career?.name ?? 'Todas, incluye sin clasificar'],
+      ['Guardado', saved],
+    ];
+    return <View testID={`saved-report-summary-${report.id}`} style={k.reportCard}>
+      <View style={[k.reportHeader, fontScale > 1.4 && { alignItems: 'flex-start' }]}>
+        <View style={k.icon} accessible={false} aria-hidden><FileCheck2 size={19} color={c.PRIMARY} /></View>
+        <View style={s.grow}>
+          <Text style={k.reportScope}>{report.scope.institutionName} · {report.scope.campusName}</Text>
+          <Text accessibilityRole="header" accessibilityLabel={`Período analizado: ${periodLabel(report.period)}`} style={k.reportPeriod}>{savedReportPeriodLabel(report.period)}</Text>
+        </View>
+      </View>
+      <View style={k.reportBody}>
+        <View style={{ gap: 7 }}>{rows.map(([label, value]) => <View key={label}
+          accessible={label === 'Guardado' ? true : undefined}
+          accessibilityLabel={label === 'Guardado' ? `Guardado el ${savedTimestampLabel(report.generatedAt, report.period.timeZone)}, ${report.period.timeZone}, por ${report.generatedBy.name}` : undefined}
+          style={[k.reportRow, fontScale > 1.4 && k.reportRowLarge]}>
+          <Text style={[k.reportLabel, fontScale > 1.4 && { width: '100%' }]}>{label}</Text><Text selectable style={[k.reportValue, label === 'Tipo' && { fontWeight: '600' }, fontScale > 1.4 && k.reportValueLarge]}>{value}</Text>
+        </View>)}</View>
+        <View style={k.reportNote}><Text style={k.reportNoteText}>Estas cifras son una copia fija: no cambian al actualizar el tablero.</Text></View>
+        {exportActions && <ReportExportActions reportId={report.id} />}
+      </View>
+    </View>;
+  }
+  return <View style={[s.card, k.compactReport]}>
     <Text style={s.label}>{periodLabel(report.period)}</Text>
+    <Text style={s.small}>Período analizado</Text>
+    <Text style={s.body}>{compact ? report.scope.campusName : `${report.scope.institutionName} · ${report.scope.campusName}`}</Text>
     {compact && <Pressable accessibilityRole="button" accessibilityLabel={`Ver contexto completo del reporte de ${report.scope.campusName}, ${periodLabel(report.period)}`} accessibilityState={{ expanded: context }} onPress={() => setContext(value => !value)} style={k.explanation}>
       <Text style={[s.link, { flexShrink: 1 }]}>{context ? 'Ocultar contexto completo' : 'Ver contexto completo'}</Text>{context ? <ChevronUp size={17} color={c.PRIMARY} aria-hidden /> : <ChevronDown size={17} color={c.PRIMARY} aria-hidden />}
     </Pressable>}
@@ -62,24 +88,9 @@ export function ReportSummary({ report, exportActions = true, compact = false }:
     {compact && <Text style={s.small}>Institución: {report.scope.institutionName}</Text>}
     <View style={s.wrap}><View style={s.badge}><Text style={s.badgeText}>{groupingLabel(report.grouping)}</Text></View>
       <Text style={s.small}>{report.scope.career?.name ?? copy.allCareers}</Text></View>
-    <Text style={s.small}>Generado el {timestampLabel(report.generatedAt, report.period.timeZone)} · {report.period.timeZone}</Text>
-    <Text style={s.small}>Responsable: {report.generatedBy.name}</Text>
+    <Text style={s.small}>Guardado el {savedTimestampLabel(report.generatedAt, report.period.timeZone)} · {report.period.timeZone}</Text>
+    <Text style={s.small}>por {report.generatedBy.name}</Text>
     <Text style={s.muted}>{copy.savedHelp}</Text>
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded: details }} onPress={() => setDetails(value => !value)} style={s.back}>
-      <Text style={s.link}>Detalles del reporte</Text>{details ? <ChevronUp size={17} color={c.PRIMARY} aria-hidden /> : <ChevronDown size={17} color={c.PRIMARY} aria-hidden />}
-    </Pressable>
-    {details && <View style={s.stack}>
-      <Text style={s.muted}>{copy.reportDetailsHelp}</Text>
-      <Text selectable style={s.small}>Identificador: {report.id}</Text>
-      <Text selectable style={s.small}>Institución: {report.scope.institutionName} · {report.scope.institutionId}</Text>
-      {(report.scope.campuses ?? []).map(campus => <Text selectable key={campus.id} style={s.small}>Campus: {campus.name} · {campus.id}</Text>)}
-      <Text selectable style={s.small}>Carrera: {report.scope.career ? `${report.scope.career.name} · ${report.scope.career.id}` : copy.allCareers}</Text>
-      <Text selectable style={s.small}>Período: {report.period.from} al {report.period.to} · {report.period.timeZone}</Text>
-      <Text selectable style={s.small}>Corte exclusivo: {report.period.cutoff}</Text>
-      <Text selectable style={s.small}>Fecha original: {report.generatedAt}</Text>
-      <Text selectable style={s.small}>Responsable: {report.generatedBy.userId}</Text>
-      <Text selectable style={s.small}>Versión de cálculo: {report.calculationVersion}</Text>
-    </View>}
     </>}
     {exportActions && <ReportExportActions reportId={report.id} />}
   </View>;
@@ -102,7 +113,19 @@ const k = StyleSheet.create({
   explanation: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', maxWidth: '100%' },
   details: { gap: 8, paddingTop: 8, paddingBottom: 8, borderTopWidth: 1, borderTopColor: c.border },
   compactReport: { padding: 12, gap: 4, borderRadius: 12 },
-  icon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.tint, flexShrink: 0 },
+  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.tint, flexShrink: 0 },
+  reportCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: c.border, borderRadius: 16 },
+  reportHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: c.border },
+  reportScope: { color: c.muted, fontSize: 11, lineHeight: 16 },
+  reportPeriod: { color: c.PRIMARY, fontSize: 18, lineHeight: 24, fontWeight: '700' },
+  reportBody: { padding: 14, gap: 12 },
+  reportRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  reportRowLarge: { flexDirection: 'column', gap: 3 },
+  reportLabel: { width: 64, color: c.muted, fontSize: 12, lineHeight: 19 },
+  reportValue: { flex: 1, minWidth: 0, color: c.PRIMARY, fontSize: 12, lineHeight: 19 },
+  reportValueLarge: { flexGrow: 0, flexBasis: 'auto', width: '100%' },
+  reportNote: { backgroundColor: '#F4F7F9', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9 },
+  reportNoteText: { color: c.PRIMARY, fontSize: 11, lineHeight: 17 },
   value: { color: c.PRIMARY, fontSize: 30, lineHeight: 38, fontWeight: '700', letterSpacing: -0.6 },
   counts: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   count: { fontWeight: '600', color: c.ink },

@@ -23,6 +23,12 @@ export async function readAnalyticsPermissions(client: PoolClient, userId: strin
      ORDER BY up.id FOR SHARE OF up,p`, [userId])).rows;
 }
 
+/** Correo del autor al generar; las lecturas históricas no consultan su cuenta actual. */
+export async function readReportAuthorEmail(client: PoolClient, userId: string): Promise<string | null> {
+  const email = (await client.query<{ email: string | null }>('SELECT email FROM auth.users WHERE id=$1', [userId])).rows[0]?.email;
+  return email?.trim() || null;
+}
+
 /** Inserción única: sin upsert ni escritura de resultados existentes. */
 export async function insertAnalyticalReport(client: PoolClient, report: AnalyticalReport, filters: DashboardQuery, from: Date, until: Date) {
   await client.query(

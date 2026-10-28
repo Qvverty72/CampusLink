@@ -14,7 +14,7 @@ function load(path, dependencies, globals = {}) {
   const source = fs.readFileSync(new URL(path, import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(compiled, { module, exports: module.exports, AbortController, Uint8Array,
+  vm.runInNewContext(compiled, { module, exports: module.exports, AbortController, Uint8Array, Error,
     ...globals, require: name => { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; } });
   return module.exports;
 }
@@ -28,7 +28,7 @@ test('export API downloads authenticated binary bytes by ID/format without posti
     } },
   });
   const pdf = await downloadReport('report/id', 'pdf', signal);
-  assert.equal(pdf.blob, blob); assert.equal(pdf.file.name, 'campuslink-reporte-report/id.pdf');
+  assert.equal(pdf.blob, blob); assert.equal(pdf.file.name, 'campuslink-reporte-report-id.pdf');
   assert.equal(calls[0].path, '/api/v1/analytics/reports/report%2Fid/export/pdf'); assert.equal(calls[0].init.signal, signal);
   contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const excel = await downloadReport('saved-id', 'xlsx', signal);
@@ -38,7 +38,7 @@ test('export API downloads authenticated binary bytes by ID/format without posti
   contentType = 'application/json'; await assert.rejects(() => downloadReport('saved-id', 'pdf', signal), /Formato/);
 });
 
-function harness() {
+function harness({ platform = 'ios', save } = {}) {
   const slots = [], calls = [], saves = []; let cursor = 0, effects = [], reportId = 'saved-a', refreshes = 0;
   const auth = { identity: { userId: 'user-a', campusId: 'campus-a', profile: { institucion_id: 'institution-a', estado_cuenta: 'ACTIVA' },
     roles: [{ name: 'ADMINISTRADOR', campusId: 'campus-a' }], permissions: [] }, refreshIdentity() { refreshes++; } };
@@ -52,10 +52,10 @@ function harness() {
       }); },
   };
   const { useReportExport } = load('../src/features/analytics/hooks/useReportExport.ts', {
-    react, '@/features/auth/hooks/useAuth': { useAuth: () => auth }, '@/lib/api/authenticated-request': { AuthApiError },
+    react, 'react-native': { Platform: { OS: platform } }, '@/features/auth/hooks/useAuth': { useAuth: () => auth }, '@/lib/api/authenticated-request': { AuthApiError },
     '../types/access': load('../src/features/analytics/types/access.ts', {}),
     '../api/reportExportApi': { downloadReport: (id, format, signal) => new Promise((resolve, reject) => calls.push({ id, format, signal, resolve, reject })) },
-    '@/lib/files/saveFile': { saveFile: async (...args) => { saves.push(args); } },
+    '@/lib/files/saveFile': { saveFile: async (...args) => { saves.push(args); await save?.(); } },
   });
   return { auth, calls, saves, get refreshes() { return refreshes; },
     select(id) { reportId = id; },
@@ -75,12 +75,52 @@ test('export hook delivers server bytes, prevents duplicate clicks, refreshes de
     assert.equal(h.render().exporting, null);
     for (const status of [401, 403, 503]) {
       const pending = h.render().exportFile('pdf'); h.calls.at(-1).reject(new AuthApiError(status, 'No disponible.')); await pending;
-      assert.equal(h.render().error, 'No disponible.'); assert.equal(h.render().exporting, null);
+      assert.equal(h.render().error, status === 401 ? 'Tu sesión venció. Vuelve a iniciar sesión e inténtalo de nuevo.' : 'No disponible.'); assert.equal(h.render().exporting, null);
     }
     assert.equal(h.refreshes, 2); assert.equal(h.saves.length, 1);
     const retry = h.render().exportFile('pdf'); assert.equal(h.render().error, '');
     h.calls.at(-1).resolve({ blob: new Blob(['pdf']), file: { id: 'saved-a', extension: 'pdf' } }); await retry;
     assert.equal(h.saves.length, 2); assert.equal(h.calls.at(-1).id, 'saved-a');
+  } finally { h.dispose(); }
+});
+
+test('download uses the server filename only when safe and never accepts a path or wrong extension', async () => {
+  let filename = 'CampusLink_Reporte_Mensual_2026-09-01_2026-09-30_san-andres_12345678.pdf';
+  const { downloadReport } = load('../src/features/analytics/api/reportExportApi.ts', {
+    '@/lib/api/authenticated-request': { authenticatedResponseRequest: async () => ({
+      headers: new Headers({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${filename}"` }), blob: async () => new Blob(['bytes']),
+    }) },
+  });
+  const signal = new AbortController().signal;
+  assert.equal((await downloadReport('safe-id', 'pdf', signal)).file.name, filename);
+  for (filename of ['../../private.pdf', 'wrong.xlsx', 'x'.repeat(125) + '.pdf', 'unsafe name.pdf']) {
+    assert.equal((await downloadReport('safe-id', 'pdf', signal)).file.name, 'campuslink-reporte-safe-id.pdf');
+  }
+});
+
+test('export phases describe delivery without claiming a file was saved and expose actionable HTTP errors', async () => {
+  for (const platform of ['ios', 'web']) {
+    let finish; const h = harness({ platform, save: () => new Promise(resolve => { finish = resolve; }) });
+    try {
+      h.render(); const pending = h.render().exportFile('pdf'); assert.equal(h.render().phase, 'preparing');
+      h.calls[0].resolve({ blob: 'bytes', file: {} }); await setImmediate(); assert.equal(h.render().phase, 'delivery');
+      assert.equal(h.render().exporting, 'pdf'); finish(); await pending;
+      assert.equal(h.render().exporting, null); assert.ok(h.render().notice.includes(platform === 'web' ? 'Descarga iniciada' : 'Si lo guardaste'));
+      assert.ok(!h.render().notice.includes('Archivo guardado'));
+      for (const [status, expected] of [[401, 'Tu sesión venció'], [403, 'todos los campus'], [404, 'ya no está disponible'], [503, 'No se pudo exportar']]) {
+        const request = h.render().exportFile('pdf'); h.calls.at(-1).reject(new AuthApiError(status)); await request;
+        assert.ok(h.render().error.includes(expected)); assert.equal(h.render().notice, '');
+      }
+    } finally { h.dispose(); }
+  }
+});
+
+test('unavailable device sharing gives an actionable error without claiming a saved file', async () => {
+  const message = 'Este dispositivo no permite guardar o compartir archivos desde la aplicación.';
+  const h = harness({ save: async () => { throw new Error(message); } });
+  try {
+    h.render(); const request = h.render().exportFile('pdf'); h.calls[0].resolve({ blob: 'bytes', file: {} }); await request;
+    assert.equal(h.render().error, message); assert.equal(h.render().notice, ''); assert.equal(h.render().exporting, null);
   } finally { h.dispose(); }
 });
 
@@ -112,16 +152,20 @@ test('export buttons select PDF/Excel, show progress/errors and respect reportin
   }, actions).load('src/features/analytics/components/ReportExportActions.tsx');
   const render = () => renderToStaticMarkup(React.createElement(ReportExportActions, { reportId: 'saved-id' }));
   let html = render(); assert.ok(html.includes('Descargar PDF')); assert.ok(html.includes('Descargar Excel'));
-  assert.ok(html.includes('reporte guardado, sin volver a calcularlas'));
+  assert.ok(html.includes('Las cifras guardadas, sin volver a calcularlas'));
+  assert.ok(!html.includes('Para leer y compartir')); assert.ok(!html.includes('Para filtrar y analizar'));
   actions[0].onPress(); actions[1].onPress(); assert.deepEqual(calls, ['pdf', 'xlsx']);
   state.exporting = 'xlsx'; actions.length = 0; html = render();
   assert.ok(html.includes('Preparando Excel')); assert.ok(actions.every(action => action.disabled));
   assert.ok(html.includes('Espera a que termine la descarga de Excel.'));
+  state.exporting = null; actions.length = 0;
+  renderToStaticMarkup(React.createElement(ReportExportActions, { reportId: 'saved-id', reportLabel: 'reporte A' }));
+  assert.ok(actions.some(action => action.accessibilityLabel === 'Descargar PDF del reporte A'));
   state.exporting = null; state.error = 'Permiso revocado'; html = render(); assert.ok(html.includes('role="alert"')); assert.ok(html.includes(state.error));
   state.allowed = false; assert.equal(render(), '');
 });
 
-function fileHarness(platform) {
+function fileHarness(platform, globals = {}) {
   const written = [], shared = [], deleted = [], clicked = [], revoked = [], timers = [];
   let available = true, failShare = false, failWrite = false, writeGate;
   const link = { remove() { clicked.push('removed'); }, click() { clicked.push(this.download); } };
@@ -140,13 +184,54 @@ function fileHarness(platform) {
       shared.push({ uri, options }); if (failShare) throw new Error('Share failed');
     } },
   }, { URL: { createObjectURL: () => 'blob:local', revokeObjectURL: url => revoked.push(url) },
-    document: { createElement: () => link, body: { appendChild() {} } }, setTimeout: callback => timers.push(callback) });
+    document: { createElement: () => link, body: { appendChild() {} } }, setTimeout: callback => timers.push(callback), ...globals });
   return { saveFile, written, shared, deleted, clicked, revoked, timers,
     unavailable() { available = false; }, failShare() { failShare = true; },
     failWrite() { failWrite = true; }, delayWrite() { let finish; writeGate = new Promise(resolve => { finish = resolve; }); return finish; } };
 }
 const descriptor = { id: 'saved-id', name: 'reporte.xlsx', extension: 'xlsx',
   mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', uti: 'org.openxmlformats.spreadsheetml.sheet' };
+
+function nativeReaderHarness() {
+  const readers = [];
+  class FileReader {
+    result = null;
+    error = null;
+    readAsArrayBuffer(blob) { this.blob = blob; readers.push(this); }
+    abort() { this.aborted = true; this.onabort?.(); }
+  }
+  return { FileReader, readers, complete(bytes) { readers[0].result = new Uint8Array(bytes).buffer; readers[0].onload?.(); },
+    fail() { readers[0].error = new Error('Native read failed'); readers[0].onerror?.(); } };
+}
+
+test('iOS and Android export PDF/Excel from native Blobs without arrayBuffer and preserve exact bytes', async () => {
+  for (const platform of ['ios', 'android']) for (const extension of ['pdf', 'xlsx']) {
+    const reader = nativeReaderHarness(), h = fileHarness(platform, { FileReader: reader.FileReader });
+    const blob = { data: { blobId: 'native-blob', size: 4 }, size: 4 };
+    const file = extension === 'pdf' ? { ...descriptor, extension, mimeType: 'application/pdf', uti: 'com.adobe.pdf' } : descriptor;
+    const pending = h.saveFile(blob, file); pending.catch(() => {});
+    await setImmediate(); assert.equal(reader.readers.length, 1, 'native Blob must use FileReader');
+    assert.equal(reader.readers[0].blob, blob); assert.equal(h.shared.length, 0);
+    reader.complete([0, 37, 128, 255]); await pending;
+    assert.deepEqual(h.written[0].bytes, [0, 37, 128, 255]);
+    assert.equal(h.shared[0].options.mimeType, file.mimeType); assert.equal(h.shared[0].options.UTI, file.uti);
+    assert.equal(h.deleted.length, 1);
+  }
+});
+
+test('native FileReader cancellation aborts before writing or sharing, and read failures reach the caller', async () => {
+  const reader = nativeReaderHarness(), h = fileHarness('ios', { FileReader: reader.FileReader });
+  const controller = new AbortController(), blob = { data: { blobId: 'native' } };
+  const pending = h.saveFile(blob, descriptor, controller.signal); pending.catch(() => {});
+  await setImmediate(); assert.equal(reader.readers.length, 1);
+  const aborted = assert.rejects(pending, { name: 'AbortError' }); controller.abort(); await aborted;
+  assert.equal(reader.readers[0].aborted, true); reader.complete([1, 2]);
+  assert.equal(h.written.length, 0); assert.equal(h.shared.length, 0);
+  const failedReader = nativeReaderHarness(), failed = fileHarness('android', { FileReader: failedReader.FileReader });
+  const failedSave = failed.saveFile(blob, descriptor); failedSave.catch(() => {}); await setImmediate();
+  const rejection = assert.rejects(failedSave, /Native read failed/); failedReader.fail(); await rejection;
+  assert.equal(failed.written.length, 0); assert.equal(failed.shared.length, 0);
+});
 
 test('web saves exact blobs with a download name and releases the object URL', async () => {
   const h = fileHarness('web'); await h.saveFile(new Blob(['bytes']), descriptor);

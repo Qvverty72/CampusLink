@@ -39,24 +39,32 @@ export function getPaginationItems(page: number, totalPages: number, numberBudge
 }
 
 /** Renderiza navegación accesible y limita la cantidad de botones al ancho disponible. */
-export function Pagination({ page, totalPages, onPageChange, label = 'Paginación', showSinglePage = false }: {
+export function Pagination({ page, totalPages, visitedPages = page, hasNextPage = false, disabled = false,
+  onPageChange, label = 'Paginación', showSinglePage = false }: {
   page: number;
-  totalPages: number;
+  /** Sin total, los números representan sólo páginas ya consultadas mediante cursor. */
+  totalPages?: number;
+  visitedPages?: number;
+  hasNextPage?: boolean;
+  disabled?: boolean;
   onPageChange: (page: number) => void;
   label?: string;
   showSinglePage?: boolean;
 }) {
   const [width, setWidth] = useState(280);
-  if (totalPages <= 0 || (totalPages <= 1 && !showSinglePage)) return null;
-  const current = Math.max(1, Math.min(page, totalPages));
+  const knownTotal = totalPages !== undefined;
+  const lastPage = knownTotal ? totalPages : Math.max(1, visitedPages, page);
+  if (lastPage <= 0 || (lastPage <= 1 && !hasNextPage && !showSinglePage)) return null;
+  const current = Math.max(1, Math.min(page, lastPage));
   // Reserva espacio para flechas, separaciones, contenedor y hasta dos puntos suspensivos.
   const numberBudget = Math.max(1, Math.min(6,
     Math.floor((width - BUTTON_SIZE * 2 - GAP * 2 - STRIP_PADDING * 2 - DOTS_WIDTH * 2) / BUTTON_SIZE)));
-  const items = getPaginationItems(current, totalPages, numberBudget);
-  const previousDisabled = current === 1;
-  const nextDisabled = current === totalPages;
+  const items = getPaginationItems(current, lastPage, numberBudget);
+  const previousDisabled = disabled || current === 1;
+  const nextDisabled = disabled || (knownTotal ? current === lastPage : !hasNextPage);
   const goTo = (target: number) => {
-    if (target >= 1 && target <= totalPages && target !== current) onPageChange(target);
+    const limit = lastPage + (!knownTotal && hasNextPage ? 1 : 0);
+    if (!disabled && target >= 1 && target <= limit && target !== current) onPageChange(target);
   };
   return <View style={styles.pagination} accessibilityLabel={label}
     onLayout={event => { if (event.nativeEvent.layout.width > 0) setWidth(event.nativeEvent.layout.width); }}>
@@ -73,8 +81,8 @@ export function Pagination({ page, totalPages, onPageChange, label = 'Paginació
       {items.map((item, index) => item === 'ellipsis'
         ? <Text key={`gap-${index}`} accessible={false} aria-hidden style={styles.dots}>…</Text>
         : <TouchableOpacity key={item} accessibilityRole="button"
-          accessibilityLabel={`Página ${item} de ${totalPages}${item === current ? ', actual' : ''}`}
-          accessibilityState={{ selected: item === current }} aria-current={item === current ? 'page' : undefined}
+          accessibilityLabel={`Página ${item}${knownTotal ? ` de ${totalPages}` : ''}${item === current ? ', actual' : ''}`}
+          disabled={disabled} accessibilityState={{ selected: item === current, disabled }} aria-current={item === current ? 'page' : undefined}
           activeOpacity={0.7} onPress={() => goTo(item)} style={styles.pageButton}>
           <View style={[styles.pageMark, item === current && styles.pageMarkActive]}>
             <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
@@ -90,7 +98,7 @@ export function Pagination({ page, totalPages, onPageChange, label = 'Paginació
         <ChevronRight size={20} color={nextDisabled ? '#94A3B8' : '#FFFFFF'} />
       </View>
     </TouchableOpacity>
-    <Text accessibilityLiveRegion="polite" style={styles.status}>Página {current} de {totalPages}</Text>
+    <Text accessibilityLiveRegion="polite" style={styles.status}>{`Página ${current}${knownTotal ? ` de ${totalPages}` : ''}`}</Text>
   </View>;
 }
 

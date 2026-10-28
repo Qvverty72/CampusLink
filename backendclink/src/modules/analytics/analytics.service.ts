@@ -8,7 +8,7 @@ import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
 import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
-import { countActivityInteractions, findAnalyticalReport, findAnalyticsResource, insertAnalyticalReport, insertResourceView, readAnalyticsPermissions, readDashboardMetrics, readDashboardOptions, readHistoricalReports } from './analytics.repository.js';
+import { countActivityInteractions, findAnalyticalReport, findAnalyticsResource, insertAnalyticalReport, insertResourceView, readAnalyticsPermissions, readDashboardMetrics, readDashboardOptions, readHistoricalReports, readReportAuthorEmail } from './analytics.repository.js';
 
 export const getAnalyticsHealth: () => Promise<AnalyticsHealth> =
   createModuleHealthCheck('analytics', probeAnalyticsDependencies);
@@ -132,7 +132,7 @@ export async function generateAnalyticalReport(auth: VerifiedAuthConnection, fil
       const current = { ...auth, profile, roles, permissions: await readAnalyticsPermissions(client, auth.userId) };
       for (const id of normalized.campusIds) requireCampusCapability(current, id, 'reports');
       const report: AnalyticalReport = { ...dashboard, id: randomUUID(),
-        generatedBy: { userId: auth.userId, name: profile.nombre_completo }, calculationVersion: 'campuslink-kpi-v1' };
+        generatedBy: { userId: auth.userId, name: profile.nombre_completo, email: await readReportAuthorEmail(client, auth.userId) }, calculationVersion: 'campuslink-kpi-v1' };
       await insertAnalyticalReport(client, report, normalized, intervals[0].from, intervals[intervals.length - 1].until);
       return report;
     });
@@ -215,6 +215,7 @@ export async function exportAnalyticalReport(auth: VerifiedAuthConnection, rawId
   const report = await getAnalyticalReport(auth, rawId);
   try {
     const { renderReportExcel, renderReportPdf } = await import('./analytics.export.js');
+    const { reportFilename } = await import('./analytics.presentation.js');
     const bytes = rawFormat === 'pdf' ? await renderReportPdf(report) : await renderReportExcel(report);
     // No mantener locks durante serialización; detectar revocación/suspensión durante la generación.
     await withPostgresTransaction(async client => {
@@ -225,7 +226,7 @@ export async function exportAnalyticalReport(auth: VerifiedAuthConnection, rawId
       const current = { ...auth, profile, roles, permissions: await readAnalyticsPermissions(client, auth.userId) };
       for (const campus of report.scope.campuses) requireCampusCapability(current, campus.id, 'reports');
     });
-    return { bytes, filename: `campuslink-reporte-${report.id}.${rawFormat}`,
+    return { bytes, filename: reportFilename(report, rawFormat),
       contentType: rawFormat === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
   } catch (error) {
     if (error instanceof ApiError) throw error;

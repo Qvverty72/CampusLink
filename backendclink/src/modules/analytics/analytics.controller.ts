@@ -40,6 +40,6 @@ export const getDashboardOptionsController: RequestHandler<Record<string,string>
 export const exportAnalyticalReportController: RequestHandler<{reportId:string;format:string},unknown,unknown,Record<string,string>,AuthLocals> = async (request,response) => {
   if (Object.keys(request.query).length) throw new ApiError(400, 'VALIDATION_ERROR', 'La exportación del reporte guardado no admite filtros.');
   const file = await exportAnalyticalReport(response.locals.auth, request.params.reportId, request.params.format);
-  response.set({ 'Content-Type': file.contentType, 'Content-Disposition': `attachment; filename="${file.filename}"`, 'Cache-Control': 'no-store' });
+  response.set({ 'Content-Type': file.contentType, 'Content-Disposition': `attachment; filename="${file.filename}"`, 'Access-Control-Expose-Headers': 'Content-Disposition', 'Cache-Control': 'no-store' });
   response.send(file.bytes);
 };
