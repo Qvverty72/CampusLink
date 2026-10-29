@@ -4,14 +4,24 @@ import type { ActivityDependencies } from '../activities/activities.service.js';
 
 export type ReportsHealth = ModuleHealth<'reports'>;
 
+export type ReportStatus = 'PENDIENTE' | 'EN_REVISION' | 'RESUELTO' | 'DESESTIMADO';
+
+export interface ReportPerson { id: string; name: string | null; email: string | null }
+/** Contactos vigentes de IDs del caso; no forman parte de la evidencia histórica. */
+export interface ReportPeople {
+  source: 'CURRENT_PROFILE'; reporter: ReportPerson | null; reported: ReportPerson | null; decisionMaker: ReportPerson | null;
+}
+
 export interface ReportReviewSummary {
   id: string; campusId: string; entityType: string; entityId: string;
   title: string | null; reason: string; status: string; reportedAt: string;
+  resolution?: { measure: string | null; resolvedById: string | null; resolvedAt: string | null } | null;
 }
 export interface ReportReviewDetail extends ReportReviewSummary {
   resolution: { justification: string; measure: string; resolvedById: string; resolvedAt: string } | null;
   description: string | null;
   reporter: { id: string; name: string | null };
+  people?: ReportPeople;
   snapshot: (Record<string, unknown> & {
     publication?: Record<string, unknown> & { id?: string; tipo_recurso?: string; files?: { id?: string }[] };
     transaction?: Record<string, unknown> & { id?: string };

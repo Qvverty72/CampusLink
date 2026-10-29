@@ -34,7 +34,7 @@ before(async () => {
     if (failSql && sql.includes('reporte_contenido')) throw new Error('private SQL password');
     return db.query(sql, values);
   }, release() {} }));
-  await db.exec('CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);');
+  await db.exec('CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY,email text);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso',
     'recurso_digital', 'archivo_publicacion', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'reporte_contenido', 'auditoria']) {
@@ -80,7 +80,7 @@ before(async () => {
 beforeEach(async () => {
   failSql = false; failAudit = false; failMongo = false; mongoWrites = 0; activity = null; storageCalls = 0;
   const userId = randomUUID();
-  await db.query('INSERT INTO auth.users VALUES($1)', [userId]);
+  await db.query("INSERT INTO auth.users(id,email) VALUES($1,'admin-current@duocuc.cl')", [userId]);
   await db.query("INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) VALUES($1,$2,$3,'Administrador',now())", [userId, institution, campus]);
   await db.query("INSERT INTO usuario_rol(perfil_usuario_id,rol_id,campus_id) SELECT $1,id,$2 FROM rol WHERE nombre='ADMINISTRADOR'", [userId, campus]);
   auth = { userId, campusId: campus, roles: [{ id: randomUUID(), name: 'ADMINISTRADOR', campusId: campus }], permissions: [], profile: {
@@ -119,6 +119,64 @@ const dismiss = { decision: 'DESESTIMAR', justification: 'Los antecedentes no ac
 const resolveCase = (id: string, input: unknown = decision, at = campus) => resolutions.resolveReport(auth, at, id, input, transaction);
 const audits = async () => (await db.query<any>('SELECT * FROM auditoria')).rows;
 
+async function contact(name: string, email: string | null) {
+  const id = randomUUID();
+  await db.query('INSERT INTO auth.users(id,email) VALUES($1,$2)', [id, email]);
+  await db.query('INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo) VALUES($1,$2,$3,$4)', [id, institution, campus, name]);
+  return { id, name, email };
+}
+
+test('authorized detail adds minimal current contacts from original case IDs, including decision response, without exposing them in lists', async () => {
+  const owner = await contact('Dueña original', 'owner@duocuc.cl');
+  const id = await report('PUBLICACION_FISICA', campus, { publication: { id: randomUUID(), titulo: 'Original', propietario_id: owner.id } });
+  const detail = await reviews.getReportReview(auth, campus, id, transaction);
+  assert.deepEqual(detail.people, { source: 'CURRENT_PROFILE', reporter: { id: auth.userId, name: 'Administrador', email: 'admin-current@duocuc.cl' }, reported: owner, decisionMaker: null });
+  const result = await resolveCase(id, dismiss);
+  assert.deepEqual(result.people?.decisionMaker, detail.people.reporter);
+  const response = await http(campus + '/' + id);
+  assert.equal(response.status, 200); assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+  const closed = (await response.json()).data;
+  assert.deepEqual(closed.people, result.people); assert.equal(closed.reporter.name, null);
+  assert.equal(closed.resolution.resolvedById, auth.userId); assert.deepEqual(closed.snapshot, detail.snapshot);
+  for (const list of [await reviews.listReportReviews(auth, campus, {}, transaction), await reviews.listReportResolutions(auth, campus, {}, transaction)]) {
+    assert.ok(!/people|owner@|admin-current@/.test(JSON.stringify(list)));
+  }
+  assert.equal((await http(campus + '/' + id + '?userId=' + owner.id)).status, 400);
+  assert.equal((await http(other + '/' + id)).status, 403);
+});
+
+test('people never replace saved evidence and use saved publication owner or activity creator even after profile changes or removal', async () => {
+  const fixture = await digitalCase(), owner = await contact('Dueño al leer', 'before@duocuc.cl');
+  await db.query('UPDATE reporte_contenido SET contenido_reportado_json=contenido_reportado_json||$2::jsonb WHERE id=$1',
+    [fixture.id, JSON.stringify({ publication: { ...fixture.snapshot.publication, propietario_id: owner.id } })]);
+  await db.query("UPDATE publicacion_recurso SET propietario_id=$2,titulo='Contenido vivo ajeno' WHERE id=$1", [fixture.publicationId, auth.userId]);
+  const before = await reviews.getReportReview(auth, campus, fixture.id, transaction);
+  assert.deepEqual(before.people?.reported, owner);
+  await db.query("UPDATE perfil_usuario SET nombre_completo='Nombre vigente',deleted_at=now(),estado_cuenta='DESACTIVADA',campus_id=$2 WHERE id=$1", [owner.id, other]);
+  await db.query("UPDATE auth.users SET email='after@duocuc.cl' WHERE id=$1", [owner.id]);
+  const after = await reviews.getReportReview(auth, campus, fixture.id, transaction);
+  assert.deepEqual(after.snapshot, before.snapshot);
+  assert.deepEqual(after.people?.reported, { id: owner.id, name: 'Nombre vigente', email: 'after@duocuc.cl' });
+  const activityId = await report('ACTIVIDAD', campus, { title: 'Actividad original', createdByUserId: owner.id });
+  assert.deepEqual((await reviews.getReportReview(auth, campus, activityId, transaction)).people?.reported, after.people?.reported);
+  const missing = randomUUID(), legacy = await report('ACTIVIDAD', campus, { title: 'Legado', createdByUserId: missing });
+  assert.deepEqual((await reviews.getReportReview(auth, campus, legacy, transaction)).people?.reported, { id: missing, name: null, email: null });
+});
+
+test('transaction reported person is the other saved participant for either reporting role; ambiguous legacy records do not guess an owner', async () => {
+  const owner = await contact('Propietaria', 'owner-trade@duocuc.cl'), receiver = await contact('Receptor', null);
+  for (const [reporterId, expected] of [[owner.id, receiver], [receiver.id, owner]] as const) {
+    const id = await report('TRANSACCION', campus, { transaction: { propietario_id: owner.id, receptor_id: receiver.id }, publication: { propietario_id: owner.id } });
+    await db.query('UPDATE reporte_contenido SET reportante_id=$2 WHERE id=$1', [id, reporterId]);
+    assert.deepEqual((await reviews.getReportReview(auth, campus, id, transaction)).people?.reported, expected);
+  }
+  for (const agreement of [null, [], { propietario_id: owner.id, receptor_id: receiver.id },
+    { propietario_id: auth.userId, receptor_id: auth.userId }, { propietario_id: auth.userId, receptor_id: 'invalid UUID' }]) {
+    const id = await report('TRANSACCION', campus, { transaction: agreement, publication: { propietario_id: owner.id } });
+    assert.equal((await reviews.getReportReview(auth, campus, id, transaction)).people?.reported, null);
+  }
+});
+
 test('resolution history includes only final cases and paginates by original decision date then UUID within the campus', async () => {
   const first = await report(), second = await report(), pending = await report(), staged = await report(), outside = await report('ACTIVIDAD', other);
   for (const [id, status, at] of [[first, 'DESESTIMADO', '2026-10-21T12:00:00.123456Z'],
@@ -144,7 +202,7 @@ test('history preserves the complete original decision after edits, logical remo
   const fixture = await digitalCase(), original = await resolveCase(fixture.id);
   const before = await reviews.getReportResolution(auth, campus, fixture.id, transaction);
   const reader = randomUUID();
-  await db.query('INSERT INTO auth.users VALUES($1)', [reader]);
+  await db.query('INSERT INTO auth.users(id) VALUES($1)', [reader]);
   await db.query(`INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en)
     VALUES($1,$2,$3,'Nuevo lector',now())`, [reader, institution, campus]);
   await db.query("INSERT INTO usuario_rol(perfil_usuario_id,rol_id,campus_id) SELECT $1,id,$2 FROM rol WHERE nombre='ADMINISTRADOR'", [reader, campus]);
@@ -152,7 +210,12 @@ test('history preserves the complete original decision after edits, logical remo
   await db.query("UPDATE perfil_usuario SET nombre_completo='Nombre cambiado',estado_cuenta='DESACTIVADA',deleted_at=now(),campus_id=$2 WHERE id=$1", [auth.userId, other]);
   const nextReader = { ...auth, userId: reader };
   const after = await reviews.getReportResolution(nextReader, campus, fixture.id, transaction);
-  assert.deepEqual(after, before); assert.deepEqual(after.resolution, original.resolution);
+  const { people: beforePeople, ...beforeRecord } = before, { people: afterPeople, ...afterRecord } = after;
+  assert.deepEqual(afterRecord, beforeRecord); assert.deepEqual(after.resolution, original.resolution);
+  assert.equal(beforePeople?.decisionMaker?.name, 'Administrador');
+  assert.equal(afterPeople?.decisionMaker?.name, 'Nombre cambiado');
+  assert.equal(afterPeople?.decisionMaker?.id, original.resolution?.resolvedById);
+  assert.equal(afterPeople?.source, 'CURRENT_PROFILE');
   assert.deepEqual(after.snapshot, fixture.snapshot); assert.equal(after.title, 'Título original');
   assert.equal(after.reason, 'Motivo privado'); assert.equal(after.currentPublication, null); assert.equal(after.currentTransaction, null);
   assert.equal(after.reporter.name, null); assert.equal(after.resolution!.resolvedById, auth.userId);
@@ -272,7 +335,7 @@ test('competing resolutions produce only one final decision and audit', async ()
 
 test('transaction report uses the actual publication relationship, preserves requests, agreement, confirmations and acquired download', async () => {
   const fixture = await digitalCase(), receiver = randomUUID(), requestId = randomUUID(), tradeId = randomUUID();
-  await db.query('INSERT INTO auth.users VALUES($1)', [receiver]);
+  await db.query('INSERT INTO auth.users(id) VALUES($1)', [receiver]);
   await db.query("INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo,verificado_en) VALUES($1,$2,$3,'Receptor',now())", [receiver, institution, campus]);
   await db.exec("INSERT INTO mensaje_solicitud(codigo,descripcion) VALUES('QA_RESOLUTION','Me interesa') ON CONFLICT DO NOTHING");
   await db.query("INSERT INTO solicitud_recurso(id,publicacion_id,solicitante_id,codigo_mensaje) VALUES($1,$2,$3,'QA_RESOLUTION')", [requestId, fixture.publicationId, receiver]);
@@ -400,8 +463,61 @@ test('listing filters campus before stable pagination, exposes minimal content/r
   for (const entry of first.data) {
     assert.equal(entry.campusId, campus); assert.equal(entry.title, 'Actividad original'); assert.equal(entry.status, 'PENDIENTE');
     assert.equal(entry.reason, 'Motivo privado'); assert.ok(Number.isFinite(Date.parse(entry.reportedAt)));
-    assert.deepEqual(Object.keys(entry).sort(), ['campusId', 'entityId', 'entityType', 'id', 'reason', 'reportedAt', 'status', 'title']);
+    assert.deepEqual(Object.keys(entry).sort(), ['campusId', 'entityId', 'entityType', 'id', 'reason', 'reportedAt', 'resolution', 'status', 'title']);
   }
+});
+
+test('status filters all campus records before pagination, preserves ties and includes only recorded final metadata', async () => {
+  const final: string[] = [];
+  for (let index = 0; index < 25; index++) {
+    const id = await report();
+    await db.query("UPDATE reporte_contenido SET reportado_en='2026-10-28T12:00:00Z' WHERE id=$1", [id]);
+    if (index % 2 === 0) {
+      final.push(id);
+      await db.query(`UPDATE reporte_contenido SET estado_reporte='RESUELTO',medida_aplicada='OCULTAR',
+        resuelto_por_id=$2,resuelto_en='2026-10-28T13:00:00Z',fundamento_resolucion='Fundamento privado' WHERE id=$1`, [id, auth.userId]);
+    }
+  }
+  const outside = await report('ACTIVIDAD', other);
+  await db.query("UPDATE reporte_contenido SET estado_reporte='RESUELTO' WHERE id=$1", [outside]);
+  const rows = [];
+  for (let page = 1; page <= 3; page++) {
+    const result = await reviews.listReportReviews(auth, campus, { status: 'RESUELTO', page: String(page), limit: '5' }, transaction);
+    assert.equal(result.meta.hasMore, page < 3); rows.push(...result.data);
+  }
+  assert.deepEqual(rows.map(row => row.id), final.sort().reverse());
+  for (const row of rows) {
+    assert.equal(row.status, 'RESUELTO'); assert.equal(row.campusId, campus);
+    assert.deepEqual(row.resolution, { measure: 'OCULTAR', resolvedById: auth.userId, resolvedAt: '2026-10-28T13:00:00.000000Z' });
+    assert.ok(!/Fundamento privado|reporter|snapshot|Administrador/.test(JSON.stringify(row)));
+  }
+  assert.equal((await reviews.listReportReviews(auth, campus, { status: 'PENDIENTE' }, transaction)).data.length, 12);
+  for (const status of ['EN_REVISION', 'DESESTIMADO']) assert.equal((await reviews.listReportReviews(auth, campus, { status }, transaction)).data.length, 0);
+  for (const status of ['', 'resuelto', 'TODAS', ['RESUELTO'], { value: 'RESUELTO' }, "RESUELTO' OR 1=1--"]) {
+    await assert.rejects(reviews.listReportReviews(auth, campus, { status }, transaction), { status: 400 });
+  }
+  await assert.rejects(reviews.listReportReviews(auth, other, { status: 'RESUELTO' }, transaction), { status: 403 });
+  for (const query of ['status=RESUELTO&status=PENDIENTE', 'status=', 'status=INVALID', 'status[eq]=RESUELTO']) {
+    assert.equal((await http(campus + '?' + query)).status, 400);
+  }
+  const response = await http(campus + '?status=RESUELTO&limit=5&page=2'); assert.equal(response.status, 200);
+  const body = await response.json(); assert.deepEqual(body.data.map((row: { id: string }) => row.id), final.slice(5, 10));
+  assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+  assert.equal((await audits()).length, 0); assert.equal(mongoWrites, 0);
+});
+
+test('unified closed detail equals historical detail after live edits and legacy nulls remain absent', async () => {
+  const fixture = await digitalCase(); await resolveCase(fixture.id, dismiss);
+  await db.query("UPDATE publicacion_recurso SET titulo='Título cambiado',deleted_at=now() WHERE id=$1", [fixture.publicationId]);
+  const original = await reviews.getReportResolution(auth, campus, fixture.id, transaction);
+  assert.deepEqual(await reviews.getReportReview(auth, campus, fixture.id, transaction), original);
+  const response = await http(campus + '/' + fixture.id); assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, original);
+  assert.equal(original.reporter.name, null); assert.equal(original.currentPublication, null); assert.deepEqual(original.snapshot, fixture.snapshot);
+  const legacy = await report(); await db.query("UPDATE reporte_contenido SET estado_reporte='RESUELTO' WHERE id=$1", [legacy]);
+  const detail = await reviews.getReportReview(auth, campus, legacy, transaction);
+  assert.deepEqual(detail.resolution, { measure: null, justification: null, resolvedById: null, resolvedAt: null });
+  assert.equal(detail.reporter.name, null);
 });
 test('detail preserves original activity independent of Mongo visibility and does not advance the case state', async () => {
   const id = await report();
@@ -421,7 +537,7 @@ test('detail keeps snapshot after publication edit/withdrawal, current state is 
 });
 test('current transaction exposes pertinent participants/status/confirmations while original agreement stays immutable', async () => {
   const fixture = await digitalCase(), transactionId = randomUUID(), receiverId = randomUUID();
-  await db.query('INSERT INTO auth.users VALUES($1)', [receiverId]);
+  await db.query('INSERT INTO auth.users(id) VALUES($1)', [receiverId]);
   await db.query("INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo) VALUES($1,$2,$3,'Receptor')", [receiverId, institution, campus]);
   // El esquema exige una solicitud real como antecedente del acuerdo.
   const requestId = randomUUID();
@@ -445,7 +561,7 @@ test('UUID and query manipulation cannot expose another campus or institution, e
     await assert.rejects(reviews.listReportReviews(auth, at, {}, transaction), { status: 403 });
     await assert.rejects(reviews.getReportReview(auth, at, id, transaction), { status: 403 });
   }
-  for (const query of [{ campusId: other }, { page: ['1'] }, { limit: '101' }, { page: '0' }, { page: '1;select 1' }, { status: 'PENDIENTE' }]) {
+  for (const query of [{ campusId: other }, { page: ['1'] }, { limit: '101' }, { page: '0' }, { page: '1;select 1' }, { status: 'INVALID' }, { status: ['PENDIENTE'] }, { status: '' }]) {
     await assert.rejects(reviews.listReportReviews(auth, campus, query, transaction), { status: 400 });
   }
 });
@@ -523,7 +639,11 @@ test('physical report and every persisted case state are readable without changi
     await db.query('UPDATE reporte_contenido SET estado_reporte=$2 WHERE id=$1', [id, status]);
     const detail = await reviews.getReportReview(auth, campus, id, transaction);
     assert.equal(detail.status, status); assert.deepEqual(detail.snapshot, snapshot);
-    assert.equal(detail.currentPublication?.title, 'Libro editado'); assert.equal(detail.currentPublication?.status, 'DISPONIBLE');
+    if (['RESUELTO', 'DESESTIMADO'].includes(status)) {
+      assert.equal(detail.currentPublication, null); assert.equal(detail.reporter.name, null);
+    } else {
+      assert.equal(detail.currentPublication?.title, 'Libro editado'); assert.equal(detail.currentPublication?.status, 'DISPONIBLE');
+    }
   }
 });
 test('inactive campus and malformed identifiers fail closed before reading a case', async () => {

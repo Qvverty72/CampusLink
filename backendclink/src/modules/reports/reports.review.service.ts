@@ -9,7 +9,8 @@ import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
 import { assertStoredDigitalFile } from '../marketplace/elibrary/elibrary.files.service.js';
 import { downloadDigitalOriginal, findDigitalResource } from '../marketplace/elibrary/elibrary.repository.js';
-import { findReportedDigitalFile, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution } from './reports.review.repository.js';
+import { findReportedDigitalFile, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution, readReportPeople } from './reports.review.repository.js';
+import type { ReportStatus } from './reports.types.js';
 
 const missing = () => new ApiError(404, 'NOT_FOUND', 'La denuncia o el archivo no está disponible en este campus.');
 
@@ -31,20 +32,24 @@ export async function authorizedReview<T>(auth: VerifiedAuthConnection, campusId
   }
 }
 
-function reviewListQuery(rawCampusId: unknown, query: unknown) {
+function reviewListQuery(rawCampusId: unknown, query: unknown, allowStatus = false) {
   const campusId = digitalId(rawCampusId, 'campusId');
   const parsed = parsePaginationQuery(query);
-  if (!parsed.success || !query || typeof query !== 'object' || Object.keys(query).some(key => !['page', 'limit'].includes(key))) {
+  if (!parsed.success || !query || typeof query !== 'object' || Array.isArray(query) || Object.keys(query).some(key => !['page', 'limit', ...(allowStatus ? ['status'] : [])].includes(key))) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa la página y el tamaño del listado.');
   }
-  return { campusId, pagination: parsed.data };
+  const status = (query as Record<string, unknown>).status;
+  if (status !== undefined && (typeof status !== 'string' || !['PENDIENTE', 'EN_REVISION', 'RESUELTO', 'DESESTIMADO'].includes(status))) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Selecciona un estado de denuncia válido.');
+  }
+  return { campusId, pagination: parsed.data, status: status as ReportStatus | undefined };
 }
 
 export async function listReportReviews(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown,
   transaction = withPostgresTransaction) {
-  const { campusId, pagination } = reviewListQuery(rawCampusId, query);
+  const { campusId, pagination, status } = reviewListQuery(rawCampusId, query, true);
   return authorizedReview(auth, campusId, async client =>
-    createPaginatedResult(await readReportReviews(client, campusId, pagination), pagination), transaction);
+    createPaginatedResult(await readReportReviews(client, campusId, pagination, status), pagination), transaction);
 }
 
 export async function listReportResolutions(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown,
@@ -60,7 +65,7 @@ export async function getReportResolution(auth: VerifiedAuthConnection, rawCampu
   return authorizedReview(auth, campusId, async client => {
     const report = await findReportResolution(client, campusId, id);
     if (!report) throw missing();
-    return report;
+    return { ...report, people: await readReportPeople(client, report) };
   }, transaction);
 }
 
@@ -70,7 +75,13 @@ export async function getReportReview(auth: VerifiedAuthConnection, rawCampusId:
   return authorizedReview(auth, campusId, async client => {
     const report = await findReportReview(client, campusId, id);
     if (!report) throw missing();
-    return { ...report, ...await readReportBackground(client, report) };
+    // La lectura unificada conserva el contrato histórico de los casos finalizados.
+    if (['RESUELTO', 'DESESTIMADO'].includes(report.status)) {
+      const resolution = await findReportResolution(client, campusId, id);
+      if (!resolution) throw missing();
+      return { ...resolution, people: await readReportPeople(client, resolution) };
+    }
+    return { ...report, ...await readReportBackground(client, report), people: await readReportPeople(client, report) };
   }, transaction);
 }
 

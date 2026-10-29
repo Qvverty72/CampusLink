@@ -4,7 +4,7 @@ import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
 import { hideReportedActivity } from '../activities/activities.management.repository.js';
 import { authorizedReview } from './reports.review.service.js';
-import { findReportReview, readReportBackground } from './reports.review.repository.js';
+import { findReportReview, readReportBackground, readReportPeople } from './reports.review.repository.js';
 import { auditReportResolution, finishActivityReport, hideReportPublication, lockReportPublication, saveReportDecision } from './reports.resolution.repository.js';
 import { parseReportResolution } from './reports.validation.js';
 import type { ReportReviewDetail, ReportResolutionInput } from './reports.types.js';
@@ -57,7 +57,7 @@ export async function resolveReport(auth: VerifiedAuthConnection, rawCampusId: u
       input.decision === 'ACOGER' ? 'OCULTAR' : 'NINGUNA', input.decision === 'ACOGER' ? 'RESUELTO' : 'DESESTIMADO');
     const after = (await findReportReview(client, campusId, id))!;
     await auditReportResolution(client, institutionId, before, after, input.decision === 'ACOGER' ? 'RESOLVER_DENUNCIA' : 'DESESTIMAR_DENUNCIA');
-    return { activity: false as const, detail: { ...after, ...await readReportBackground(client, after) } };
+    return { activity: false as const, detail: { ...after, ...await readReportBackground(client, after), people: await readReportPeople(client, after) } };
   }, transaction);
   if (!result.activity) return result.detail;
   // La segunda transacción revalida permisos y serializa reintentos de la misma decisión.
@@ -69,6 +69,6 @@ export async function resolveReport(auth: VerifiedAuthConnection, rawCampusId: u
     await finishActivityReport(client, before);
     const after = (await findReportReview(client, campusId, id))!;
     await auditReportResolution(client, institutionId, before, after, 'RESOLVER_DENUNCIA');
-    return { ...after, ...await readReportBackground(client, after) };
+    return { ...after, ...await readReportBackground(client, after), people: await readReportPeople(client, after) };
   }, transaction);
 }

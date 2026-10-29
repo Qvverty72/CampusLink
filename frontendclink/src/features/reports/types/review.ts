@@ -1,10 +1,18 @@
+export type ReportStatus = 'PENDIENTE' | 'EN_REVISION' | 'RESUELTO' | 'DESESTIMADO';
+export type ReportStatusFilter = ReportStatus | '';
+export interface ReportPerson { id: string; name: string | null; email: string | null }
+export interface ReportPeople {
+  source: 'CURRENT_PROFILE'; reporter: ReportPerson | null; reported: ReportPerson | null; decisionMaker: ReportPerson | null;
+}
 export interface ReportReviewSummary {
   id: string; campusId: string; entityType: string; entityId: string;
   title: string | null; reason: string; status: string; reportedAt: string;
+  resolution?: { measure: string | null; resolvedById: string | null; resolvedAt: string | null } | null;
 }
 export interface ReportReviewDetail extends ReportReviewSummary {
   resolution: { justification: string; measure: string; resolvedById: string; resolvedAt: string } | null;
   description: string | null; reporter: { id: string; name: string | null };
+  people?: ReportPeople;
   snapshot: Record<string, unknown> | null;
   currentPublication: { id: string; title: string; status: string; deletedAt: string | null } | null;
   currentTransaction: Record<string, unknown> | null;

@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { PaginationParams } from '../../types/api.js';
 import type { DigitalStoredFile } from '../marketplace/elibrary/elibrary.types.js';
-import type { ReportResolutionDetail, ReportResolutionSummary, ReportReviewDetail, ReportReviewSummary } from './reports.types.js';
+import type { ReportPeople, ReportPerson, ReportResolutionDetail, ReportResolutionSummary, ReportReviewDetail, ReportReviewSummary, ReportStatus } from './reports.types.js';
 
 const summaryProjection = `r.id,r.campus_id AS "campusId",r.entidad_tipo AS "entityType",r.entidad_id AS "entityId",
   COALESCE(r.contenido_reportado_json->'publication'->>'titulo',r.contenido_reportado_json->>'title') AS title,
@@ -32,10 +32,13 @@ export async function findReportResolution(client: PoolClient, campusId: string,
 }
 
 /** El campus se aplica en SQL antes de paginar o buscar un identificador. */
-export async function readReportReviews(client: PoolClient, campusId: string, pagination: PaginationParams) {
-  return (await client.query<ReportReviewSummary>(`SELECT ${summaryProjection} FROM public.reporte_contenido r
-    WHERE r.campus_id=$1 ORDER BY r.reportado_en DESC,r.id DESC LIMIT $2 OFFSET $3`,
-    [campusId, pagination.limit + 1, pagination.offset])).rows;
+export async function readReportReviews(client: PoolClient, campusId: string, pagination: PaginationParams, status?: ReportStatus) {
+  return (await client.query<ReportReviewSummary>(`SELECT ${summaryProjection},
+    CASE WHEN ${finalResolution} THEN jsonb_build_object('measure',r.medida_aplicada,
+      'resolvedById',r.resuelto_por_id,'resolvedAt',to_char(r.resuelto_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ELSE NULL END AS resolution
+    FROM public.reporte_contenido r WHERE r.campus_id=$1 ${status ? 'AND r.estado_reporte=$4' : ''}
+    ORDER BY r.reportado_en DESC,r.id DESC LIMIT $2 OFFSET $3`,
+    status ? [campusId, pagination.limit + 1, pagination.offset, status] : [campusId, pagination.limit + 1, pagination.offset])).rows;
 }
 
 export async function findReportReview(client: PoolClient, campusId: string, id: string, lock = false) {
@@ -47,6 +50,31 @@ export async function findReportReview(client: PoolClient, campusId: string, id:
       'resolvedAt',to_char(r.resuelto_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) END AS resolution
     FROM public.reporte_contenido r LEFT JOIN public.perfil_usuario u ON u.id=r.reportante_id
     WHERE r.id=$1 AND r.campus_id=$2 ${lock ? 'FOR UPDATE OF r' : ''}`, [id, campusId])).rows[0] ?? null;
+}
+
+/** Sólo IDs ya vinculados al caso autorizado; no reconstruye participantes desde contenido vivo. */
+export async function readReportPeople(client: PoolClient, report: ReportReviewDetail | ReportResolutionDetail): Promise<ReportPeople> {
+  const uuid = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value) ? value.toLowerCase() : null;
+  const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const snapshot = record(report.snapshot), publication = record(snapshot.publication), agreement = record(snapshot.transaction);
+  const reporterId = uuid(report.reporter?.id), decisionId = uuid(report.resolution?.resolvedById);
+  let reportedId: string | null = null;
+  if (report.entityType === 'ACTIVIDAD') reportedId = uuid(snapshot.createdByUserId);
+  else if (['PUBLICACION_FISICA', 'PUBLICACION_DIGITAL'].includes(report.entityType)) reportedId = uuid(publication.propietario_id);
+  else if (report.entityType === 'TRANSACCION') {
+    const owner = uuid(agreement.propietario_id), receiver = uuid(agreement.receptor_id);
+    if (owner && receiver && owner !== receiver) {
+      if (reporterId === owner) reportedId = receiver;
+      else if (reporterId === receiver) reportedId = owner;
+    }
+  }
+  const ids = [...new Set([reporterId, reportedId, decisionId].filter((id): id is string => !!id))];
+  const rows = ids.length ? (await client.query<ReportPerson>(`SELECT p.id,NULLIF(btrim(p.nombre_completo),'') AS name,
+    NULLIF(btrim(u.email),'') AS email FROM public.perfil_usuario p LEFT JOIN auth.users u ON u.id=p.id
+    WHERE p.id=ANY($1::uuid[])`, [ids])).rows : [];
+  const byId = new Map(rows.map(row => [row.id, row]));
+  const person = (id: string | null) => id ? byId.get(id) ?? { id, name: null, email: null } : null;
+  return { source: 'CURRENT_PROFILE', reporter: person(reporterId), reported: person(reportedId), decisionMaker: person(decisionId) };
 }
 
 /** Antecedentes actuales complementan, sin sustituir, la evidencia del envío. Incluye retirada lógica. */

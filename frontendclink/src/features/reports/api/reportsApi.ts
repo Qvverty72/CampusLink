@@ -3,7 +3,7 @@ import { authenticatedEnvelopeRequest } from '@/lib/api/authenticated-request';
 import type { ActivityReportInput, ActivityReportReceipt } from '@/features/activities/types/activityReport';
 import type { ContentReportInput, ContentReportTarget, PhysicalgoodsReportReceipt } from '../types/contentReport';
 import { authenticatedRequest, authenticatedResponseRequest } from '@/lib/api/authenticated-request';
-import type { ReportReviewDetail, ReportReviewSummary, ReportResolutionInput, ReportResolutionDetail, ReportResolutionSummary, ReviewPage } from '../types/review';
+import type { ReportReviewDetail, ReportReviewSummary, ReportResolutionInput, ReportResolutionDetail, ReportResolutionSummary, ReportStatusFilter, ReviewPage } from '../types/review';
 
 const reviewPath = (campusId: string) => '/api/v1/reports/campuses/' + encodeURIComponent(campusId);
 export const loadReportResolutions = (campusId: string, page: number, signal: AbortSignal): Promise<ReviewPage> =>
@@ -11,11 +11,11 @@ export const loadReportResolutions = (campusId: string, page: number, signal: Ab
     new URLSearchParams({ page: String(page), limit: '20' }));
 export const loadReportResolution = (campusId: string, id: string, signal: AbortSignal) =>
   authenticatedRequest<ReportResolutionDetail>(reviewPath(campusId) + '/resolutions/' + encodeURIComponent(id), { signal });
-export const loadReportReviews = (campusId: string, page: number, signal: AbortSignal): Promise<ReviewPage> =>
+export const loadReportReviews = (campusId: string, page: number, signal: AbortSignal, status: ReportStatusFilter = ''): Promise<ReviewPage> =>
   authenticatedEnvelopeRequest<ReportReviewSummary[], ReviewPage['meta']>(reviewPath(campusId), { signal },
-    new URLSearchParams({ page: String(page), limit: '20' }));
+    new URLSearchParams({ page: String(page), limit: '20', ...(status ? { status } : {}) }));
 export const loadReportReview = (campusId: string, id: string, signal: AbortSignal) =>
-  authenticatedRequest<ReportReviewDetail>(reviewPath(campusId) + '/' + encodeURIComponent(id), { signal });
+  authenticatedRequest<ReportReviewDetail | ReportResolutionDetail>(reviewPath(campusId) + '/' + encodeURIComponent(id), { signal });
 export const submitReportResolution = (campusId: string, id: string, input: ReportResolutionInput, signal: AbortSignal) =>
   authenticatedRequest<ReportReviewDetail>(reviewPath(campusId) + '/' + encodeURIComponent(id) + '/resolution', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
