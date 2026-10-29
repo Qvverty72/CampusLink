@@ -20,6 +20,7 @@ export function ReportCaseDetail({ review, campusName, titleRef }: { review: Rev
   if (!detail) return null;
   const final = ['RESUELTO', 'DESESTIMADO'].includes(detail.status), saved = reportContent(detail);
   const originalLabel = detail.entityType === 'ACTIVIDAD' ? 'Ver actividad como fue denunciada' : 'Ver publicación como fue denunciada';
+  const activityOpen = detail.entityType === 'ACTIVIDAD' && originalOpen;
   return <View style={d.content}>
     <View style={s.card}>
       <View style={d.summary}>
@@ -34,15 +35,15 @@ export function ReportCaseDetail({ review, campusName, titleRef }: { review: Rev
       <ReportPersonDetails label="Persona denunciada" person={detail.people?.reported} missingName="Persona no identificada en el registro" />
     </View>
     <ReportCaseHistory detail={detail} />
-    <View style={d.disclosureCard}>
+    <View style={[d.disclosureCard, activityOpen && d.activityDisclosure]}>
       <Pressable accessibilityRole="button" accessibilityLabel={originalLabel} accessibilityState={{ expanded: originalOpen }} aria-expanded={originalOpen}
-        onPress={() => setOriginalOpen(value => !value)} style={d.disclosure}>
+        onPress={() => setOriginalOpen(value => !value)} style={[d.disclosure, activityOpen && d.activityDisclosureTrigger]}>
         <Text style={d.disclosureText}>{originalLabel}</Text><ReportIcon icon={originalOpen ? ChevronUp : ChevronDown} />
       </Pressable>
       {originalOpen && <ReportOriginalContent review={review} />}
     </View>
     {!final && review.canResolve && <ReportResolutionForm review={review} campusName={campusName} />}
-    {!final && (detail.currentPublication || detail.currentTransaction) && <ReportSection title="Situación actual" icon={Info}>
+    {!final && detail.entityType !== 'TRANSACCION' && (detail.currentPublication || detail.currentTransaction) && <ReportSection title="Situación actual" icon={Info}>
       <Text style={s.small}>Estos datos describen la situación actual y no reemplazan el registro original.</Text>
       {detail.currentPublication && <View style={s.smallStack}><Text style={s.label}>Publicación actual</Text><ReportEvidence value={detail.currentPublication} /></View>}
       {detail.currentTransaction && <View style={s.smallStack}><Text style={s.label}>Antecedentes actuales del acuerdo</Text><ReportEvidence value={detail.currentTransaction} /></View>}

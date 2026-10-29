@@ -6,7 +6,7 @@ import { parseActivityId, parseEmptyActivityInput } from '../activities/activiti
 import { parseActivityReport, parseContentReport } from './reports.validation.js';
 import type { ReportsDependencies } from './reports.types.js';
 import { createDigitalReportController,getOwnPhysicalgoodsReportController,getOwnDigitalReportController } from './reports.controller.js';
-import { downloadReportedOriginalController, getReportReviewController, listReportReviewsController } from './reports.controller.js';
+import { downloadReportedOriginalController, getReportedImageController, getReportReviewController, listReportReviewsController } from './reports.controller.js';
 import { resolveReportController, listReportResolutionsController, getReportResolutionController } from './reports.controller.js';
 
 /** Todas las denuncias de contenido se registran en reports, con autorización propia del elemento. */
@@ -23,6 +23,8 @@ export function createReportsRouter(diagnosticsEnabled: boolean, dependencies: R
     validateRequest({ query: parseEmptyActivityInput }), getReportReviewController);
   router.get('/campuses/:campusId/:reportId/files/:fileId', requireAuthentication,
     validateRequest({ query: parseEmptyActivityInput }), downloadReportedOriginalController);
+  router.get('/campuses/:campusId/:reportId/images/:imageId', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput }), getReportedImageController);
 
   router.get('/activities/:activityId/own', requireAuthentication,
     validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseEmptyActivityInput }),

@@ -47,6 +47,11 @@ before(async () => {
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     assert.equal(url.origin, 'https://review-test.invalid');
+    if (url.pathname.startsWith('/storage/v1/object/sign/publication-images/')) {
+      storageCalls++; assert.equal(new Headers(init?.headers).get('apikey'), 'sb_secret_test');
+      assert.equal(JSON.parse(String(init?.body)).expiresIn, 60);
+      return Response.json({ signedURL: url.pathname.replace('/storage/v1', '') + '?token=fixture-only' });
+    }
     if (url.pathname.startsWith('/storage/v1/object/digital-resources/')) {
       storageCalls++; assert.equal(new Headers(init?.headers).get('apikey'), 'sb_secret_test');
       return new Response(new Uint8Array(bytes), { headers: { 'Content-Type': 'application/pdf' } });
@@ -113,6 +118,16 @@ async function digitalCase() {
     files: [{ id: fileId, name: 'evidencia.pdf', mimeType: 'application/pdf', sizeBytes: bytes.length }] } };
   return { id: await report('PUBLICACION_DIGITAL', campus, snapshot), publicationId, fileId, path, snapshot };
 }
+async function physicalCase() {
+  const publicationId = randomUUID(), imageId = randomUUID(), path = `${campus}/${auth.userId}/${publicationId}/${imageId}.png`;
+  await db.query(`INSERT INTO publicacion_recurso(id,propietario_id,campus_id,tipo_recurso,titulo,descripcion,modalidad,estado_publicacion)
+    VALUES($1,$2,$3,'FISICO','Título actual','Contenido actual','DONACION','DISPONIBLE')`, [publicationId, auth.userId, campus]);
+  await db.query(`INSERT INTO archivo_publicacion(id,publicacion_id,bucket_id,storage_path,nombre_original,mime_type,tamano_bytes,tipo_archivo,orden)
+    VALUES($1,$2,'publication-images',$3,'original.png','image/png',100,'IMAGEN',0)`, [imageId, publicationId, path]);
+  const snapshot = { publication: { id: publicationId, tipo_recurso: 'FISICO', titulo: 'Título guardado', propietario_id: auth.userId,
+    images: [{ id: imageId, nombre_original: 'original.png', url: 'https://untrusted.invalid/never', storage_path: 'never-use-snapshot-path' }] } };
+  return { id: await report('PUBLICACION_FISICA', campus, snapshot), publicationId, imageId, path, snapshot };
+}
 const http = (path: string, token = true) => originalFetch(base + path, { headers: token ? { Authorization: 'Bearer review.token' } : {} });
 const decision = { decision: 'ACOGER', justification: 'Contenido revisado y contrario al uso permitido.' };
 const dismiss = { decision: 'DESESTIMAR', justification: 'Los antecedentes no acreditan el motivo denunciado.' };
@@ -125,6 +140,64 @@ async function contact(name: string, email: string | null) {
   await db.query('INSERT INTO perfil_usuario(id,institucion_id,campus_id,nombre_completo) VALUES($1,$2,$3,$4)', [id, institution, campus, name]);
   return { id, name, email };
 }
+
+test('reported images sign only the saved photo, including final/hidden/logically removed content, without changing historical data', async () => {
+  const fixture = await physicalCase(), paths: string[] = [];
+  const sign = async (path: string) => { paths.push(path); return 'https://review-test.invalid/signed?token=private'; };
+  await db.query("UPDATE publicacion_recurso SET titulo='Contenido editado',estado_publicacion='OCULTO',deleted_at=now() WHERE id=$1", [fixture.publicationId]);
+  await db.query("UPDATE archivo_publicacion SET nombre_original='nombre-actual.png',deleted_at=now() WHERE id=$1", [fixture.imageId]);
+  for (const status of ['PENDIENTE', 'EN_REVISION', 'RESUELTO', 'DESESTIMADO']) {
+    await db.query('UPDATE reporte_contenido SET estado_reporte=$2 WHERE id=$1', [fixture.id, status]);
+    assert.deepEqual(await reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, sign), { url: 'https://review-test.invalid/signed?token=private', expiresIn: 60 });
+    assert.deepEqual((await reviews.getReportReview(auth, campus, fixture.id, transaction)).snapshot, fixture.snapshot);
+  }
+  assert.deepEqual(paths, Array(4).fill(fixture.path)); assert.equal((await audits()).length, 0);
+  const agreementId = randomUUID();
+  await db.query("UPDATE reporte_contenido SET entidad_tipo='TRANSACCION',entidad_id=$2,contenido_reportado_json=contenido_reportado_json||$3::jsonb WHERE id=$1",
+    [fixture.id, agreementId, JSON.stringify({ transaction: { id: agreementId } })]);
+  await reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, sign);
+  await db.query('UPDATE reporte_contenido SET entidad_id=$2 WHERE id=$1', [fixture.id, randomUUID()]);
+  await assert.rejects(reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, sign), { status: 404 });
+});
+
+test('reported images reject new/live-only photos, other campuses, mismatched publication and unsafe file storage references', async () => {
+  const fixture = await physicalCase(); let signs = 0;
+  const sign = async () => { signs++; return 'https://review-test.invalid/signed'; };
+  await assert.rejects(reviews.getReportedImage(auth, campus, fixture.id, randomUUID(), transaction, sign), { status: 404 });
+  for (const [column, value] of [['bucket_id', 'digital-resources'], ['mime_type', 'application/pdf'], ['tipo_archivo', 'RECURSO'],
+    ['storage_path', `${other}/private.png`], ['storage_path', `${campus}/../private.png`], ['storage_path', `${campus}/%2e%2e/private.png`], ['storage_path', `${campus}/image.png?token=bad`]]) {
+    // Columnas estáticas de esta prueba; ningún identificador SQL procede de una petición.
+    await db.query(`UPDATE archivo_publicacion SET ${column}=$2 WHERE id=$1`, [fixture.imageId, value]);
+    await assert.rejects(reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, sign), { status: 404 });
+    await db.query("UPDATE archivo_publicacion SET bucket_id='publication-images',mime_type='image/png',tipo_archivo='IMAGEN',storage_path=$2 WHERE id=$1", [fixture.imageId, fixture.path]);
+  }
+  await db.query('UPDATE publicacion_recurso SET campus_id=$2 WHERE id=$1', [fixture.publicationId, other]);
+  await assert.rejects(reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, sign), { status: 404 });
+  await db.query('UPDATE publicacion_recurso SET campus_id=$2 WHERE id=$1', [fixture.publicationId, campus]);
+  await db.query('UPDATE reporte_contenido SET entidad_id=$2 WHERE id=$1', [fixture.id, randomUUID()]);
+  await assert.rejects(reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, sign), { status: 404 });
+  assert.equal(signs, 0);
+});
+
+test('image signing sanitizes dependency failures and rechecks current access and file association before exposing a URL', async () => {
+  const fixture = await physicalCase();
+  await assert.rejects(reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, async () => { throw new Error('private Storage credentials'); }),
+    error => (error as any).status === 503 && !/credentials|Storage/.test((error as Error).message));
+  await assert.rejects(reviews.getReportedImage(auth, campus, fixture.id, fixture.imageId, transaction, async () => {
+    await db.query('DELETE FROM usuario_rol WHERE perfil_usuario_id=$1', [auth.userId]);
+    return 'https://review-test.invalid/must-not-return';
+  }), { status: 403 });
+});
+
+test('image HTTP is private/no-store, rejects malformed IDs/query or wrong campus and uses the existing signed Storage transport', async () => {
+  const fixture = await physicalCase(), path = `${campus}/${fixture.id}/images/${fixture.imageId}`;
+  assert.equal((await http(path, false)).status, 401);
+  for (const target of [path + '?url=anything', `${campus}/${fixture.id}/images/invalid`]) assert.equal((await http(target)).status, 400);
+  assert.equal((await http(`${other}/${fixture.id}/images/${fixture.imageId}`)).status, 403);
+  const response = await http(path); assert.equal(response.status, 200); assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+  const body = await response.json(); assert.equal(body.data.expiresIn, 60); assert.match(body.data.url, /^https:\/\/review-test.invalid\/storage\/v1\/object\/sign\/publication-images\//);
+  assert.equal(storageCalls, 1); assert.ok(!/bucket_id|storage_path|nombre-actual/.test(JSON.stringify(body)));
+});
 
 test('authorized detail adds minimal current contacts from original case IDs, including decision response, without exposing them in lists', async () => {
   const owner = await contact('Dueña original', 'owner@duocuc.cl');
@@ -504,6 +577,50 @@ test('status filters all campus records before pagination, preserves ties and in
   const body = await response.json(); assert.deepEqual(body.data.map((row: { id: string }) => row.id), final.slice(5, 10));
   assert.match(response.headers.get('cache-control') ?? '', /no-store/);
   assert.equal((await audits()).length, 0); assert.equal(mongoWrites, 0);
+});
+
+test('content types combine with status and campus before pagination without exposing private case data', async () => {
+  const types = ['ACTIVIDAD', 'PUBLICACION_FISICA', 'PUBLICACION_DIGITAL', 'TRANSACCION'];
+  const expected = new Map<string, { id: string; status: string }[]>();
+  for (const type of types) {
+    const rows = [];
+    for (let index = 0; index < 7; index++) {
+      const id = await report(type), status = index % 2 ? 'DESESTIMADO' : 'PENDIENTE';
+      await db.query("UPDATE reporte_contenido SET reportado_en='2026-10-29T12:00:00Z',estado_reporte=$2 WHERE id=$1", [id, status]);
+      rows.push({ id, status });
+    }
+    expected.set(type, rows.sort((a, b) => b.id.localeCompare(a.id)));
+    await report(type, other);
+  }
+  for (const entityType of types) {
+    const rows = [];
+    for (let page = 1; page <= 4; page++) {
+      const result = await reviews.listReportReviews(auth, campus, { entityType, limit: '2', page: String(page) }, transaction);
+      assert.equal(result.meta.hasMore, page < 4); rows.push(...result.data);
+    }
+    assert.deepEqual(rows.map(row => row.id), expected.get(entityType)!.map(row => row.id));
+    for (const row of rows) {
+      assert.equal(row.entityType, entityType); assert.equal(row.campusId, campus);
+      assert.ok(!/reporter|snapshot|people|email|description/.test(JSON.stringify(row)));
+    }
+    const result = await http(campus + `?entityType=${entityType}&status=PENDIENTE&limit=2&page=2`);
+    assert.equal(result.status, 200); assert.match(result.headers.get('cache-control') ?? '', /no-store/);
+    const body = await result.json(); assert.equal(body.meta.hasMore, false);
+    assert.deepEqual(body.data.map((row: { id: string }) => row.id), expected.get(entityType)!.filter(row => row.status === 'PENDIENTE').slice(2).map(row => row.id));
+    await assert.rejects(reviews.listReportReviews(auth, other, { entityType }, transaction), { status: 403 });
+  }
+  assert.equal((await reviews.listReportReviews(auth, campus, { limit: '100' }, transaction)).data.length, 28);
+  assert.equal((await audits()).length, 0); assert.equal(mongoWrites, 0);
+});
+
+test('content type query rejects empty, repeated, structured and unknown values; historical endpoint stays compatible', async () => {
+  for (const entityType of ['', 'actividad', 'TODOS', 'DIGITAL', ['ACTIVIDAD'], { eq: 'ACTIVIDAD' }, "ACTIVIDAD' OR 1=1--"]) {
+    await assert.rejects(reviews.listReportReviews(auth, campus, { entityType }, transaction), { status: 400 });
+  }
+  for (const query of ['entityType=', 'entityType=INVALID', 'entityType=ACTIVIDAD&entityType=TRANSACCION', 'entityType[eq]=ACTIVIDAD', 'entityType[]=ACTIVIDAD']) {
+    assert.equal((await http(campus + '?' + query)).status, 400);
+  }
+  await assert.rejects(reviews.listReportResolutions(auth, campus, { entityType: 'ACTIVIDAD' }, transaction), { status: 400 });
 });
 
 test('unified closed detail equals historical detail after live edits and legacy nulls remain absent', async () => {

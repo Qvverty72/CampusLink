@@ -7,7 +7,7 @@ import type { AuthLocals } from '../auth/auth.types.js';
 import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
 import { getOwnPhysicalgoodsReport,reportPhysicalgoods } from './reports.physicalgoods.service.js';
 import { getOwnDigitalReport,reportDigitalResource } from './reports.elibrary.service.js';
-import { getReportedOriginal, getReportReview, listReportReviews, listReportResolutions, getReportResolution } from './reports.review.service.js';
+import { getReportedImage, getReportedOriginal, getReportReview, listReportReviews, listReportResolutions, getReportResolution } from './reports.review.service.js';
 import { sendSuccess as sendEnvelope } from '../../services/apiResponse.js';
 import { resolveReport } from './reports.resolution.service.js';
 
@@ -30,6 +30,9 @@ export const listReportReviewsController: ReviewHandler = async (request, respon
 };
 export const getReportReviewController: ReviewHandler = async (request, response) => {
   sendSuccess(response, await getReportReview(response.locals.auth, request.params.campusId, request.params.reportId));
+};
+export const getReportedImageController: ReviewHandler = async (request, response) => {
+  sendSuccess(response, await getReportedImage(response.locals.auth, request.params.campusId, request.params.reportId, request.params.imageId));
 };
 export const downloadReportedOriginalController: ReviewHandler = async (request, response) => {
   const file = await getReportedOriginal(response.locals.auth, request.params.campusId, request.params.reportId, request.params.fileId);

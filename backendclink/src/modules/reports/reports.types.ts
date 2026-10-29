@@ -5,6 +5,7 @@ import type { ActivityDependencies } from '../activities/activities.service.js';
 export type ReportsHealth = ModuleHealth<'reports'>;
 
 export type ReportStatus = 'PENDIENTE' | 'EN_REVISION' | 'RESUELTO' | 'DESESTIMADO';
+export type ReportEntityType = 'ACTIVIDAD' | 'PUBLICACION_FISICA' | 'PUBLICACION_DIGITAL' | 'TRANSACCION';
 
 export interface ReportPerson { id: string; name: string | null; email: string | null }
 /** Contactos vigentes de IDs del caso; no forman parte de la evidencia histórica. */
@@ -47,7 +48,7 @@ export interface PhysicalgoodsReportReceipt extends ContentReportReceipt {
   reason?:string;description?:string|null;
 }
 export interface NewContentReport extends ContentReportInput {
-  userId:string;campusId:string;entityType:'ACTIVIDAD'|'PUBLICACION_FISICA'|'PUBLICACION_DIGITAL'|'TRANSACCION';entityId:string;snapshot:unknown;
+  userId:string;campusId:string;entityType:ReportEntityType;entityId:string;snapshot:unknown;
 }
 export interface ActivityReportReceipt {
   id: string; activityId: string; campusId: string;

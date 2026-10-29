@@ -11,7 +11,7 @@ import { analyticsRenderer } from './helpers/analytics-render.mjs';
 function renderReview(state) {
   const native = createRequire(import.meta.url)('react-native-web');
   const noop = () => {};
-  const defaults = { allowed: true, statusFilter: '', identityKey: 'fixture', campuses: [{ id: 'campus-a', name: 'San Andrés' }], campusId: 'campus-a',
+  const defaults = { allowed: true, statusFilter: '', entityTypeFilter: '', visitedPages: 1, identityKey: 'fixture', campuses: [{ id: 'campus-a', name: 'San Andrés' }], campusId: 'campus-a',
     entries: [], page: 1, hasMore: false, detail: null, selectedId: null, canResolve: false,
     resolutionInput: { decision: null, justification: '' }, applyFilters: noop, chooseCampus: noop, changePage: noop, retry: noop, close: noop };
   return analyticsRenderer({
@@ -33,13 +33,13 @@ function load(path, dependencies) {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(compiled, { module, exports: module.exports, AbortController, URLSearchParams,
+  vm.runInNewContext(compiled, { module, exports: module.exports, AbortController, URL, URLSearchParams,
     require: name => { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; } });
   return module.exports;
 }
 
 function harness() {
-  const calls = { catalog: [], lists: [], details: [], historyLists: [], historyDetails: [], files: [], resolutions: [], saved: [] }, slots = [];
+  const calls = { catalog: [], lists: [], details: [], historyLists: [], historyDetails: [], files: [], images: [], resolutions: [], saved: [] }, slots = [];
   let cursor = 0, effects = [], refreshes = 0;
   const auth = { status: 'ready', identity: { userId: 'admin-a', campusId: 'campus-a', profile: { estado_cuenta: 'ACTIVA' },
     roles: [{ name: 'ADMINISTRADOR', campusId: 'campus-a' }] }, refreshIdentity() { refreshes++; } };
@@ -59,11 +59,12 @@ function harness() {
     '@/features/users/api/accessApi': { loadAccessCampuses: signal => request(calls.catalog, { signal }) },
     '@/lib/api/authenticated-request': { AuthApiError }, '@/lib/files/saveFile': { saveFile: async (...args) => calls.saved.push(args) },
     '../api/reportsApi': {
-      loadReportReviews: (campusId, page, signal, status) => request(calls.lists, { campusId, page, signal, status }),
+      loadReportReviews: (campusId, page, signal, status, entityType) => request(calls.lists, { campusId, page, signal, status, entityType }),
       loadReportReview: (campusId, id, signal) => request(calls.details, { campusId, id, signal }),
       loadReportResolutions: (campusId, page, signal) => request(calls.historyLists, { campusId, page, signal }),
       loadReportResolution: (campusId, id, signal) => request(calls.historyDetails, { campusId, id, signal }),
       downloadReportedFile: (campusId, id, fileId, signal) => request(calls.files, { campusId, id, fileId, signal }),
+      loadReportedImage: (campusId, id, imageId, signal) => request(calls.images, { campusId, id, imageId, signal }),
       submitReportResolution: (campusId, id, input, signal) => request(calls.resolutions, { campusId, id, input, signal }),
     },
   });
@@ -124,13 +125,40 @@ test('filtered resolution preserves result until close, then refreshes page one 
   assert.equal(h.calls.lists.length, count + 1); assert.equal(h.calls.lists.at(-1).status, 'PENDIENTE'); assert.equal(h.calls.lists.at(-1).page, 1);
 });
 
-test('unified API sends optional status to the server and retains authenticated cancellation', async () => {
+test('unified API sends optional status and content type to the server and retains authenticated cancellation', async () => {
   const calls = [], signal = new AbortController().signal;
   const request = (...args) => { calls.push(args); return Promise.resolve({ data: [] }); };
   const api = load('../src/features/reports/api/reportsApi.ts', { '@/lib/api/authenticated-request': { authenticatedEnvelopeRequest: request, authenticatedRequest: request } });
-  await api.loadReportReviews('campus/id', 2, signal, 'EN_REVISION'); await api.loadReportReviews('campus/id', 1, signal);
-  assert.equal(calls[0][0], '/api/v1/reports/campuses/campus%2Fid'); assert.equal(calls[0][2].toString(), 'page=2&limit=20&status=EN_REVISION');
+  await api.loadReportReviews('campus/id', 2, signal, 'EN_REVISION', 'ACTIVIDAD'); await api.loadReportReviews('campus/id', 1, signal);
+  await api.loadReportReviews('campus/id', 1, signal, '', 'TRANSACCION');
+  assert.equal(calls[0][0], '/api/v1/reports/campuses/campus%2Fid'); assert.equal(calls[0][2].toString(), 'page=2&limit=20&status=EN_REVISION&entityType=ACTIVIDAD');
   assert.equal(calls[0][1].signal, signal); assert.equal(calls[1][2].has('status'), false);
+  assert.equal(calls[1][2].has('entityType'), false); assert.equal(calls[2][2].toString(), 'page=1&limit=20&entityType=TRANSACCION');
+});
+
+test('type-only changes abort list/detail requests, preserve type across pagination and reset visited pages per query', async () => {
+  const h = harness(); let state = await ready(h);
+  state.applyFilters({ campusId: 'campus-a', status: 'PENDIENTE', entityType: 'PUBLICACION_FISICA' }); h.render();
+  h.calls.lists.at(-1).resolve(page([{ id: 'physical' }])); await setImmediate(); state = h.render();
+  state.changePage(2); h.render(); h.calls.lists.at(-1).resolve(page([{ id: 'physical-2' }])); await setImmediate(); state = h.render();
+  assert.equal(state.visitedPages, 2); assert.equal(h.calls.lists.at(-1).entityType, 'PUBLICACION_FISICA');
+  state.changePage(3); h.render(); h.calls.lists.at(-1).resolve({ data: [{ id: 'physical-3' }], meta: { page: 3, limit: 20, hasMore: false } });
+  await setImmediate(); state = h.render(); assert.equal(state.visitedPages, 3);
+  state.changePage(4); h.render(); assert.equal(h.calls.lists.at(-1).page, 3);
+  state.changePage(1); h.render(); h.calls.lists.at(-1).resolve(page([{ id: 'physical' }])); await setImmediate(); state = h.render();
+  assert.equal(state.visitedPages, 3); state.changePage(3); h.render(); assert.equal(h.calls.lists.at(-1).page, 3);
+  h.calls.lists.at(-1).resolve(page([{ id: 'physical-3' }])); await setImmediate(); state = h.render();
+  state.open('physical-3'); h.render(); const oldDetail = h.calls.details.at(-1);
+  state = h.render(); state.applyFilters({ campusId: 'campus-a', status: 'PENDIENTE', entityType: 'ACTIVIDAD' }); state = h.render();
+  const oldList = h.calls.lists.at(-1);
+  assert.equal(state.page, 1); assert.equal(state.visitedPages, 1); assert.equal(oldDetail.signal.aborted, true); assert.equal(state.detail, null);
+  state.applyFilters({ campusId: 'campus-a', status: 'PENDIENTE', entityType: 'PUBLICACION_DIGITAL' }); h.render();
+  assert.equal(oldList.signal.aborted, true);
+  oldDetail.resolve({ id: 'physical-3', description: 'Old private evidence' }); oldList.resolve(page([{ id: 'stale-activity' }])); await setImmediate();
+  state = h.render(); assert.equal(state.entries.length, 0); assert.equal(state.detail, null); assert.equal(state.entityTypeFilter, 'PUBLICACION_DIGITAL');
+  h.calls.lists.at(-1).resolve(page([{ id: 'digital' }])); await setImmediate(); state = h.render();
+  state.chooseCampus('campus-b'); h.render(); assert.equal(h.calls.lists.at(-1).entityType, 'PUBLICACION_DIGITAL');
+  h.auth.identity.userId = 'another-reader'; state = h.render(); assert.equal(state.entityTypeFilter, ''); assert.equal(state.visitedPages, 1);
 });
 
 test('unified final details preserve the recorded decision, with current contacts separately identified and no write/download actions', () => {
@@ -253,16 +281,37 @@ test('file errors offer retry and reporting-only users never request a moderatio
   const other = harness(); other.auth.identity.roles = [{ name: 'USUARIO_AUTORIZADO' }]; other.auth.identity.permissions = [{ name: 'ACCEDER_REPORTERIA' }];
   assert.equal(other.render().allowed, false); assert.equal(other.calls.catalog.length, 0);
 });
-test('review screen presents snapshot and current agreement separately with private reporter and protected download action', () => {
-  const detail = { title: 'Título denunciado', status: 'PENDIENTE', reportedAt: '2026-10-22T12:00:00Z', reporter: { name: 'Denunciante privado' }, reason: 'Uso indebido',
-        snapshot: { publication: { titulo: 'Original preservado', files: [{ id: 'file', name: 'evidencia.pdf' }], storage_path: 'secret-path' }, transaction: { estado_transaccion: 'RESERVADA' } },
-        currentPublication: { title: 'Título editado', status: 'OCULTO' }, currentTransaction: { status: 'CANCELADA', receiver: { name: 'Receptor' } } };
-  const markup = renderReview({ selectedId: 'case', detail });
-  for (const text of ['Original preservado', 'Título editado', 'Antecedentes actuales', 'Receptor', 'Denunciante privado']) assert.ok(markup.includes(text), text);
-  assert.ok(!markup.includes('Referencias del caso')); assert.ok(!markup.includes('Descargar evidencia.pdf'));
-  const original = renderOriginal(detail);
-  for (const text of ['Original preservado', 'Registro original', 'Intercambio al denunciar', 'Descargar evidencia.pdf']) assert.ok(original.includes(text), text);
-  for (const text of ['Título editado', 'Denunciante privado', 'Receptor', 'estado_transaccion', 'storage_path', 'secret-path']) assert.ok(!original.includes(text), text);
+test('transaction details omit agreement terms, saved confirmations and current context while preserving publication, history and resolution', () => {
+  const detail = { entityType: 'TRANSACCION', title: 'Título denunciado', status: 'PENDIENTE', reportedAt: '2026-10-22T12:00:00Z', reporter: { name: 'Denunciante privado' }, reason: 'Uso indebido',
+    people: { source: 'CURRENT_PROFILE', reporter: { id: 'reporter', name: 'Denunciante privado', email: 'reporter@example.test' }, reported: null, decisionMaker: null },
+    snapshot: { publication: { titulo: 'Original preservado', files: [{ id: 'file', name: 'evidencia.pdf' }], storage_path: 'secret-path' },
+      transaction: { estado_transaccion: 'RESERVADA', monto_acordado: 87654, receptor_nombre: 'Receptor guardado' }, confirmations: [{ name: 'Confirmación guardada privada' }] },
+    currentPublication: { title: 'Título editado', status: 'OCULTO' }, currentTransaction: { status: 'CANCELADA', receiver: { name: 'Receptor vivo' } } };
+  const snapshot = structuredClone(detail.snapshot);
+  for (const status of ['PENDIENTE', 'EN_REVISION', 'RESUELTO', 'DESESTIMADO']) {
+    const current = { ...detail, status, resolution: ['RESUELTO', 'DESESTIMADO'].includes(status) ? { measure: 'NINGUNA', justification: 'Decisión conservada' } : null };
+    const final = ['RESUELTO', 'DESESTIMADO'].includes(status);
+    const markup = renderReview({ selectedId: 'case', detail: current, canResolve: !final });
+    for (const text of ['Original preservado', 'Historial del caso', 'Denunciante privado', 'Ver publicación como fue denunciada']) assert.ok(markup.includes(text), text);
+    for (const text of ['Situación actual', 'Título editado', 'Antecedentes actuales', 'Receptor vivo', 'Referencias del caso']) assert.ok(!markup.includes(text), text);
+    assert.equal(markup.includes('Resolver denuncia'), !final);
+    const original = renderOriginal(current);
+    for (const text of ['Original preservado', 'Registro original', 'evidencia.pdf']) assert.ok(original.includes(text), text);
+    for (const text of ['Intercambio al denunciar', 'Confirmaciones guardadas', 'Receptor guardado', '87654', 'Título editado', 'estado_transaccion', 'storage_path', 'secret-path']) assert.ok(!original.includes(text), text);
+    assert.equal(original.includes('Descargar evidencia.pdf'), !final);
+  }
+  assert.deepEqual(detail.snapshot, snapshot);
+  const publication = renderReview({ selectedId: 'case', detail: { ...detail, entityType: 'PUBLICACION_DIGITAL', currentTransaction: null } });
+  for (const text of ['Situación actual', 'Publicación actual', 'Título editado']) assert.ok(publication.includes(text), text);
+});
+
+test('legacy transaction originals do not expose agreement data through the generic evidence fallback', () => {
+  const detail = { entityType: 'TRANSACCION', title: 'Ficha legada', status: 'PENDIENTE',
+    snapshot: { transaction: { titulo: 'Título exclusivo del acuerdo', monto_acordado: 87654 }, confirmations: [{ name: 'Confirmación exclusiva del acuerdo' }] } };
+  const snapshot = structuredClone(detail.snapshot), markup = renderOriginal(detail);
+  assert.ok(markup.includes('Registro original'));
+  for (const text of ['Título exclusivo del acuerdo', '87654', 'Confirmación exclusiva del acuerdo', 'Intercambio', 'Confirmaciones']) assert.ok(!markup.includes(text), text);
+  assert.deepEqual(detail.snapshot, snapshot);
 });
 
 test('real resolution screen shows mandatory justification and confirmation, and replaces controls with the recorded decision after completion', () => {
@@ -336,13 +385,13 @@ test('pending decision controls follow the original-content disclosure, while fi
   assert.ok(!markup.includes('<textarea')); assert.ok(!markup.includes('Resolver denuncia'));
 });
 
-test('original preview preserves zero price and saved state/edition without loading images or reconstructing absent data', () => {
+test('original preview preserves zero price and saved state/edition without trusting injected image URLs or reconstructing absent data', () => {
   const detail = { id: 'case', title: 'Título de resumen', status: 'RESUELTO', entityType: 'PUBLICACION_FISICA', reportedAt: '2026-10-16T17:09:00Z',
     snapshot: { publication: { titulo: 'Calculadora original', tipo_recurso: 'FISICO', modalidad: 'VENTA', precio: '0.00', moneda: 'CLP', estado_uso: 'USADO', estado_publicacion: 'DISPONIBLE',
       updated_at: '2026-10-16T17:08:00Z', images: [{ id: 'image', url: 'https://secret.invalid/file', storage_path: 'private/storage' }], files: [{ id: 'file', name: 'Original.pdf', mimeType: { invalid: 'hidden' } }] } },
     resolution: { measure: 'OCULTAR' }, currentPublication: { title: 'Actual', price: 999999, status: 'OCULTO' } };
   const markup = renderOriginal(detail);
-  for (const text of ['Calculadora original', '$0', 'Usado', 'Disponible', 'Última edición guardada', '1 imagen registrada', 'Original.pdf']) assert.ok(markup.includes(text), text);
+  for (const text of ['Calculadora original', '$0', 'Usado', 'Disponible', 'Última edición guardada', 'Imagen no disponible', 'Original.pdf']) assert.ok(markup.includes(text), text);
   for (const text of ['secret.invalid', 'private/storage', '999999', 'Descargar', '<img']) assert.ok(!markup.includes(text), text);
   assert.ok(renderOriginal({ ...detail, snapshot: null }).includes('Sin antecedentes registrados'));
 });
@@ -370,4 +419,60 @@ test('case contacts appear beside their roles, with no technical references pane
   const missing = renderReview({ selectedId: detail.id, detail });
   assert.ok(missing.includes('Persona no identificada en el registro')); assert.ok(missing.includes('Correo no disponible'));
   assert.ok(!missing.includes('private-decision-id'));
+});
+
+test('original content includes the reported full name/email and omits withdrawal fields without deleting the stored snapshot', () => {
+  const detail = { entityType: 'PUBLICACION_FISICA', title: 'Objeto', status: 'RESUELTO',
+    people: { source: 'CURRENT_PROFILE', reported: { id: 'owner', name: 'Nombre Apellido Completo', email: 'persona@example.test' } },
+    snapshot: { publication: { titulo: 'Objeto original', tipo_recurso: 'FISICO', deleted_at: null, images: [] }, transaction: { deletedAt: '2026-10-28T12:00:00Z', estado_transaccion: 'COMPLETADA' } } };
+  const before = JSON.stringify(detail.snapshot), markup = renderOriginal(detail);
+  for (const text of ['Nombre Apellido Completo', 'persona@example.test', 'actuales del perfil', 'Sin imágenes registradas', 'Completado']) assert.ok(markup.includes(text), text);
+  assert.ok(!markup.includes('Retirada')); assert.equal(JSON.stringify(detail.snapshot), before);
+});
+
+test('image API uses the authorized case/image route and cancellation, rejecting unexpected URL protocols', async () => {
+  const calls = [], signal = new AbortController().signal; let result = { url: 'https://storage.example.test/signed.png?token=fixture', expiresIn: 60 };
+  const request = (...args) => { calls.push(args); return Promise.resolve(result); };
+  const api = load('../src/features/reports/api/reportsApi.ts', { '@/lib/api/authenticated-request': { authenticatedEnvelopeRequest: request, authenticatedRequest: request, authenticatedResponseRequest: request } });
+  await api.loadReportedImage('campus/id', 'case/id', 'image/id', signal);
+  assert.equal(calls[0][0], '/api/v1/reports/campuses/campus%2Fid/case%2Fid/images/image%2Fid'); assert.equal(calls[0][1].signal, signal);
+  result = { url: 'javascript:alert(1)', expiresIn: 60 }; await assert.rejects(api.loadReportedImage('campus', 'case', 'image', signal));
+});
+
+test('image requests cancel on case changes; an old denial cannot clear the new case and a current denial removes private evidence', async () => {
+  const h = harness(); let state = await openPending(h);
+  const controller = new AbortController(), first = state.loadImage('image-a', controller.signal);
+  const request = h.calls.images[0]; assert.equal(request.id, 'report-a');
+  state.close(); h.render(); assert.equal(request.signal.aborted, true);
+  request.reject(new AuthApiError(403, 'Old denial')); await assert.rejects(first); assert.equal(h.refreshes, 0);
+  state = h.render(); state.open('report-b'); h.render(); h.calls.details.at(-1).resolve({ id: 'report-b', status: 'RESUELTO' });
+  await setImmediate(); state = h.render(); const current = state.loadImage('image-b', new AbortController().signal);
+  h.calls.images.at(-1).reject(new AuthApiError(403, 'Permiso revocado')); await assert.rejects(current);
+  state = h.render(); assert.equal(state.detail, null); assert.equal(state.entries.length, 0); assert.equal(h.refreshes, 1);
+});
+
+test('original activity uses saved status, type, schedule and location even after the case closes, with current owner contact kept explicit', () => {
+  const creator = '33333333-3333-4333-8333-333333333333';
+  const detail = { entityType: 'ACTIVIDAD', title: 'Título de listado', status: 'RESUELTO', reportedAt: '2026-10-26T00:12:00Z',
+    snapshot: { title: 'Prueba denuncia', description: 'Jornada informativa', status: 'ACTIVE', visibility: 'PUBLIC', type: 'COMMUNITY_ACTIVITY',
+      startAt: '2026-10-26T00:11:00Z', endAt: '2026-10-29T00:11:00Z', createdByUserId: creator,
+      location: { buildingName: 'Cabaña A', floorName: 'Cabaña A - Piso 1', poiName: 'Radio', customLabel: 'Junto al acceso' } },
+    people: { source: 'CURRENT_PROFILE', reported: { id: creator, name: 'María Antonia Pérez González', email: 'maria.perez@example.test' } },
+    currentPublication: { title: 'Título vivo', status: 'FINISHED' } };
+  const snapshot = JSON.stringify(detail.snapshot), markup = renderOriginal(detail);
+  for (const text of ['Prueba denuncia', 'Jornada informativa', 'Activa', 'Público', 'Actividad comunitaria', 'Inicio', 'Término', 'CUÁNDO', 'DÓNDE', 'Radio', 'Cabaña A', 'Cabaña A - Piso 1', 'Junto al acceso', 'María Antonia Pérez González', 'maria.perez@example.test', 'Organizador', 'actuales del perfil']) assert.ok(markup.includes(text), text);
+  for (const text of ['Título vivo', 'Finalizada', 'Retirada', 'RUT', 'ADMINISTRADOR', 'Resolver denuncia', 'Más datos del registro original']) assert.ok(!markup.includes(text), text);
+  assert.equal(JSON.stringify(detail.snapshot), snapshot);
+  assert.ok(markup.indexOf('Actividad comunitaria') < markup.indexOf('Prueba denuncia'));
+});
+
+test('activity legacy records preserve unknown values and missing dates/location/owner without inventing a POI, current date or role', () => {
+  const detail = { entityType: 'ACTIVIDAD', status: 'PENDIENTE', snapshot: { title: 'Legado', status: 'LEGACY_STATUS', type: 'OFFICIAL_EVENT',
+    startAt: null, endAt: 'invalid', createdByUserId: 'invalid', location: { buildingName: 'Edificio original', floorName: 'Piso original' } } };
+  let markup = renderOriginal(detail);
+  for (const text of ['LEGACY_STATUS', 'Evento oficial', 'Fecha no registrada', 'Edificio original', 'Piso original', 'Nombre no disponible', 'Correo no disponible', 'Relación no registrada']) assert.ok(markup.includes(text), text);
+  assert.ok(!markup.includes('Organizador')); assert.ok(!markup.includes('Punto de interés'));
+  detail.snapshot.location = { customLabel: 'Patio del campus' }; markup = renderOriginal(detail); assert.ok(markup.includes('Patio del campus'));
+  detail.snapshot = null; markup = renderOriginal(detail);
+  for (const text of ['Sin antecedentes registrados', 'Estado no registrado', 'Ubicación no registrada', 'Fecha no registrada']) assert.ok(markup.includes(text), text);
 });

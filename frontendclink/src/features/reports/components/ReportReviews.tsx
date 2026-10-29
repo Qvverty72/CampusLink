@@ -4,11 +4,10 @@ import { router } from 'expo-router';
 import { ArrowLeft, MapPinned, ShieldCheck, SlidersHorizontal } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { safeAreaInset } from '@/lib/layout/safeArea';
-import { BottomNavigationBar, DEFAULT_BOTTOM_NAVIGATION_ITEMS } from '@/components/navigation/BottomNavigationBar';
 import { Pagination } from '@/components/Pagination';
 import { useReportReviews } from '../hooks/useReportReviews';
 import { AppliedFiltersSummary } from '@/features/analytics/components/AppliedFiltersSummary';
-import { ReportFilters, reportFilterLabel } from './ReportFilters';
+import { ReportFilters, reportEntityTypeLabel, reportFilterLabel } from './ReportFilters';
 import { ReportCaseDetail } from './ReportCaseDetail';
 import { ReportReviewCard } from './ReportReviewCard';
 import { focusReport, ReportButton, ReportIcon, ReportLoading, ReportStateMessage, type ReportFocusTarget } from './ReportUI';
@@ -26,6 +25,8 @@ export function ReportReviews() {
   const closeFilters = () => { setFiltersOpen(false); requestAnimationFrame(() => focusReport(filterTrigger.current)); };
   const [pendingLeave, setPendingLeave] = useState<{ leave: () => void; stay?: () => void } | null>(null);
   const campusName = review.campuses.find(row => row.id === review.campusId)?.name ?? 'Campus';
+  const activeFilterCount = Number(!!review.statusFilter) + Number(!!review.entityTypeFilter);
+  const clearFilters = () => review.applyFilters({ campusId: review.campusId, status: '', entityType: '' });
   const pushWebEntry = () => {
     if (Platform.OS === 'web') { window.history.pushState({ ...window.history.state, campuslinkReport: true }, ''); webEntry.current = true; }
   };
@@ -79,7 +80,7 @@ export function ReportReviews() {
   return <View style={s.screen}>
     <ScrollView ref={scroll} style={s.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets
       onScroll={event => { scrollY.current = event.nativeEvent.contentOffset.y; }} scrollEventThrottle={16}
-      contentContainerStyle={{ paddingTop: safeAreaInset('top', insets.top, { min: 12, offset: 8 }), paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 16, base: 112 }),
+      contentContainerStyle={{ paddingTop: safeAreaInset('top', insets.top, { min: 12, offset: 8 }), paddingBottom: safeAreaInset('bottom', insets.bottom, { min: 16, base: 24 }),
         paddingLeft: safeAreaInset('left', insets.left, { min: 16 }), paddingRight: safeAreaInset('right', insets.right, { min: 16 }) }}>
       <View style={s.content}>
         <View style={s.smallStack}>
@@ -105,19 +106,20 @@ export function ReportReviews() {
                       <Pressable ref={filterTrigger} accessibilityRole="button" accessibilityLabel="Filtros de denuncias" accessibilityState={{ expanded: filtersOpen }} aria-expanded={filtersOpen}
                         style={s.filterTrigger} onPress={() => setFiltersOpen(true)}>
                         <ReportIcon icon={SlidersHorizontal} size={17} /><Text style={s.linkText}>Filtros</Text>
-                        {!!review.statusFilter && <View style={s.filterBadge}><Text style={s.filterCount}>1</Text></View>}
+                        {!!activeFilterCount && <View style={s.filterBadge}><Text style={s.filterCount}>{activeFilterCount}</Text></View>}
                       </Pressable>
                     </View>
-                    <AppliedFiltersSummary identityKey={`${review.identityKey}:${review.campusId}:${review.statusFilter}`}
-                      summary={`${campusName} · ${reportFilterLabel(review.statusFilter)}`} rows={[["Campus", campusName], ["Estado", reportFilterLabel(review.statusFilter)]]}
-                      hint="Muestra el campus y el estado aplicados a toda la consulta." />
-                    {!!review.statusFilter && <Pressable accessibilityRole="button" style={s.back} onPress={() => review.applyFilters({ campusId: review.campusId, status: '' })}><Text style={s.linkText}>Limpiar filtros</Text></Pressable>}
+                    <AppliedFiltersSummary identityKey={`${review.identityKey}:${review.campusId}:${review.statusFilter}:${review.entityTypeFilter}`}
+                      summary={`${campusName} · ${reportFilterLabel(review.statusFilter)}${review.entityTypeFilter ? ` · ${reportEntityTypeLabel(review.entityTypeFilter)}` : ''}`}
+                      rows={[["Campus", campusName], ["Estado", reportFilterLabel(review.statusFilter)], ["Tipo de contenido", reportEntityTypeLabel(review.entityTypeFilter)]]}
+                      hint="Muestra el campus, el estado y el tipo de contenido aplicados a toda la consulta." />
+                    {!!activeFilterCount && <Pressable accessibilityRole="button" style={s.back} onPress={clearFilters}><Text style={s.linkText}>Limpiar filtros</Text></Pressable>}
                     {review.listLoading ? <ReportLoading /> : review.listError ? <ReportStateMessage title="No pudimos cargar las denuncias" error onRetry={review.retry}>{review.listError}</ReportStateMessage>
-                      : !review.entries.length ? <ReportStateMessage title={review.statusFilter ? "Sin denuncias con este estado" : "No hay denuncias en este campus"}
-                          onRetry={review.statusFilter ? () => review.applyFilters({ campusId: review.campusId, status: '' }) : undefined} action="Ver todos los estados">
-                          {review.statusFilter ? "Prueba con otro estado o consulta todas las denuncias de este campus." : "Aquí aparecerán los casos enviados para que la administración pueda revisarlos."}</ReportStateMessage>
+                      : !review.entries.length ? <ReportStateMessage title={activeFilterCount ? "Sin denuncias con estos filtros" : "No hay denuncias en este campus"}
+                          onRetry={activeFilterCount ? clearFilters : undefined} action="Ver todas las denuncias">
+                          {activeFilterCount ? "Prueba con otro estado o tipo de contenido, o consulta todas las denuncias de este campus." : "Aquí aparecerán los casos enviados para que la administración pueda revisarlos."}</ReportStateMessage>
                         : <View style={s.caseList}>{review.entries.map(entry => <ReportReviewCard key={entry.id} entry={entry} onOpen={() => open(entry.id)} ref={node => { if (node) triggers.current.set(entry.id, node); else triggers.current.delete(entry.id); }} />)}</View>}
-                    {!review.listError && <Pagination page={review.page} hasNextPage={review.hasMore} disabled={review.listLoading} onPageChange={page => {
+                    {!review.listError && <Pagination page={review.page} visitedPages={review.visitedPages} hasNextPage={review.hasMore} showSinglePage disabled={review.listLoading} onPageChange={page => {
                       scroll.current?.scrollTo({ y: 0, animated: false }); review.changePage(page);
                     }} label="Paginación de denuncias" />}
                   </View>}
@@ -125,14 +127,8 @@ export function ReportReviews() {
           </>}
       </View>
     </ScrollView>
-    <View style={StyleSheet.absoluteFill} pointerEvents={review.resolving ? 'none' : 'box-none'} aria-hidden={review.resolving} accessibilityElementsHidden={review.resolving} importantForAccessibility={review.resolving ? 'no-hide-descendants' : 'auto'}>
-      <BottomNavigationBar onItemPress={id => {
-        const target = DEFAULT_BOTTOM_NAVIGATION_ITEMS.find(item => item.id === id);
-        if (target?.href) navigate(() => router.replace(target.href!));
-      }} />
-    </View>
     {filtersOpen && review.allowed && !review.accessDenied && !review.selectedId && !!review.campuses.length && <ReportFilters
-      key={review.identityKey} campuses={review.campuses} campusId={review.campusId} status={review.statusFilter} onClose={closeFilters}
+      key={review.identityKey} campuses={review.campuses} campusId={review.campusId} status={review.statusFilter} entityType={review.entityTypeFilter} onClose={closeFilters}
       onApply={filters => { review.applyFilters(filters); closeFilters(); listY.current = 0; scroll.current?.scrollTo({ y: 0, animated: false }); }} />}
     <Modal visible={!!pendingLeave} transparent animationType="fade" onRequestClose={() => { pendingLeave?.stay?.(); setPendingLeave(null); }}>
       <View style={{ flex: 1, backgroundColor: '#102C4380', justifyContent: 'center', padding: 24 }} accessibilityViewIsModal>

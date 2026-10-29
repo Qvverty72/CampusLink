@@ -9,8 +9,9 @@ import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
 import { assertStoredDigitalFile } from '../marketplace/elibrary/elibrary.files.service.js';
 import { downloadDigitalOriginal, findDigitalResource } from '../marketplace/elibrary/elibrary.repository.js';
-import { findReportedDigitalFile, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution, readReportPeople } from './reports.review.repository.js';
-import type { ReportStatus } from './reports.types.js';
+import { findReportedDigitalFile, findReportedPhysicalImage, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution, readReportPeople } from './reports.review.repository.js';
+import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../marketplace/physicalgoods/physicalgoods.repository.js';
+import type { ReportEntityType, ReportStatus } from './reports.types.js';
 
 const missing = () => new ApiError(404, 'NOT_FOUND', 'La denuncia o el archivo no está disponible en este campus.');
 
@@ -32,24 +33,28 @@ export async function authorizedReview<T>(auth: VerifiedAuthConnection, campusId
   }
 }
 
-function reviewListQuery(rawCampusId: unknown, query: unknown, allowStatus = false) {
+function reviewListQuery(rawCampusId: unknown, query: unknown, allowFilters = false) {
   const campusId = digitalId(rawCampusId, 'campusId');
   const parsed = parsePaginationQuery(query);
-  if (!parsed.success || !query || typeof query !== 'object' || Array.isArray(query) || Object.keys(query).some(key => !['page', 'limit', ...(allowStatus ? ['status'] : [])].includes(key))) {
+  if (!parsed.success || !query || typeof query !== 'object' || Array.isArray(query) || Object.keys(query).some(key => !['page', 'limit', ...(allowFilters ? ['status', 'entityType'] : [])].includes(key))) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'Revisa la página y el tamaño del listado.');
   }
   const status = (query as Record<string, unknown>).status;
   if (status !== undefined && (typeof status !== 'string' || !['PENDIENTE', 'EN_REVISION', 'RESUELTO', 'DESESTIMADO'].includes(status))) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'Selecciona un estado de denuncia válido.');
   }
-  return { campusId, pagination: parsed.data, status: status as ReportStatus | undefined };
+  const entityType = (query as Record<string, unknown>).entityType;
+  if (entityType !== undefined && (typeof entityType !== 'string' || !['ACTIVIDAD', 'PUBLICACION_FISICA', 'PUBLICACION_DIGITAL', 'TRANSACCION'].includes(entityType))) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Selecciona un tipo de contenido válido.');
+  }
+  return { campusId, pagination: parsed.data, status: status as ReportStatus | undefined, entityType: entityType as ReportEntityType | undefined };
 }
 
 export async function listReportReviews(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown,
   transaction = withPostgresTransaction) {
-  const { campusId, pagination, status } = reviewListQuery(rawCampusId, query, true);
+  const { campusId, pagination, status, entityType } = reviewListQuery(rawCampusId, query, true);
   return authorizedReview(auth, campusId, async client =>
-    createPaginatedResult(await readReportReviews(client, campusId, pagination, status), pagination), transaction);
+    createPaginatedResult(await readReportReviews(client, campusId, pagination, status, entityType), pagination), transaction);
 }
 
 export async function listReportResolutions(auth: VerifiedAuthConnection, rawCampusId: unknown, query: unknown,
@@ -112,5 +117,36 @@ export async function getReportedOriginal(auth: VerifiedAuthConnection, rawCampu
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo descargar el archivo de la denuncia.');
+  }
+}
+
+/** Firma sólo la foto del snapshot autorizado; jamás usa una URL recibida en el JSON histórico. */
+export async function getReportedImage(auth: VerifiedAuthConnection, rawCampusId: unknown, rawId: unknown, rawImageId: unknown,
+  transaction = withPostgresTransaction, sign = signPrincipalPhoto) {
+  const campusId = digitalId(rawCampusId, 'campusId'), id = digitalId(rawId, 'reportId'), imageId = digitalId(rawImageId, 'imageId');
+  const unavailable = () => new ApiError(404, 'NOT_FOUND', 'La imagen no está disponible en esta denuncia.');
+  const read = () => authorizedReview(auth, campusId, async (client, institutionId) => {
+    const report = await findReportReview(client, campusId, id), publication = report?.snapshot?.publication;
+    if (!report || !publication || !['PUBLICACION_FISICA', 'TRANSACCION'].includes(report.entityType)
+      || !Array.isArray(publication.images) || !publication.images.some(image => image && typeof image === 'object'
+        && typeof image.id === 'string' && image.id.toLowerCase() === imageId)) throw unavailable();
+    const publicationId = digitalId(publication.id, 'publicationId');
+    if (report.entityType === 'PUBLICACION_FISICA' && report.entityId !== publicationId) throw unavailable();
+    if (report.entityType === 'TRANSACCION' && report.snapshot?.transaction?.id !== report.entityId) throw unavailable();
+    const file = await findReportedPhysicalImage(client, campusId, institutionId, publicationId, imageId);
+    if (!file || file.bucket_id !== PHYSICALGOODS_BUCKET || !file.storage_path.startsWith(campusId + '/')
+      || file.storage_path.split('/').some(part => !part || part === '..' || part === '.') || /[\\?#%]/.test(file.storage_path)
+      || !['image/jpeg', 'image/png', 'image/webp'].includes(file.mime_type)) throw unavailable();
+    return file;
+  }, transaction);
+  try {
+    const file = await read();
+    // Libera locks/conexión durante Storage y vuelve a autorizar antes de entregar el enlace temporal.
+    const url = await sign(file.storage_path), current = await read();
+    if (JSON.stringify(current) !== JSON.stringify(file)) throw unavailable();
+    return { url, expiresIn: 60 };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo cargar la imagen de la denuncia.');
   }
 }

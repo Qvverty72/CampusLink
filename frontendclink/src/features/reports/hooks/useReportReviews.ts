@@ -4,8 +4,8 @@ import { canManageAccess } from '@/features/users/types/access';
 import { loadAccessCampuses } from '@/features/users/api/accessApi';
 import { AuthApiError } from '@/lib/api/authenticated-request';
 import { saveFile } from '@/lib/files/saveFile';
-import { downloadReportedFile, loadReportReview, loadReportReviews, submitReportResolution } from '../api/reportsApi';
-import type { ReportResolutionInput, ReportReviewDetail, ReportResolutionDetail, ReportStatusFilter, ReviewPage } from '../types/review';
+import { downloadReportedFile, loadReportedImage, loadReportReview, loadReportReviews, submitReportResolution } from '../api/reportsApi';
+import type { ReportFiltersInput, ReportResolutionInput, ReportReviewDetail, ReportResolutionDetail, ReviewPage } from '../types/review';
 
 /** Estado de edición local: el contrato HTTP sigue exigiendo una decisión concreta. */
 export interface ReportResolutionDraft { decision: ReportResolutionInput['decision'] | null; justification: string }
@@ -16,13 +16,15 @@ export function useReportReviews() {
   const allowed = auth.status === 'ready' && canManageAccess(auth.identity?.roles ?? []);
   const identityKey = JSON.stringify([auth.status, auth.identity?.userId, auth.identity?.campusId, auth.identity?.roles, auth.identity?.profile.estado_cuenta]);
   const [catalog, setCatalog] = useState<{ key: string; rows: { id: string; name: string }[]; error: string } | null>(null);
-  const [query, setQuery] = useState<{ identity: string; campusId: string; status: ReportStatusFilter; page: number; revision: number } | null>(null);
+  const [query, setQuery] = useState<(ReportFiltersInput & { identity: string; page: number; revision: number }) | null>(null);
+  const [visited, setVisited] = useState<{ key: string; through: number } | null>(null);
   const [listing, setListing] = useState<{ key: string; result: ReviewPage | null; error: string } | null>(null);
   const [selection, setSelection] = useState<{ key: string; id: string; revision: number } | null>(null);
   const [detail, setDetail] = useState<{ key: string; value: ReportReviewDetail | ReportResolutionDetail | null; error: string } | null>(null);
   const [fileState, setFileState] = useState<{ key: string; fileId: string; busy: boolean; error: string } | null>(null);
   const [accessError, setAccessError] = useState<{ key: string; message: string } | null>(null);
   const fileRequest = useRef<AbortController | null>(null);
+  const imageRequests = useRef(new Set<AbortController>());
   const resolutionRequest = useRef<AbortController | null>(null);
   const [draft, setDraft] = useState<{ key: string; input: ReportResolutionDraft; confirming: boolean } | null>(null);
   const [resolutionState, setResolutionState] = useState<{ key: string; busy: boolean; error: string; needsReload: boolean } | null>(null);
@@ -32,9 +34,13 @@ export function useReportReviews() {
   const campusId = currentQuery?.campusId ?? campuses[0]?.id ?? '';
   const page = currentQuery?.page ?? 1;
   const statusFilter = currentQuery?.status ?? '';
-  const listKey = JSON.stringify([identityKey, campusId, statusFilter, page, currentQuery?.revision, reload]);
+  const entityTypeFilter = currentQuery?.entityType ?? '';
+  const filterKey = JSON.stringify([identityKey, campusId, statusFilter, entityTypeFilter, currentQuery?.revision ?? 0, reload]);
+  const listKey = JSON.stringify([filterKey, page]);
+  const visitedPages = visited?.key === filterKey ? visited.through : 1;
   const selected = selection?.key === listKey ? selection : null;
   const detailKey = JSON.stringify([listKey, selected]);
+  const activeDetailKey = useRef(detailKey); activeDetailKey.current = detailKey;
   const denied = (reason: unknown) => reason instanceof AuthApiError && [401, 403].includes(reason.status);
   const fail = (reason: unknown) => {
     const message = reason instanceof AuthApiError && reason.serverMessage ? reason.serverMessage : 'No se pudo completar la consulta. Inténtalo nuevamente.';
@@ -55,8 +61,11 @@ export function useReportReviews() {
 
   useEffect(() => {
     const controller = new AbortController(); setListing(null);
-    if (allowed && campusId) void loadReportReviews(campusId, page, controller.signal, statusFilter).then(result => {
-      if (!controller.signal.aborted) setListing({ key: listKey, result, error: '' });
+    if (allowed && campusId) void loadReportReviews(campusId, page, controller.signal, statusFilter, entityTypeFilter).then(result => {
+      if (!controller.signal.aborted) {
+        setListing({ key: listKey, result, error: '' });
+        setVisited(current => ({ key: filterKey, through: Math.max(page, current?.key === filterKey ? current.through : 1) }));
+      }
     }).catch(reason => { if (!controller.signal.aborted) setListing({ key: listKey, result: null, error: fail(reason) }); });
     return () => controller.abort();
   }, [listKey, allowed]);
@@ -71,11 +80,12 @@ export function useReportReviews() {
 
   useEffect(() => {
     fileRequest.current?.abort(); fileRequest.current = null; setFileState(null);
+    imageRequests.current.forEach(controller => controller.abort()); imageRequests.current.clear();
     resolutionRequest.current?.abort(); resolutionRequest.current = null; setResolutionState(null); setDraft(null);
     return () => fileRequest.current?.abort();
   }, [detailKey]);
 
-  useEffect(() => () => resolutionRequest.current?.abort(), []);
+  useEffect(() => () => { resolutionRequest.current?.abort(); imageRequests.current.forEach(controller => controller.abort()); }, []);
 
   const result = allowed && listing?.key === listKey ? listing : null;
   const currentDetail = allowed && detail?.key === detailKey ? detail : null;
@@ -92,10 +102,10 @@ export function useReportReviews() {
   const currentFile = fileState?.key === detailKey ? fileState : null;
   return {
     identityKey,
-    statusFilter,
-    applyFilters(filters: { campusId: string; status: ReportStatusFilter }) {
+    statusFilter, entityTypeFilter, visitedPages,
+    applyFilters(filters: ReportFiltersInput) {
       if (resolutionRequest.current || !campuses.some(campus => campus.id === filters.campusId)) return;
-      setQuery({ identity: identityKey, campusId: filters.campusId, status: filters.status, page: 1, revision: (currentQuery?.revision ?? 0) + 1 }); setSelection(null);
+      setQuery({ identity: identityKey, ...filters, page: 1, revision: (currentQuery?.revision ?? 0) + 1 }); setSelection(null);
     },
     allowed, campuses, campusId, page, selectedId: selected?.id, detail: currentDetail?.value ?? null,
     entries: result?.result?.data ?? [], hasMore: result?.result?.meta.hasMore ?? false,
@@ -149,17 +159,18 @@ export function useReportReviews() {
     },
     chooseCampus(id: string) {
       if (!campuses.some(campus => campus.id === id)) return;
-      setQuery({ identity: identityKey, campusId: id, status: statusFilter, page: 1, revision: 0 }); setSelection(null);
+      setQuery({ identity: identityKey, campusId: id, status: statusFilter, entityType: entityTypeFilter, page: 1, revision: 0 }); setSelection(null);
     },
     changePage(next: number) {
-      if (listLoading || !Number.isSafeInteger(next) || next < 1 || next === page || next > page + 1 || (next > page && !result?.result?.meta.hasMore)) return;
-      setQuery({ identity: identityKey, campusId, status: statusFilter, page: next, revision: 0 }); setSelection(null);
+      const lastReachable = Math.max(visitedPages, page + (result?.result?.meta.hasMore ? 1 : 0));
+      if (listLoading || !Number.isSafeInteger(next) || next < 1 || next === page || next > lastReachable) return;
+      setQuery({ identity: identityKey, campusId, status: statusFilter, entityType: entityTypeFilter, page: next, revision: currentQuery?.revision ?? 0 }); setSelection(null);
     },
     open(id: string) { setSelection({ key: listKey, id, revision: (selected?.revision ?? 0) + 1 }); },
     close() {
       // Una decisión puede sacar el caso del filtro. Releer al volver evita páginas incoherentes.
       if (statusFilter && currentDetail?.value && currentDetail.value.status !== statusFilter) {
-        setQuery({ identity: identityKey, campusId, status: statusFilter, page: 1, revision: (currentQuery?.revision ?? 0) + 1 });
+        setQuery({ identity: identityKey, campusId, status: statusFilter, entityType: entityTypeFilter, page: 1, revision: (currentQuery?.revision ?? 0) + 1 });
       }
       setSelection(null);
     },
@@ -167,6 +178,14 @@ export function useReportReviews() {
       if (deniedMessage) { setAccessError(null); setQuery(null); setSelection(null); setReload(value => value + 1); }
       else if (selected) setSelection({ ...selected, revision: selected.revision + 1 });
       else setReload(value => value + 1);
+    },
+    async loadImage(imageId: string, signal: AbortSignal) {
+      if (!allowed || !selected || !currentDetail?.value || signal.aborted) throw new Error('La denuncia ya no está abierta.');
+      const controller = new AbortController(), abort = () => controller.abort();
+      imageRequests.current.add(controller); signal.addEventListener('abort', abort, { once: true });
+      try { return await loadReportedImage(campusId, selected.id, imageId, controller.signal); }
+      catch (reason) { if (!controller.signal.aborted && activeDetailKey.current === detailKey && denied(reason)) fail(reason); throw reason; }
+      finally { imageRequests.current.delete(controller); signal.removeEventListener('abort', abort); }
     },
     async download(fileId: string, name: string) {
       if (!selected || !currentDetail?.value || ['RESUELTO', 'DESESTIMADO'].includes(currentDetail.value.status) || fileRequest.current) return;

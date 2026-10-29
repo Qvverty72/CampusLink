@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { PaginationParams } from '../../types/api.js';
 import type { DigitalStoredFile } from '../marketplace/elibrary/elibrary.types.js';
-import type { ReportPeople, ReportPerson, ReportResolutionDetail, ReportResolutionSummary, ReportReviewDetail, ReportReviewSummary, ReportStatus } from './reports.types.js';
+import type { ReportEntityType, ReportPeople, ReportPerson, ReportResolutionDetail, ReportResolutionSummary, ReportReviewDetail, ReportReviewSummary, ReportStatus } from './reports.types.js';
 
 const summaryProjection = `r.id,r.campus_id AS "campusId",r.entidad_tipo AS "entityType",r.entidad_id AS "entityId",
   COALESCE(r.contenido_reportado_json->'publication'->>'titulo',r.contenido_reportado_json->>'title') AS title,
@@ -32,13 +32,17 @@ export async function findReportResolution(client: PoolClient, campusId: string,
 }
 
 /** El campus se aplica en SQL antes de paginar o buscar un identificador. */
-export async function readReportReviews(client: PoolClient, campusId: string, pagination: PaginationParams, status?: ReportStatus) {
+export async function readReportReviews(client: PoolClient, campusId: string, pagination: PaginationParams, status?: ReportStatus, entityType?: ReportEntityType) {
+  const values: (string | number)[] = [campusId, pagination.limit + 1, pagination.offset];
+  const conditions = ['r.campus_id=$1'];
+  if (status) { values.push(status); conditions.push(`r.estado_reporte=$${values.length}`); }
+  if (entityType) { values.push(entityType); conditions.push(`r.entidad_tipo=$${values.length}`); }
   return (await client.query<ReportReviewSummary>(`SELECT ${summaryProjection},
     CASE WHEN ${finalResolution} THEN jsonb_build_object('measure',r.medida_aplicada,
       'resolvedById',r.resuelto_por_id,'resolvedAt',to_char(r.resuelto_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ELSE NULL END AS resolution
-    FROM public.reporte_contenido r WHERE r.campus_id=$1 ${status ? 'AND r.estado_reporte=$4' : ''}
+    FROM public.reporte_contenido r WHERE ${conditions.join(' AND ')}
     ORDER BY r.reportado_en DESC,r.id DESC LIMIT $2 OFFSET $3`,
-    status ? [campusId, pagination.limit + 1, pagination.offset, status] : [campusId, pagination.limit + 1, pagination.offset])).rows;
+    values)).rows;
 }
 
 export async function findReportReview(client: PoolClient, campusId: string, id: string, lock = false) {
@@ -103,4 +107,12 @@ export async function findReportedDigitalFile(client: PoolClient, publicationId:
   return (await client.query<DigitalStoredFile>(`SELECT id,bucket_id,storage_path,nombre_original,mime_type,tamano_bytes
     FROM public.archivo_publicacion WHERE id=$1 AND publicacion_id=$2 AND tipo_archivo='RECURSO' FOR SHARE`,
     [fileId, publicationId])).rows[0] ?? null;
+}
+
+/** La lectura histórica admite retirada lógica, nunca una imagen de otra publicación o sede. */
+export async function findReportedPhysicalImage(client: PoolClient, campusId: string, institutionId: string, publicationId: string, imageId: string) {
+  return (await client.query<{ bucket_id: string; storage_path: string; mime_type: string }>(`SELECT a.bucket_id,a.storage_path,a.mime_type
+    FROM public.archivo_publicacion a JOIN public.publicacion_recurso p ON p.id=a.publicacion_id
+    JOIN public.campus c ON c.id=p.campus_id WHERE p.campus_id=$1 AND c.institucion_id=$2 AND p.id=$3 AND a.id=$4
+    AND p.tipo_recurso='FISICO' AND a.tipo_archivo='IMAGEN'`, [campusId, institutionId, publicationId, imageId])).rows[0] ?? null;
 }

@@ -1,5 +1,8 @@
 export type ReportStatus = 'PENDIENTE' | 'EN_REVISION' | 'RESUELTO' | 'DESESTIMADO';
 export type ReportStatusFilter = ReportStatus | '';
+export type ReportEntityType = 'ACTIVIDAD' | 'PUBLICACION_FISICA' | 'PUBLICACION_DIGITAL' | 'TRANSACCION';
+export type ReportEntityTypeFilter = ReportEntityType | '';
+export interface ReportFiltersInput { campusId: string; status: ReportStatusFilter; entityType: ReportEntityTypeFilter }
 export interface ReportPerson { id: string; name: string | null; email: string | null }
 export interface ReportPeople {
   source: 'CURRENT_PROFILE'; reporter: ReportPerson | null; reported: ReportPerson | null; decisionMaker: ReportPerson | null;
