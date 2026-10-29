@@ -67,12 +67,12 @@ export function AgreementListSection({ label, children }: { label?: string; chil
   return <View style={styles.listSection}>{Boolean(label) && <Text accessibilityRole="header" style={styles.listGroupTitle}>{label?.toLocaleUpperCase('es-CL')}</Text>}{children}</View>;
 }
 
-export function AgreementStepper({ state, digital = false, selected, onSelect, disabled = false, showCancelled = false }: {
-  state: AgreementUIState; digital?: boolean; selected?: AgreementStep; onSelect?: (step: AgreementStep) => void; disabled?: boolean; showCancelled?: boolean;
+export function AgreementStepper({ state, digital = false, digitalChat = false, selected, onSelect, disabled = false, showCancelled = false }: {
+  state: AgreementUIState; digital?: boolean; digitalChat?: boolean; selected?: AgreementStep; onSelect?: (step: AgreementStep) => void; disabled?: boolean; showCancelled?: boolean;
 }) {
   if (state === 'CANCELADO' && !onSelect && !showCancelled) return null;
   const completed = state === 'FINALIZADO', cancelled = state === 'CANCELADO';
-  const steps: { id: AgreementStep; label: string }[] = [{ id: 'accepted', label: copy.acceptedStep }, ...(!digital ? [{ id: 'coordinate' as const, label: copy.coordinateStep }] : []), { id: 'confirm', label: copy.confirmStep }];
+  const steps: { id: AgreementStep; label: string }[] = [{ id: 'accepted', label: copy.acceptedStep }, ...(!digital || digitalChat ? [{ id: 'coordinate' as const, label: copy.coordinateStep }] : []), { id: 'confirm', label: copy.confirmStep }];
   const currentIndex = state === 'COORDINANDO' && !digital ? 1 : steps.length - 1;
   return <View style={styles.stepper}>{steps.map(({ id, label }, index) => {
     const current = !cancelled && !completed && index === currentIndex;
@@ -97,9 +97,9 @@ export function AgreementStepper({ state, digital = false, selected, onSelect, d
 }
 
 /** Pasos y menú son destinos hermanos; el contenedor no intercepta sus toques. */
-export function AgreementCard({ title, roleLabel, participants, currentUserId, modality, amount, currency, state, label, dateLabel, ratingScore, onSelect, onMenu, disabled = false, digital = false,amountNote,amountContent }: {
+export function AgreementCard({ title, roleLabel, participants, currentUserId, modality, amount, currency, state, label, dateLabel, ratingScore, onSelect, onMenu, disabled = false, digital = false,digitalChat=false,amountNote,amountContent }: {
   title: string; roleLabel: string; participants?: TransactionParticipant[]; currentUserId?: string; modality: string; amount: number | null; currency: string;
-  state?: AgreementUIState; label: string; dateLabel: string; ratingScore?: number | null; onSelect: (step: AgreementStep) => void; onMenu: () => void; disabled?: boolean; digital?:boolean;amountNote?:string;amountContent?:ReactNode;
+  state?: AgreementUIState; label: string; dateLabel: string; ratingScore?: number | null; onSelect: (step: AgreementStep) => void; onMenu: () => void; disabled?: boolean; digital?:boolean;digitalChat?:boolean;amountNote?:string;amountContent?:ReactNode;
 }) {
   return <View style={styles.card}>
     <View style={styles.cardHeading}><Text accessibilityRole="header" style={styles.cardTitle}>{title}</Text>
@@ -109,7 +109,7 @@ export function AgreementCard({ title, roleLabel, participants, currentUserId, m
       : <><Text style={styles.cardHelper}>{roleLabel}</Text><Text style={detailUI.helper}>{copy.participantsUnavailable}</Text><AgreementAmount modality={modality} amount={amount} currency={currency} content={amountContent}/>
         <Pressable accessibilityRole="button" disabled={disabled} onPress={() => onSelect('accepted')} style={ui.outlined}><Text style={ui.link}>{copy.retryTransaction}</Text></Pressable></>}
     {amountNote&&<Text style={detailUI.helper}>{amountNote}</Text>}
-    {state && <AgreementStepper state={state} digital={digital} showCancelled disabled={disabled} onSelect={onSelect} />}
+    {state && <AgreementStepper state={state} digital={digital} digitalChat={digitalChat} showCancelled disabled={disabled} onSelect={onSelect} />}
     {state === 'FINALIZADO' && <TransactionRating score={ratingScore} />}
     <View style={styles.cardFooter}><Text style={styles.cardHelper}>{label}</Text><Text style={detailUI.helper}>{dateLabel}</Text></View>
   </View>;

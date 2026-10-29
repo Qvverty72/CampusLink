@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarClock, CalendarDays, CalendarSync, Ellipsis, Store, Trash2, type LucideIcon } from 'lucide-react-native';
+import { CalendarClock, CalendarDays, CalendarSync, Ellipsis, Store, Trash2, Inbox, PackageCheck, PackageSearch, MessageCircle, type LucideIcon } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { APP_COLORS } from '@/types/colors';
 import type { UserNotification } from '../types/notification';
@@ -10,6 +10,10 @@ const ICONS: Record<UserNotification['type'], LucideIcon> = {
   OFFICIAL_EVENT_STARTED: CalendarClock,
   ACTIVITY_CHANGED: CalendarSync,
   PHYSICAL_PUBLICATION_CLOSE_REMINDER: Store,
+  RESOURCE_REQUEST_RECEIVED: Inbox,
+  RESOURCE_UPDATED: PackageSearch,
+  RESOURCE_REQUEST_ACCEPTED: PackageCheck,
+  COORDINACION_RECURSO: MessageCircle,
 };
 
 export function NotificationItem({ item, busy, onOpen, onDelete }: {

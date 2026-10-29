@@ -9,18 +9,17 @@ import { AgreementNotice, DetailActionBar, DetailHeader, DetailSection, OwnerCar
 import type { useDigitalLibrary } from '../hooks/useDigitalLibrary';
 import { useDigitalRequestAction } from '../hooks/useDigitalTrades';
 import { DigitalPreview } from './DigitalPreview';
-import { DigitalAcademicSelector } from './DigitalAcademicSelector';
-import { DigitalPublicationEditor } from './DigitalPublicationEditor';
+import { DigitalPublicationManagement } from './DigitalPublicationManagement';
 
 type Library = ReturnType<typeof useDigitalLibrary>;
 export function DigitalResourceDetail({ library, onAcquired, onRequests,onBusyChange }: { library: Library; onAcquired: (id: string) => void; onRequests: () => void;onBusyChange?:(busy:boolean)=>void }) {
   const insets = useSafeAreaInsets(), resource = library.detail;
   const request = useDigitalRequestAction(resource?.id ?? '', Boolean(resource && !library.isOwner));
   const [reporting, setReporting] = useState(false), [reportBusy, setReportBusy] = useState(false);
-  const [requesting, setRequesting] = useState(false), [managing, setManaging] = useState(false), [contentEditor, setContentEditor] = useState(false);
+  const [requesting, setRequesting] = useState(false), [managing, setManaging] = useState(false), [managementBusy, setManagementBusy] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const preview = resource?.files.find(file => file.id === previewId) ?? resource?.files[0];
-  const busy = library.busy || request.busy || reportBusy || Boolean(library.downloading);
+  const busy = library.busy || request.busy || reportBusy || managementBusy || Boolean(library.downloading);
   useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false);},[busy,onBusyChange]);
   const acquired = !library.isOwner && Boolean(resource?.acquired || request.options?.acquired);
   const active = Boolean(request.options?.activeRequestId);
@@ -33,8 +32,6 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests,onBusyCh
   const disabled = busy || !resource || library.isOwner || (!acquired && !active && (!canRequest || (requesting && !request.code)));
   const goBack = () => {
     if (reporting) setReporting(false);
-    else if (contentEditor) setContentEditor(false);
-    else if (library.editingAcademics) library.cancelAcademics();
     else if (managing) setManaging(false);
     else if (requesting) setRequesting(false);
     else library.closeDetail();
@@ -47,23 +44,7 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests,onBusyCh
         <Text accessibilityRole="alert" style={detailUI.error}>{library.error || 'No pudimos abrir el recurso.'}</Text>
         <Pressable accessibilityRole="button" onPress={() => { if (library.selectedId) void library.openDetail(library.selectedId); }} style={ui.outlined}><Text style={ui.link}>Reintentar detalle</Text></Pressable>
       </View> : reporting ? <MarketplaceReportForm target={{ type: 'PUBLICACION_DIGITAL', publicationId: resource.id, campusId: resource.campusId }} title={resource.title} onBusyChange={setReportBusy} onBack={() => setReporting(false)} />
-        : managing ? <>
-          {library.error && <Text accessibilityRole="alert" style={detailUI.error}>{library.error}</Text>}
-          {contentEditor ? <DigitalPublicationEditor key={resource.id} resource={resource} onSaved={value => { setContentEditor(false); library.savedContent(value); }} onClose={() => setContentEditor(false)} />
-            : library.editingAcademics ? <>
-              <DigitalAcademicSelector catalog={library.catalog} loading={library.catalogLoading} error={library.catalogError} reload={library.reloadCatalog}
-                careerIds={library.careerIds} subjectIds={library.subjectIds} onCareersChange={library.setCareerIds} onSubjectsChange={library.setSubjectIds} disabled={busy} previous={resource} />
-              {library.academicConflict && <Pressable accessibilityRole="button" disabled={busy} onPress={library.openAcademicEditor} style={ui.outlined}><Text style={ui.link}>Recargar asociaciones vigentes</Text></Pressable>}
-              <Pressable accessibilityRole="button" disabled={busy || library.academicConflict || library.catalogLoading || Boolean(library.catalogError)} onPress={library.saveAcademics} style={ui.primary}><Text style={ui.primaryText}>Guardar asociaciones</Text></Pressable>
-              <Pressable accessibilityRole="button" disabled={busy} onPress={library.cancelAcademics} style={ui.outlined}><Text style={ui.link}>Cancelar edición</Text></Pressable>
-            </> : <>
-              <Text style={detailUI.title}>{resource.title}</Text>
-              <Pressable accessibilityRole="button" disabled={busy} onPress={() => setContentEditor(true)} style={ui.outlined}><Text style={ui.link}>Editar contenido o retirar publicación</Text></Pressable>
-              <Pressable accessibilityRole="button" disabled={busy} onPress={library.openAcademicEditor} style={ui.outlined}><Text style={ui.link}>Editar asociaciones académicas</Text></Pressable>
-              <Pressable accessibilityRole="button" disabled={busy} onPress={library.openAttachments} style={ui.outlined}><Text style={ui.link}>Añadir archivos</Text></Pressable>
-              {resource.files.map(file => <Pressable key={file.id} accessibilityRole="button" accessibilityLabel={`Descargar ${file.name}`} disabled={busy} onPress={() => library.download(file)} style={ui.outlined}><Text style={ui.link}>{library.downloading === file.id ? 'Descargando…' : `Descargar ${file.name}`}</Text></Pressable>)}
-            </>}
-        </> : requesting ? <>
+        : requesting ? <>
           <RequestResourceSummary title={resource.title} modality={resource.modality} price={resource.price} digital />
           {active || acquired ? <Text style={detailUI.body}>{acquired ? 'Ya adquiriste este recurso. Abre tus materiales para consultar los archivos.' : 'Tu solicitud está registrada. Puedes consultar tus solicitudes y acuerdos.'}</Text>
             : <RequestMessageForm title={resource.title} messages={(request.options?.messages ?? []).map(row => ({ code: row.code, label: row.description }))} selected={request.code}
@@ -91,5 +72,6 @@ export function DigitalResourceDetail({ library, onAcquired, onRequests,onBusyCh
     </ScrollView>
     {resource && !reporting && !managing && <DetailActionBar flow busy={request.busy} label={label} helper={helper} disabled={disabled}
       onPress={acquired ? () => onAcquired(resource.id) : active ? onRequests : requesting ? () => { void request.submit().then(sent => { if (sent) void library.openDetail(resource.id); }); } : () => setRequesting(true)} />}
+    {resource && managing && <DigitalPublicationManagement library={library} onBusyChange={setManagementBusy} onClose={()=>setManaging(false)}/>}
   </View>;
 }

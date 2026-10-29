@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../services/api-response.js';
 import { createPaginatedResult } from '../../../services/pagination.js';
@@ -49,6 +50,9 @@ export async function editPhysicalgoods<T>(auth: VerifiedAuthConnection, id: str
     const after = await physicalgoodsSnapshot(client, id);
     if (JSON.stringify(before) !== JSON.stringify(after)) await auditPhysicalgoods(client, current, id,
       after.deleted_at ? 'RETIRAR_PUBLICACION' : 'EDITAR_PUBLICACION', before, after);
+    const content = (snapshot: typeof before) => [snapshot.titulo,snapshot.descripcion,snapshot.estado_uso,
+      snapshot.categoria_id,snapshot.modalidad,snapshot.precio,snapshot.moneda,snapshot.images];
+    if (!after.deleted_at && JSON.stringify(content(before)) !== JSON.stringify(content(after))) await notifyResourceUpdated(client,id);
     return result;
   });
 }

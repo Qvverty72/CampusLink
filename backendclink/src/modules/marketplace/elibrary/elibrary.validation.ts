@@ -149,7 +149,10 @@ export async function validateDigitalFile(file: DigitalUpload | undefined): Prom
   if (name.length > 255) return invalidDigital('file', 'El nombre del archivo supera los 255 caracteres. Acórtalo y vuelve a seleccionarlo.');
   if (/[\\/\u0000-\u001f\u007f]/.test(name)) return invalidDigital('file', 'El nombre del archivo contiene una ruta o caracteres no admitidos. Renómbralo y vuelve a seleccionarlo.');
   if (!/\.pdf$/i.test(name)) return invalidDigital('file', 'Solo se admiten archivos PDF con extensión .pdf.');
-  if (file.mimeType !== 'application/pdf') return invalidDigital('file', 'El tipo del archivo no corresponde a un PDF. Selecciona un documento PDF.');
+  const mimeType = typeof file.mimeType === 'string' ? file.mimeType.split(';')[0].trim().toLowerCase() : '';
+  if (!['', 'application/pdf', 'application/x-pdf', 'application/octet-stream'].includes(mimeType)) {
+    return invalidDigital('file', 'El tipo del archivo no corresponde a un PDF. Selecciona un documento PDF.');
+  }
   if (!/^%PDF-(?:1\.[0-7]|2\.0)[\r\n]/.test(file.bytes.toString('latin1', 0, 10)) ||
     !/%%EOF[\s]*$/.test(file.bytes.subarray(-1024).toString('latin1'))) {
     return invalidDigital('file', 'El contenido no corresponde a un PDF completo.');

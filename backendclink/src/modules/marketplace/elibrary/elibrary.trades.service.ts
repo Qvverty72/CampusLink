@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { notifyResourceRequest } from '../marketplace.notifications.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import { ApiError } from '../../../services/api-response.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../../services/pagination.js';
@@ -84,6 +85,7 @@ export async function createDigitalRequest(auth:VerifiedAuthConnection,id:unknow
     if(await activeDigitalRequest(client,resource.id,current.userId)||await hasDigitalAcquisition(client,resource.id,resource.propietario_id,current.userId))throw conflict('Ya tienes una solicitud activa o adquiriste este recurso.');
     if(!(await digitalRequestMessages(client)).some(row=>row.code===messageCode))invalidDigital('messageCode','Selecciona un mensaje disponible.');
     const selected=await insertDigitalRequest(client,resource.id,current.userId,messageCode as string,operationRequestId);
+    await notifyResourceRequest(client,resource.id,selected);
     return requestDto((await findDigitalRequest(client,resource.id,selected))!);
   });
 }
@@ -112,7 +114,8 @@ export async function resolveDigitalRequest(auth:VerifiedAuthConnection,id:unkno
       await available(client,resource);
       if(current.userId===request.solicitante_id||!await digitalMembersEnabled(client,[current.userId,request.solicitante_id],resource.institucion_id))throw conflict('El receptor ya no está habilitado en tu institución.');
       if(await hasDigitalAcquisition(client,resource.id,resource.propietario_id,request.solicitante_id))throw conflict('El receptor ya adquirió este recurso.');
-      await insertDigitalTrade(client,resource.id,requestId,request.solicitante_id);
+      const transactionId=await insertDigitalTrade(client,resource.id,requestId,request.solicitante_id);
+      await notifyResourceRequest(client,resource.id,requestId,transactionId);
     }
     await setDigitalRequestStatus(client,requestId,decision==='ACEPTAR'?'ACEPTADA':'RECHAZADA');
     return requestDto((await findDigitalRequest(client,resource.id,requestId))!);

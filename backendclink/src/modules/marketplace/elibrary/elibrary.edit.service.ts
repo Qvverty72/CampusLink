@@ -1,4 +1,5 @@
 import { ApiError } from '../../../services/api-response.js';
+import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { digitalAction,withDigitalTradeContext } from './elibrary.trades.service.js';
 import { parseDigitalInput,invalidDigital } from './elibrary.validation.js';
@@ -17,6 +18,8 @@ export async function editDigitalPublication(auth:VerifiedAuthConnection,id:unkn
     if(input&&input.title===before.title&&input.description===before.description&&input.modality===before.modality&&input.price===before.price)return before;
     if(retiring)await retireDigitalPublication(client,resource.id);else await updateDigitalContent(client,resource.id,input!);
     const after=(await findDigitalPublications(client,resource.institucion_id,resource.id,undefined,current.userId,'owned'))[0];
-    await auditDigitalAcademics(client,current,before,after,retiring?'RETIRAR_PUBLICACION':'EDITAR_PUBLICACION');return after;
+    await auditDigitalAcademics(client,current,before,after,retiring?'RETIRAR_PUBLICACION':'EDITAR_PUBLICACION');
+    if(!retiring)await notifyResourceUpdated(client,resource.id);
+    return after;
   });
 }

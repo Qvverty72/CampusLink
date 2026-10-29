@@ -66,7 +66,7 @@ test('digital transactions use shared segments and sections, preserve inline pan
  const rows=[{...trade,id:'wait',canConfirm:false,confirmations:[confirmed]},{...trade,id:'act'},{...trade,id:'other',canConfirm:false}];
  const state={value:{data:rows,meta:{page:1,limit:5,total:6,counts:{active:6,finished:2}}},loading:false,initialLoading:false,error:null,reload:()=>changes++,update:noop};
  const {DigitalActivityTransactions}=load('elibrary/components/DigitalActivityTransactions.tsx',{
-  react:h.react,'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text'},'@/features/auth/hooks/useAuth':{useAuth:()=>({identity:{userId:'receiver'}})},
+  react:h.react,'react/jsx-runtime':jsx,'react-native':{View:'View',Text:'Text'},'./DigitalTransactionChat':{},'@/features/auth/hooks/useAuth':{useAuth:()=>({identity:{userId:'receiver'}})},
   '../../components/AgreementUI':{AgreementCard:'Card',AgreementCardsSkeleton:'Skeleton',AgreementTabs:'Tabs',AgreementListSection:'Section'},'../../components/AgreementStepModal':{},'../../components/CatalogUI':{ui:{}},'../../components/RequestsUI':{RequestButton:'Button'},
   '../../components/ResourceDetailUI':{detailUI:{}},'../../components/PersonalUI':{PersonalEmpty:'Empty'},'../../components/TransactionUI':{},'../../components/OwnerRating':{},'../../components/MarketplaceReportForm':{},'../../hooks/useMarketplaceRefresh':{useMarketplaceRefresh:noop},'../../hooks/useAgreementPolling':{},
   '../hooks/useDigitalActivity':{useDigitalActivityPage:(kind,q)=>{query=q;return state;}},'../hooks/useDigitalTransactionPanel':{},'./DigitalActivityResource':{},'./DigitalActivityUI':{DigitalActivityPager:'Pager'},'../utils/digitalTransactionPresentation':{digitalTransactionPresentation},'../../utils/agreementPresentation':{agreementCopy},
@@ -131,10 +131,44 @@ test('resource modal uses server totals and page rows without slicing the second
  assert.equal(nodes.some(row=>row.props?.accessibilityLabel==='Aceptar solicitud de Estudiante 11'),false);
  nodes.filter(row=>row.props?.accessibilityRole==='tab')[1].props.onPress();assert.deepEqual(orders,['newest']);assert.deepEqual(pages,[1]);h.unmount();
 });
-test('digital activity uses four tabs, two transaction circles and inline options without delivery coordination',()=>{
+test('digital activity uses four tabs, three transaction circles and a free chat entry',()=>{
  const list=renderCatalog('digital',{mode:'transactions'}).markup;for(const text of ['Publicaciones','Solicitudes','Transacciones','Adquiridos','Participantes','Monto acordado','Comprador (tú)'])assert.ok(list.includes(text),text);
- assert.match(list,/aria-label="Aceptada"/);assert.match(list,/aria-label="Confirmar"/);assert.doesNotMatch(list,/aria-label="Coordinar"/);
+ assert.match(list,/aria-label="Aceptada"/);assert.match(list,/aria-label="Confirmar"/);assert.match(list,/aria-label="Coordinar"/);
  const menu=renderCatalog('digital',{mode:'transactions',inlinePanel:'menu'}).markup;assert.match(menu,/Opciones de transacción/);assert.match(menu,/Denunciar transacción/);assert.match(menu,/Cancelar transacción/);assert.doesNotMatch(menu,/Ver solicitud|Volver a opciones/);
+});
+test('digital chat renders a free composer and participants without physical location cases, keeping closed history read-only',()=>{
+ const chat=renderCatalog('digital',{mode:'transactions',inlinePanel:'coordinate'}).markup;
+ assert.match(chat,/Escribe un mensaje/);assert.match(chat,/Enviar mensaje/);assert.match(chat,/soy de otra sede/);
+ assert.ok(chat.indexOf('Hola, podemos coordinar por aquí.')<chat.indexOf('Perfecto, soy de otra sede.'));
+ assert.doesNotMatch(chat,/Selecciona edificio|Selecciona piso|Estoy en el edificio/);
+ const history=renderCatalog('digital',{mode:'transactions',inlinePanel:'coordinate',agreementTab:'finished'}).markup;
+ assert.match(history,/transacción está cerrada/);assert.match(history,/Perfecto, soy de otra sede/);assert.doesNotMatch(history,/Enviar mensaje/);
+});
+
+function conversation(){
+ const h=runtime(),reads=[],lists=[],sends=[],snapshots=[];let key=0;
+ const {useDigitalMessages}=load('elibrary/hooks/useDigitalMessages.ts',{
+  react:h.react,'@/lib/api/authenticated-request':{AuthApiError},'@/lib/api/operation-id':{operationId:()=>`key-${++key}`},
+  '../api/digitalTradesApi':{loadDigitalTrade:(...args)=>pending(reads,args),loadDigitalMessages:(...args)=>pending(lists,args),sendDigitalMessage:(...args)=>pending(sends,args)},
+ });
+ return {h,reads,lists,sends,snapshots,render:()=>h.render(()=>useDigitalMessages(trade,value=>snapshots.push(value))),
+  resolve(index,data=[],value=trade){reads[index].resolve(value);lists[index].resolve({data,meta:{page:lists[index].args[1],hasMore:false}});}};
+}
+test('digital chat retains draft and operation key after an uncertain send, blocks double clicks and refreshes without duplicate messages',async()=>{
+ const q=conversation();q.render();q.resolve(0);await setImmediate();let state=q.render();state.setDraft('  Hola desde otra sede  ');state=q.render();
+ const send=state.send();void state.send();assert.equal(q.sends.length,1);assert.equal(q.sends[0].args[1],'Hola desde otra sede');
+ q.sends[0].reject(new Error('lost reply'));await send;q.resolve(1);await setImmediate();state=q.render();assert.equal(state.draft,'  Hola desde otra sede  ');assert.ok(state.sendError);
+ const retry=state.send();assert.equal(q.sends[1].args[2],q.sends[0].args[2]);
+ const receipt={id:'message',senderId:'receiver',text:'Hola desde otra sede',createdAt:'2026-10-29T12:00:00Z'};
+ q.sends[1].resolve(receipt);await retry;q.resolve(2,[receipt]);await setImmediate();state=q.render();assert.equal(state.messages.length,1);assert.equal(state.draft,'');assert.equal(state.sendError,null);q.h.unmount();
+});
+test('digital chat ignores aborted pagination, polls quietly, revokes denied history and blocks closed sends',async()=>{
+ const q=conversation();q.render();q.resolve(0,[{id:'new'}]);await setImmediate();let state=q.render();
+ const previous=state.changePage(2);state=q.render();const refresh=state.refresh();assert.equal(q.lists[1].args[2].aborted,true);
+ q.resolve(2,[{id:'current'}]);await refresh;q.resolve(1,[{id:'stale'}]);await previous;state=q.render();assert.equal(state.messages[0].id,'current');
+ const poll=state.poll();assert.equal(q.render().loading,false);q.reads[3].reject(new AuthApiError(403));q.lists[3].resolve({data:[],meta:{}});await poll;state=q.render();assert.equal(state.verified,false);assert.equal(state.messages.length,0);
+ const restore=state.refresh();q.resolve(4,[],{...trade,status:'COMPLETADA'});await restore;state=q.render();state.setDraft('Hola');state=q.render();await state.send();assert.equal(q.sends.length,0);
+ const closing=state.refresh();q.h.unmount();assert.equal(q.lists[5].args[2].aborted,true);q.resolve(5);await closing;
 });
 
 test('both transaction tabs use identical segmented styling; digital action/waiting/empty states keep their proper layout',()=>{

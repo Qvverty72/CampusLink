@@ -46,7 +46,7 @@ function DigitalReceivedResources({active,onChanged}:{active:boolean;onChanged:(
  <DigitalActivityPager meta={state.value?.meta} onChange={setPage} disabled={state.loading}/></>}
  {resource&&<DigitalReceivedRequests key={resource.publicationId} resource={resource} onClose={()=>setResource(null)} onResolved={resolved} onUncertain={()=>{state.reload();onChanged();}}/>}</View>;
 }
-function DigitalReceivedRequests({resource,onClose,onResolved,onUncertain}:{resource:DigitalActivityResource;onClose:()=>void;onResolved:(decision:'ACEPTAR'|'RECHAZAR')=>void;onUncertain:()=>void}){
+export function DigitalReceivedRequests({resource,onClose,onResolved,onUncertain}:{resource:DigitalActivityResource;onClose:()=>void;onResolved:(decision:'ACEPTAR'|'RECHAZAR')=>void;onUncertain:()=>void}){
  const [page,setPage]=useState(1),[order,setOrder]=useState<'oldest'|'newest'>('oldest'),[selection,setSelection]=useState<{request:DigitalActivityRequest;decision:'ACEPTAR'|'RECHAZAR'}|null>(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),running=useRef(false),pending=useRef<AbortController|null>(null);
  const query=`received=true&resourceId=${resource.publicationId}&page=${page}&limit=10&order=${order}`;

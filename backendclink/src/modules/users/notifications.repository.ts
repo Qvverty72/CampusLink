@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import type { PendingActivityNotification } from '../activities/activities.notifications.repository.js';
-import type { ActivityNotificationDto, NotificationPage } from './notifications.types.js';
+import type { ActivityNotificationDto, NotificationPage, UserNotificationDto } from './notifications.types.js';
 
 const reasonLabels = { DATES_CHANGED: 'fechas', LOCATION_CHANGED: 'ubicación', CONTENT_CHANGED: 'información' };
 const publicationMessage = 'Se publicó un evento oficial en tu campus.';
@@ -54,16 +54,32 @@ export async function deliverActivityNotification(task: PendingActivityNotificat
   });
 }
 
-type SqlNotification = { id: string; actividad_id: string; publicacion_id:string;
-  tipo_notificacion: ActivityNotificationDto['type']|'PHYSICAL_PUBLICATION_CLOSE_REMINDER';
+type SqlNotification = { id: string; actividad_id: string; publicacion_id:string; transaccion_id:string;
+  resource_type:'FISICO'|'DIGITAL'; request_id:string;
+  tipo_notificacion: UserNotificationDto['type'];
   titulo: string; mensaje: string; created_at: Date; leida_en: Date | null; actividad_evento_clave: string };
 
-// Las actividades conservan campus vigente; un aviso físico solo pertenece al propietario de su publicación original.
+// Actividades por campus; recordatorios por propiedad y recursos por relación propia e institución de origen.
 const ownNotificationScope=`n.destinatario_id=$1 AND (
   (n.campus_id=$2 AND n.actividad_evento_clave IS NOT NULL
     AND n.tipo_notificacion IN ('OFFICIAL_EVENT_PUBLISHED','ACTIVITY_CHANGED','OFFICIAL_EVENT_STARTED'))
   OR (n.tipo_notificacion='PHYSICAL_PUBLICATION_CLOSE_REMINDER' AND EXISTS(SELECT 1 FROM public.publicacion_recurso p
-    WHERE p.id=n.publicacion_id AND p.tipo_recurso='FISICO' AND p.propietario_id=$1)))`;
+    WHERE p.id=n.publicacion_id AND p.tipo_recurso='FISICO' AND p.propietario_id=$1))
+  OR (n.tipo_notificacion IN ('RESOURCE_REQUEST_RECEIVED','RESOURCE_UPDATED','RESOURCE_REQUEST_ACCEPTED','COORDINACION_RECURSO')
+    AND EXISTS(SELECT 1 FROM public.publicacion_recurso p
+      JOIN public.campus origin ON origin.id=p.campus_id
+      JOIN public.campus current ON current.id=$2 AND current.institucion_id=origin.institucion_id
+      WHERE p.id=n.publicacion_id AND (
+        (n.tipo_notificacion='RESOURCE_REQUEST_RECEIVED' AND p.propietario_id=$1
+          AND EXISTS(SELECT 1 FROM public.solicitud_recurso s WHERE s.publicacion_id=p.id
+            AND n.actividad_evento_clave='resource:request:'||s.id||':received'))
+        OR (n.tipo_notificacion='RESOURCE_UPDATED' AND EXISTS(SELECT 1 FROM public.solicitud_recurso s
+          WHERE s.publicacion_id=p.id AND s.solicitante_id=$1))
+        OR (n.tipo_notificacion IN ('RESOURCE_REQUEST_ACCEPTED','COORDINACION_RECURSO') AND EXISTS(
+          SELECT 1 FROM public.transaccion_recurso t WHERE t.id=n.transaccion_id AND t.publicacion_id=p.id
+            AND ((n.tipo_notificacion='RESOURCE_REQUEST_ACCEPTED' AND t.receptor_id=$1
+              AND n.actividad_evento_clave='resource:request:'||t.solicitud_id||':accepted')
+              OR (n.tipo_notificacion='COORDINACION_RECURSO' AND p.tipo_recurso IN ('FISICO','DIGITAL') AND $1 IN (t.propietario_id,t.receptor_id)))))))))`;
 
 /** Total de no leídas en el mismo alcance de la bandeja, independiente de la paginación. */
 export async function countOwnUnreadNotifications(client: PoolClient, userId: string, campusId: string): Promise<number> {
@@ -75,11 +91,22 @@ export async function countOwnUnreadNotifications(client: PoolClient, userId: st
 export async function listOwnNotifications(client: PoolClient, userId: string, campusId: string, cursor?: string): Promise<NotificationPage> {
   const result = await client.query<SqlNotification>(`WITH own AS (
       SELECT n.* FROM public.notificacion n WHERE ${ownNotificationScope})
-    SELECT id,actividad_id,publicacion_id,tipo_notificacion,titulo,mensaje,created_at,leida_en,actividad_evento_clave
-    FROM own WHERE deleted_at IS NULL AND ($3::uuid IS NULL OR (created_at,id) <
+    SELECT n.id,n.actividad_id,n.publicacion_id,n.transaccion_id,n.tipo_notificacion,n.titulo,n.mensaje,n.created_at,n.leida_en,n.actividad_evento_clave,
+      (SELECT p.tipo_recurso FROM public.publicacion_recurso p WHERE p.id=n.publicacion_id) AS resource_type,
+      (SELECT s.id FROM public.solicitud_recurso s WHERE s.publicacion_id=n.publicacion_id AND
+        ((n.tipo_notificacion='RESOURCE_REQUEST_RECEIVED' AND n.actividad_evento_clave='resource:request:'||s.id||':received')
+          OR (n.tipo_notificacion='RESOURCE_UPDATED' AND s.solicitante_id=$1)) ORDER BY s.solicitada_en DESC,s.id DESC LIMIT 1) AS request_id
+    FROM own n WHERE n.deleted_at IS NULL AND ($3::uuid IS NULL OR (n.created_at,n.id) <
       (SELECT created_at,id FROM own WHERE id=$3))
-    ORDER BY created_at DESC,id DESC LIMIT 31`, [userId, campusId, cursor ?? null]);
-  const items = result.rows.slice(0, 30).map(row => {
+    ORDER BY n.created_at DESC,n.id DESC LIMIT 31`, [userId, campusId, cursor ?? null]);
+  const items: UserNotificationDto[] = result.rows.slice(0, 30).map(row => {
+    const base = {id:row.id,title:row.titulo,message:row.mensaje,createdAt:row.created_at.toISOString(),readAt:row.leida_en?.toISOString()??null};
+    if(row.tipo_notificacion==='RESOURCE_REQUEST_RECEIVED'||row.tipo_notificacion==='RESOURCE_UPDATED')return {
+      ...base,type:row.tipo_notificacion,publicationId:row.publicacion_id,resourceType:row.resource_type,requestId:row.request_id,
+    };
+    if(row.tipo_notificacion==='RESOURCE_REQUEST_ACCEPTED'||row.tipo_notificacion==='COORDINACION_RECURSO')return {
+      ...base,type:row.tipo_notificacion,publicationId:row.publicacion_id,resourceType:row.resource_type,transactionId:row.transaccion_id,
+    };
     if(row.tipo_notificacion==='PHYSICAL_PUBLICATION_CLOSE_REMINDER')return {
       id:row.id,publicationId:row.publicacion_id,type:row.tipo_notificacion,title:row.titulo,message:row.mensaje,
       createdAt:row.created_at.toISOString(),readAt:row.leida_en?.toISOString()??null,

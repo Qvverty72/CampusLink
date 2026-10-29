@@ -37,6 +37,13 @@ test('picker preserves a valid PDF selection and accepts the exact size boundary
   const file = {}, state = picker([{ name: 'válido.pdf', size: 25 * 1024 * 1024, mimeType: 'application/pdf', uri: 'blob:valid', file }]);
   const result = await state.pick(); assert.equal(result[0].webFile, file); assert.equal(result[0].name, 'válido.pdf'); assert.deepEqual(state.revoked, []);
 });
+test('PDF selections accept unknown and alternate MIME metadata while keeping extension and size checks', async () => {
+  for (const mimeType of ['', 'application/octet-stream', 'application/x-pdf', 'Application/PDF; charset=binary']) {
+    const state = picker([{name:'apuntes.pdf',size:30,mimeType,uri:'file:///apuntes.pdf'}]);
+    assert.equal((await state.pick())[0].name, 'apuntes.pdf');
+    assert.equal(state.fromWeb([{name:'apuntes.pdf',size:30,type:mimeType}]).length, 1);
+  }
+});
 
 test('drop validates the whole batch before allocating local URLs', () => {
   const state = picker([]), valid = { name: 'guia.pdf', size: 10, type: 'application/pdf' };

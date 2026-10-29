@@ -36,14 +36,16 @@ before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://notification-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
   await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
-    CREATE TABLE public.campus(id uuid PRIMARY KEY);
+    CREATE TABLE public.campus(id uuid PRIMARY KEY,institucion_id uuid);
     CREATE TABLE public.perfil_usuario(id uuid PRIMARY KEY,campus_id uuid REFERENCES public.campus(id),estado_cuenta text,deleted_at timestamptz);
-    CREATE TABLE public.publicacion_recurso(id uuid PRIMARY KEY,propietario_id uuid,tipo_recurso text);
+    CREATE TABLE public.publicacion_recurso(id uuid PRIMARY KEY,propietario_id uuid,tipo_recurso text,campus_id uuid);
+    CREATE TABLE public.solicitud_recurso(id uuid PRIMARY KEY,publicacion_id uuid,solicitante_id uuid,solicitada_en timestamptz);
+    CREATE TABLE public.transaccion_recurso(id uuid PRIMARY KEY,publicacion_id uuid,propietario_id uuid,receptor_id uuid,solicitud_id uuid);
     CREATE TABLE public.notificacion(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),destinatario_id uuid REFERENCES public.perfil_usuario(id),
-      actividad_id text,publicacion_id uuid,tipo_notificacion text,titulo text,mensaje text NOT NULL,created_at timestamptz DEFAULT now(),leida_en timestamptz,deleted_at timestamptz);
+      actividad_id text,publicacion_id uuid,transaccion_id uuid,tipo_notificacion text,titulo text,mensaje text NOT NULL,created_at timestamptz DEFAULT now(),leida_en timestamptz,deleted_at timestamptz);
     ALTER TABLE public.notificacion ENABLE ROW LEVEL SECURITY;`);
   await db.exec(await migration());
-  await db.query('INSERT INTO campus VALUES ($1),($2)', [campusId, otherCampus]);
+  await db.query('INSERT INTO campus(id) VALUES ($1),($2)', [campusId, otherCampus]);
   for (const [user, campus, state, date] of [[userId, campusId, 'ACTIVA', null], [second, campusId, 'ACTIVA', null],
     [foreign, otherCampus, 'ACTIVA', null], [suspended, campusId, 'SUSPENDIDA', null], [deleted, campusId, 'ACTIVA', now]]) {
     await db.query('INSERT INTO perfil_usuario VALUES ($1,$2,$3,$4)', [user, campus, state, date]);

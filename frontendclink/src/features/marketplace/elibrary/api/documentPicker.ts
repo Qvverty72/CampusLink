@@ -3,10 +3,13 @@ import { File as LocalFile } from 'expo-file-system';
 import { DIGITAL_MAX_BYTES, type DigitalFile } from '../types/publication';
 
 function invalidFileMessage(files: { name: string; sizeBytes: number; mimeType?: string }[]) {
+  // Algunos proveedores no identifican el MIME del PDF; el servidor valida sus bytes.
+  const supportedMime = (type = '') => ['', 'application/pdf', 'application/x-pdf', 'application/octet-stream']
+    .includes(type.split(';')[0].trim().toLowerCase());
   const invalid = files.find(file => !file.sizeBytes || file.sizeBytes > DIGITAL_MAX_BYTES || !/\.pdf$/i.test(file.name)
-    || (file.mimeType && file.mimeType !== 'application/pdf'));
+    || !supportedMime(file.mimeType));
   if (!invalid) return null;
-  const reason = !/\.pdf$/i.test(invalid.name) || (invalid.mimeType && invalid.mimeType !== 'application/pdf')
+  const reason = !/\.pdf$/i.test(invalid.name) || !supportedMime(invalid.mimeType)
     ? 'Solo se admiten archivos PDF.' : !invalid.sizeBytes ? 'El archivo está vacío.' : 'El archivo supera el máximo de 25 MB.';
   return `${invalid.name}: ${reason}`;
 }

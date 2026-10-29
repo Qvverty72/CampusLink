@@ -124,6 +124,85 @@ function inbox() {
 }
 const item = { id: 'notice', type: 'OFFICIAL_EVENT_PUBLISHED', activityId: 'activity', title: 'Evento', readAt: null };
 
+test('resource notifications validate their domain and exact request/transaction targets before entering the inbox',async()=>{
+  const id='11111111-1111-4111-8111-111111111111',publicationId='22222222-2222-4222-8222-222222222222',target='33333333-3333-4333-8333-333333333333';
+  let value;
+  const api=load('api/notificationsApi.ts',{'@/lib/api/authenticated-request':{authenticatedEnvelopeRequest:async()=>({data:value})}},{URLSearchParams});
+  const make=(type,domain='FISICO')=>({id,publicationId,resourceType:domain,type,title:'Recurso',message:'Aviso',createdAt:'2026-10-29T12:00:00Z',readAt:null,
+    ...(['RESOURCE_UPDATED','RESOURCE_REQUEST_RECEIVED'].includes(type)?{requestId:target}:{transactionId:target})});
+  for(const type of ['RESOURCE_REQUEST_RECEIVED','RESOURCE_UPDATED','RESOURCE_REQUEST_ACCEPTED','COORDINACION_RECURSO']){
+    const notice=make(type);value={items:[notice],nextCursor:null};assert.equal((await api.fetchNotifications()).items[0],notice);
+    for(const patch of [{publicationId:'bad'},{requestId:'bad',transactionId:'bad'},{resourceType:'OTHER'},{readAt:'bad'}]){
+      value={items:[{...notice,...patch}],nextCursor:null};await assert.rejects(api.fetchNotifications(),/notificaciones/);
+    }
+  }
+  for(const type of ['RESOURCE_REQUEST_RECEIVED','RESOURCE_UPDATED','RESOURCE_REQUEST_ACCEPTED']){
+    value={items:[make(type,'DIGITAL')],nextCursor:null};await api.fetchNotifications();
+  }
+  const digital=make('COORDINACION_RECURSO','DIGITAL');
+  value={items:[digital,{...make('RESOURCE_UPDATED'),id:target}],nextCursor:null};
+  const page=await api.fetchNotifications();assert.equal(page.items[0].resourceType,'DIGITAL');assert.equal(page.items.length,2);
+  for(const patch of [{publicationId:'bad'},{transactionId:'bad'},{resourceType:'OTHER'},{readAt:'bad'}]){
+    value={items:[{...digital,...patch}],nextCursor:null};await assert.rejects(api.fetchNotifications(),/notificaciones/);
+  }
+});
+
+test('notification load failures distinguish reading from a failed mutation and recover on refresh',async()=>{
+  const h=inbox();h.render();h.lists[0].reject(new Error('invalid response'));await setImmediate();
+  assert.match(h.render().error,/cargar las notificaciones/);assert.equal(h.render().loading,false);
+  const refresh=h.render().load();const digital={...item,type:'COORDINACION_RECURSO',resourceType:'DIGITAL',publicationId:'resource',transactionId:'trade'};
+  h.lists[1].resolve({items:[digital],nextCursor:null});await refresh;assert.equal(h.render().error,null);
+  const reading=h.render().update(digital,false);h.changes[0].resolve();await reading;
+  assert.equal(h.render().resourceNotification,digital);assert.equal(h.render().activityId,null);
+});
+
+test('resource targets open only after acknowledged reading and disappear on session cleanup',async()=>{
+  for(const type of ['RESOURCE_REQUEST_RECEIVED','RESOURCE_UPDATED','RESOURCE_REQUEST_ACCEPTED','COORDINACION_RECURSO']){
+    const h=inbox(),notice={...item,type,publicationId:'publication',resourceType:'FISICO',requestId:'request',transactionId:'trade'};
+    h.render();h.lists[0].resolve({items:[notice],nextCursor:null});await setImmediate();
+    const pending=h.render().update(notice,false);assert.equal(h.render().resourceNotification,null);
+    h.changes[0].resolve();await pending;assert.equal(h.render().resourceNotification,notice);
+    assert.equal(h.render().activityId,null);assert.equal(h.render().publicationId,null);assert.equal(h.confirmations(),1);
+    h.focus(false);assert.equal(h.render().resourceNotification,null);
+  }
+});
+
+test('resource notification destinations reuse authorized request/resource and transaction modals including coordination',()=>{
+  const stub=()=>null,history=()=>null,physical=()=>null,digital=()=>null;
+  const dependencies={react:null,'react/jsx-runtime':jsx,'react-native':{Text:'Text'},
+    '@/features/marketplace/physicalgoods/components/PhysicalgoodsHistory':{PhysicalgoodsHistoryDetail:history},
+    '@/features/marketplace/physicalgoods/components/PhysicalgoodsRequestProduct':{PhysicalgoodsRequestProduct:stub},
+    '@/features/marketplace/physicalgoods/hooks/usePhysicalgoodsHistory':{usePhysicalgoodsHistoryDetail:()=>({detail:{publication:{id:'resource'}},loading:false,error:null})},
+    '@/features/marketplace/physicalgoods/components/PhysicalgoodsTransaction':{PhysicalgoodsTransaction:physical},
+    '@/features/marketplace/elibrary/components/DigitalActivityResource':{DigitalResourceModal:digital},
+    '@/features/marketplace/elibrary/components/DigitalActivityTransactions':{DigitalTransactionModal:stub},
+    '@/features/marketplace/elibrary/components/DigitalActivityRequests':{DigitalReceivedRequests:stub},
+    '@/features/marketplace/elibrary/api/digitalActivityApi':{loadDigitalActivityResource:stub},
+    '@/features/marketplace/elibrary/api/digitalTradesApi':{loadDigitalTrade:stub},
+    '@/features/marketplace/components/AgreementStepModal':{AgreementStepModal:stub},
+    '@/features/marketplace/components/RequestsUI':{RequestButton:stub},
+    '@/features/marketplace/components/AgreementUI':{AgreementPanelSkeleton:stub},
+    '@/features/marketplace/components/CatalogUI':{ui:{subtitle:{}}},
+  };
+    for(const [type,domain] of [['RESOURCE_REQUEST_RECEIVED','FISICO'],['RESOURCE_UPDATED','FISICO'],['RESOURCE_REQUEST_ACCEPTED','FISICO'],['COORDINACION_RECURSO','FISICO'],['RESOURCE_UPDATED','DIGITAL'],['RESOURCE_REQUEST_RECEIVED','DIGITAL'],['RESOURCE_REQUEST_ACCEPTED','DIGITAL'],['COORDINACION_RECURSO','DIGITAL']]){
+    const h=hooks();dependencies.react=h.react;
+    const {NotificationResourceModal}=load('components/NotificationResourceModal.tsx',dependencies);
+    const notice={...item,type,resourceType:domain,publicationId:'resource',...(['RESOURCE_UPDATED','RESOURCE_REQUEST_RECEIVED'].includes(type)?{requestId:'request'}:{transactionId:'transaction'})};
+    const root=h.render(()=>NotificationResourceModal({item:notice,onClose:stub,onChanged:stub}));
+    if(domain==='FISICO'){
+      if(type==='RESOURCE_UPDATED'){
+        assert.equal(root.props.publicationId,'resource');assert.equal(root.props.requestId,'request');
+        const content=root.type(root.props);assert.equal(content.type,stub);assert.equal(content.props.request.publication.id,'resource');continue;
+      }
+      assert.equal(root.type,'transactionId' in notice?physical:history);assert.equal(root.props.target.publicationId,'resource');
+      if(type==='COORDINACION_RECURSO')assert.equal(root.props.initialPanel,'coordinate');
+      if('requestId' in notice)assert.equal(root.props.target.requestId,'request');
+    }else if(type==='RESOURCE_REQUEST_RECEIVED'){assert.equal(root.props.publicationId,'resource');}
+    else if('requestId' in notice){assert.equal(root.type,digital);assert.equal(root.props.id,'resource');assert.equal(root.props.mode,'resource');}
+      else {assert.equal(root.props.publicationId,'resource');assert.equal(root.props.transactionId,'transaction');assert.equal(root.props.initialPanel,type==='COORDINACION_RECURSO'?'coordinate':'confirm');}
+  }
+});
+
 test('refresh replaces the paginated inbox from page one, preserves failures and cancels obsolete loads', async () => {
   const h = inbox(); assert.equal(h.render().loading, true); assert.equal(h.render().loadingMore, false);
   h.lists[0].resolve({ items: [item], nextCursor: 'page-two' }); await setImmediate(); assert.equal(h.render().loading, false);
@@ -161,6 +240,7 @@ test('notification modal uses pull refresh without a manual button and protects 
     '@/types/colors': { APP_COLORS: { PRIMARY: '#002E56', SECONDARY: '#3F6A8E', ACCENT: '#FDBB30' } },
     '@/components/RefreshScrollView': { RefreshScrollView: 'UniversalScroll' },
     './NotificationActivityModal': { NotificationActivityModal: activity },
+    './NotificationResourceModal': { NotificationResourceModal: () => null },
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsHistory': { PhysicalgoodsHistoryDetail: detail },
     '@/features/marketplace/physicalgoods/components/PhysicalgoodsTransaction': { PhysicalgoodsTransaction: () => null },
     '../hooks/useActivityNotifications': { useActivityNotifications: () => state }, '../hooks/useUnreadNotificationCount': { useUnreadNotificationCount: () => counter },
@@ -233,8 +313,9 @@ test('notification groups use the local Monday boundary and preserve order witho
 
 test('notification rows distinguish every supported type, open on tap and expose full message/delete through options', () => {
   const presentation = load('utils/notificationPresentation.ts', {});
-  const icons = Object.fromEntries(['CalendarDays', 'CalendarClock', 'CalendarSync', 'Store', 'Ellipsis', 'Trash2'].map(name => [name, () => null]));
-  const expected = { OFFICIAL_EVENT_PUBLISHED: 'CalendarDays', OFFICIAL_EVENT_STARTED: 'CalendarClock', ACTIVITY_CHANGED: 'CalendarSync', PHYSICAL_PUBLICATION_CLOSE_REMINDER: 'Store' };
+  const icons = Object.fromEntries(['CalendarDays', 'CalendarClock', 'CalendarSync', 'Store', 'Ellipsis', 'Trash2', 'Inbox', 'PackageSearch', 'PackageCheck', 'MessageCircle'].map(name => [name, () => null]));
+  const expected = { OFFICIAL_EVENT_PUBLISHED: 'CalendarDays', OFFICIAL_EVENT_STARTED: 'CalendarClock', ACTIVITY_CHANGED: 'CalendarSync', PHYSICAL_PUBLICATION_CLOSE_REMINDER: 'Store',
+    RESOURCE_REQUEST_RECEIVED:'Inbox',RESOURCE_UPDATED:'PackageSearch',RESOURCE_REQUEST_ACCEPTED:'PackageCheck',COORDINACION_RECURSO:'MessageCircle' };
   for (const [type, icon] of Object.entries(expected)) {
     const h = hooks(); let opened = 0, deleted = 0;
     const notice = { ...item, type, title: 'Aviso con nombre extenso', message: 'Motivo completo del aviso', createdAt: '2026-10-23T12:00:00Z' };

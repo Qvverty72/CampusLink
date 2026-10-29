@@ -38,12 +38,21 @@ export async function fetchNotifications(cursor?: string, signal?: AbortSignal):
   const query = new URLSearchParams(); if (cursor) query.set('cursor', cursor);
   const response = await authenticatedEnvelopeRequest<NotificationPage>('/api/v1/users/me/notifications', { signal }, query);
   const value = response.data;
+  const validTarget = (item: NotificationPage['items'][number]) => {
+    if ('resourceType' in item) {
+      if (!['FISICO','DIGITAL'].includes(item.resourceType) || !uuid.test(item.publicationId)) return false;
+      if (item.type==='RESOURCE_REQUEST_RECEIVED'||item.type==='RESOURCE_UPDATED') return uuid.test(item.requestId);
+      return ['RESOURCE_REQUEST_ACCEPTED','COORDINACION_RECURSO'].includes(item.type) && 'transactionId' in item && uuid.test(item.transactionId);
+    }
+    if (item.type==='PHYSICAL_PUBLICATION_CLOSE_REMINDER') return uuid.test(item.publicationId);
+    return 'activityId' in item && /^[0-9a-f]{24}$/.test(item.activityId)
+      && (item.seriesId===undefined||/^[0-9a-f]{24}$/.test(item.seriesId))
+      && ['OFFICIAL_EVENT_PUBLISHED','ACTIVITY_CHANGED','OFFICIAL_EVENT_STARTED'].includes(item.type);
+  };
   if (!value || !Array.isArray(value.items) || (value.nextCursor !== null && !uuid.test(value.nextCursor))
-    || value.items.some(item => !uuid.test(item.id)
-      || (item.type==='PHYSICAL_PUBLICATION_CLOSE_REMINDER'?!uuid.test(item.publicationId):
-        (!/^[0-9a-f]{24}$/.test(item.activityId)||(item.seriesId!==undefined&&!/^[0-9a-f]{24}$/.test(item.seriesId))
-          ||!['OFFICIAL_EVENT_PUBLISHED','ACTIVITY_CHANGED','OFFICIAL_EVENT_STARTED'].includes(item.type))) || typeof item.title !== 'string'
-      || typeof item.message !== 'string' || !Number.isFinite(Date.parse(item.createdAt)))) {
+    || value.items.some(item => !item || !uuid.test(item.id) || !validTarget(item) || typeof item.title !== 'string'
+      || typeof item.message !== 'string' || !Number.isFinite(Date.parse(item.createdAt))
+      || (item.readAt!==null&&!Number.isFinite(Date.parse(item.readAt))))) {
     throw new Error('No se pudieron cargar las notificaciones.');
   }
   return value;

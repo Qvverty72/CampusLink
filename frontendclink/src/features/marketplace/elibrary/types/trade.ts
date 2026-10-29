@@ -10,3 +10,4 @@ export interface DigitalTrade {
   rating:{id:string;score:number;createdAt:string}|null;canRate:boolean;
 }
 export interface DigitalTradeTarget { publicationId: string; transactionId: string; title: string }
+export interface DigitalMessage { id: string; senderId: string; text: string; createdAt: string }

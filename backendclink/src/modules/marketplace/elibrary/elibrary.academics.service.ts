@@ -1,4 +1,5 @@
 import { ApiError } from '../../../services/api-response.js';
+import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
@@ -37,6 +38,7 @@ export async function updateDigitalAcademics(auth: VerifiedAuthConnection, rawId
       await replaceDigitalAcademics(client, id, input.careerIds, input.subjectIds);
       const after = (await findDigitalPublications(client, campus.institucion_id, id))[0];
       await auditDigitalAcademics(client, current, before, after);
+      await notifyResourceUpdated(client,id);
       return after;
     });
   } catch (error) {

@@ -1,11 +1,10 @@
 import type { PoolClient } from 'pg';
-import type { PhysicalgoodsConfirmationRow,PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionDetailRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
+import type { PhysicalgoodsConfirmationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionDetailRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
 import type { PaginationParams } from '../../../types/api.js';
+export { resourceCoordinationMessages as physicalgoodsCoordinationMessages, insertResourceCoordination as insertPhysicalgoodsCoordination } from '../marketplace.messages.repository.js';
 
 const confirmationProjection = `usuario_id,rol_confirmante,
   to_char(confirmado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS confirmado_en`;
-const messageProjection = `id,destinatario_id,mensaje,
-  to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at`;
 const ratingProjection=`id,transaccion_id,evaluador_id,evaluado_id,puntuacion,
   to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at`;
 
@@ -82,18 +81,6 @@ export async function physicalgoodsTransactionDetail(client: PoolClient, transac
     FROM public.transaccion_recurso t JOIN public.publicacion_recurso p ON p.id=t.publicacion_id
     JOIN public.campus c ON c.id=p.campus_id JOIN public.perfil_usuario o ON o.id=t.propietario_id
     JOIN public.perfil_usuario r ON r.id=t.receptor_id WHERE t.id=$1`,[transactionId])).rows[0];
-}
-export async function physicalgoodsCoordinationMessages(client: PoolClient, publicationId: string, transactionId: string, participants: string[], pagination: PaginationParams) {
-  return (await client.query<PhysicalgoodsCoordinationRow>(`SELECT ${messageProjection} FROM public.notificacion
-    WHERE transaccion_id=$1 AND publicacion_id=$2 AND tipo_notificacion='COORDINACION_RECURSO'
-    AND destinatario_id=ANY($3::uuid[]) AND deleted_at IS NULL ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5`,
-    [transactionId,publicationId,participants,pagination.limit+1,pagination.offset])).rows;
-}
-export async function insertPhysicalgoodsCoordination(client: PoolClient, publicationId: string, transactionId: string, recipientId: string, message: string) {
-  return (await client.query<PhysicalgoodsCoordinationRow>(`INSERT INTO public.notificacion
-    (publicacion_id,transaccion_id,destinatario_id,tipo_notificacion,titulo,mensaje,created_at)
-    VALUES($1,$2,$3,'COORDINACION_RECURSO','Coordinación del intercambio',$4,clock_timestamp()) RETURNING ${messageProjection}`,
-    [publicationId,transactionId,recipientId,message])).rows[0];
 }
 export async function updatePhysicalgoodsTransactionStatus(client: PoolClient, transactionId: string, status: 'PENDIENTE_CONFIRMACION'|'COMPLETADA'|'CANCELADA', actorId: string) {
   await client.query(`UPDATE public.transaccion_recurso SET estado_transaccion=$2,

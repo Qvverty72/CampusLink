@@ -1,4 +1,5 @@
 import { authenticatedEnvelopeRequest, authenticatedRequest, authenticatedResponseRequest } from '@/lib/api/authenticated-request';
+import { File as LocalFile } from 'expo-file-system';
 import type { DigitalAcademicCatalog, DigitalAttachment, DigitalFile, DigitalInput, DigitalPublication } from '../types/publication';
 import type { DigitalFilters, DigitalPage } from '../types/publication';
 import type { RecommendedDigitalPublication } from '../types/publication';
@@ -29,15 +30,25 @@ export function loadDigitalPublication(id: string, signal?: AbortSignal) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Publicación inválida.');
   return authenticatedRequest<DigitalPublication>(`${base}/${id}`, { signal });
 }
+function digitalUploadPart(file: DigitalFile): Blob {
+  if (file.webFile) return file.webFile;
+  const local = new LocalFile(file.uri);
+  // Expo serializa bytes(), no objetos {uri}. El nombre de caché del picker es aleatorio:
+  // conservar explícitamente el nombre original y el MIME PDF en la parte multipart.
+  const part: Pick<LocalFile, 'name' | 'type' | 'bytes'> = {
+    name: file.name, type: 'application/pdf', bytes: () => local.bytes(),
+  };
+  return part as unknown as Blob;
+}
 export function publishDigitalPublication(input: DigitalInput, file: DigitalFile, signal?: AbortSignal) {
   const body = new FormData();
   body.append('metadata', JSON.stringify(input));
-  body.append('file', file.webFile ?? { uri: file.uri, name: file.name, type: 'application/pdf' } as unknown as Blob, file.name);
+  body.append('file', digitalUploadPart(file), file.name);
   return authenticatedRequest<DigitalPublication>(base, { method: 'POST', body, signal });
 }
 export function attachDigitalFile(publicationId: string, file: DigitalFile, signal?: AbortSignal) {
   const body = new FormData();
-  body.append('file', file.webFile ?? { uri: file.uri, name: file.name, type: 'application/pdf' } as unknown as Blob, file.name);
+  body.append('file', digitalUploadPart(file), file.name);
   return authenticatedRequest<DigitalAttachment>(`${base}/${publicationId}/files`, { method: 'POST', body, signal });
 }
 export async function downloadDigitalFile(publicationId: string, file: DigitalAttachment, signal?: AbortSignal) {

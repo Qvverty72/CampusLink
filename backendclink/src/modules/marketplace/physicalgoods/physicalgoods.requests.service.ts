@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { notifyResourceRequest } from '../marketplace.notifications.js';
 import { ApiError } from '../../../services/api-response.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
@@ -72,7 +73,9 @@ export async function createPhysicalgoodsRequest(auth: VerifiedAuthConnection, p
     if (await findActivePhysicalgoodsRequest(client,id,current.userId)) throw new ApiError(409,'CONFLICT','Ya tienes una solicitud activa para este recurso.');
     const message = await findPhysicalgoodsRequestMessage(client,code);
     if (!message?.activo) throw new ApiError(400,'VALIDATION_ERROR','Selecciona un mensaje predefinido disponible.');
-    return receipt(client,await insertPhysicalgoodsRequest(client,id,current.userId,code,requestId),resource);
+    const created = await insertPhysicalgoodsRequest(client,id,current.userId,code,requestId);
+    await notifyResourceRequest(client,id,created.id);
+    return receipt(client,created,resource);
   });
 }
 function ownRequestDto(row:PhysicalgoodsReceivedRow,current:VerifiedAuthConnection,requestedTerms:PhysicalgoodsTerms|null,rating?:OwnerRatingSummary,originalTerms:PhysicalgoodsTerms|null=null) {
@@ -155,6 +158,7 @@ export async function resolvePhysicalgoodsRequest(auth: VerifiedAuthConnection, 
     await updatePhysicalgoodsRequestStatus(client,selected,'ACEPTADA');
     await setPhysicalgoodsPublicationStatus(client,id,'RESERVADO'); await touchPhysicalgoods(client,id);
     await auditPhysicalgoods(client,current,id,'EDITAR_PUBLICACION',before,await physicalgoodsSnapshot(client,id));
+    await notifyResourceRequest(client,id,selected,transaction.id);
     return { request:{ ...await receipt(client,request,resource),status:'ACEPTADA' as const },
       transaction:{ id:transaction.id,status:transaction.estado_transaccion,modality:transaction.modalidad_acordada,
         amount:transaction.monto_acordado===null?null:Number(transaction.monto_acordado),currency:transaction.moneda } };

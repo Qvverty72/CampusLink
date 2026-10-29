@@ -15,6 +15,7 @@ import { useUnreadNotificationCount } from '../hooks/useUnreadNotificationCount'
 import { NotificationItem } from './NotificationItem';
 import { NotificationSkeleton } from './NotificationSkeleton';
 import { NotificationActivityModal } from './NotificationActivityModal';
+import { NotificationResourceModal } from './NotificationResourceModal';
 import { groupNotifications } from '../utils/notificationPresentation';
 import type { ActivityNotification } from '../types/notification';
 
@@ -26,7 +27,7 @@ export function NotificationsScreen() {
 
 function NotificationsContent() {
   const { unreadCount, refreshUnreadCount, loading: unreadLoading } = useUnreadNotificationCount();
-  const { items, cursor, busy, loading, loadingMore, error, activityId, setActivityId, publicationId, setPublicationId, load, update } = useActivityNotifications(refreshUnreadCount);
+  const { items, cursor, busy, loading, loadingMore, error, activityId, setActivityId, publicationId, setPublicationId, resourceNotification, setResourceNotification, load, update } = useActivityNotifications(refreshUnreadCount);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [agreement, setAgreement] = useState<PhysicalgoodsTransactionTarget | null>(null);
@@ -60,7 +61,7 @@ function NotificationsContent() {
         </View>
         <RefreshScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"
           onRefresh={refresh} refreshing={listLoading || busy || unreadLoading}
-          refreshEnabled={!listLoading && !busy && !unreadLoading && !activityId && !publicationId && !agreement}
+          refreshEnabled={!listLoading && !busy && !unreadLoading && !activityId && !publicationId && !agreement && !resourceNotification}
           refreshLabel="las notificaciones" indicatorColor={APP_COLORS.ACCENT} refreshIndicatorOffset={8}>
           {showListSkeleton && <NotificationSkeleton label={pullRefreshing ? 'Actualizando notificaciones' : 'Cargando notificaciones'} />}
           {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
@@ -74,7 +75,7 @@ function NotificationsContent() {
           {!showListSkeleton && groups.map(group => <View key={group.title} style={styles.group}>
             <Text accessibilityRole="header" style={styles.groupTitle}>{group.title.toLocaleUpperCase('es')}</Text>
             <View>{group.items.map(item => <NotificationItem key={item.id} item={item} busy={busy}
-              onOpen={() => { if (item.type !== 'PHYSICAL_PUBLICATION_CLOSE_REMINDER') { setActivityNotificationType(item.type); setActivityNotificationId(item.id); } void update(item, false); }} onDelete={() => { void update(item, true); }} />)}</View>
+              onOpen={() => { if ('activityId' in item) { setActivityNotificationType(item.type); setActivityNotificationId(item.id); } void update(item, false); }} onDelete={() => { void update(item, true); }} />)}</View>
           </View>)}
           {loadingMore && <NotificationSkeleton rows={2} heading={false} label="Cargando más notificaciones" />}
           {cursor && !showListSkeleton && !loadingMore && (
@@ -89,6 +90,8 @@ function NotificationsContent() {
       {publicationId && <PhysicalgoodsHistoryDetail key={publicationId} target={{ publicationId }} refreshEnabled={false} onClose={() => setPublicationId(null)}
         onAgreement={(id, transactionId) => { setPublicationId(null); setAgreement({ publicationId: id, transactionId }); }} />}
       {agreement && <PhysicalgoodsTransaction key={agreement.transactionId} target={agreement} refreshEnabled={false} onChanged={() => { void load(); refreshUnreadCount(); }} onClose={() => setAgreement(null)} />}
+      {resourceNotification && <NotificationResourceModal key={resourceNotification.id} item={resourceNotification}
+        onClose={() => setResourceNotification(null)} onChanged={() => { void load(); refreshUnreadCount(); }} />}
     </View>
   );
 }

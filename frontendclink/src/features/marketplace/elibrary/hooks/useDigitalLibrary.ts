@@ -150,18 +150,20 @@ export function useDigitalLibrary() {
     } catch (reason) { if (!abort.signal.aborted) showError(reason); }
   }
   async function saveAcademics() {
-    if (!detail || saving.current || academicConflict || catalogLoading || catalogError) return;
+    if (!detail || saving.current || academicConflict || catalogLoading || catalogError) return false;
     const abort = new AbortController(); pending.current = abort; saving.current = true; setBusy(true); setError(null);
     try {
       const result = await updateDigitalAcademics(detail.id, { careerIds, subjectIds, updatedAt: detail.updatedAt }, abort.signal);
-      if (abort.signal.aborted) return;
+      if (abort.signal.aborted) return false;
       setDetail(previous => ({ ...result, owner: result.owner ?? (previous?.ownerId === result.ownerId ? previous.owner : undefined) })); setItems(previous => previous.map(item => item.id === result.id ? result : item));
       setEditingAcademics(false); setNotice('Las asociaciones académicas se guardaron correctamente.');
+      return true;
     } catch (reason) {
       if (!abort.signal.aborted) {
         showError(reason, true);
         if (!(reason instanceof AuthApiError) || [409, 503].includes(reason.status)) setAcademicConflict(true);
       }
+      return false;
     } finally { saving.current = false; if (!abort.signal.aborted) setBusy(false); }
   }
   async function download(file: DigitalAttachment) {

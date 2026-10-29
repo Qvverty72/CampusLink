@@ -132,9 +132,9 @@ before(async () => {
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
-  await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
+  await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key,email text);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
-  for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario','usuario_carrera', 'rol', 'usuario_rol',
+  for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'campus_carrera', 'carrera_asignatura', 'perfil_usuario','usuario_carrera', 'rol', 'usuario_rol', 'permiso', 'usuario_permiso',
     'publicacion_recurso', 'categoria_recurso_fisico', 'recurso_fisico', 'archivo_publicacion', 'publicacion_carrera', 'publicacion_asignatura',
     'mensaje_solicitud','solicitud_recurso','transaccion_recurso','confirmacion_transaccion','valoracion','notificacion','reporte_contenido','auditoria','interaccion_recurso','recurso_digital','acceso_recurso_digital']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
@@ -975,6 +975,39 @@ async function requestedPair() {
   return {saved,first,second,a,b};
 }
 
+test('resource notifications connect physical request, edit, acceptance and coordination to the private profile inbox',async()=>{
+  const {saved,first,second,a,b}=await requestedPair();
+  const ownPage=async(actor:VerifiedAuthConnection)=>{const page=await notificationsService.ownNotificationOperation(actor,{});assert.ok('items' in page);return page.items;};
+  assert.equal((await ownPage(auth)).filter(row=>row.type==='RESOURCE_REQUEST_RECEIVED').length,2);
+  assert.equal((await ownPage(first)).length,0);
+  const gallery=await imagesService.getPhysicalgoodsGallery(auth,saved.id);
+  await editService.updatePhysicalgoods(auth,saved.id,{title:'Recurso actualizado',description:gallery.description,condition:gallery.condition,modality:'VENTA',price:17000,updatedAt:gallery.updatedAt});
+  for(const receiver of [first,second])assert.equal((await ownPage(receiver)).filter(row=>row.type==='RESOURCE_UPDATED').length,1);
+  const accepted=await resolveRequest(saved.id,a.id),id=accepted.transaction!.id;
+  const acceptance=(await ownPage(first)).find(row=>row.type==='RESOURCE_REQUEST_ACCEPTED')!;
+  assert.ok('transactionId' in acceptance);assert.equal(acceptance.transactionId,id);
+  assert.equal((await ownPage(second)).some(row=>row.type==='RESOURCE_REQUEST_ACCEPTED'),false);
+  const sent=await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location);
+  assert.ok((await ownPage(first)).some(row=>row.id===sent.id&&row.type==='COORDINACION_RECURSO'));
+  assert.equal((await ownPage(auth)).some(row=>row.id===sent.id),false);
+  await notificationsService.ownNotificationOperation(first,{id:sent.id,remove:true});
+  assert.ok((await transactionsService.getPhysicalgoodsCoordinationMessages(auth,saved.id,id,{})).data.some(row=>row.id===sent.id));
+  const reply=await transactionsService.sendPhysicalgoodsCoordination(first,saved.id,id,location);
+  assert.ok((await ownPage(auth)).some(row=>row.id===reply.id));
+  assert.equal((await ownPage(second)).some(row=>row.id===reply.id),false);
+  assert.equal((await requestsService.getPhysicalgoodsRequestOptions(second,saved.id)).activeRequest?.id,b.id);
+});
+
+test('resource notification failure rolls back a physical request and its acceptance instead of leaving a silent committed event',async()=>{
+  const saved=await create(auth,input()),receiver=await otherActor();failCoordination=true;
+  await assert.rejects(requestsService.createPhysicalgoodsRequest(receiver,saved.id,{messageCode:'ME_INTERESA'}),{status:503});
+  assert.equal((await db.query('SELECT id FROM solicitud_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
+  failCoordination=false;const request=await requestsService.createPhysicalgoodsRequest(receiver,saved.id,{messageCode:'ME_INTERESA'});failCoordination=true;
+  await assert.rejects(resolveRequest(saved.id,request.id),{status:503});failCoordination=false;
+  assert.equal((await transactionRows(saved.id)).rows.length,0);
+  assert.equal((await imagesService.getPhysicalgoodsGallery(auth,saved.id)).status,'DISPONIBLE');
+});
+
 test('own request details expose registered career names without duplicating requests or leaking foreign institution careers',async()=>{
   const {first,a}=await requestedPair(),another=randomUUID(),outsideInstitution=randomUUID(),outsideCareer=randomUUID();
   await db.query('insert into carrera(id,institucion_id,nombre) values($1,$2,$3)',[another,institution,'Otra carrera']);
@@ -1493,7 +1526,7 @@ test('coordination rejects POIs from another floor, hidden/removed/duplicate/inv
     await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,{...location,poiKey}),{status:400});
   }
   await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,{...location,poiKey:'library',poiName:'Inventado'}),{status:400});
-  assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+  assert.equal((await db.query("select id from notificacion where transaccion_id=$1 and tipo_notificacion='COORDINACION_RECURSO'",[id])).rows.length,0);
   const fallback=await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location);assert.equal(fallback.text,'Estoy en Edificio E, en Piso 2.');
 });
 
@@ -1513,7 +1546,7 @@ test('coordination rejects free text, identity overrides, malformed fields and f
     await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,body),{status:400});
   }
   for(const query of [{senderId:auth.userId},{limit:'0'},{page:['1']},{limit:'101'}])await assert.rejects(transactionsService.getPhysicalgoodsCoordinationMessages(auth,saved.id,id,query),{status:400});
-  assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+  assert.equal((await db.query("select id from notificacion where transaccion_id=$1 and tipo_notificacion='COORDINACION_RECURSO'",[id])).rows.length,0);
 });
 
 test('Mongo absence or outage affects only coordination and never prevents participant confirmation/cancellation',async()=>{
@@ -1529,15 +1562,15 @@ test('Mongo absence or outage affects only coordination and never prevents parti
 test('closing the agreement or changing the actor while Mongo is read prevents a late coordination write',async()=>{
   const {saved,first,id}=await acceptedAgreement();
   onMapRead=()=>transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR').then(()=>{});
-  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:409});assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:409});assert.equal((await db.query("select id from notificacion where transaccion_id=$1 and tipo_notificacion='COORDINACION_RECURSO'",[id])).rows.length,0);
   const next=await acceptedAgreement();onMapRead=()=>db.query("update perfil_usuario set estado_cuenta='SUSPENDIDA' where id=$1",[auth.userId]).then(()=>{});
-  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,next.saved.id,next.id,location),{status:403});assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[next.id])).rows.length,0);
+  await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,next.saved.id,next.id,location),{status:403});assert.equal((await db.query("select id from notificacion where transaccion_id=$1 and tipo_notificacion='COORDINACION_RECURSO'",[next.id])).rows.length,0);
 });
 
 test('coordination insertion failure is atomic and a lost insertion acknowledgement is recovered from the message history',async()=>{
   const {saved,first,id}=await acceptedAgreement(),before=await transactionRows(saved.id);failCoordination=true;
   await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:503});failCoordination=false;
-  assert.deepEqual((await transactionRows(saved.id)).rows,before.rows);assert.equal((await db.query('select id from notificacion where transaccion_id=$1',[id])).rows.length,0);
+  assert.deepEqual((await transactionRows(saved.id)).rows,before.rows);assert.equal((await db.query("select id from notificacion where transaccion_id=$1 and tipo_notificacion='COORDINACION_RECURSO'",[id])).rows.length,0);
   lostCoordinationCommit=true;await assert.rejects(transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location),{status:503});
   const history=await transactionsService.getPhysicalgoodsCoordinationMessages(first,saved.id,id,{});assert.equal(history.data.length,1);assert.equal(history.data[0].text,'Estoy en Edificio E, en Piso 2.');
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
@@ -1786,17 +1819,17 @@ test('fresh own-publication detail points to the current pending agreement inste
   await assert.rejects(historyService.getOwnPhysicalgoodsDetail(first,saved.id),{status:404});
 });
 
-test('reminder HTTP inbox/read/delete retain no-store and never expose coordination or other owners notices',async()=>{
+test('reminder HTTP inbox/read/delete retain no-store alongside own request notices and exclude sent coordination',async()=>{
   const {saved,id}=await acceptedAgreement();await agePublication(saved.id);await remindersService.dispatchPhysicalgoodsReminders();
   await transactionsService.sendPhysicalgoodsCoordination(auth,saved.id,id,location);
   const notificationId=(await reminderRows(saved.id)).rows[0].id,headers={Authorization:'Bearer '+token},url=base.replace('/marketplace/physicalgoods','/users/me/notifications');
   let response=await originalFetch(url,{headers});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
-  const items=(await response.json()).data.items;assert.equal(items.length,1);assert.equal(items[0].publicationId,saved.id);assert.equal(items[0].type,'PHYSICAL_PUBLICATION_CLOSE_REMINDER');
+  const items=(await response.json()).data.items;assert.equal(items.length,3);assert.equal(items.filter((row:{type:string})=>row.type==='RESOURCE_REQUEST_RECEIVED').length,2);const reminder=items.find((row:{id:string})=>row.id===notificationId);assert.equal(reminder.publicationId,saved.id);assert.equal(reminder.type,'PHYSICAL_PUBLICATION_CLOSE_REMINDER');
   assert.equal((await originalFetch(url+'/'+notificationId+'/read',{method:'PUT',headers})).status,200);
   const owner=structuredClone(current);current=structuredClone(await otherActor('ADMINISTRADOR'));
   assert.equal((await originalFetch(url+'/'+notificationId,{method:'DELETE',headers})).status,404);current=owner;
   response=await originalFetch(url+'/'+notificationId,{method:'DELETE',headers});assert.equal(response.status,200);
-  assert.equal((await originalFetch(url,{headers}).then(row=>row.json())).data.items.length,0);
+  const remaining=(await originalFetch(url,{headers}).then(row=>row.json())).data.items;assert.equal(remaining.length,2);assert.ok(remaining.every((row:{type:string})=>row.type==='RESOURCE_REQUEST_RECEIVED'));
   await remindersService.dispatchPhysicalgoodsReminders();assert.equal((await reminderRows(saved.id)).rows.length,1);
 });
 

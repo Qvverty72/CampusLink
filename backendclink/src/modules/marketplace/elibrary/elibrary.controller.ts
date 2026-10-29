@@ -17,8 +17,17 @@ import { editDigitalPublication } from './elibrary.edit.service.js';
 import { getDigitalRecommendations } from './elibrary.recommendations.service.js';
 import { rateDigitalOwner } from './elibrary.rating.service.js';
 import {getDigitalActivity} from './elibrary.activity.service.js';
+import { getDigitalMessages, sendDigitalMessage } from './elibrary.messages.service.js';
 
 type DigitalHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const digitalMessagesController: DigitalHandler = async (request, response) => {
+  const result = await getDigitalMessages(response.locals.auth, request.params.publicationId, request.params.transactionId, request.query);
+  sendEnvelope(response, result.data, { meta: result.meta });
+};
+export const sendDigitalMessageController: DigitalHandler = async (request, response) => {
+  digitalAction(request.query);
+  sendSuccess(response, await sendDigitalMessage(response.locals.auth, request.params.publicationId, request.params.transactionId, request.body), 201);
+};
 export const digitalActivityController=(kind:Parameters<typeof getDigitalActivity>[2]):DigitalHandler=>async(request,response)=>{
  const result=await getDigitalActivity(response.locals.auth,request.query,kind,request.params.publicationId);
  if('data' in result&&'meta' in result)sendEnvelope(response,result.data,{meta:result.meta});else sendSuccess(response,result);

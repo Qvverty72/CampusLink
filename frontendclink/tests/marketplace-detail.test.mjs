@@ -74,7 +74,7 @@ test('digital detail uses protected preview, blocks own requests and opens the a
   const { DigitalResourceDetail } = load('elibrary/components/DigitalResourceDetail.tsx', { ...baseUI(h),
     'lucide-react-native': { FileText: 'Icon', LockKeyhole: 'Icon' }, '@/components/navigation/BottomNavigationBar': { BottomNavigationBar: 'Nav' },
     '../hooks/useDigitalTrades': { useDigitalRequestAction: () => request }, './DigitalPreview': { DigitalPreview: 'Preview' },
-    './DigitalAcademicSelector': { DigitalAcademicSelector: 'Academic' }, './DigitalPublicationEditor': { DigitalPublicationEditor: 'Editor' },
+    './DigitalPublicationManagement': { DigitalPublicationManagement: 'Management' },
   });
   const render = () => elements(h.render(() => DigitalResourceDetail({ library, onAcquired: id => acquired.push(id), onRequests: () => requests++ })));
   let nodes = render(); const preview = nodes.find(node => node.type === 'Preview');
@@ -85,7 +85,10 @@ test('digital detail uses protected preview, blocks own requests and opens the a
   resource.acquired = true; nodes = render(); let footer = nodes.find(node => node.type === 'DetailActionBar');
   assert.equal(footer.props.label, 'Abrir en mis materiales'); footer.props.onPress(); assert.deepEqual(acquired, ['digital']);
   resource.acquired = false; request.options.activeRequestId = 'request'; nodes = render(); nodes.find(node => node.type === 'DetailActionBar').props.onPress(); assert.equal(requests, 1);
-  library.isOwner = true; nodes = render(); assert.equal(nodes.find(node => node.type === 'DetailActionBar').props.disabled, true);assert.equal(nodes.find(node=>node.type==='DetailHeader').props.onReport,undefined);assert.equal(nodes.find(node=>node.type==='Scroll').props.automaticallyAdjustKeyboardInsets,true); h.unmount();
+  library.isOwner = true; nodes = render(); assert.equal(nodes.find(node => node.type === 'DetailActionBar').props.disabled, true);assert.equal(nodes.find(node=>node.type==='DetailHeader').props.onReport,undefined);assert.equal(nodes.find(node=>node.type==='Scroll').props.automaticallyAdjustKeyboardInsets,true);
+  nodes.find(node=>node.type==='Button'&&elements(node).some(child=>child.props?.children==='Administrar publicación')).props.onPress();nodes=render();assert.equal(nodes.find(node=>node.type==='Management').props.library,library);assert.ok(!nodes.some(node=>node.type==='DetailActionBar'));
+  nodes.find(node=>node.type==='Management').props.onBusyChange(true);nodes=render();assert.equal(nodes.find(node=>node.type==='DetailHeader').props.disabled,true);
+  nodes.find(node=>node.type==='Management').props.onBusyChange(false);nodes.find(node=>node.type==='Management').props.onClose();assert.ok(!render().some(node=>node.type==='Management'));h.unmount();
 });
 
 test('automatic digital preview cancels changed files and never restores an obsolete fragment or downloads originals', async () => {
@@ -132,7 +135,7 @@ test('detalle digital reconsulta recurso tras envío confirmado y conserva fallo
  const h=runtime(),reloaded=[];let success=false;
  const resource={id:'digital',title:'Guía',status:'DISPONIBLE',careers:[],subjects:[],files:[]};
  const library={detail:resource,isOwner:false,openDetail:id=>reloaded.push(id)},request={options:{canRequest:true,messages:[]},loading:false,code:'INTERES',submit:async()=>success};
- const {DigitalResourceDetail}=load('elibrary/components/DigitalResourceDetail.tsx',{...baseUI(h),'lucide-react-native':{FileText:'Icon',LockKeyhole:'Icon'},'@/components/navigation/BottomNavigationBar':{BottomNavigationBar:'Nav'},'../hooks/useDigitalTrades':{useDigitalRequestAction:()=>request},'./DigitalPreview':{DigitalPreview:'Preview'},'./DigitalAcademicSelector':{DigitalAcademicSelector:'Academic'},'./DigitalPublicationEditor':{DigitalPublicationEditor:'Editor'}});
+ const {DigitalResourceDetail}=load('elibrary/components/DigitalResourceDetail.tsx',{...baseUI(h),'lucide-react-native':{FileText:'Icon',LockKeyhole:'Icon'},'@/components/navigation/BottomNavigationBar':{BottomNavigationBar:'Nav'},'../hooks/useDigitalTrades':{useDigitalRequestAction:()=>request},'./DigitalPreview':{DigitalPreview:'Preview'},'./DigitalPublicationManagement':{DigitalPublicationManagement:'Management'}});
  const render=()=>elements(h.render(()=>DigitalResourceDetail({library,onAcquired:noop,onRequests:noop})));let tree=render();tree.find(node=>node.type==='DetailActionBar').props.onPress();tree=render();tree.find(node=>node.type==='DetailActionBar').props.onPress();await setImmediate();assert.deepEqual(reloaded,[]);
  success=true;tree.find(node=>node.type==='DetailActionBar').props.onPress();await setImmediate();assert.deepEqual(reloaded,['digital']);h.unmount();
 });

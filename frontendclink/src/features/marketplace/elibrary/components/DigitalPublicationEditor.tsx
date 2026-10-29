@@ -1,22 +1,46 @@
-import { ActivityIndicator,Pressable,StyleSheet,Text,TextInput,View } from 'react-native';
-import { APP_COLORS } from '@/types/colors';
-import { useEditDigitalPublication } from '../hooks/useEditDigitalPublication';
-import type { DigitalPublication } from '../types/publication';
 import {useEffect} from 'react';
-export function DigitalPublicationEditor({resource,onSaved,onClose,onBusyChange}:{resource:DigitalPublication;onSaved:(value:DigitalPublication)=>void;onClose:()=>void;onBusyChange?:(busy:boolean)=>void}){const editor=useEditDigitalPublication(resource,onSaved);useEffect(()=>{onBusyChange?.(editor.busy);return()=>onBusyChange?.(false);},[editor.busy,onBusyChange]);return <View style={styles.box}>
-  <Text style={styles.title}>Editar publicación digital</Text>
-  {editor.error&&<Text style={styles.error} accessibilityLiveRegion="assertive">{editor.error}</Text>}
-  {editor.resource.isWithdrawn||editor.resource.status!=='DISPONIBLE'?<Text style={styles.text}>Esta publicación está retirada o no disponible para editar. Sus archivos y acuerdos se conservan.</Text>:<>
-    <TextInput accessibilityLabel="Editar título digital" value={editor.title} onChangeText={editor.setTitle} editable={!editor.busy} maxLength={200} style={styles.input}/>
-    <TextInput accessibilityLabel="Editar descripción digital" value={editor.description} onChangeText={editor.setDescription} editable={!editor.busy} maxLength={4000} multiline style={[styles.input,{minHeight:100}]}/>
-    <View style={styles.row}>{(['DONACION','VENTA'] as const).map(value=><Pressable key={value} accessibilityRole="radio" accessibilityLabel={`Editar modalidad: ${value==='VENTA'?'Venta':'Donación'}`} aria-checked={editor.modality===value} accessibilityState={{checked:editor.modality===value}} disabled={editor.busy} onPress={()=>editor.setModality(value)} style={styles.button}><Text style={styles.link}>{value==='VENTA'?'Venta':'Donación'}{editor.modality===value?' ✓':''}</Text></Pressable>)}</View>
-    {editor.modality==='VENTA'&&<TextInput accessibilityLabel="Editar precio digital" value={editor.price} onChangeText={editor.setPrice} keyboardType="decimal-pad" editable={!editor.busy} maxLength={20} style={styles.input}/>}
-    <Text style={styles.text}>Las condiciones anteriores y los accesos adquiridos se conservan. Para reemplazar un archivo original, crea otra publicación.</Text>
-    <Pressable accessibilityRole="button" disabled={editor.busy||editor.mustReload} onPress={editor.save} style={styles.button}><Text style={styles.link}>Guardar publicación digital</Text></Pressable>
-    {editor.retiring?<><Text style={styles.text}>Dejará de aparecer en búsquedas y no recibirá nuevas solicitudes. Quienes ya adquirieron el recurso conservarán sus archivos.</Text><Pressable accessibilityRole="button" disabled={editor.busy||editor.mustReload} onPress={editor.retire} style={styles.button}><Text style={styles.error}>Confirmar retirada digital</Text></Pressable><Pressable accessibilityRole="button" disabled={editor.busy} onPress={()=>editor.setRetiring(false)} style={styles.button}><Text style={styles.link}>Conservar publicación</Text></Pressable></>:<Pressable accessibilityRole="button" disabled={editor.busy} onPress={()=>editor.setRetiring(true)} style={styles.button}><Text style={styles.error}>Retirar publicación digital</Text></Pressable>}
+import {ActivityIndicator,Pressable,Text,TextInput,View} from 'react-native';
+import {Archive} from 'lucide-react-native';
+import {CATALOG_COLORS as c} from '../../components/CatalogUI';
+import {PublicationSection,PublicationModality,PublicationFeedback,PublicationSubmit,publicationUI as f} from '../../components/PublicationFormUI';
+import {ManagementAction,publicationManagementUI as s} from '../../components/PublicationManagementUI';
+import {RequestButton} from '../../components/RequestsUI';
+import {useEditDigitalPublication} from '../hooks/useEditDigitalPublication';
+import type {DigitalPublication} from '../types/publication';
+
+export function DigitalPublicationEditor({resource,onSaved,onClose,onBusyChange,mode}:{resource:DigitalPublication;onSaved:(value:DigitalPublication)=>void;onClose:()=>void;onBusyChange?:(busy:boolean)=>void;mode?:'edit'|'withdraw'}){
+ const editor=useEditDigitalPublication(resource,onSaved);
+ useEffect(()=>{onBusyChange?.(editor.busy);return()=>onBusyChange?.(false);},[editor.busy,onBusyChange]);
+ const available=!editor.resource.isWithdrawn&&editor.resource.status==='DISPONIBLE';
+ const disabled=editor.busy||editor.mustReload,withdrawing=mode==='withdraw'||editor.retiring;
+ const cancel=()=>{if(editor.busy)return;if(!mode&&editor.retiring)editor.setRetiring(false);else onClose();};
+ return <View style={f.form}>
+  {!available?<Text style={s.body}>Esta publicación está retirada o no disponible para editar. Sus archivos y acuerdos se conservan.</Text>:withdrawing?<View style={[s.card,s.dangerCard]}>
+   <View accessible={false} aria-hidden style={[s.actionIcon,s.dangerIcon]}><Archive size={24} color="#AD3029"/></View>
+   <Text accessibilityRole="header" style={s.sectionTitle}>¿Retirar esta publicación?</Text>
+   <Text style={s.body}>Dejará de aparecer en búsquedas y no recibirá nuevas solicitudes.</Text>
+   <Text style={s.helper}>Conservarás el historial de solicitudes y transacciones. Quienes ya adquirieron el recurso mantendrán el acceso a sus archivos.</Text>
+   <PublicationFeedback error={editor.error}/>
+   <Pressable accessibilityRole="button" accessibilityLabel="Confirmar retirada digital" disabled={disabled} accessibilityState={{disabled,busy:editor.busy}} onPress={editor.retire} style={[s.dangerButton,disabled&&s.disabled]}>
+    {editor.busy&&<ActivityIndicator color={c.surface}/>}<Text style={s.dangerButtonText}>{editor.busy?'Retirando…':'Retirar publicación'}</Text>
+   </Pressable>
+   <RequestButton label="Conservar publicación" disabled={editor.busy} onPress={cancel}/>
+  </View>:<>
+   <PublicationSection number="1" title="Datos del recurso">
+    <View style={f.field}><Text style={f.label}>Nombre del recurso *</Text><TextInput accessibilityLabel="Editar título digital" value={editor.title} onChangeText={editor.setTitle} editable={!disabled} maxLength={200} style={f.input}/></View>
+    <View style={f.field}><Text style={f.label}>Descripción *</Text><TextInput accessibilityLabel="Editar descripción digital" value={editor.description} onChangeText={editor.setDescription} editable={!disabled} maxLength={4000} multiline style={[f.input,f.textarea]}/></View>
+   </PublicationSection>
+   <PublicationSection number="2" title="Modalidad y precio">
+    <PublicationModality value={editor.modality} disabled={disabled} onChange={editor.setModality}/>
+    {editor.modality==='VENTA'&&<View style={f.field}><Text style={f.label}>Precio de venta (CLP) *</Text><TextInput accessibilityLabel="Editar precio digital" value={editor.price} onChangeText={editor.setPrice} inputMode="decimal" editable={!disabled} maxLength={20} style={f.input}/></View>}
+   </PublicationSection>
+   <Text style={f.hint}>Los cambios no modifican las condiciones de transacciones anteriores ni los accesos adquiridos.</Text>
+   <PublicationFeedback error={editor.error}/>
+   <PublicationSubmit label={editor.busy?'Guardando cambios…':'Guardar cambios'} busy={editor.busy} disabled={disabled} onPress={editor.save}/>
+   <RequestButton label="Cancelar edición" disabled={editor.busy} onPress={cancel}/>
+   {!mode&&<View style={s.withdrawOption}><ManagementAction icon={Archive} title="Retirar publicación" description="Dejará de aparecer en la Biblioteca." danger disabled={disabled} onPress={()=>editor.setRetiring(true)}/></View>}
   </>}
-  {editor.mustReload&&<Pressable accessibilityRole="button" disabled={editor.busy} onPress={editor.reload} style={styles.button}><Text style={styles.link}>Recargar publicación para editar</Text></Pressable>}
-  {editor.busy&&<ActivityIndicator/>}
-  <Pressable accessibilityRole="button" disabled={editor.busy} onPress={onClose} style={styles.button}><Text style={styles.link}>Cancelar edición de publicación</Text></Pressable>
-</View>;}
-const styles=StyleSheet.create({box:{gap:12},title:{fontSize:19,fontWeight:'700',color:'#09243A'},text:{fontSize:15,lineHeight:23,color:'#40596C'},input:{fontSize:16,minHeight:48,padding:12,borderWidth:1,borderColor:'#BDCBD5',borderRadius:12,color:'#09243A'},button:{minHeight:44,justifyContent:'center'},link:{fontSize:15,color:APP_COLORS.PRIMARY},error:{fontSize:15,lineHeight:23,color:'#9D302A'},row:{flexDirection:'row',gap:16}});
+  {editor.mustReload&&<View style={s.errorBox}><Text style={s.helper}>Recargar descarta los cambios de este formulario y consulta la información vigente.</Text><RequestButton label="Recargar publicación para editar" disabled={editor.busy} onPress={editor.reload}/></View>}
+  {!available&&<RequestButton label="Volver" disabled={editor.busy} onPress={onClose}/>}
+ </View>;
+}

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../services/api-response.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
@@ -62,6 +63,7 @@ export async function addDigitalAttachment(auth: VerifiedAuthConnection, publica
         if (duplicate) throw new ApiError(409, 'CONFLICT', 'Este archivo ya está adjunto a esta publicación. No se puede agregar el mismo contenido dos veces, aunque tenga otro nombre.');
         const attachment = await insertDigitalAttachment(client, id, fileId, path, file);
         if (!attachment) throw new ApiError(409, 'CONFLICT', 'La publicación alcanzó el límite de orden de archivos admitido por el sistema.');
+        await notifyResourceUpdated(client,id);
         saved = attachment; return attachment;
       });
       if (result) return result;

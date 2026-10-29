@@ -93,10 +93,11 @@ before(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
   for (const name of ['institucion', 'campus', 'carrera', 'asignatura', 'carrera_asignatura', 'perfil_usuario', 'rol', 'usuario_rol', 'publicacion_recurso', 'recurso_digital', 'archivo_publicacion',
-    'publicacion_carrera', 'publicacion_asignatura', 'usuario_carrera', 'interaccion_recurso', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'valoracion', 'reporte_contenido', 'auditoria', 'categoria_recurso_fisico', 'recurso_fisico']) {
+    'publicacion_carrera', 'publicacion_asignatura', 'usuario_carrera', 'interaccion_recurso', 'mensaje_solicitud', 'solicitud_recurso', 'transaccion_recurso', 'confirmacion_transaccion', 'acceso_recurso_digital', 'valoracion', 'reporte_contenido', 'auditoria', 'categoria_recurso_fisico', 'recurso_fisico', 'notificacion']) {
     const sql = schema.match(new RegExp('CREATE TABLE public\\.' + name + ' \\([\\s\\S]*?\\n\\);'))?.[0];
     assert.ok(sql, name); await db.exec(sql);
   }
+  await db.exec(await readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql','utf8'));
   // Restricciones adicionales observadas en remoto, aún ausentes en el snapshot histórico.
   await db.exec(`ALTER TABLE campus ADD UNIQUE(id,institucion_id);
     ALTER TABLE perfil_usuario ADD FOREIGN KEY(campus_id,institucion_id) REFERENCES campus(id,institucion_id);
@@ -691,6 +692,127 @@ async function requestAndAccept(saved:{id:string},receiver:VerifiedAuthConnectio
   const requested=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,requested.id,{decision:'ACEPTAR'});assert.ok(accepted.transactionId);return {trades,requested,accepted,tradeId:accepted.transactionId!};
 }
+
+test('digital free chat works across campuses with private authenticated HTTP and literal bounded text', async () => {
+  const saved = await service.createDigitalPublication(auth,input(),file()), receiver = await peer();
+  const { tradeId } = await requestAndAccept(saved,receiver);
+  const path = `/${saved.id}/transactions/${tradeId}/messages`;
+  const body = { text: '  Hola, soy de otra sede.\n¿Coordinamos por aquí? <b>PDF</b>  ', messageId: randomUUID() };
+  current = receiver;
+  let response = await digitalJson(path,'POST',body); assert.equal(response.status,201);
+  const first = (await response.json()).data; assert.equal(first.senderId,receiver.userId); assert.equal(first.text,body.text.trim());
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  current = auth;
+  response = await digitalJson(path,'POST',{text:'Sí, conversemos libremente.',messageId:randomUUID()}); assert.equal(response.status,201);
+  assert.equal((await response.json()).data.senderId,auth.userId);
+  response = await get(path); const history = await response.json(); assert.equal(history.data.length,2);
+  assert.equal(history.data[1].id,first.id); assert.equal(history.data[0].senderId,auth.userId);
+  for (const invalid of [{text:' ',messageId:randomUUID()},{text:'a'.repeat(2001),messageId:randomUUID()},
+    {text:'a\u0000b',messageId:randomUUID()},{text:'Hola',messageId:randomUUID(),senderId:receiver.userId},{text:'Hola'}]) {
+    assert.equal((await digitalJson(path,'POST',invalid)).status,400);
+  }
+  assert.equal((await originalFetch(base+path)).status,401);
+  const outsider = await peer(); current = outsider;
+  assert.equal((await get(path)).status,404); assert.equal((await digitalJson(path,'POST',body)).status,404);
+  current = await peer(foreignCampus,foreignInstitution); assert.equal((await get(path)).status,404);
+  current = receiver;
+  await db.query("UPDATE perfil_usuario SET estado_cuenta='SUSPENDIDA' WHERE id=$1",[receiver.userId]);
+  assert.equal((await get(path)).status,403);
+  assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE transaccion_id=$1',[tradeId])).rows.length,0);
+});
+
+test('digital messages persist through HTTP and enter only the recipient inbox with a digital transaction target',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();
+  const {tradeId}=await requestAndAccept(saved,receiver),notifications=await import('../src/modules/users/notifications.service.js');
+  const path=`/${saved.id}/transactions/${tradeId}/messages`,owner=auth;
+  for(const [sender,recipient] of [[owner,receiver],[receiver,owner]]){
+    const before=await notifications.ownNotificationOperation(recipient,{countOnly:true});assert.ok('unreadCount' in before);
+    current=sender;const body={text:'Coordinemos la entrega digital.\n¿Puedes hoy?',messageId:randomUUID()};
+    const response=await digitalJson(path,'POST',body);assert.equal(response.status,201);const receipt=(await response.json()).data;
+    const stored=(await db.query('SELECT * FROM notificacion WHERE id=$1',[receipt.id])).rows[0];
+    assert.equal(stored.mensaje,body.text);assert.equal(stored.destinatario_id,recipient.userId);assert.equal(stored.transaccion_id,tradeId);
+    const page=await notifications.ownNotificationOperation(recipient,{});assert.ok('items' in page);const item=page.items.find(row=>row.id===receipt.id)!;
+    assert.equal(item.type,'COORDINACION_RECURSO');assert.ok('resourceType' in item&&'transactionId' in item);
+    assert.equal(item.resourceType,'DIGITAL');assert.equal(item.transactionId,tradeId);
+    const after=await notifications.ownNotificationOperation(recipient,{countOnly:true});assert.ok('unreadCount' in after);assert.equal(after.unreadCount,before.unreadCount+1);
+    const senderInbox=await notifications.ownNotificationOperation(sender,{});assert.ok('items' in senderInbox);assert.equal(senderInbox.items.some(row=>row.id===receipt.id),false);
+    await notifications.ownNotificationOperation(recipient,{id:receipt.id});await notifications.ownNotificationOperation(recipient,{id:receipt.id,remove:true});
+    current=recipient;const history=await get(path);assert.equal(history.status,200);assert.ok((await history.json()).data.some((row:{id:string})=>row.id===receipt.id));
+  }
+});
+
+test('digital conversations paginate separately, retain removed notifications and become read-only after completion', async () => {
+  const chat = await import('../src/modules/marketplace/elibrary/elibrary.messages.service.js');
+  const saved = await service.createDigitalPublication(auth,input(),file()), receiver = await peer(), other = await peer();
+  const { tradeId, trades } = await requestAndAccept(saved,receiver), second = await requestAndAccept(saved,other);
+  const receipts = [];
+  for(let index=0;index<21;index++) receipts.push(await chat.sendDigitalMessage(receiver,saved.id,tradeId,{text:`Mensaje ${index}`,messageId:randomUUID()}));
+  await chat.sendDigitalMessage(other,saved.id,second.tradeId,{text:'Otro intercambio',messageId:randomUUID()});
+  const recent = await chat.getDigitalMessages(auth,saved.id,tradeId,{page:'1',limit:'20'});
+  const older = await chat.getDigitalMessages(receiver,saved.id,tradeId,{page:'2',limit:'20'});
+  assert.equal(recent.data.length,20); assert.equal(recent.meta.hasMore,true); assert.equal(older.data.length,1);
+  assert.equal(older.data[0].text,'Mensaje 0'); assert.equal(new Set([...recent.data,...older.data].map(row=>row.id)).size,21);
+  await db.query('UPDATE notificacion SET deleted_at=now() WHERE id=$1',[receipts[0].id]);
+  assert.equal((await chat.getDigitalMessages(receiver,saved.id,tradeId,{page:'2',limit:'20'})).data[0].id,receipts[0].id);
+  assert.equal((await chat.getDigitalMessages(auth,saved.id,second.tradeId,{})).data.length,1);
+  await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');
+  await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
+  await assert.rejects(chat.sendDigitalMessage(auth,saved.id,tradeId,{text:'Cerrada',messageId:randomUUID()}),{status:409});
+  assert.equal((await chat.getDigitalMessages(receiver,saved.id,tradeId,{})).data.length,20);
+  assert.equal((await trades.getDigitalTrade(other,saved.id,second.tradeId)).status,'RESERVADA');
+});
+
+test('digital message keys prevent duplicates after lost acknowledgement and reject conflicting reuse', async () => {
+  const chat = await import('../src/modules/marketplace/elibrary/elibrary.messages.service.js');
+  const saved = await service.createDigitalPublication(auth,input(),file()), receiver = await peer();
+  const { tradeId, trades } = await requestAndAccept(saved,receiver), body = {text:'¿A qué hora puedes?',messageId:randomUUID()};
+  lostCommit = true;
+  await assert.rejects(chat.sendDigitalMessage(receiver,saved.id,tradeId,body),{status:503});
+  const [first, retry] = await Promise.all([chat.sendDigitalMessage(receiver,saved.id,tradeId,body),chat.sendDigitalMessage(receiver,saved.id,tradeId,body)]);
+  assert.equal(first.id,retry.id); assert.equal((await chat.getDigitalMessages(auth,saved.id,tradeId,{})).data.length,1);
+  await assert.rejects(chat.sendDigitalMessage(receiver,saved.id,tradeId,{...body,text:'Otro texto'}),{status:409});
+  await assert.rejects(chat.sendDigitalMessage(auth,saved.id,tradeId,body),{status:409});
+  await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CANCELAR');
+  assert.equal((await chat.sendDigitalMessage(receiver,saved.id,tradeId,body)).id,first.id);
+  await assert.rejects(chat.sendDigitalMessage(receiver,saved.id,tradeId,{text:'Nuevo',messageId:randomUUID()}),{status:409});
+});
+
+test('PDF uploads with absent or generic browser MIME survive multipart and keep canonical private storage metadata', async () => {
+  for(const type of ['', 'application/octet-stream']) {
+    const body = new FormData(); body.append('metadata',JSON.stringify(input()));
+    body.append('file',new Blob([new Uint8Array(pdf)],{type}),'apuntes.pdf');
+    const response = await originalFetch(base,{method:'POST',headers:{Authorization:'Bearer '+token},body});
+    assert.equal(response.status,201); const saved = (await response.json()).data;
+    assert.equal(saved.files[0].mimeType,'application/pdf');
+    const additional = await distinctFile(), attachment = new FormData();
+    attachment.append('file',new Blob([new Uint8Array(additional.bytes)],{type}),additional.name);
+    const appended = await originalFetch(`${base}/${saved.id}/files`,{method:'POST',headers:{Authorization:'Bearer '+token},body:attachment});
+    assert.equal(appended.status,201); assert.equal((await appended.json()).data.mimeType,'application/pdf');
+  }
+});
+test('resource notifications connect digital requests, edits, files and acceptance across authorized institutional campuses',async()=>{
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();
+  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const notifications=await import('../src/modules/users/notifications.service.js');
+  const own=async(actor:VerifiedAuthConnection)=>{const page=await notifications.ownNotificationOperation(actor,{});assert.ok('items' in page);return page.items;};
+  const key=randomUUID();
+  const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},key);
+  await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},key);
+  assert.equal((await own(auth)).filter(row=>row.type==='RESOURCE_REQUEST_RECEIVED').length,1);
+  const {editDigitalPublication}=await import('../src/modules/marketplace/elibrary/elibrary.edit.service.js');
+  const body={title:saved.title,description:'Contenido actualizado',modality:'VENTA',price:3000,updatedAt:saved.updatedAt};
+  const updated=await editDigitalPublication(auth,saved.id,body);
+  await editDigitalPublication(auth,saved.id,{...body,updatedAt:updated.updatedAt});
+  assert.equal((await own(receiver)).filter(row=>row.type==='RESOURCE_UPDATED').length,1);
+  await filesService.addDigitalAttachment(auth,saved.id,await distinctFile());
+  assert.equal((await own(receiver)).filter(row=>row.type==='RESOURCE_UPDATED').length,2);
+  const accepted=await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'});
+  await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'});
+  const notices=(await own(receiver)).filter(row=>row.type==='RESOURCE_REQUEST_ACCEPTED');assert.equal(notices.length,1);
+  assert.ok('transactionId' in notices[0]);assert.equal(notices[0].transactionId,accepted.transactionId);
+  assert.equal((await trades.getDigitalTrade(receiver,saved.id,accepted.transactionId!)).amount,3000);
+  assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE publicacion_id=$1',[saved.id])).rows.length,0);
+});
 test('digital activity counts and grouped resources cover all requests before pagination, with independent receiver trades',async()=>{
  const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
  const saved=await service.createDigitalPublication(auth,input(),file()),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');

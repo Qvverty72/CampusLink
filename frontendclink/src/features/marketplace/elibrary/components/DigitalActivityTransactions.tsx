@@ -19,6 +19,7 @@ import {DigitalActivityPager} from './DigitalActivityUI';
 import {digitalTransactionPresentation} from '../utils/digitalTransactionPresentation';
 import {agreementCopy as copy} from '../../utils/agreementPresentation';
 import {useAuth} from '@/features/auth/hooks/useAuth';
+import {DigitalTransactionChat} from './DigitalTransactionChat';
 
 type Panel=AgreementStep|'menu'|'cancel'|'report';
 export function DigitalActivityTransactions({active,onChanged,onAcquired,onExplore}:{active:boolean;onChanged:()=>void;onAcquired:(id:string)=>void;onExplore?:()=>void}){
@@ -46,7 +47,7 @@ export function DigitalActivityTransactions({active,onChanged,onAcquired,onExplo
  {state.initialLoading?<AgreementCardsSkeleton digital/>:<>
  {!items.length&&!state.error&&<PersonalEmpty title={tab==='active'?copy.emptyActive:copy.emptyFinished} helper={copy.emptyHelp} action={onExplore?copy.explore:copy.retry} onAction={onExplore??refresh}/>}
  {groups.filter(group=>group.items.length).map(group=><AgreementListSection key={group.label} label={group.label}>
- {group.items.map(({trade,view})=><AgreementCard key={trade.id} digital title={trade.title} roleLabel={trade.ownerId===identity?.userId?'Propietario':'Receptor'} participants={trade.participants} currentUserId={identity?.userId}
+ {group.items.map(({trade,view})=><AgreementCard key={trade.id} digital digitalChat title={trade.title} roleLabel={trade.ownerId===identity?.userId?'Propietario':'Receptor'} participants={trade.participants} currentUserId={identity?.userId}
  modality={trade.modality} amount={trade.amount} currency={trade.currency} state={view.state} label={view.label} ratingScore={trade.rating?.score} disabled={Boolean(selected)}
  dateLabel={`${trade.completedAt||trade.cancelledAt?'Cerrado':'Iniciado'} el ${new Date(trade.completedAt??trade.cancelledAt??trade.startedAt).toLocaleDateString('es-CL')}`}
  onSelect={panel=>setSelected({trade,panel})} onMenu={()=>setSelected({trade,panel:'menu'})}/>)}</AgreementListSection>)}
@@ -61,12 +62,13 @@ export function DigitalTransactionModal({initial,initialPanel,onClose,onSnapshot
  const rating=panel==='confirm'&&trade.status==='COMPLETADA'&&trade.canRate&&!trade.rating;
  const title=panel==='accepted'?'Recurso de la transacción':panel==='menu'?'Opciones de transacción':panel==='report'?'Denunciar transacción':panel==='cancel'?'Cancelar transacción':rating?'Valorar transacción':'Confirmar';
  useAgreementPolling(state.read,active&&panel==='confirm'&&state.fresh&&!state.loading&&!locked&&!state.error&&['RESERVADA','PENDIENTE_CONFIRMACION'].includes(trade.status),7000);
+ if(panel==='coordinate')return <DigitalTransactionChat key={trade.id} initial={trade} active={active} onClose={onClose} onSnapshot={onSnapshot}/>;
  return <AgreementStepModal title={title} closeLabel="Cerrar transacción" onClose={onClose} closeDisabled={locked} fillHeight={panel==='accepted'||panel==='report'} preferredHeight={panel==='menu'||panel==='cancel'?420:680}
  contentKey={panel} refresh={{onRefresh:state.read,refreshing:state.loading,enabled:!locked&&panel!=='report',label:'la transacción'}}>
  {state.error&&<><Text accessibilityRole="alert" style={ui.subtitle}>{state.error}</Text><RequestButton label="Actualizar estado" onPress={state.read} disabled={locked}/></>}
  {!state.verified&&state.loading?<AgreementPanelSkeleton digital panel={panel==='accepted'?'accepted':panel==='menu'?'menu':'confirm'}/>:state.verified&&<>
  {panel==='accepted'&&<DigitalResourceContent id={trade.publicationId} trade={trade} onBusyChange={setReportBusy}/>}
- {panel==='menu'&&<AgreementMenu embedded visible onClose={onClose} actions={[{label:'Denunciar transacción',disabled,onPress:()=>setPanel('report')},...(trade.canCancel?[{label:'Cancelar transacción',danger:true,disabled,onPress:()=>setPanel('cancel')}]:[])]}/>}
+ {panel==='menu'&&<AgreementMenu embedded visible onClose={onClose} actions={[{label:'Abrir chat',disabled,onPress:()=>setPanel('coordinate')},{label:'Denunciar transacción',disabled,onPress:()=>setPanel('report')},...(trade.canCancel?[{label:'Cancelar transacción',danger:true,disabled,onPress:()=>setPanel('cancel')}]:[])]}/>}
  {panel==='report'&&state.fresh&&<MarketplaceReportForm target={{type:'TRANSACCION_DIGITAL',publicationId:trade.publicationId,transactionId:trade.id,campusId:trade.campusId}} title={trade.title} onBack={()=>setPanel('menu')} onBusyChange={setReportBusy} showHeading={false} backLabel={null}/>}
  {panel==='cancel'&&<View style={{gap:16}}><Text style={ui.subtitle}>Se cancelará esta transacción sin conceder acceso a los archivos completos. Las demás transacciones y la publicación se conservan.</Text>
  <RequestButton label={state.busy?'Cancelando…':'Confirmar cancelación'} primary disabled={disabled||!trade.canCancel} onPress={()=>void state.run('cancel')}/>

@@ -10,6 +10,7 @@ import { ownedDigitalController,ownedDigitalDetailController,editDigitalControll
 import { recommendationsDigitalController } from './elibrary.controller.js';
 import { rateDigitalController } from './elibrary.controller.js';
 import {digitalActivityController} from './elibrary.controller.js';
+import { digitalMessagesController, sendDigitalMessageController } from './elibrary.controller.js';
 import { createDigitalRequestController, digitalRequestOptionsController, receivedDigitalRequestsController, sentDigitalRequestsController,
   resolveDigitalRequestController, detailDigitalTradeController, transitionDigitalTradeController } from './elibrary.controller.js';
 
@@ -44,6 +45,8 @@ export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
   router.post('/:publicationId/requests', requireAuthentication, createDigitalRequestController);
   router.patch('/:publicationId/requests/:requestId', requireAuthentication, resolveDigitalRequestController);
   router.get('/:publicationId/transactions/:transactionId', requireAuthentication, detailDigitalTradeController);
+  router.get('/:publicationId/transactions/:transactionId/messages', requireAuthentication, digitalMessagesController);
+  router.post('/:publicationId/transactions/:transactionId/messages', requireAuthentication, sendDigitalMessageController);
   router.post('/:publicationId/transactions/:transactionId/confirm', requireAuthentication, transitionDigitalTradeController('CONFIRMAR'));
   router.post('/:publicationId/transactions/:transactionId/cancel', requireAuthentication, transitionDigitalTradeController('CANCELAR'));
   router.post('/:publicationId/transactions/:transactionId/rating',requireAuthentication,rateDigitalController);

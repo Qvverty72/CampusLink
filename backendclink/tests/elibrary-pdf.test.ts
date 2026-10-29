@@ -5,6 +5,14 @@ import { DIGITAL_MAX_BYTES, validateDigitalFile } from '../src/modules/marketpla
 import { ApiError } from '../src/services/api-response.js';
 
 const upload = (bytes: Buffer) => ({ name: 'material.pdf', mimeType: 'application/pdf', bytes });
+test('generic, missing and alternate PDF MIME values are normalized only after validating real PDF bytes', async () => {
+  const bytes = await document();
+  for (const mimeType of ['', 'application/octet-stream', 'application/x-pdf', 'Application/PDF; charset=binary']) {
+    const saved = await validateDigitalFile({ ...upload(bytes), mimeType });
+    assert.equal(saved.mimeType, 'application/pdf'); assert.strictEqual(saved.bytes, bytes);
+    await assert.rejects(validateDigitalFile({ ...upload(Buffer.from('renamed text')), mimeType }), { status: 400 });
+  }
+});
 async function document(edit: (pdf: PDFDocument) => void | Promise<void> = () => {}, compressed = true) {
   const pdf = await PDFDocument.create(); pdf.addPage().drawText('Material de prueba'); await edit(pdf);
   return Buffer.from(await pdf.save({ useObjectStreams: compressed }));

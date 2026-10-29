@@ -9,6 +9,7 @@ import {DigitalActivityFeedback,DigitalActivityPager} from './DigitalActivityUI'
 import {DigitalPublicationEditor} from './DigitalPublicationEditor';
 import {AgreementStepModal} from '../../components/AgreementStepModal';
 import {RequestButton} from '../../components/RequestsUI';
+import {publicationManagementUI} from '../../components/PublicationManagementUI';
 export function DigitalPublications({active,onRequests,onPublish,onChanged,onOpenResource}:{active:boolean;onRequests:()=>void;onPublish?:()=>void;onChanged:()=>void;onOpenResource?:(id:string)=>void}){
  const [tab,setTab]=useState('all'),[page,setPage]=useState(1),[resource,setResource]=useState<DigitalPublication|null>(null),[editing,setEditing]=useState<DigitalPublication|null>(null),[editBusy,setEditBusy]=useState(false);
  const state=useDigitalActivityPage<DigitalPublication>('publications',`page=${page}&limit=10&tab=${tab}`,active);
@@ -26,7 +27,7 @@ export function DigitalPublications({active,onRequests,onPublish,onChanged,onOpe
  {rest.length>0&&<View style={styles.group}><Text style={styles.heading}>MIS PUBLICACIONES</Text><View style={styles.history}>{rest.map(item=>row(item))}</View></View>}
  <DigitalActivityPager meta={state.value?.meta} onChange={setPage} disabled={state.loading}/></>}
  {resource&&<DigitalResourceModal key={resource.id} id={resource.id} title="Recurso de la publicación" mode="owned" initial={resource} onClose={()=>setResource(null)} onEdit={value=>{setResource(null);setEditing(value);}} onOpen={onOpenResource?()=>{setResource(null);onOpenResource(resource.id);}:undefined}/>}
- {editing&&<AgreementStepModal title="Gestionar publicación" closeLabel="Cerrar edición" onClose={()=>{if(!editBusy)setEditing(null);}} closeDisabled={editBusy} fillHeight>
+ {editing&&<AgreementStepModal title="Editar publicación" closeLabel="Cerrar edición" onClose={()=>{if(!editBusy)setEditing(null);}} closeDisabled={editBusy} fillHeight keyboardAvoiding contentStyle={publicationManagementUI.content}>
  <DigitalPublicationEditor resource={editing} onBusyChange={setEditBusy} onSaved={()=>{setEditing(null);reload();}} onClose={()=>setEditing(null)}/></AgreementStepModal>}
  </View>;
 }

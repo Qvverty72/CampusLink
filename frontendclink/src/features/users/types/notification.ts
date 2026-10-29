@@ -10,7 +10,18 @@ export interface PhysicalgoodsReminder {
   id:string;publicationId:string;type:'PHYSICAL_PUBLICATION_CLOSE_REMINDER';
   title:string;message:string;createdAt:string;readAt:string|null;
 }
-export type UserNotification=ActivityNotification|PhysicalgoodsReminder;
+interface ResourceNotificationBase {
+  id:string; publicationId:string; resourceType:'FISICO'|'DIGITAL';
+  title:string; message:string; createdAt:string; readAt:string|null;
+}
+export interface ResourceRequestNotification extends ResourceNotificationBase {
+  type:'RESOURCE_REQUEST_RECEIVED'|'RESOURCE_UPDATED'; requestId:string;
+}
+export interface ResourceTransactionNotification extends ResourceNotificationBase {
+  type:'RESOURCE_REQUEST_ACCEPTED'|'COORDINACION_RECURSO'; transactionId:string;
+}
+export type ResourceNotification=ResourceRequestNotification|ResourceTransactionNotification;
+export type UserNotification=ActivityNotification|PhysicalgoodsReminder|ResourceNotification;
 /** Página de notificaciones; `nextCursor` nulo indica que no hay página siguiente. */
 export interface NotificationPage { items: UserNotification[]; nextCursor: string | null }
 

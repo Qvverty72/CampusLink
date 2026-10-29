@@ -5,6 +5,10 @@ export const NOTIFICATION_LABELS: Record<UserNotification['type'], string> = {
   OFFICIAL_EVENT_STARTED: 'Evento oficial en curso',
   ACTIVITY_CHANGED: 'Actividad actualizada',
   PHYSICAL_PUBLICATION_CLOSE_REMINDER: 'Revisar publicación',
+  RESOURCE_REQUEST_RECEIVED: 'Nueva solicitud',
+  RESOURCE_UPDATED: 'Recurso actualizado',
+  RESOURCE_REQUEST_ACCEPTED: 'Solicitud aceptada',
+  COORDINACION_RECURSO: 'Mensaje de coordinación',
 };
 
 /** Agrupa las páginas cargadas según la semana local, de lunes a domingo. */
