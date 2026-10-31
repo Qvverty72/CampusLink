@@ -1,14 +1,13 @@
 import type { PoolClient } from 'pg';
-
+import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
+import type { PendingActivityNotification } from '../../activities/types/activities.notifications.types.js';
+import type { ActivityNotificationDto, NotificationPage, UserNotificationDto } from '../types/notifications.types.js';
 /** Revalidación bajo el mismo lock y transacción de las operaciones propias. */
 export async function lockOwnNotificationAccount(client: PoolClient, userId: string, campusId: string): Promise<boolean> {
   const profile = await client.query(`SELECT id FROM public.perfil_usuario WHERE id=$1 AND campus_id=$2
       AND estado_cuenta='ACTIVA' AND deleted_at IS NULL FOR SHARE`, [userId, campusId]);
   return profile.rows.length === 1;
 }
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { PendingActivityNotification } from '../../activities/types/activities.notifications.types.js';
-import type { ActivityNotificationDto, NotificationPage, UserNotificationDto } from '../types/notifications.types.js';
 
 const reasonLabels = { DATES_CHANGED: 'fechas', LOCATION_CHANGED: 'ubicación', CONTENT_CHANGED: 'información' };
 const publicationMessage = 'Se publicó un evento oficial en tu campus.';

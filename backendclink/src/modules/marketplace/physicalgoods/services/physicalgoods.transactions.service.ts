@@ -14,7 +14,7 @@ import { findPhysicalgoodsTransaction, insertPhysicalgoodsConfirmation, lockPhys
   findPhysicalgoodsRating,insertPhysicalgoodsRating,listOwnPhysicalgoodsTransactions,countOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from '../repositories/physicalgoods.transactions.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
 import type { PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionRow } from '../types/physicalgoods.types.js';
-import { findActiveMapByCampusId } from '../../../maps/repositories/map.repository.js';
+import { findActiveMapByCampusId } from '../../../maps/public.js';
 import { spatialBuildings } from '../../../maps/domain/map.location.js';
 import {findPhysicalgoodsRequestTerms} from '../repositories/physicalgoods.price-history.repository.js';
 

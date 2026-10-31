@@ -5,7 +5,7 @@ import { withPostgresTransaction } from '../../../database/supabase/postgres.js'
 import { ApiError } from '../../../shared/errors/api-error.js';
 import type { PoolClient } from 'pg';
 import type { ActivityReportReceipt, ContentReportReceipt, PhysicalgoodsReportReceipt, NewActivityReport, NewContentReport } from '../types/reports.types.js';
-import { lockAccountContext } from '../../auth/repositories/auth.repository.js';
+import { lockAccountContext } from '../../auth/public.js';
 import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 

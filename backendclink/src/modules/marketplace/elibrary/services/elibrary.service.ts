@@ -6,7 +6,7 @@ import type { PoolClient } from 'pg';
 import { ApiError } from '../../../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
 import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
-import { lockAccountContext } from '../../../auth/repositories/auth.repository.js';
+import { lockAccountContext } from '../../../auth/public.js';
 import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import type { DigitalPublication, DigitalUpload } from '../types/elibrary.types.js';
 import { digitalId, parseDigitalInput, validateDigitalAcademics, validateDigitalFile } from '../validators/elibrary.validation.js';

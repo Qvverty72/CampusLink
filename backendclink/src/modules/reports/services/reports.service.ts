@@ -3,13 +3,13 @@ import { findOwnActivityReport, probeReportsDependencies, saveActivityReport } f
 import type { ReportsHealth } from '../types/reports.types.js';
 import type { ActivityReportReceipt, ActivityReportSnapshot, NewActivityReport, ReportActivityInput, ReportsDependencies } from '../types/reports.types.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { getAuthorizedActiveMap } from '../../maps/services/map.service.js';
+import { getAuthorizedActiveMap } from '../../maps/public.js';
 import { spatialBuildings } from '../../activities/domain/activities.location.js';
 import { toVisibleActivity } from '../../activities/domain/activities.policy.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { parseActivityReport } from '../validators/reports.validation.js';
 import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
-import { validActivityCreators } from '../../activities/services/activities.references.service.js';
+import { validActivityCreators } from '../../activities/public.js';
 
 export const getReportsHealth: () => Promise<ReportsHealth> =
   createModuleHealthCheck('reports', probeReportsDependencies);
@@ -36,7 +36,7 @@ export async function reportActivity(auth: VerifiedAuthConnection, activityId: s
   const id = activityId.toLowerCase();
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const now = dependencies.now?.() ?? new Date();
-  const find = dependencies.findActivity ?? (await import('../../activities/repositories/activities.detail.repository.js')).findVisibleActivity;
+  const find = dependencies.findActivity ?? (await import('../../activities/public.js')).findVisibleActivity;
   const document = await find(auth.campusId, id, now);
   const visible = document && toVisibleActivity(document, auth.campusId, now, spatialBuildings(map));
   if (!visible || visible.id !== id) throw new ApiError(404, 'NOT_FOUND', 'Esta actividad ya no está disponible para denunciar.');

@@ -3,7 +3,7 @@ import { requireCampusCapability } from '../../auth/domain/auth.authorization.js
 import type { ActivityDependencies } from './activities.service.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 
-export const relationalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { relationalUuid } from '../domain/activities.references.js';
 
 /**
  * La identidad propia proviene del perfil vigente verificado en esta solicitud.

@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { PhysicalgoodsConfirmationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionDetailRow,PhysicalgoodsTransactionRow } from '../types/physicalgoods.types.js';
 import type { PaginationParams } from '../../../../shared/http/api.types.js';
-export { resourceCoordinationMessages as physicalgoodsCoordinationMessages, insertResourceCoordination as insertPhysicalgoodsCoordination } from '../../repositories/marketplace.messages.repository.js';
+export { resourceCoordinationMessages as physicalgoodsCoordinationMessages, insertResourceCoordination as insertPhysicalgoodsCoordination } from '../../public.js';
 
 const confirmationProjection = `usuario_id,rol_confirmante,
   to_char(confirmado_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS confirmado_en`;

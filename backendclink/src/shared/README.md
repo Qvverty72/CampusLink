@@ -1,44 +1,39 @@
-# Servicios compartidos del backend
+# Infraestructura compartida del backend
 
-Esta carpeta reúne funciones de infraestructura que reutilizan los módulos de la API. Sus archivos se importan desde el servidor; no se ejecutan como comandos independientes.
+El negocio pertenece a `src/modules`. Esta carpeta contiene transporte, errores,
+paginación, cuotas y utilidades técnicas. La composición de readiness está en
+[`src/readiness.ts`](../readiness.ts), fuera de shared.
 
-Los archivos `*.service.ts` dentro de `src/modules` coordinan cada módulo. Los servicios de esta carpeta proporcionan respuestas HTTP uniformes, diagnósticos de dependencias y límites de espera compartidos.
+| Carpeta / archivo | Responsabilidad |
+| --- | --- |
+| [http/api-response.ts](http/api-response.ts) | Serializador único: `sendSuccess`, `sendApiError` y alias `sendError`. |
+| [http/api.types.ts](http/api.types.ts) | Sobres, errores y contratos generales de validación/paginación HTTP. |
+| [errors/api-error.ts](errors/api-error.ts) | Error previsto con código/status y plazo de reintento para429. |
+| [http/error-handler.ts](http/error-handler.ts) | JSON inválido, payload grande, errores de drivers/aplicación, sanitización y404. |
+| [http/validate-request.ts](http/validate-request.ts) | Validación por sección y valores normalizados en locals. |
+| [http/endpoint-policy.ts](http/endpoint-policy.ts) | Declaración obligatoria de acceso; integra el middleware de auth. |
+| [http/rate-limit.middleware.ts](http/rate-limit.middleware.ts) | Cuotas por origen y por identidad verificada. |
+| [rate-limit/rate-limit.ts](rate-limit/rate-limit.ts) | Contrato de contador, claves hash,429 y memoria limitada de development/test. |
+| [pagination/pagination.ts](pagination/pagination.ts) | Parseo y metadatos de paginación. |
+| [health/health-response.ts](health/health-response.ts) | Respuesta sanitaria sin detalles sensibles. |
+| [health/module-health.ts](health/module-health.ts) | Sondas concurrentes y caché técnica breve. |
+| [health/health.types.ts](health/health.types.ts) | Contratos de salud de módulos/readiness. |
+| [async/deadline.ts](async/deadline.ts) | Límite temporal de operaciones asíncronas. |
 
-## Archivos
+## Respuestas HTTP
 
-| Archivo | Responsabilidad | Exportaciones |
-| --- | --- | --- |
-| [api-response.ts](api-response.ts) | Fachada compatible para los módulos existentes; delega en los helpers comunes. | `ApiError`, `sendSuccess`, `sendError` |
-| [apiResponse.ts](apiResponse.ts) | Emitir sobres comunes de éxito y error. | `sendSuccess`, `sendApiError` |
-| [apiError.ts](apiError.ts) | Representar errores esperados con status y códigos estables. | `ApiError` |
-| [health-response.ts](health-response.ts) | Convertir el diagnóstico de un módulo en una respuesta HTTP. | `sendModuleHealth` |
-| [module-health.ts](module-health.ts) | Coordinar y almacenar brevemente las comprobaciones de dependencias. | `createModuleHealthCheck` |
-| [readiness.ts](readiness.ts) | Reunir los diagnósticos de los siete módulos. | `getReadiness` |
-| [deadline.ts](deadline.ts) | Limitar cuánto se espera una operación asíncrona. | `withDeadline` |
+`sendSuccess(response, data, status)` y `sendSuccess(response, data, {status, meta})`
+usan una sola implementación.200/201/202 entregan `{data}` y opcionalmente `meta`;
+204 termina sin cuerpo. `sendError` es el mismo serializador que `sendApiError`,
+no otra implementación. El error mantiene `{error:{code,message,details?}}`.
 
-## api-response.ts
+El handler conserva `Retry-After`, oculta detalles internos y distingue las caídas
+de dependencias. Formatear no equivale a autenticar ni autorizar. El liveness
+histórico `/api/v1/health` conserva `{status:"ok"}`.
 
-- `sendSuccess(response, data, status = 200)` emite `{ data }` para 200, 201 o 202; con 204 termina la respuesta sin cuerpo.
-- `sendError(response, status, code, message)` emite `{ error: { code, message } }` mediante el helper común.
-- `ApiError(status, code, message, options?)` representa un error esperado. La fachada exporta la misma clase que usa F2.2-04, así el manejador reconoce errores de mapas y de auth con un único `instanceof`.
-
-Ejemplo de éxito:
-
-~~~json
-{"data":{"module":"users","status":"ok","dependencies":{"supabase":"ok"}}}
-~~~
-
-Ejemplo de error:
-
-~~~json
-{"error":{"code":"DEPENDENCY_UNAVAILABLE","message":"A required dependency is unavailable"}}
-~~~
-
-Los consumidores principales son el router, los controladores de diagnóstico y auth. Los tipos compartidos están en [api.ts](../types/api.ts); `api.types.ts` reutiliza esos contratos para health.
-
-Estos helpers formatean la respuesta; no validan datos, autentican al solicitante ni limpian automáticamente el mensaje proporcionado. Usar mensajes aptos para el cliente, sin credenciales, consultas ni errores internos del proveedor.
-
-`/health` mantiene su contrato histórico `{ status: "ok" }`. El mapa activo devuelve `{ data }`; Expo desenvuelve ese campo en `mapApi.ts`.
+Redis se implementa en [database/redis/rate-limit.redis.ts](../database/redis/rate-limit.redis.ts).
+Su contador/TTL atómico se comparte entre instancias; production requiere Redis y
+una caída produce503. La memoria local solo se usa en development/test sin URL.
 
 ## health-response.ts
 
@@ -86,7 +81,7 @@ Devuelve `{ status, modules }`. El estado global es `ok` solo si todos los módu
 
 Tiene dos consumidores principales:
 
-- [bootstrap.ts](../bootstrap.ts): verifica las dependencias antes de abrir el puerto HTTP. Si la verificación falla, el arranque se detiene y se cierra MongoDB.
+- [bootstrap.ts](../bootstrap.ts): verifica las dependencias antes de abrir el puerto HTTP. Si la verificación falla, el arranque se detiene y se cierran las conexiones abiertas.
 - [routes/index.ts](../routes/index.ts): atiende `GET /api/v1/ready`. Responde `200` con el resultado global o `503` con un error genérico de dependencia.
 
 La ruta `/ready` y los diagnósticos individuales solo se registran con `NODE_ENV=development` y `HEALTH_DIAGNOSTICS_ENABLED=true`. El arranque verifica las dependencias también cuando esas rutas están deshabilitadas.
@@ -126,5 +121,5 @@ La validación de estas variables está en [config/env.ts](../config/env.ts). Lo
 
 - Reutilizar los helpers de respuesta para nuevas rutas y conservar los contratos ya consumidos por Expo.
 - Mantener las consultas en los repositories y las reglas propias del módulo en sus `*.service.ts`.
-- Al incorporar un módulo al arranque, añadir su comprobador a `getReadiness` y actualizar los tipos de [api.types.ts](../types/api.types.ts).
+- Al incorporar un módulo al arranque, añadir su comprobador a `getReadiness` y actualizar los tipos de [health.types.ts](health/health.types.ts).
 - Definir la autorización de nuevas operaciones en su tarea funcional. Un diagnóstico correcto confirma disponibilidad técnica; no autoriza a leer o modificar datos.

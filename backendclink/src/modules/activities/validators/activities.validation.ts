@@ -1,6 +1,6 @@
 import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../../shared/http/api.types.js';
 import type { ActivityQuery } from '../types/activities.types.js';
-
+import { ApiError } from '../../../shared/errors/api-error.js';
 /** Acepta solo filtros espaciales; campus y visibilidad provienen de la política del servidor. */
 export const parseActivityQuery: RequestParser = (input: unknown): ValidationResult<ActivityQuery> => {
   const query = typeof input === 'object' && input !== null
@@ -52,9 +52,6 @@ export const parseActivityView: RequestParser = (input: unknown) => {
     ? { success: true, data: { type: 'VIEWED', operationId: value.operationId.toLowerCase() } }
     : { success: false, issues: [{ field: 'body', message: 'Envía VIEWED con un identificador UUID de apertura, sin campos de identidad.' }] };
 };
-
-import { ApiError } from '../../../shared/errors/api-error.js';
-
 
 export function participationOperationId(value: unknown): string | undefined {
   if (value === undefined) return undefined;

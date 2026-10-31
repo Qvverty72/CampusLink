@@ -1,7 +1,7 @@
 import type { Filter } from 'mongodb';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
 import type { ActivityDocument, ActivityDto, ActivityQuery } from '../types/activities.types.js';
-import { relationalUuid } from '../services/activities.references.service.js';
+import { relationalUuid } from './activities.references.js';
 
 export const COMMUNITY_ACTIVITY_LIMIT_MESSAGE = 'Solo puedes tener activa una actividad comunitaria.';
 

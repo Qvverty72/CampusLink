@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { notifyResourceRequest } from '../../repositories/marketplace.notifications.js';
+import { notifyResourceRequest } from '../../public.js';
 import { ApiError } from '../../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
@@ -14,10 +14,10 @@ import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setP
 import { touchPhysicalgoods } from '../repositories/physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from '../repositories/physicalgoods.history.repository.js';
 import { createPaginatedResult } from '../../../../shared/pagination/pagination.js';
-import { parseResourceOperationId, resourceOperationKey } from '../../../analytics/services/analytics.service.js';
-import { findResourceRequestOperation } from '../../../analytics/repositories/analytics.repository.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../../analytics/public.js';
+import { findResourceRequestOperation } from '../../../analytics/public.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
-import {findOwnerRatings,type OwnerRatingSummary} from '../../repositories/marketplace.ratings.repository.js';
+import {findOwnerRatings,type OwnerRatingSummary} from '../../public.js';
 import {findPhysicalgoodsOriginalTermsBatch,findPhysicalgoodsRequestTerms,type PhysicalgoodsTerms} from '../repositories/physicalgoods.price-history.repository.js';
 
 /** Reutiliza el orden de bloqueos de edición: perfil primero, publicación después. */

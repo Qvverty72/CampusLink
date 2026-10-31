@@ -1,4 +1,4 @@
-import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../../marketplace/physicalgoods/repositories/physicalgoods.repository.js';
+import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../../marketplace/physicalgoods/public.js';
 import { auditSnapshot } from '../domain/audit.snapshot.js';
 import type { AuditDetail } from '../types/access.types.js';
 

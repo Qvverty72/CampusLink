@@ -1,5 +1,5 @@
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { withPhysicalgoodsHistory } from '../../marketplace/physicalgoods/services/physicalgoods.history.service.js';
+import { withPhysicalgoodsHistory } from '../../marketplace/physicalgoods/public.js';
 import { queryProfileOverview } from '../repositories/profile-overview.repository.js';
 
 

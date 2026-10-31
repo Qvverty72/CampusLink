@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { notifyResourceRequest } from '../../repositories/marketplace.notifications.js';
+import { notifyResourceRequest } from '../../public.js';
 import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
 import { ApiError } from '../../../../shared/errors/api-error.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../../../shared/pagination/pagination.js';
@@ -13,8 +13,8 @@ import { activeDigitalRequest, confirmDigitalParticipant, digitalConfirmations, 
   lockDigitalProfiles, setDigitalRequestStatus, setDigitalTradeStatus } from '../repositories/elibrary.trades.repository.js';
 import { findDigitalRating } from '../repositories/elibrary.rating.repository.js';
 import { digitalParticipantNames } from '../repositories/elibrary.activity.repository.js';
-import { parseResourceOperationId, resourceOperationKey } from '../../../analytics/services/analytics.service.js';
-import { findResourceRequestOperation } from '../../../analytics/repositories/analytics.repository.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../../analytics/public.js';
+import { findResourceRequestOperation } from '../../../analytics/public.js';
 
 export function digitalAction(raw: unknown, fields: string[] = []): Record<string,unknown> {
   if (!raw || typeof raw!=='object' || Array.isArray(raw) || Object.keys(raw).some(key=>!fields.includes(key))) return invalidDigital('body','La solicitud contiene campos no admitidos.');

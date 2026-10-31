@@ -1,13 +1,5 @@
 import type { RequestHandler } from 'express';
 import { getOwnActivities, type OwnActivityDependencies } from '../services/activities.mine.service.js';
-
-/** Adapta las consultas propias sin introducir lógica de negocio en las rutas. */
-export function createOwnActivitiesController(dependencies: OwnActivityDependencies = {}, countOnly = false): RequestHandler {
-  return async (request, response) => {
-    const result = await getOwnActivities(response.locals.auth, countOnly ? { limit: '1' } : request.query, dependencies);
-    sendSuccess(response, countOnly ? { campusId: result.campusId, total: result.total } : result);
-  };
-}
 import type { AuthLocals } from '../../auth/types/auth.types.js';
 import { getValidatedRequest } from '../../../shared/http/validate-request.js';
 import { sendSuccess } from '../../../shared/http/api-response.js';
@@ -25,6 +17,13 @@ import { editActivity, previewActivityEdit } from '../services/activities.edit.s
 import type { ActivityEditDependencies, EditActivityInput } from '../types/activities.edit.types.js';
 import { getActivityParticipants, deleteOwnActivity } from '../services/activities.management.service.js';
 import type { ActivityParticipantsQuery } from '../types/activities.types.js';
+/** Adapta las consultas propias sin introducir lógica de negocio en las rutas. */
+export function createOwnActivitiesController(dependencies: OwnActivityDependencies = {}, countOnly = false): RequestHandler {
+  return async (request, response) => {
+    const result = await getOwnActivities(response.locals.auth, countOnly ? { limit: '1' } : request.query, dependencies);
+    sendSuccess(response, countOnly ? { campusId: result.campusId, total: result.total } : result);
+  };
+}
 
 /** Adapta el listado paginado de participantes al sobre HTTP común. */
 export function createActivityParticipantsController(dependencies: ActivityDependencies = {}): RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals> {

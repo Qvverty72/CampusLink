@@ -114,7 +114,7 @@ test('metrics read the immutable event log with campus/time/type scope and repor
     return { toArray: async () => [{ _id: 'VIEWED', count: 8, legacy: 0 }, { _id: 'JOINED', count: 3, legacy: 1 }, { _id: 'LEFT', count: 1, legacy: 0 }] };
   } }));
   try {
-    const { countActivityInteractions } = await import('../src/modules/analytics/repositories/analytics.repository.js');
+  const { countActivityInteractions } = await import('../src/modules/analytics/repositories/analytics.activities.repository.js');
     assert.deepEqual(await countActivityInteractions(campusId, now, new Date('2100-01-01')), { viewed: 8, joined: 3, left: 1, legacyEvents: 1 });
     await assert.rejects(countActivityInteractions(campusId, now, now));
   } finally { dbMock.mock.restore(); }

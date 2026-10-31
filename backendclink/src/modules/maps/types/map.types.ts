@@ -1,5 +1,5 @@
 import type { ObjectId } from 'mongodb';
-
+import type { ModuleHealth } from '../../../shared/health/health.types.js';
 export type CampusMapStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
 
 /**
@@ -24,5 +24,4 @@ export interface CampusMapDocument {
   communityActivityCreationRevision?: number;
 }
 
-import type { ModuleHealth } from '../../../shared/health/health.types.js';
 export type MapHealth = ModuleHealth<'maps'>;

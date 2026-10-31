@@ -1,7 +1,7 @@
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import type { ActivityDependencies } from '../../activities/services/activities.service.js';
+import type { ActivityDependencies } from '../../activities/public.js';
 import type { ActivitySnapshot } from '../../activities/types/activities.edit.types.js';
-import { getAuthorizedActiveMap } from '../../maps/services/map.service.js';
+import { getAuthorizedActiveMap } from '../../maps/public.js';
 import { resolveActivityLocation, spatialBuildings } from '../../activities/domain/activities.location.js';
 import { toVisibleActivity } from '../../activities/domain/activities.policy.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
@@ -18,7 +18,7 @@ export async function getNotificationActivityChange(auth: VerifiedAuthConnection
   if ((!revision && !operation) || (revision && !Number.isSafeInteger(Number(revision[1])))) throw unavailable();
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const buildings = spatialBuildings(map), now = dependencies.now?.() ?? new Date();
-  const find = dependencies.findActivity ?? (await import('../../activities/repositories/activities.detail.repository.js')).findVisibleActivity;
+  const find = dependencies.findActivity ?? (await import('../../activities/public.js')).findVisibleActivity;
   const document = await find(auth.campusId, id, now);
   if (!document || document._id?.toHexString?.() !== id || !toVisibleActivity(document, auth.campusId, now, buildings)) throw unavailable();
   const matches = (Array.isArray(document.changeHistory) ? document.changeHistory : []).filter(history => history?.campusId === auth.campusId

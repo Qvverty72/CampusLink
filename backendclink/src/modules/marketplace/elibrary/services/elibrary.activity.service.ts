@@ -7,7 +7,7 @@ import {digitalAction,digitalTradeDto} from './elibrary.trades.service.js';
 import {digitalId} from '../validators/elibrary.validation.js';
 import {activityCounts,activityRequests,activityResources,activityTradeCounts,activityTrades} from '../repositories/elibrary.activity.repository.js';
 import {findDigitalPublications,findOwnedDigitalActivity} from '../repositories/elibrary.repository.js';
-import {findOwnerRatings} from '../../repositories/marketplace.ratings.repository.js';
+import {findOwnerRatings} from '../../public.js';
 
 export async function getDigitalActivity(auth:VerifiedAuthConnection,raw:unknown,kind:'counts'|'requests'|'resources'|'transactions'|'publications'|'resource',rawId?:unknown){
  authorizeDigitalAccess(auth);

@@ -3,7 +3,7 @@ import { getMongoDB as getMongoDb } from '../../../database/mongodb/client.js';
 import type { ActivityDocument, ActivityInteractionDocument, ActivityParticipationDocument } from '../../activities/types/activities.types.js';
 import type { ActivityChangeDocument } from '../../activities/types/activities.edit.types.js';
 import type { AccessCampus, AuditDetail, AuditEntry, AuditOccurrences, AuditSearch } from '../types/access.types.js';
-import { findActiveMapByCampusId } from '../../maps/repositories/map.repository.js';
+import { findActiveMapByCampusId } from '../../maps/public.js';
 import { compareAuditEntries } from '../domain/audit.timeline.js';
 import { auditEditSummary } from '../domain/audit.edit-groups.js';
 

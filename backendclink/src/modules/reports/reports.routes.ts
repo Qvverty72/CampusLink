@@ -3,7 +3,7 @@ import type { Router } from 'express';
 import { getReportsHealthController, getOwnActivityReportController, createActivityReportController, createPhysicalgoodsReportController } from './controllers/reports.controller.js';
 import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
 import { validateRequest } from '../../shared/http/validate-request.js';
-import { parseActivityId, parseEmptyActivityInput } from '../activities/validators/activities.validation.js';
+import { parseActivityId, parseEmptyActivityInput } from '../activities/public.js';
 import { parseActivityReport, parseContentReport } from './validators/reports.validation.js';
 import type { ReportsDependencies } from './types/reports.types.js';
 import { createDigitalReportController,getOwnPhysicalgoodsReportController,getOwnDigitalReportController } from './controllers/reports.controller.js';

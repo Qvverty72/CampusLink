@@ -112,7 +112,7 @@ test('all roles reject legacy group edits before reading data, saving or opening
     for (const context of [auth, publisher, { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }] }]) {
       await assert.rejects(preview(context, current._id.toHexString(), forbidden, dependencies), { status: 400 });
       await assert.rejects(edit(context, current._id.toHexString(), forbidden, dependencies), { status: 400 });
-      await assert.rejects(commitActivityEdit(context, current._id.toHexString(), forbidden, now), { status: 400 });
+      await assert.rejects(commitActivityEdit(context, current._id.toHexString(), forbidden, now, preview), { status: 400 });
     }
     assert.equal(reads, 0); assert.equal(writes, 0); assert.equal(sessionMock.mock.callCount(), 0);
   } finally { sessionMock.mock.restore(); }
@@ -156,7 +156,7 @@ test('edit and immutable history commit together; stale snapshot, location loss 
   try {
     const input = parsed(), review = await preview(auth, id, input, deps(current));
     const { commitActivityEdit } = await import('../src/modules/activities/repositories/activities.edit.repository.js');
-    const result = await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now);
+    const result = await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now, preview);
     assert.equal(result.updatedCount, 1); assert.equal(committed.length, 1);
     const history = committed[0].data[0].updateOne.update.$push.changeHistory;
     assert.equal(history.before.title, 'Original'); assert.equal(history.after.title, 'Editada');
@@ -165,10 +165,10 @@ test('edit and immutable history commit together; stale snapshot, location loss 
     const event = committed[0].data[0].updateOne.update.$push.notificationEvents;
     assert.equal(event.key, `activity:${id}:revision:1`); assert.deepEqual(event.recipientIds.sort(), [userId, other].sort());
     assert.equal(committed[0].data[0].updateOne.update.$set.participantCount, undefined); assert.equal(committed[0].data[0].updateOne.update.$set.createdByUserId, undefined);
-    fail = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), /Embedded history failed/); assert.equal(committed.length, 1);
-    fail = false; conflict = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), { status: 409 });
-    conflict = false; current = { ...current, title: 'Concurrent edit' }; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), { status: 409 });
-    current.title = 'Original'; activeMap = { ...map, buildings: [] }; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now), { status: 400 });
+    fail = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now, preview), /Embedded history failed/); assert.equal(committed.length, 1);
+    fail = false; conflict = true; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now, preview), { status: 409 });
+    conflict = false; current = { ...current, title: 'Concurrent edit' }; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now, preview), { status: 409 });
+    current.title = 'Original'; activeMap = { ...map, buildings: [] }; await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now, preview), { status: 400 });
     assert.equal(committed.length, 1); assert.equal(staged.length, 0);
   } finally { sessionMock.mock.restore(); collectionMock.mock.restore(); }
 });
@@ -198,7 +198,7 @@ test('a recurring edit atomically writes one selected history and notification, 
   });
   try {
     const { commitActivityEdit } = await import('../src/modules/activities/repositories/activities.edit.repository.js');
-    const result = await commitActivityEdit(publisher, id, { ...input, previewHash: review.previewHash }, now);
+    const result = await commitActivityEdit(publisher, id, { ...input, previewHash: review.previewHash }, now, preview);
     assert.equal(result.updatedCount, 1); assert.equal(committed.length, 1);
     const update = committed[0].updateOne.update;
     assert.equal(update.$push.changeHistory.activityId.toHexString(), id); assert.equal(update.$push.changeHistory.scope, 'ONE');
@@ -208,7 +208,7 @@ test('a recurring edit atomically writes one selected history and notification, 
       assert.equal(update.$set[field], undefined);
     }
     assert.equal(JSON.stringify({ values, series }), original);
-    fail = true; await assert.rejects(commitActivityEdit(publisher, id, { ...input, previewHash: review.previewHash }, now), /individual write failed/);
+    fail = true; await assert.rejects(commitActivityEdit(publisher, id, { ...input, previewHash: review.previewHash }, now, preview), /individual write failed/);
     assert.equal(committed.length, 1); assert.equal(staged.length, 0);
   } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
 });
@@ -241,11 +241,11 @@ test('reactivating an ended community publication shares the creation lock and r
   }));
   try {
     const { commitActivityEdit } = await import('../src/modules/activities/repositories/activities.edit.repository.js');
-    await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now),
+    await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now, preview),
       { status: 409, message: 'Solo puedes tener activa una actividad comunitaria.' });
     assert.equal(writes, 0);
     existing = null;
-    assert.equal((await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now)).updatedCount, 1);
+    assert.equal((await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now, preview)).updatedCount, 1);
     assert.equal(writes, 1);
   } finally { dbMock.mock.restore(); sessionMock.mock.restore(); }
 });

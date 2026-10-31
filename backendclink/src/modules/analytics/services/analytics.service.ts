@@ -5,7 +5,7 @@ import { ANALYTICS_TIME_ZONE, dashboardIntervals } from '../domain/analytics.per
 import { createHash, randomUUID } from 'node:crypto';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { lockAccountContext } from '../../auth/repositories/auth.repository.js';
+import { lockAccountContext } from '../../auth/public.js';
 import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../../auth/domain/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { countActivityInteractions } from '../repositories/analytics.activities.repository.js';

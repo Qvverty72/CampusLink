@@ -1,5 +1,5 @@
 import { ApiError } from '../../../../shared/errors/api-error.js';
-import { notifyResourceUpdated } from '../../repositories/marketplace.notifications.js';
+import { notifyResourceUpdated } from '../../public.js';
 import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
 import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';

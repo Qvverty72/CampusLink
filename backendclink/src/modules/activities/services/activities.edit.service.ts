@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
+import { requireIndividualEdit } from '../domain/activities.edit.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { requireResourceOwner } from '../../auth/domain/auth.authorization.js';
-import { getAuthorizedActiveMap } from '../../maps/services/map.service.js';
+import { getAuthorizedActiveMap } from '../../maps/public.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { resolveActivityLocation, spatialBuildings } from '../domain/activities.location.js';
 import type { ActivityDocument } from '../types/activities.types.js';
@@ -14,11 +15,6 @@ const conflict = () => new ApiError(409, 'CONFLICT', 'La actividad o las ocurren
 const valid = (document: ActivityDocument) => document._id?.toHexString?.() && document.startAt instanceof Date && document.endAt instanceof Date
   && Number.isFinite(document.startAt.getTime()) && Number.isFinite(document.endAt.getTime()) && document.endAt > document.startAt
   && Number.isSafeInteger(editRevision(document)) && editRevision(document) >= 0 && editRevision(document) < Number.MAX_SAFE_INTEGER;
-
-/** Protege también llamadas directas de servicios y repositorios frente a clientes antiguos. */
-export function requireIndividualEdit(scope: unknown): void {
-  if (scope !== 'ONE') throw new ApiError(400, 'VALIDATION_ERROR', 'Solo se permite editar una actividad u ocurrencia individual.');
-}
 
 /**
  * Construye una vista previa de una sola actividad u ocurrencia y su hash de contenido/revisión.
@@ -74,5 +70,5 @@ export async function editActivity(auth: VerifiedAuthConnection, activityId: str
   const plan = await previewActivityEdit(auth, activityId, input, dependencies);
   if (plan.previewHash !== input.previewHash) throw conflict();
   if (dependencies.saveEdit) return dependencies.saveEdit(plan);
-  return (await import('../repositories/activities.edit.repository.js')).commitActivityEdit(auth, activityId, input, dependencies.now?.() ?? new Date());
+  return (await import('../repositories/activities.edit.repository.js')).commitActivityEdit(auth, activityId, input, dependencies.now?.() ?? new Date(), previewActivityEdit);
 }

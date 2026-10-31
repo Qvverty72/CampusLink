@@ -18,7 +18,7 @@ export async function retirePhysicalgoods(client: PoolClient, id: string) {
   await client.query('UPDATE public.publicacion_recurso SET deleted_at=clock_timestamp() WHERE id=$1', [id]);
 }
 
-export { lockAccountContext as lockPhysicalgoodsPublisher } from '../../../auth/repositories/auth.repository.js';
+export { lockAccountContext as lockPhysicalgoodsPublisher } from '../../../auth/public.js';
 
 export async function findPhysicalgoodsCatalog(client: PoolClient, campusId: string): Promise<PhysicalgoodsCatalog> {
   const campus = (await client.query<NonNullable<PhysicalgoodsCatalog['campus']>>(

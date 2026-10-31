@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { notifyResourceUpdated } from '../../repositories/marketplace.notifications.js';
+import { notifyResourceUpdated } from '../../public.js';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../../shared/errors/api-error.js';
 import { createPaginatedResult } from '../../../../shared/pagination/pagination.js';

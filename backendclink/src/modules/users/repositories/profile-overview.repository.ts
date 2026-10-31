@@ -1,8 +1,8 @@
 import type { PoolClient } from 'pg';
-import { DIGITAL_ACCESS_PROOF } from '../../marketplace/elibrary/repositories/elibrary.repository.js';
-import { activityCounts } from '../../marketplace/elibrary/repositories/elibrary.activity.repository.js';
-import { countPhysicalgoodsRequests } from '../../marketplace/physicalgoods/repositories/physicalgoods.requests.repository.js';
-import { countOwnPhysicalgoodsTransactions } from '../../marketplace/physicalgoods/repositories/physicalgoods.transactions.repository.js';
+import { DIGITAL_ACCESS_PROOF } from '../../marketplace/elibrary/public.js';
+import { activityCounts } from '../../marketplace/elibrary/public.js';
+import { countPhysicalgoodsRequests } from '../../marketplace/physicalgoods/public.js';
+import { countOwnPhysicalgoodsTransactions } from '../../marketplace/physicalgoods/public.js';
 import type { ProfileOverview } from '../types/profile-overview.types.js';
 
 

@@ -8,7 +8,8 @@ import { accountCapabilities } from '../../auth/domain/auth.authorization.js';
 import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from '../domain/activities.policy.js';
 import type { ActivityDocument, ActivityParticipationDocument } from '../types/activities.types.js';
 import type { ActivityChangeDocument, ActivityEditResult, EditActivityInput } from '../types/activities.edit.types.js';
-import { previewActivityEdit, requireIndividualEdit } from '../services/activities.edit.service.js';
+import { requireIndividualEdit } from '../domain/activities.edit.js';
+import type { ActivityEditPlanner } from '../types/activities.edit.types.js';
 import { changeNotification, participantsAtChange } from '../domain/activities.notifications.js';
 
 export const findEditableActivity = (campusId: string, activityId: string) => getMongoDb().collection<ActivityDocument>('activities')
@@ -18,7 +19,8 @@ export const findEditableActivity = (campusId: string, activityId: string) => ge
  * Recalcula y confirma el plan en una transacción MongoDB; guarda historial y avisos junto al cambio.
  * Los filtros de revisión y propietario protegen contra ediciones concurrentes y cambios de dueño.
  */
-export async function commitActivityEdit(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput, now: Date): Promise<ActivityEditResult> {
+export async function commitActivityEdit(auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput, now: Date,
+  previewActivityEdit: ActivityEditPlanner): Promise<ActivityEditResult> {
   requireIndividualEdit(input.scope);
   const db = getMongoDb();
   const operationId = new ObjectId();

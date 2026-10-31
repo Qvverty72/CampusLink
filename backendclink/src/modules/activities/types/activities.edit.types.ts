@@ -1,4 +1,5 @@
 import type { ObjectId } from 'mongodb';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import type { ActivityDependencies } from '../services/activities.service.js';
 import type { ActivityDocument, CreateActivityInput } from './activities.types.js';
 
@@ -27,3 +28,7 @@ export interface ActivityEditDependencies extends ActivityDependencies {
   findEditable?: (campusId: string, activityId: string) => Promise<ActivityDocument | null>;
   saveEdit?: (plan: ActivityEditPreview) => Promise<ActivityEditResult>;
 }
+
+/** El repositorio revalida el plan con lectores de su propia transacción. */
+export type ActivityEditPlanner = (auth: VerifiedAuthConnection, activityId: string, input: EditActivityInput,
+  dependencies: ActivityEditDependencies) => Promise<ActivityEditPreview>;

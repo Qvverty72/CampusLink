@@ -1,5 +1,5 @@
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { getAuthorizedActiveMap } from '../../maps/services/map.service.js';
+import { getAuthorizedActiveMap } from '../../maps/public.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { spatialBuildings } from '../domain/activities.location.js';
 import { toVisibleActivity } from '../domain/activities.policy.js';
