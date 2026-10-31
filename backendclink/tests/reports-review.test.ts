@@ -422,7 +422,7 @@ test('transaction report uses the actual publication relationship, preserves req
   const result = await resolveCase(fixture.id); assert.equal(result.currentPublication?.status, 'OCULTO');
   for (let i = 0; i < tables.length; i++) assert.deepEqual((await db.query(`SELECT * FROM ${tables[i]} ORDER BY id`)).rows, original[i].rows, tables[i]);
   const receiverAuth = { ...auth, userId: receiver, profile: { ...auth.profile, id: receiver } };
-  const { getDigitalOriginal } = await import('../src/modules/marketplace/elibrary/elibrary.files.service.js');
+  const { getDigitalOriginal } = await import('../src/modules/marketplace/elibrary/services/elibrary.files.service.js');
   const file = await getDigitalOriginal(receiverAuth, fixture.publicationId, fixture.fileId);
   assert.deepEqual(file.bytes, bytes);
 });

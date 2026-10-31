@@ -1,11 +1,11 @@
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { notifyResourceUpdated } from '../repositories/marketplace.notifications.js';
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { notifyResourceUpdated } from '../../repositories/marketplace.notifications.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
-import { findDigitalPublications, findDigitalResource, lockDigitalPersistence } from './elibrary.repository.js';
-import { auditDigitalAcademics, findDigitalAcademicCatalog, replaceDigitalAcademics } from './elibrary.academics.repository.js';
-import { digitalId, parseDigitalAcademics, validateDigitalAcademics } from './elibrary.validation.js';
+import { findDigitalPublications, findDigitalResource, lockDigitalPersistence } from '../repositories/elibrary.repository.js';
+import { auditDigitalAcademics, findDigitalAcademicCatalog, replaceDigitalAcademics } from '../repositories/elibrary.academics.repository.js';
+import { digitalId, parseDigitalAcademics, validateDigitalAcademics } from '../validators/elibrary.validation.js';
 export async function getDigitalAcademicCatalog(auth: VerifiedAuthConnection) {
   authorizeDigitalAccess(auth);
   try {

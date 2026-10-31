@@ -1,11 +1,11 @@
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { notifyResourceUpdated } from '../repositories/marketplace.notifications.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { notifyResourceUpdated } from '../../repositories/marketplace.notifications.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { digitalAction,withDigitalTradeContext } from './elibrary.trades.service.js';
-import { parseDigitalInput,invalidDigital } from './elibrary.validation.js';
-import { findDigitalPublications } from './elibrary.repository.js';
-import { auditDigitalAcademics } from './elibrary.academics.repository.js';
-import { retireDigitalPublication,updateDigitalContent } from './elibrary.edit.repository.js';
+import { parseDigitalInput,invalidDigital } from '../validators/elibrary.validation.js';
+import { findDigitalPublications } from '../repositories/elibrary.repository.js';
+import { auditDigitalAcademics } from '../repositories/elibrary.academics.repository.js';
+import { retireDigitalPublication,updateDigitalContent } from '../repositories/elibrary.edit.repository.js';
 export async function editDigitalPublication(auth:VerifiedAuthConnection,id:unknown,raw:unknown,retiring=false) {
   const body=digitalAction(raw,retiring?['updatedAt']:['title','description','modality','price','updatedAt']);
   if(typeof body.updatedAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(body.updatedAt))invalidDigital('updatedAt','Recarga la publicación antes de editar.');

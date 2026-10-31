@@ -1,8 +1,8 @@
 import busboy from 'busboy';
 import type { Request } from 'express';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { DIGITAL_MAX_BYTES } from './elibrary.validation.js';
-import type { DigitalUpload } from './elibrary.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { DIGITAL_MAX_BYTES } from '../validators/elibrary.validation.js';
+import type { DigitalUpload } from '../types/elibrary.types.js';
 
 /** Solo transporte multipart; autorización y validación del contenido permanecen en service. */
 export function readDigitalUpload(request: Request, withMetadata = true): Promise<{ metadata: unknown; file?: DigitalUpload }> {

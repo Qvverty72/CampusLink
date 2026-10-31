@@ -1,20 +1,20 @@
 import type { PoolClient } from 'pg';
-import { notifyResourceRequest } from '../repositories/marketplace.notifications.js';
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { notifyResourceRequest } from '../../repositories/marketplace.notifications.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../../../../shared/pagination/pagination.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
-import { digitalId, invalidDigital } from './elibrary.validation.js';
-import { findDigitalPublications, findDigitalResource, hasDigitalAcquisition, lockDigitalPersistence } from './elibrary.repository.js';
-import type { DigitalRequestRow, DigitalResourceRow, DigitalTradeRow } from './elibrary.types.js';
+import { digitalId, invalidDigital } from '../validators/elibrary.validation.js';
+import { findDigitalPublications, findDigitalResource, hasDigitalAcquisition, lockDigitalPersistence } from '../repositories/elibrary.repository.js';
+import type { DigitalRequestRow, DigitalResourceRow, DigitalTradeRow } from '../types/elibrary.types.js';
 import { activeDigitalRequest, confirmDigitalParticipant, digitalConfirmations, digitalMembersEnabled, digitalRequestMessages,
   digitalTradeParticipants, findDigitalRequest, findDigitalTrade, insertDigitalRequest, insertDigitalTrade, listDigitalRequests,
-  lockDigitalProfiles, setDigitalRequestStatus, setDigitalTradeStatus } from './elibrary.trades.repository.js';
-import { findDigitalRating } from './elibrary.rating.repository.js';
-import { digitalParticipantNames } from './elibrary.activity.repository.js';
-import { parseResourceOperationId, resourceOperationKey } from '../../analytics/services/analytics.service.js';
-import { findResourceRequestOperation } from '../../analytics/repositories/analytics.repository.js';
+  lockDigitalProfiles, setDigitalRequestStatus, setDigitalTradeStatus } from '../repositories/elibrary.trades.repository.js';
+import { findDigitalRating } from '../repositories/elibrary.rating.repository.js';
+import { digitalParticipantNames } from '../repositories/elibrary.activity.repository.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../../analytics/services/analytics.service.js';
+import { findResourceRequestOperation } from '../../../analytics/repositories/analytics.repository.js';
 
 export function digitalAction(raw: unknown, fields: string[] = []): Record<string,unknown> {
   if (!raw || typeof raw!=='object' || Array.isArray(raw) || Object.keys(raw).some(key=>!fields.includes(key))) return invalidDigital('body','La solicitud contiene campos no admitidos.');

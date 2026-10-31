@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { PaginationParams } from '../../../shared/http/api.types.js';
-import type { DigitalStoredFile } from '../../marketplace/elibrary/elibrary.types.js';
+import type { DigitalStoredFile } from '../../marketplace/elibrary/types/elibrary.types.js';
 import type { ReportEntityType, ReportPeople, ReportPerson, ReportResolutionDetail, ReportResolutionSummary, ReportReviewDetail, ReportReviewSummary, ReportStatus } from '../types/reports.types.js';
 
 const summaryProjection = `r.id,r.campus_id AS "campusId",r.entidad_tipo AS "entityType",r.entidad_id AS "entityId",

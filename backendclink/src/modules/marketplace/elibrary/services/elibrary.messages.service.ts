@@ -1,11 +1,11 @@
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult } from '../../../../shared/pagination/pagination.js';
 import { digitalAction, digitalHistoryPage, withDigitalTradeContext } from './elibrary.trades.service.js';
-import { digitalId, invalidDigital } from './elibrary.validation.js';
-import { digitalMembersEnabled, findDigitalTrade } from './elibrary.trades.repository.js';
-import { findResourceMessage, insertResourceCoordination, resourceCoordinationMessages, type ResourceMessageRow } from '../repositories/marketplace.messages.repository.js';
-import type { DigitalTradeRow } from './elibrary.types.js';
+import { digitalId, invalidDigital } from '../validators/elibrary.validation.js';
+import { digitalMembersEnabled, findDigitalTrade } from '../repositories/elibrary.trades.repository.js';
+import { findResourceMessage, insertResourceCoordination, resourceCoordinationMessages, type ResourceMessageRow } from '../../repositories/marketplace.messages.repository.js';
+import type { DigitalTradeRow } from '../types/elibrary.types.js';
 
 const messageDto = (row: ResourceMessageRow, trade: DigitalTradeRow) => ({
   id: row.id, text: row.mensaje, createdAt: row.created_at,

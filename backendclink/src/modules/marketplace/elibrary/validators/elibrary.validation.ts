@@ -1,6 +1,6 @@
 import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFObject, PDFStream, PDFString } from 'pdf-lib';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import type { DigitalAcademicCatalog, DigitalInput, DigitalUpload } from './elibrary.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import type { DigitalAcademicCatalog, DigitalInput, DigitalUpload } from '../types/elibrary.types.js';
 
 export const DIGITAL_MAX_BYTES = 25 * 1024 * 1024;
 export function invalidDigital(field: string, message: string): never {

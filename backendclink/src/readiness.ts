@@ -1,7 +1,7 @@
 import { getAnalyticsHealth } from './modules/analytics/services/analytics.service.js';
 import { getAuthHealth } from './modules/auth/services/auth.service.js';
 import { getMapHealth } from './modules/maps/services/map.service.js';
-import { getElibraryHealth } from './modules/marketplace/elibrary/elibrary.service.js';
+import { getElibraryHealth } from './modules/marketplace/elibrary/services/elibrary.service.js';
 import { getPhysicalgoodsHealth } from './modules/marketplace/physicalgoods/services/physicalgoods.service.js';
 import { getReportsHealth } from './modules/reports/services/reports.service.js';
 import { getUsersHealth } from './modules/users/services/users.service.js';

@@ -1,11 +1,11 @@
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { PaginationParams } from '../../../shared/http/api.types.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../../../../shared/pagination/pagination.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import type { PaginationParams } from '../../../../shared/http/api.types.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
-import { digitalId, invalidDigital } from './elibrary.validation.js';
-import { findDigitalPublications } from './elibrary.repository.js';
+import { digitalId, invalidDigital } from '../validators/elibrary.validation.js';
+import { findDigitalPublications } from '../repositories/elibrary.repository.js';
 
 export interface DigitalSearch extends PaginationParams { q: string; careerId: string | null; subjectId: string | null; modality: string | null }
 export function parseDigitalSearch(raw: unknown): DigitalSearch {

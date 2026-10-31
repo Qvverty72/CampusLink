@@ -1,15 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { notifyResourceUpdated } from '../repositories/marketplace.notifications.js';
+import { notifyResourceUpdated } from '../../repositories/marketplace.notifications.js';
 import type { PoolClient } from 'pg';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { requireResourceOwner } from '../../auth/domain/auth.authorization.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import { requireResourceOwner } from '../../../auth/domain/auth.authorization.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
-import { DIGITAL_MAX_BYTES, digitalId, validateDigitalFile } from './elibrary.validation.js';
+import { DIGITAL_MAX_BYTES, digitalId, validateDigitalFile } from '../validators/elibrary.validation.js';
 import { DIGITAL_BUCKET, digitalFileHasReference, downloadDigitalOriginal, findDigitalFile, findDigitalFileCandidates, findDigitalResource,
-  hasDigitalAcquisition, insertDigitalAttachment, lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from './elibrary.repository.js';
-import type { DigitalAttachment, DigitalResourceRow, DigitalStoredFile, DigitalUpload } from './elibrary.types.js';
+  hasDigitalAcquisition, insertDigitalAttachment, lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from '../repositories/elibrary.repository.js';
+import type { DigitalAttachment, DigitalResourceRow, DigitalStoredFile, DigitalUpload } from '../types/elibrary.types.js';
 
 const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo completar la operación del archivo.');
 const notFound = () => new ApiError(404, 'NOT_FOUND', 'El recurso o archivo no está disponible en tu institución.');

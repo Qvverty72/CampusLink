@@ -1,18 +1,18 @@
-import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
-import { probeElibraryDependencies } from './elibrary.repository.js';
-import type { ElibraryHealth } from './elibrary.types.js';
+import { createModuleHealthCheck } from '../../../../shared/health/module-health.js';
+import { probeElibraryDependencies } from '../repositories/elibrary.repository.js';
+import type { ElibraryHealth } from '../types/elibrary.types.js';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
-import { lockAccountContext } from '../../auth/repositories/auth.repository.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import type { DigitalPublication, DigitalUpload } from './elibrary.types.js';
-import { digitalId, parseDigitalInput, validateDigitalAcademics, validateDigitalFile } from './elibrary.validation.js';
-import { auditDigitalAcademics, findDigitalAcademicCatalog, replaceDigitalAcademics } from './elibrary.academics.repository.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
+import { lockAccountContext } from '../../../auth/repositories/auth.repository.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import type { DigitalPublication, DigitalUpload } from '../types/elibrary.types.js';
+import { digitalId, parseDigitalInput, validateDigitalAcademics, validateDigitalFile } from '../validators/elibrary.validation.js';
+import { auditDigitalAcademics, findDigitalAcademicCatalog, replaceDigitalAcademics } from '../repositories/elibrary.academics.repository.js';
 import { digitalFileHasReference, findDigitalCampus, findDigitalPublications, findDigitalOwnerSummary, insertDigitalPublication,
-  lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from './elibrary.repository.js';
+  lockDigitalPersistence, removeDigitalFile, uploadDigitalFile } from '../repositories/elibrary.repository.js';
 
 const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo completar la operación.');
 export function authorizeDigitalAccess(auth: VerifiedAuthConnection) {

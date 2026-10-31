@@ -1,11 +1,11 @@
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult } from '../../../../shared/pagination/pagination.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { authorizeDigitalAccess,currentDigitalContext } from './elibrary.service.js';
 import { digitalHistoryPage } from './elibrary.trades.service.js';
-import { findDigitalPublications } from './elibrary.repository.js';
-import { rankDigitalRecommendations } from './elibrary.recommendations.repository.js';
+import { findDigitalPublications } from '../repositories/elibrary.repository.js';
+import { rankDigitalRecommendations } from '../repositories/elibrary.recommendations.repository.js';
 export const DIGITAL_RECOMMENDATION_WEIGHTS=Object.freeze({career:30,subject:20,view:5,request:10,activity:1});
 export async function getDigitalRecommendations(auth:VerifiedAuthConnection,raw:unknown) {
   authorizeDigitalAccess(auth);const page=digitalHistoryPage(raw);

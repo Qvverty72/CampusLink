@@ -1,11 +1,11 @@
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
-import { downloadDigitalOriginal, findDigitalFile, findDigitalResource } from './elibrary.repository.js';
+import { downloadDigitalOriginal, findDigitalFile, findDigitalResource } from '../repositories/elibrary.repository.js';
 import { assertStoredDigitalFile } from './elibrary.files.service.js';
-import { digitalId } from './elibrary.validation.js';
-import { extractDigitalPreview } from './elibrary.preview.extractor.js';
+import { digitalId } from '../validators/elibrary.validation.js';
+import { extractDigitalPreview } from '../files/elibrary.preview.extractor.js';
 
 export async function getDigitalPreview(auth: VerifiedAuthConnection, rawId: unknown, rawFileId: unknown) {
   authorizeDigitalAccess(auth); const id = digitalId(rawId), fileId = digitalId(rawFileId,'fileId');

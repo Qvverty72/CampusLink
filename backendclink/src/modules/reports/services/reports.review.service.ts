@@ -6,9 +6,9 @@ import { requireCampusCapability } from '../../auth/domain/auth.authorization.js
 import { lockAccountContext } from '../../auth/repositories/auth.repository.js';
 import { accessRepository } from '../../users/repositories/access.repository.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { digitalId } from '../../marketplace/elibrary/elibrary.validation.js';
-import { assertStoredDigitalFile } from '../../marketplace/elibrary/elibrary.files.service.js';
-import { downloadDigitalOriginal, findDigitalResource } from '../../marketplace/elibrary/elibrary.repository.js';
+import { digitalId } from '../../marketplace/elibrary/validators/elibrary.validation.js';
+import { assertStoredDigitalFile } from '../../marketplace/elibrary/services/elibrary.files.service.js';
+import { downloadDigitalOriginal, findDigitalResource } from '../../marketplace/elibrary/repositories/elibrary.repository.js';
 import { findReportedDigitalFile, findReportedPhysicalImage, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution, readReportPeople } from '../repositories/reports.review.repository.js';
 import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../../marketplace/physicalgoods/repositories/physicalgoods.repository.js';
 import type { ReportEntityType, ReportStatus } from '../types/reports.types.js';

@@ -1,10 +1,10 @@
-import { ApiError } from '../../../shared/errors/api-error.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { assertMarketplaceRatingEligible,parseMarketplaceRating } from '../domain/marketplace.rating.js';
-import { digitalId } from './elibrary.validation.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import { assertMarketplaceRatingEligible,parseMarketplaceRating } from '../../domain/marketplace.rating.js';
+import { digitalId } from '../validators/elibrary.validation.js';
 import { withDigitalTradeContext } from './elibrary.trades.service.js';
-import { findDigitalTrade } from './elibrary.trades.repository.js';
-import { findDigitalRating,insertDigitalRating } from './elibrary.rating.repository.js';
+import { findDigitalTrade } from '../repositories/elibrary.trades.repository.js';
+import { findDigitalRating,insertDigitalRating } from '../repositories/elibrary.rating.repository.js';
 export async function rateDigitalOwner(auth:VerifiedAuthConnection,id:unknown,rawTrade:unknown,raw:unknown) {
   const score=parseMarketplaceRating(raw),tradeId=digitalId(rawTrade,'transactionId');
   return withDigitalTradeContext(auth,id,async(client,resource,current)=>{

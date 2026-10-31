@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import type { DigitalAcademicCatalog, DigitalAcademicOption, DigitalPublication } from './elibrary.types.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import type { DigitalAcademicCatalog, DigitalAcademicOption, DigitalPublication } from '../types/elibrary.types.js';
 
 /** La asignatura conserva un único UUID aunque forme parte de varias carreras. */
 export async function findDigitalAcademicCatalog(client: PoolClient, institutionId: string): Promise<DigitalAcademicCatalog> {

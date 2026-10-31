@@ -1,11 +1,11 @@
-import { inspectDependencies } from '../../../database/health.js';
-import { probeSupabaseTables } from '../../../database/supabase/health.js';
-import type { DependencyChecks } from '../../../shared/health/health.types.js';
+import { inspectDependencies } from '../../../../database/health.js';
+import { probeSupabaseTables } from '../../../../database/supabase/health.js';
+import type { DependencyChecks } from '../../../../shared/health/health.types.js';
 import type { PoolClient } from 'pg';
-import { createServerSupabaseClient } from '../../../database/supabase/client.js';
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { DigitalPublication, DigitalResourceRow, DigitalStoredFile, DigitalUpload } from './elibrary.types.js';
-import type { DigitalSearch } from './elibrary.search.service.js';
+import { createServerSupabaseClient } from '../../../../database/supabase/client.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import type { DigitalPublication, DigitalResourceRow, DigitalStoredFile, DigitalUpload } from '../types/elibrary.types.js';
+import type { DigitalSearch } from '../services/elibrary.search.service.js';
 
 export const DIGITAL_BUCKET = 'digital-resources';
 /** Predicado común para derechos existentes: solicitud/visibilidad por sí solas no conceden acceso. */

@@ -1,11 +1,11 @@
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult } from '../../../../shared/pagination/pagination.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { authorizeDigitalAccess,currentDigitalContext } from './elibrary.service.js';
 import { digitalHistoryPage } from './elibrary.trades.service.js';
-import { digitalId } from './elibrary.validation.js';
-import { findDigitalPublications,findOwnedDigitalActivity } from './elibrary.repository.js';
+import { digitalId } from '../validators/elibrary.validation.js';
+import { findDigitalPublications,findOwnedDigitalActivity } from '../repositories/elibrary.repository.js';
 async function getPrivateDigitalResources(auth:VerifiedAuthConnection,query:unknown,rawId:unknown,scope:'acquired'|'owned') {
   authorizeDigitalAccess(auth);const pagination=digitalHistoryPage(query),id=rawId===undefined?null:digitalId(rawId);
   try{return await withPostgresTransaction(async client=>{

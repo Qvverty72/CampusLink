@@ -1,9 +1,9 @@
 import { ApiError } from '../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { digitalId } from '../../marketplace/elibrary/elibrary.validation.js';
-import { digitalConfirmations,findDigitalTrade } from '../../marketplace/elibrary/elibrary.trades.repository.js';
-import { withDigitalTradeContext } from '../../marketplace/elibrary/elibrary.trades.service.js';
-import { findDigitalPublications } from '../../marketplace/elibrary/elibrary.repository.js';
+import { digitalId } from '../../marketplace/elibrary/validators/elibrary.validation.js';
+import { digitalConfirmations,findDigitalTrade } from '../../marketplace/elibrary/repositories/elibrary.trades.repository.js';
+import { withDigitalTradeContext } from '../../marketplace/elibrary/services/elibrary.trades.service.js';
+import { findDigitalPublications } from '../../marketplace/elibrary/repositories/elibrary.repository.js';
 import { insertContentReport,selectOwnPublicationReport } from '../repositories/reports.repository.js';
 import { digitalReportSnapshot } from '../repositories/reports.elibrary.repository.js';
 import { parseContentReport } from '../validators/reports.validation.js';

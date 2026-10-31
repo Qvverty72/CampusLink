@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PDFDocument, PDFHexString, PDFName, PDFString } from 'pdf-lib';
-import { DIGITAL_MAX_BYTES, validateDigitalFile } from '../src/modules/marketplace/elibrary/elibrary.validation.js';
+import { DIGITAL_MAX_BYTES, validateDigitalFile } from '../src/modules/marketplace/elibrary/validators/elibrary.validation.js';
 import { ApiError } from '../src/shared/errors/api-error.js';
 
 const upload = (bytes: Buffer) => ({ name: 'material.pdf', mimeType: 'application/pdf', bytes });

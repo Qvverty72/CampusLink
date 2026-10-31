@@ -1,13 +1,13 @@
-import {withPostgresTransaction} from '../../../database/supabase/postgres.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import {parsePaginationQuery} from '../../../shared/pagination/pagination.js';
-import type {VerifiedAuthConnection} from '../../auth/types/auth.types.js';
+import {withPostgresTransaction} from '../../../../database/supabase/postgres.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import {parsePaginationQuery} from '../../../../shared/pagination/pagination.js';
+import type {VerifiedAuthConnection} from '../../../auth/types/auth.types.js';
 import {authorizeDigitalAccess,currentDigitalContext} from './elibrary.service.js';
 import {digitalAction,digitalTradeDto} from './elibrary.trades.service.js';
-import {digitalId} from './elibrary.validation.js';
-import {activityCounts,activityRequests,activityResources,activityTradeCounts,activityTrades} from './elibrary.activity.repository.js';
-import {findDigitalPublications,findOwnedDigitalActivity} from './elibrary.repository.js';
-import {findOwnerRatings} from '../repositories/marketplace.ratings.repository.js';
+import {digitalId} from '../validators/elibrary.validation.js';
+import {activityCounts,activityRequests,activityResources,activityTradeCounts,activityTrades} from '../repositories/elibrary.activity.repository.js';
+import {findDigitalPublications,findOwnedDigitalActivity} from '../repositories/elibrary.repository.js';
+import {findOwnerRatings} from '../../repositories/marketplace.ratings.repository.js';
 
 export async function getDigitalActivity(auth:VerifiedAuthConnection,raw:unknown,kind:'counts'|'requests'|'resources'|'transactions'|'publications'|'resource',rawId?:unknown){
  authorizeDigitalAccess(auth);

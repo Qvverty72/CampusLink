@@ -1,7 +1,7 @@
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { digitalId } from '../../marketplace/elibrary/elibrary.validation.js';
+import { digitalId } from '../../marketplace/elibrary/validators/elibrary.validation.js';
 import { hideReportedActivity } from '../../activities/repositories/activities.management.repository.js';
 import { authorizedReview } from './reports.review.service.js';
 import { findReportReview, readReportBackground, readReportPeople } from '../repositories/reports.review.repository.js';

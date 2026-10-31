@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
-import type { PaginationParams } from '../../../shared/http/api.types.js';
-import type { DigitalRequestRow, DigitalTradeRow } from './elibrary.types.js';
+import type { PaginationParams } from '../../../../shared/http/api.types.js';
+import type { DigitalRequestRow, DigitalTradeRow } from '../types/elibrary.types.js';
 
 export async function digitalTradeParticipants(client: PoolClient, id: string, institutionId: string, requestId: string | null, tradeId: string | null) {
   return (await client.query<{ ownerId:string; receiverId:string|null }>(`SELECT p.propietario_id AS "ownerId",COALESCE(t.receptor_id,r.solicitante_id) AS "receiverId"

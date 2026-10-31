@@ -1,6 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import { pathToFileURL } from 'node:url';
-import { ApiError } from '../../../shared/errors/api-error.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
 
 let running = 0;
 const script = `
