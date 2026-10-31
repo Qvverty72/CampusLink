@@ -1,4 +1,4 @@
-import type { AnalyticalReport } from './analytics.types.js';
+import type { AnalyticalReport } from '../types/analytics.types.js';
 
 /** Vocabulario de presentación; pruebas lo contrastan con ANALYTICS_COPY del cliente. */
 export const REPORT_KPIS = {

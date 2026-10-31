@@ -1,6 +1,6 @@
 import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
-import { exportAnalyticalReportController, generateAnalyticalReportController, getAnalyticalReportController, getAnalyticsHealthController, getDashboardController, getDashboardOptionsController, listHistoricalReportsController, recordResourceViewController } from './analytics.controller.js';
+import { exportAnalyticalReportController, generateAnalyticalReportController, getAnalyticalReportController, getAnalyticsHealthController, getDashboardController, getDashboardOptionsController, listHistoricalReportsController, recordResourceViewController } from './controllers/analytics.controller.js';
 import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
 
 // El servicio exige reportería por campus para las consultas de métricas.

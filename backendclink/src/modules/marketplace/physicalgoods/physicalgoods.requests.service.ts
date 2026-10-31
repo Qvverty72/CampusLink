@@ -14,8 +14,8 @@ import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setP
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
 import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
-import { parseResourceOperationId, resourceOperationKey } from '../../analytics/analytics.service.js';
-import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../analytics/services/analytics.service.js';
+import { findResourceRequestOperation } from '../../analytics/repositories/analytics.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
 import {findOwnerRatings,type OwnerRatingSummary} from '../marketplace.ratings.repository.js';
 import {findPhysicalgoodsOriginalTermsBatch,findPhysicalgoodsRequestTerms,type PhysicalgoodsTerms} from './physicalgoods.price-history.repository.js';

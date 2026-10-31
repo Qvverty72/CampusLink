@@ -1,14 +1,17 @@
-import { createModuleHealthCheck } from '../../shared/health/module-health.js';
-import { probeAnalyticsDependencies } from './analytics.repository.js';
-import type { AnalyticalReport, AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount, HistoricalReportsQuery } from './analytics.types.js';
-import { ANALYTICS_TIME_ZONE, dashboardIntervals } from './analytics.periods.js';
+import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
+import { probeAnalyticsDependencies } from '../repositories/analytics.repository.js';
+import type { AnalyticalReport, AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount, HistoricalReportsQuery } from '../types/analytics.types.js';
+import { ANALYTICS_TIME_ZONE, dashboardIntervals } from '../domain/analytics.periods.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { ApiError } from '../../shared/errors/api-error.js';
-import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { lockAccountContext } from '../auth/repositories/auth.repository.js';
-import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/domain/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import { countActivityInteractions, findAnalyticalReport, findAnalyticsResource, insertAnalyticalReport, insertResourceView, readAnalyticsPermissions, readDashboardMetrics, readDashboardOptions, readHistoricalReports, readReportAuthorEmail } from './analytics.repository.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
+import { lockAccountContext } from '../../auth/repositories/auth.repository.js';
+import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { countActivityInteractions } from '../repositories/analytics.activities.repository.js';
+import { findAnalyticalReport, insertAnalyticalReport, readAnalyticsPermissions, readHistoricalReports, readReportAuthorEmail } from '../repositories/analytics.reports.repository.js';
+import { findAnalyticsResource, insertResourceView } from '../repositories/analytics.repository.js';
+import { readDashboardMetrics, readDashboardOptions } from '../repositories/analytics.dashboard.repository.js';
 
 export const getAnalyticsHealth: () => Promise<AnalyticsHealth> =
   createModuleHealthCheck('analytics', probeAnalyticsDependencies);
@@ -214,8 +217,8 @@ export async function exportAnalyticalReport(auth: VerifiedAuthConnection, rawId
   }
   const report = await getAnalyticalReport(auth, rawId);
   try {
-    const { renderReportExcel, renderReportPdf } = await import('./analytics.export.js');
-    const { reportFilename } = await import('./analytics.presentation.js');
+    const { renderReportExcel, renderReportPdf } = await import('../exports/analytics.export.js');
+    const { reportFilename } = await import('../domain/analytics.presentation.js');
     const bytes = rawFormat === 'pdf' ? await renderReportPdf(report) : await renderReportExcel(report);
     // No mantener locks durante serialización; detectar revocación/suspensión durante la generación.
     await withPostgresTransaction(async client => {

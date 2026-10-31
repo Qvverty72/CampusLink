@@ -999,7 +999,7 @@ test('explicit views feed recommendations once per opening, GETs never record vi
   const saved=await service.createDigitalPublication(auth,input({title:'Interes '+randomUUID()}),file()),receiver=await peer();current=receiver;
   await get('/'+saved.id);await get('/'+saved.id);
   assert.equal((await db.query('SELECT * FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
-  const view=await import('../src/modules/analytics/analytics.service.js'),operationId=randomUUID();
+  const view=await import('../src/modules/analytics/services/analytics.service.js'),operationId=randomUUID();
   await view.recordResourceView(receiver,saved.id,{operationId});await view.recordResourceView(receiver,saved.id,{operationId});
   assert.equal((await db.query("SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2 AND tipo_interaccion='VISTA'",[receiver.userId,saved.id])).rows.length,1);
   await digitalJson('/'+saved.id+'/requests','POST',{messageCode:'LIB_QA_INTERES'});
@@ -1042,7 +1042,7 @@ test('request idempotency survives resolved requests and lost responses, without
 
 test('resource history separates views/requests/transitions and survives soft deletion and actor campus changes',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
-  const analytics=await import('../src/modules/analytics/analytics.service.js'),repository=await import('../src/modules/analytics/analytics.repository.js');
+  const analytics=await import('../src/modules/analytics/services/analytics.service.js'),repository=await import('../src/modules/analytics/repositories/analytics.repository.js');
   await analytics.recordResourceView(receiver,saved.id,{operationId:randomUUID()});
   const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},randomUUID());
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'}),tradeId=accepted.transactionId!;
@@ -1065,7 +1065,7 @@ test('failed digital confirmation persists no transition and cancellation retain
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'}),id=accepted.transactionId!;
   await trades.transitionDigitalTrade(auth,saved.id,id,{},'CONFIRMAR');failDigitalAccess=true;
   await assert.rejects(trades.transitionDigitalTrade(receiver,saved.id,id,{},'CONFIRMAR'),{status:503});failDigitalAccess=false;
-  const repository=await import('../src/modules/analytics/analytics.repository.js');
+  const repository=await import('../src/modules/analytics/repositories/analytics.repository.js');
   const read=async()=> (await repository.readResourceAnalyticsEvents(db as never,campus,'2000-01-01','2100-01-01')).filter(row=>row.transactionId===id);
   assert.deepEqual((await read()).map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION']);
   await trades.transitionDigitalTrade(receiver,saved.id,id,{},'CANCELAR');await trades.transitionDigitalTrade(receiver,saved.id,id,{},'CANCELAR');

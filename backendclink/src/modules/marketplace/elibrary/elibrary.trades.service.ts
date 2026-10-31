@@ -13,8 +13,8 @@ import { activeDigitalRequest, confirmDigitalParticipant, digitalConfirmations, 
   lockDigitalProfiles, setDigitalRequestStatus, setDigitalTradeStatus } from './elibrary.trades.repository.js';
 import { findDigitalRating } from './elibrary.rating.repository.js';
 import { digitalParticipantNames } from './elibrary.activity.repository.js';
-import { parseResourceOperationId, resourceOperationKey } from '../../analytics/analytics.service.js';
-import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../analytics/services/analytics.service.js';
+import { findResourceRequestOperation } from '../../analytics/repositories/analytics.repository.js';
 
 export function digitalAction(raw: unknown, fields: string[] = []): Record<string,unknown> {
   if (!raw || typeof raw!=='object' || Array.isArray(raw) || Object.keys(raw).some(key=>!fields.includes(key))) return invalidDigital('body','La solicitud contiene campos no admitidos.');

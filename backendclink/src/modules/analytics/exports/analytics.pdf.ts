@@ -3,9 +3,9 @@ import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import type { AnalyticalReport } from './analytics.types.js';
+import type { AnalyticalReport } from '../types/analytics.types.js';
 import type { SavedSection } from './analytics.export.js';
-import { REPORT_KPIS, REPORT_STATES, reportPeriodLabel, reportSavedLabel } from './analytics.presentation.js';
+import { REPORT_KPIS, REPORT_STATES, reportPeriodLabel, reportSavedLabel } from '../domain/analytics.presentation.js';
 
 /** Maquetación únicamente: todas las cifras y metadatos llegan de la instantánea original. */
 export async function renderSavedReportPdf(report: AnalyticalReport, metadata: [string, string][], sections: SavedSection[], glossary: string[][]): Promise<Buffer> {

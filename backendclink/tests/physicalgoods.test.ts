@@ -1214,7 +1214,7 @@ test('HTTP request counters are authenticated, no-store, unfiltered and revalida
 const transactionRows=(publicationId:string)=>db.query('select * from transaccion_recurso where publicacion_id=$1 order by iniciada_en,id',[publicationId]);
 
 test('physical resource openings validate campus and keep one view per operation without gallery refresh signals',async()=>{
-  const saved=await create(auth,input()),viewer=await otherActor(),analytics=await import('../src/modules/analytics/analytics.service.js');
+  const saved=await create(auth,input()),viewer=await otherActor(),analytics=await import('../src/modules/analytics/services/analytics.service.js');
   await imagesService.getPhysicalgoodsGallery(viewer,saved.id);await imagesService.getPhysicalgoodsGallery(viewer,saved.id);
   assert.equal((await db.query('SELECT id FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
   const operationId=randomUUID();await Promise.all([analytics.recordResourceView(viewer,saved.id,{operationId}),analytics.recordResourceView(viewer,saved.id,{operationId})]);
@@ -1243,7 +1243,7 @@ test('physical transaction analytics retains reservation, first confirmation and
   await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
-  const repository=await import('../src/modules/analytics/analytics.repository.js');
+  const repository=await import('../src/modules/analytics/repositories/analytics.repository.js');
   const read=async()=> (await repository.readResourceAnalyticsEvents(db as never,campus,'2000-01-01','2100-01-01')).filter(row=>row.transactionId===id);
   const events=await read();assert.deepEqual(events.map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION','TRANSACCION_CANCELADA']);
   assert.deepEqual(events.map(row=>row.userId),[auth.userId,auth.userId,first.userId]);

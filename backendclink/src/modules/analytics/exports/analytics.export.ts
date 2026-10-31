@@ -4,8 +4,8 @@ import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import type { AnalyticalReport, DashboardMetrics, DashboardPeriod } from './analytics.types.js';
-import { REPORT_KPIS, REPORT_STATES, reportPeriodLabel, reportSavedLabel } from './analytics.presentation.js';
+import type { AnalyticalReport, DashboardMetrics, DashboardPeriod } from '../types/analytics.types.js';
+import { REPORT_KPIS, REPORT_STATES, reportPeriodLabel, reportSavedLabel } from '../domain/analytics.presentation.js';
 
 /** Interpretación histórica de la versión guardada; no consulta ni ejecuta el cálculo actual. */
 const definitions = {
