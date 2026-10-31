@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ApiError } from './apiError.js';
+import { ApiError } from '../errors/api-error.js';
 
 export interface RateLimitStore {
   consume(key: string, windowSeconds: number): Promise<{ count: number; retryAfterSeconds: number }>;

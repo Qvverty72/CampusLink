@@ -335,7 +335,7 @@ test('HTTP report is authenticated, scoped, validated and private; no admin/repo
     return Response.json([]);
   };
   const { createReportsRouter } = await import('../src/modules/reports/reports.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   let saves = 0, loseCommit = false;
   const uncertainTransaction: typeof transaction = async operation => {
     const receipt = await transaction(operation);

@@ -1,8 +1,8 @@
 import { inspectDependencies } from '../../database/health.js';
 import { probeSupabaseTables } from '../../database/supabase/health.js';
-import type { DependencyChecks } from '../../types/api.types.js';
+import type { DependencyChecks } from '../../shared/health/health.types.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { PoolClient } from 'pg';
 import type { ActivityReportReceipt, ContentReportReceipt, PhysicalgoodsReportReceipt, NewActivityReport, NewContentReport } from './reports.types.js';
 import { lockAccountContext } from '../auth/auth.repository.js';

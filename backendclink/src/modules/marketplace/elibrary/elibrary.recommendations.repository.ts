@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { PaginationParams } from '../../../types/api.js';
+import type { PaginationParams } from '../../../shared/http/api.types.js';
 import { DIGITAL_ACCESS_PROOF } from './elibrary.repository.js';
 export interface DigitalRecommendationSignals {id:string;careerMatches:number;subjectMatches:number;ownView:boolean;ownRequest:boolean;activity:number;score:number}
 export async function rankDigitalRecommendations(client:PoolClient,institutionId:string,userId:string,page:PaginationParams,weights:{career:number;subject:number;view:number;request:number;activity:number}) {

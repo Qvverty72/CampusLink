@@ -1,7 +1,7 @@
 import { inspectDependencies } from '../../database/health.js';
 import { probeSupabaseTables } from '../../database/supabase/health.js';
 import { probeMongoCollections } from '../../database/mongodb/health.js';
-import type { DependencyChecks } from '../../types/api.types.js';
+import type { DependencyChecks } from '../../shared/health/health.types.js';
 import type { PoolClient } from 'pg';
 import type { AnalyticalReport, DashboardGrouping, DashboardOptions, DashboardQuery, DashboardScope, HistoricalReportsQuery, HistoricalReportSummary, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
 import type { AuthAssignment } from '../auth/auth.types.js';
@@ -148,7 +148,7 @@ export function countActivityInteractions(campusId: string | string[], from: Dat
 export async function countActivityInteractions(campusId: string | string[], from: Date, until: Date, userIds?: string[], windows?: AnalyticsWindow[], grouping: DashboardGrouping = 'month') {
   const campusIds = typeof campusId === 'string' ? [campusId] : campusId;
   if (!campusIds.length || campusIds.some(id => !id) || !Number.isFinite(from.getTime()) || !Number.isFinite(until.getTime()) || until <= from) throw new Error('Invalid metric scope.');
-  const { getMongoDb } = await import('../../config/mongodb.js');
+  const { getMongoDB: getMongoDb } = await import('../../database/mongodb/client.js');
   const group = { $group: { _id: '$type', count: { $sum: 1 }, legacy: { $sum: { $cond: [{ $eq: ['$provenance', 'LEGACY_STATE'] }, 1, 0] } } } };
   const pipeline = [
     { $match: { campusId: typeof campusId === 'string' ? campusId : { $in: campusIds }, ...(userIds ? { userId: { $in: userIds } } : {}),

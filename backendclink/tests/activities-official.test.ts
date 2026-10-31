@@ -161,7 +161,7 @@ test('HTTP official flow enforces fresh permissions, returns official list/detai
     throw new Error('Unexpected auth request');
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({
     ...dependencies(document => documents.push(document)), findActivities: async () => documents,
     findActivity: async (campus, id) => documents.find(document => document.campusId === campus && document._id.toHexString() === id) ?? null,

@@ -1,5 +1,5 @@
 import type { Db } from 'mongodb';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 
 /** Todas las escrituras de actividad requieren este índice único completo, incluso la creación del organizador. */
 export async function requireParticipationIndex(db: Db): Promise<void> {

@@ -1,6 +1,6 @@
 import type { AuditEntry } from './access.types.js';
-import type { PaginationParams } from '../../types/api.js';
-import { createPaginatedResult } from '../../services/pagination.js';
+import type { PaginationParams } from '../../shared/http/api.types.js';
+import { createPaginatedResult } from '../../shared/pagination/pagination.js';
 
 const timestamp = (value: string) => value.replace(/\.(\d+)Z$/, (_, fraction: string) => '.' + fraction.padEnd(6, '0') + 'Z');
 /** Orden total compartido: preserva los microsegundos SQL y los milisegundos Mongo. */

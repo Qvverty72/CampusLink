@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { assertMarketplaceRatingEligible } from '../marketplace.rating.js';
-import { ApiError } from '../../../services/api-response.js';
-import { createPaginatedResult,parsePaginationQuery } from '../../../services/pagination.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { createPaginatedResult,parsePaginationQuery } from '../../../shared/pagination/pagination.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';

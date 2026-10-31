@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import type { PoolClient } from 'pg';
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { requireResourceOwner } from '../../auth/auth.authorization.js';

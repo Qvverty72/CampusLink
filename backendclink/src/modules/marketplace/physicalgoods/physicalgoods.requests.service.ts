@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { notifyResourceRequest } from '../marketplace.notifications.js';
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
@@ -13,7 +13,7 @@ import { findActivePhysicalgoodsRequest, findPhysicalgoodsRequestMessage, insert
 import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setPhysicalgoodsPublicationStatus,countOwnPhysicalgoodsTransactions } from './physicalgoods.transactions.repository.js';
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
 import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
-import { createPaginatedResult } from '../../../services/pagination.js';
+import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
 import { parseResourceOperationId, resourceOperationKey } from '../../analytics/analytics.service.js';
 import { findResourceRequestOperation } from '../../analytics/analytics.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';

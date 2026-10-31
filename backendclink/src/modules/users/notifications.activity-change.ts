@@ -4,7 +4,7 @@ import type { ActivitySnapshot } from '../activities/activities.edit.types.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { resolveActivityLocation, spatialBuildings } from '../activities/activities.location.js';
 import { toVisibleActivity } from '../activities/activities.policy.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { NotificationActivityChangeDto, NotificationActivitySnapshot } from './notifications.types.js';
 
 /** Vincula un aviso autorizado al snapshot exacto, aunque existan ediciones posteriores. */

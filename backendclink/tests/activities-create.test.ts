@@ -172,7 +172,7 @@ test('HTTP creation requires identity, rejects overrides, returns 201 JOINED wit
     return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   let writes = 0;
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({
     getActiveMap: async () => map, now: () => now,

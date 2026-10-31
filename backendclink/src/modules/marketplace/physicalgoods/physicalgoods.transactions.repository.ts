@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { PhysicalgoodsConfirmationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionDetailRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
-import type { PaginationParams } from '../../../types/api.js';
+import type { PaginationParams } from '../../../shared/http/api.types.js';
 export { resourceCoordinationMessages as physicalgoodsCoordinationMessages, insertResourceCoordination as insertPhysicalgoodsCoordination } from '../marketplace.messages.repository.js';
 
 const confirmationProjection = `usuario_id,rol_confirmante,

@@ -1,4 +1,4 @@
-import type { ModuleHealth } from '../../types/api.types.js';
+import type { ModuleHealth } from '../../shared/health/health.types.js';
 import type { ActivityDto } from '../activities/activities.types.js';
 import type { ActivityDependencies } from '../activities/activities.service.js';
 

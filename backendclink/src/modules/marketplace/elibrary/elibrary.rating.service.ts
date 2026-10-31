@@ -1,4 +1,4 @@
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { assertMarketplaceRatingEligible,parseMarketplaceRating } from '../marketplace.rating.js';
 import { digitalId } from './elibrary.validation.js';

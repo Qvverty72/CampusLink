@@ -1,4 +1,4 @@
-import { ApiError } from '../../services/api-response.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { AuthProfile, VerifiedAuthConnection } from './auth.types.js';
 
 /** Exige que el perfil pertenezca al usuario y esté ACTIVA, sin marca de eliminación. */

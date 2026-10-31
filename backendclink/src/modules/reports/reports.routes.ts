@@ -1,8 +1,8 @@
-import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { getReportsHealthController, getOwnActivityReportController, createActivityReportController, createPhysicalgoodsReportController } from './reports.controller.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
-import { validateRequest } from '../../middleware/validateRequest.js';
+import { validateRequest } from '../../shared/http/validate-request.js';
 import { parseActivityId, parseEmptyActivityInput } from '../activities/activities.validation.js';
 import { parseActivityReport, parseContentReport } from './reports.validation.js';
 import type { ReportsDependencies } from './reports.types.js';

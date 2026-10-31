@@ -1,6 +1,6 @@
 import { Temporal } from '@js-temporal/polyfill';
 import { createHash } from 'node:crypto';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { ActivityRecurrencePreview, CreateActivitySeriesInput, ActivityType } from './activities.types.js';
 
 export const RECURRENCE_LIMITS = { occurrences: 200, interval: 52, years: 2 } as const;

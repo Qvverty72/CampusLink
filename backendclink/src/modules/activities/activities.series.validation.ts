@@ -1,5 +1,5 @@
 import { Temporal } from '@js-temporal/polyfill';
-import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../types/api.js';
+import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../shared/http/api.types.js';
 import { parseCreateActivity } from './activities.create.validation.js';
 import { RECURRENCE_LIMITS } from './activities.recurrence.js';
 import type { ActivityRecurrenceRule, CreateActivitySeriesInput, CreateActivityInput } from './activities.types.js';

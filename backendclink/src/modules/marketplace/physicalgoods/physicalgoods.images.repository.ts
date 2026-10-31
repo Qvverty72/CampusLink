@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { PaginationParams } from '../../../types/api.js';
+import type { PaginationParams } from '../../../shared/http/api.types.js';
 import type { PhysicalgoodsDetailRow, PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsOwnRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
 import { PHYSICALGOODS_BUCKET } from './physicalgoods.repository.js';
 

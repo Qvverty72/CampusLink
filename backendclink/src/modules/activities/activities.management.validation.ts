@@ -1,4 +1,4 @@
-import type { RequestParser, ApiErrorDetail } from '../../types/api.js';
+import type { RequestParser, ApiErrorDetail } from '../../shared/http/api.types.js';
 
 /** Acepta únicamente página y tamaño de página, con topes para mantener acotada la consulta. */
 export const parseActivityParticipantsQuery: RequestParser = input => {

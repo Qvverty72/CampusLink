@@ -1,4 +1,4 @@
-import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { loginAccountController, recoverAccountController, resetAccountPasswordController, completeInstitutionalRegistrationController, confirmInstitutionalRegistrationController, getAuthHealthController, getAuthIdentityController, getRegistrationOptionsController, registerInstitutionalAccountController, resendInstitutionalConfirmationController } from './auth.controller.js';
 import { requireAuthentication, requireVerifiedIdentity } from './auth.middleware.js';

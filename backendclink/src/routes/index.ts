@@ -1,4 +1,4 @@
-import { createPolicyRouter, publicEndpoint } from '../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { createActivitiesRouter } from '../modules/activities/activities.routes.js';
 import type { ActivityDependencies } from '../modules/activities/activities.service.js';
@@ -10,9 +10,9 @@ import { createElibraryRouter } from '../modules/marketplace/elibrary/elibrary.r
 import { createPhysicalgoodsRouter } from '../modules/marketplace/physicalgoods/physicalgoods.routes.js';
 import { createReportsRouter } from '../modules/reports/reports.routes.js';
 import { createUsersRouter } from '../modules/users/users.routes.js';
-import { getReadiness } from '../services/readiness.js';
-import { sendError, sendSuccess } from '../services/api-response.js';
-import { ApiError } from '../services/apiError.js';
+import { getReadiness } from '../readiness.js';
+import { sendError, sendSuccess } from '../shared/http/api-response.js';
+import { ApiError } from '../shared/errors/api-error.js';
 import type { ActiveMapLookup } from '../modules/maps/map.service.js';
 
 export interface ApiRouterOptions {

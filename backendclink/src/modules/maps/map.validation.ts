@@ -1,4 +1,4 @@
-import type { RequestParser, ValidationResult } from '../../types/api.js';
+import type { RequestParser, ValidationResult } from '../../shared/http/api.types.js';
 
 export interface ActiveMapRouteParams {
   campusId: string;

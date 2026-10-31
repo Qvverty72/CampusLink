@@ -1,8 +1,8 @@
-import { createModuleHealthCheck } from '../../../services/module-health.js';
+import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
 import { probePhysicalgoodsDependencies } from './physicalgoods.repository.js';
 import type { PhysicalgoodsHealth } from './physicalgoods.types.js';
 import { randomUUID } from 'node:crypto';
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import type { PhysicalgoodsCatalog, PhysicalgoodsCreated } from './physicalgoods.types.js';

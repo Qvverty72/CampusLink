@@ -1,6 +1,6 @@
 import type { Response } from 'express';
-import type { ModuleHealth } from '../types/api.types.js';
-import { sendError, sendSuccess } from './api-response.js';
+import type { ModuleHealth } from './health.types.js';
+import { sendError, sendSuccess } from '../http/api-response.js';
 
 /** Evita almacenar respuestas de salud y asigna 503 cuando falta alguna dependencia. */
 export function sendModuleHealth(response: Response, health: ModuleHealth): void {

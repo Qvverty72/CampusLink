@@ -274,7 +274,7 @@ test('HTTP authenticated owner preview and PATCH enforce confirmation; shared de
     if (url.pathname === '/auth/v1/user') return Response.json({ id: userId, email: 'test@duocuc.cl', email_confirmed_at: now.toISOString() });
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
-  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js'); const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js'); const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({ ...deps(value), findActivity: async () => value,
     findParticipation: async () => null, findOrganizer: async () => ({ name: 'Creador' }), saveEdit: async plan => ({ activityId: plan.activityId, revision: 1, updatedCount: 1 }) })); app.use(apiErrorHandler);
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));

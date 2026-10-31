@@ -345,7 +345,7 @@ test('HTTP recurrence requires current publication permission for the series bro
     if (url.pathname.endsWith('/usuario_permiso')) return Response.json(allowed ? [{ campus_id: campusId, permiso: { id: 'publish', nombre: 'PUBLICAR_EVENTO' } }] : []);
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
-  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js'); const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js'); const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({ ...basicDeps(),
     createSeries: async (value, values) => { series = value; documents = values; return values.map(document => toVisibleActivity(document, campusId, now, spatialBuildings(map))!); },
     findSeries: async () => series, findSeriesOccurrences: async () => documents, findActivities: async () => documents,

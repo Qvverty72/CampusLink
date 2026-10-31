@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { requireResourceOwner } from '../auth/auth.authorization.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
 import type { ActivityDocument } from './activities.types.js';
 import type { ActivityEditDependencies, ActivityEditPreview, ActivityEditResult, ActivitySnapshot, EditActivityInput } from './activities.edit.types.js';

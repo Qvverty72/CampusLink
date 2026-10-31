@@ -1,8 +1,8 @@
-import type { ErrorRequestHandler } from 'express';
+import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { MongoError } from 'mongodb';
 
-import { ApiError } from '../services/apiError.js';
-import { sendApiError } from '../services/apiResponse.js';
+import { ApiError } from '../errors/api-error.js';
+import { sendApiError } from './api-response.js';
 
 interface BodyParserError extends Error {
   type?: string;
@@ -90,4 +90,9 @@ export const apiErrorHandler: ErrorRequestHandler = (
     'INTERNAL_SERVER_ERROR',
     'Internal server error.',
   );
+};
+
+/** Conserva el 404 de rutas ajenas a la API versionada. */
+export const notFoundHandler: RequestHandler = (_request, _response, next) => {
+  next(new ApiError(404, 'NOT_FOUND', 'Route not found.'));
 };

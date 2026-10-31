@@ -462,7 +462,7 @@ test('HTTP inbox/read/delete require identity, reject overrides and return own d
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
   const { createNotificationsRouter } = await import('../src/modules/users/notifications.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json());
   app.use('/api/v1/users/me/notifications', createNotificationsRouter((identity, input) => operation(identity, input, transaction))); app.use(apiErrorHandler);
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));

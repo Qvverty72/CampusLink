@@ -1,4 +1,4 @@
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';

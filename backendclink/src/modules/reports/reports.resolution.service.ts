@@ -1,5 +1,5 @@
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
 import { hideReportedActivity } from '../activities/activities.management.repository.js';

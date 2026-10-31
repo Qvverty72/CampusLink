@@ -1,4 +1,4 @@
-import type { RequestParser, ApiErrorDetail, ValidationResult } from '../../types/api.js';
+import type { RequestParser, ApiErrorDetail, ValidationResult } from '../../shared/http/api.types.js';
 import type { ContentReportInput, ReportResolutionInput } from './reports.types.js';
 
 /** Contrato persistido en reporte_contenido.motivo; conservar códigos aunque cambien etiquetas. */

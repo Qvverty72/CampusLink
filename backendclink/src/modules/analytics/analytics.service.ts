@@ -1,9 +1,9 @@
-import { createModuleHealthCheck } from '../../services/module-health.js';
+import { createModuleHealthCheck } from '../../shared/health/module-health.js';
 import { probeAnalyticsDependencies } from './analytics.repository.js';
 import type { AnalyticalReport, AnalyticsHealth, DashboardData, DashboardMetrics, DashboardPeriod, DashboardQuery, DemandCount, HistoricalReportsQuery } from './analytics.types.js';
 import { ANALYTICS_TIME_ZONE, dashboardIntervals } from './analytics.periods.js';
 import { createHash, randomUUID } from 'node:crypto';
-import { ApiError } from '../../services/api-response.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
 import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';

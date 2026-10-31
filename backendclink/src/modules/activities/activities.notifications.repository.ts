@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityNotificationEvent } from './activities.notifications.js';
 import { occurrencePublicationNotification } from './activities.notifications.js';

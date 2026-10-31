@@ -1,4 +1,4 @@
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { digitalAction,withDigitalTradeContext } from './elibrary.trades.service.js';

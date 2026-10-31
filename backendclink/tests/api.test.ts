@@ -6,13 +6,13 @@ import { after, before, test } from 'node:test';
 import express, { type Express } from 'express';
 import { ObjectId } from 'mongodb';
 
-import { apiErrorHandler } from '../src/middleware/apiErrorHandler.js';
-import { getValidatedRequest, validateRequest } from '../src/middleware/validateRequest.js';
+import { apiErrorHandler } from '../src/shared/http/error-handler.js';
+import { getValidatedRequest, validateRequest } from '../src/shared/http/validate-request.js';
 import { parseActiveMapParams } from '../src/modules/maps/map.validation.js';
-import { ApiError } from '../src/services/apiError.js';
-import { createPaginatedResult, parsePaginationQuery } from '../src/services/pagination.js';
-import { sendSuccess } from '../src/services/apiResponse.js';
-import type { RequestParser } from '../src/types/api.js';
+import { ApiError } from '../src/shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../src/shared/pagination/pagination.js';
+import { sendSuccess } from '../src/shared/http/api-response.js';
+import type { RequestParser } from '../src/shared/http/api.types.js';
 import { ApiClientError, fetchActiveCampusMap } from '../../frontendclink/src/three/api/mapApi.js';
 
 /**

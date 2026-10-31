@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
-import { sendModuleHealth } from '../../services/health-response.js';
+import { sendModuleHealth } from '../../shared/health/health-response.js';
 import { getUsersHealth } from './users.service.js';
 import { getAcademicProfile, getAcademicOptions, updateAcademicProfile } from './users.service.js';
-import { sendSuccess } from '../../services/api-response.js';
+import { sendSuccess } from '../../shared/http/api-response.js';
 import type { AuthLocals } from '../auth/auth.types.js';
 
 type ProfileHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;

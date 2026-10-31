@@ -128,7 +128,7 @@ test('[F2.2-06] inactive relational campus blocks Mongo reads and provider failu
 });
 
 test('[F2.2-06] Mongo outage uses sanitized HTTP 503 without a false successful acknowledgement', async () => {
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.get('/', () => { throw new MongoNetworkError('mongodb://private:password@host'); }); app.use(apiErrorHandler);
   await withServer(app, async base => {
     const response = await network(base); assert.equal(response.status, 503);
@@ -173,8 +173,8 @@ test('[F2.2-08] operational activity reads omit retired content without mutating
 });
 
 test('[F2.2-10] endpoint without a policy denies 401/403 before executing its controller, including route().get', async () => {
-  const { createPolicyRouter, publicEndpoint } = await import('../src/middleware/endpoint-policy.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { createPolicyRouter, publicEndpoint } = await import('../src/shared/http/endpoint-policy.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const router = createPolicyRouter(); let executions = 0;
   const { requireAuthentication } = await import('../src/modules/auth/auth.middleware.js');
   router.get('/forgotten', (_request, response) => { executions++; response.json({ leaked: true }); });
@@ -200,7 +200,7 @@ test('[F2.2-10] endpoint without a policy denies 401/403 before executing its co
 
 test('[F2.2-10] every mounted endpoint explicitly declares public, verified identity or current account policy', async () => {
   const { createApiRouter } = await import('../src/routes/index.js');
-  const { publicEndpoint } = await import('../src/middleware/endpoint-policy.js');
+  const { publicEndpoint } = await import('../src/shared/http/endpoint-policy.js');
   const { requireAuthentication, requireVerifiedIdentity } = await import('../src/modules/auth/auth.middleware.js');
   let total = 0;
   function inspect(router: ReturnType<typeof createApiRouter>) {

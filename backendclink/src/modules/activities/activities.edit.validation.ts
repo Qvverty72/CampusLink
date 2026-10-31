@@ -1,4 +1,4 @@
-import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../types/api.js';
+import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../shared/http/api.types.js';
 import { parseCreateActivity } from './activities.create.validation.js';
 import type { CreateActivityInput } from './activities.types.js';
 import type { EditActivityInput } from './activities.edit.types.js';

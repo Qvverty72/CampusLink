@@ -1,4 +1,4 @@
-import { env } from '../config/env.js';
+import { env } from '../../config/env.js';
 
 // La carrera temporal no cancela la operación subyacente; cubre inicializaciones del driver,
 // como la resolución DNS SRV, que pueden quedar fuera de los límites propios del driver.

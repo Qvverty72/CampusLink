@@ -1,5 +1,5 @@
 import type { Request, RequestHandler } from 'express';
-import { ApiError } from '../../services/api-response.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { verifyAuthConnection, verifyAuthIdentity } from './auth.service.js';
 import type { AuthLocals, IdentityLocals } from './auth.types.js';
 

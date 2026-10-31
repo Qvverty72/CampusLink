@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { METHODS } from 'node:http';
-import { requireAuthentication, requireVerifiedIdentity } from '../modules/auth/auth.middleware.js';
-import { ApiError } from '../services/apiError.js';
+import { requireAuthentication, requireVerifiedIdentity } from '../../modules/auth/auth.middleware.js';
+import { ApiError } from '../errors/api-error.js';
 
 /** Declaración explícita para autenticación pública, liveness y diagnósticos development opt-in. */
 export const publicEndpoint: RequestHandler = (_request, _response, next) => next();

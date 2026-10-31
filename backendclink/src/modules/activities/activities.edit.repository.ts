@@ -1,9 +1,9 @@
 import { ObjectId } from 'mongodb';
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import { mongoClient } from '../../database/mongodb/client.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { accountCapabilities } from '../auth/auth.authorization.js';
 import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from './activities.policy.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';

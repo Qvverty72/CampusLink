@@ -1,6 +1,6 @@
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { requireResourceOwner } from '../auth/auth.authorization.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { getAvailableActivity } from './activities.detail.service.js';
 import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityParticipantsQuery, ActivityParticipantsPage, ActivityDeletionResult } from './activities.types.js';

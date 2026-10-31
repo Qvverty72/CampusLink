@@ -1,12 +1,12 @@
 import type { RequestHandler } from 'express';
 import type { AuthLocals } from '../auth/auth.types.js';
-import { getValidatedRequest } from '../../middleware/validateRequest.js';
-import { sendSuccess } from '../../services/apiResponse.js';
+import { getValidatedRequest } from '../../shared/http/validate-request.js';
+import { sendSuccess } from '../../shared/http/api-response.js';
 import { getActivities, type ActivityDependencies } from './activities.service.js';
 import type { ActivityQuery } from './activities.types.js';
 import { getActivityDetail, joinActivity } from './activities.detail.service.js';
 import { recordViewedActivity } from './activities.detail.service.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 
 function participationOperationId(value: unknown): string | undefined {
   if (value === undefined) return undefined;

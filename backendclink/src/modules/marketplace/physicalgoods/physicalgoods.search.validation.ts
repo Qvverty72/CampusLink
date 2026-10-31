@@ -1,5 +1,5 @@
-import { ApiError } from '../../../services/api-response.js';
-import { parsePaginationQuery } from '../../../services/pagination.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { parsePaginationQuery } from '../../../shared/pagination/pagination.js';
 import type { PhysicalgoodsCondition, PhysicalgoodsSearchFilters } from './physicalgoods.types.js';
 import { physicalgoodsId } from './physicalgoods.validation.js';
 

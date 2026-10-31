@@ -1,4 +1,4 @@
-import { createPolicyRouter, publicEndpoint } from '../../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { getElibraryHealthController } from './elibrary.controller.js';
 import { createDigitalController, detailDigitalController, listDigitalController } from './elibrary.controller.js';

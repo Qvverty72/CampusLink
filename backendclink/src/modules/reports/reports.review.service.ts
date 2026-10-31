@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { ApiError } from '../../services/apiError.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../services/pagination.js';
+import { ApiError } from '../../shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../../shared/pagination/pagination.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import { lockAccountContext } from '../auth/auth.repository.js';
 import { accessRepository } from '../users/access.repository.js';

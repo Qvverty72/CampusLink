@@ -1,15 +1,15 @@
 import type { RequestHandler } from 'express';
-import { sendModuleHealth } from '../../../services/health-response.js';
+import { sendModuleHealth } from '../../../shared/health/health-response.js';
 import { getElibraryHealth } from './elibrary.service.js';
 import { authorizeDigitalAccess, createDigitalPublication, getDigitalPublications } from './elibrary.service.js';
-import { sendSuccess } from '../../../services/api-response.js';
+import { sendSuccess } from '../../../shared/http/api-response.js';
 import type { AuthLocals } from '../../auth/auth.types.js';
 import { readDigitalUpload } from './elibrary.upload.js';
 import { addDigitalAttachment, getDigitalOriginal } from './elibrary.files.service.js';
 import { getDigitalAcademicCatalog, updateDigitalAcademics } from './elibrary.academics.service.js';
 import { invalidDigital } from './elibrary.validation.js';
 import { searchDigitalPublications } from './elibrary.search.service.js';
-import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
+import { sendSuccess as sendEnvelope } from '../../../shared/http/api-response.js';
 import { getDigitalPreview } from './elibrary.preview.service.js';
 import { createDigitalRequest, digitalAction, getDigitalRequestOptions, getDigitalRequests, getDigitalTrade, resolveDigitalRequest, transitionDigitalTrade } from './elibrary.trades.service.js';
 import { getAcquiredDigitalResources,getOwnedDigitalResources } from './elibrary.acquired.service.js';

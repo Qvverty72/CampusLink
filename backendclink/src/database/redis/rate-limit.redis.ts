@@ -1,7 +1,7 @@
 import { createClient } from 'redis';
-import { env } from '../config/env.js';
-import type { RateLimitStore } from '../services/rate-limit.js';
-import { withDeadline } from '../services/deadline.js';
+import { env } from '../../config/env.js';
+import type { RateLimitStore } from '../../shared/rate-limit/rate-limit.js';
+import { withDeadline } from '../../shared/async/deadline.js';
 
 // Un solo comando atómico: el reloj/TTL de Redis es común a todas las instancias.
 export const consumeScript = `

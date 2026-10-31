@@ -2,7 +2,7 @@ import type { PoolClient } from 'pg';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { countOwnUnreadNotifications, findOwnActivityChange, listOwnNotifications, updateOwnNotification } from './notifications.repository.js';
 import { getNotificationActivityChange } from './notifications.activity-change.js';
 import type { ActivityDependencies } from '../activities/activities.service.js';

@@ -1,4 +1,4 @@
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { editPhysicalgoods } from './physicalgoods.images.service.js';
 import { physicalgoodsId, parsePhysicalgoodsUpdate, parsePhysicalgoodsVersion } from './physicalgoods.validation.js';

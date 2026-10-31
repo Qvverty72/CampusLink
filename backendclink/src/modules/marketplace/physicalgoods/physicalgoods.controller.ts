@@ -1,11 +1,11 @@
 import type { RequestHandler } from 'express';
-import { sendModuleHealth } from '../../../services/health-response.js';
+import { sendModuleHealth } from '../../../shared/health/health-response.js';
 import { getPhysicalgoodsHealth } from './physicalgoods.service.js';
 import { createPhysicalgoods, getPhysicalgoodsOptions, getPhysicalgoodsPhoto } from './physicalgoods.service.js';
-import { sendSuccess } from '../../../services/api-response.js';
+import { sendSuccess } from '../../../shared/http/api-response.js';
 import type { AuthLocals } from '../../auth/auth.types.js';
 import { addPhysicalgoodsImage, changePhysicalgoodsCategory, changePhysicalgoodsPrincipal, deletePhysicalgoodsImage, getPhysicalgoodsGallery, getPhysicalgoodsResources } from './physicalgoods.images.service.js';
-import { sendSuccess as sendEnvelope } from '../../../services/apiResponse.js';
+import { sendSuccess as sendEnvelope } from '../../../shared/http/api-response.js';
 import { updatePhysicalgoods, withdrawPhysicalgoods } from './physicalgoods.edit.service.js';
 import { createPhysicalgoodsRequest, getPhysicalgoodsRequestOptions, getReceivedPhysicalgoodsRequests, getSentPhysicalgoodsRequests, resolvePhysicalgoodsRequest } from './physicalgoods.requests.service.js';
 import { getPhysicalgoodsTransaction,getPhysicalgoodsCoordinationOptions,getPhysicalgoodsCoordinationMessages,sendPhysicalgoodsCoordination,transitionPhysicalgoodsTransaction,ratePhysicalgoodsOwner } from './physicalgoods.transactions.service.js';

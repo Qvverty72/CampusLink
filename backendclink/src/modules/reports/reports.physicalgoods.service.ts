@@ -1,4 +1,4 @@
-import { ApiError } from '../../services/api-response.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from '../marketplace/physicalgoods/physicalgoods.repository.js';

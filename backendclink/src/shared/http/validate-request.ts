@@ -1,12 +1,12 @@
 import type { RequestHandler, Response } from 'express';
 
-import { ApiError } from '../services/apiError.js';
+import { ApiError } from '../errors/api-error.js';
 import type {
   ApiErrorDetail,
   RequestParser,
   RequestSection,
   ValidatedRequest,
-} from '../types/api.js';
+} from './api.types.js';
 
 export type RequestParsers = Partial<Record<RequestSection, RequestParser>>;
 

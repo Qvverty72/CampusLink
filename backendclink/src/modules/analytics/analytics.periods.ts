@@ -1,5 +1,5 @@
 import { Temporal } from '@js-temporal/polyfill';
-import { ApiError } from '../../services/api-response.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { DashboardGrouping, DashboardPeriod } from './analytics.types.js';
 
 // Referencia institucional confirmada por el usuario en GH-99.

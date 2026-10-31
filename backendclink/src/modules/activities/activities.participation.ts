@@ -1,4 +1,4 @@
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { ActivityParticipationDocument, ActivityParticipationDto } from './activities.types.js';
 import type { ObjectId } from 'mongodb';
 

@@ -1,4 +1,4 @@
-import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../types/api.js';
+import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../shared/http/api.types.js';
 import type { CreateActivityInput } from './activities.types.js';
 
 export const ACTIVITY_CONTENT_LIMITS = { title: 120, description: 2000, customLabel: 160 } as const;

@@ -1,5 +1,5 @@
 import type {PoolClient} from 'pg';
-import type {PaginationParams} from '../../../types/api.js';
+import type {PaginationParams} from '../../../shared/http/api.types.js';
 import type {DigitalResourceRow,DigitalTradeRow} from './elibrary.types.js';
 
 /** Private projections: identities always come from the revalidated digital context. */

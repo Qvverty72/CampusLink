@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from '../../database/supabase/client.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 
 /** UUID relacional vigente; nunca sustituye el ObjectId del documento ni duplica el perfil. */
 export async function findValidActivityCreators(campusId: string, userIds: string[]): Promise<Map<string, string>> {

@@ -3,11 +3,11 @@ import { inspectDependencies } from '../../database/health.js';
 import { probeSupabaseTables } from '../../database/supabase/health.js';
 import { createServerSupabaseClient } from '../../database/supabase/client.js';
 import { probeMongoCollections } from '../../database/mongodb/health.js';
-import type { DependencyChecks } from '../../types/api.types.js';
+import type { DependencyChecks } from '../../shared/health/health.types.js';
 
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import type { CampusMapDocument } from './map.types.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 
 const CAMPUS_MAPS_COLLECTION = 'campus_maps';
 

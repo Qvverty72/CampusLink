@@ -1,9 +1,9 @@
-import { createModuleHealthCheck } from '../../../services/module-health.js';
+import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
 import { probeElibraryDependencies } from './elibrary.repository.js';
 import type { ElibraryHealth } from './elibrary.types.js';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import { requireCampusCapability } from '../../auth/auth.authorization.js';
 import { lockAccountContext } from '../../auth/auth.repository.js';

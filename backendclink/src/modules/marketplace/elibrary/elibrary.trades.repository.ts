@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { PaginationParams } from '../../../types/api.js';
+import type { PaginationParams } from '../../../shared/http/api.types.js';
 import type { DigitalRequestRow, DigitalTradeRow } from './elibrary.types.js';
 
 export async function digitalTradeParticipants(client: PoolClient, id: string, institutionId: string, requestId: string | null, tradeId: string | null) {

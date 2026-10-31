@@ -1,9 +1,9 @@
-import { createModuleHealthCheck } from '../../services/module-health.js';
-import type { DependencyChecks } from '../../types/api.types.js';
+import { createModuleHealthCheck } from '../../shared/health/module-health.js';
+import type { DependencyChecks } from '../../shared/health/health.types.js';
 import type { CampusMapDocument, MapHealth } from './map.types.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
-import { ApiError } from '../../services/api-response.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 
 export type ActiveMapLookup = (
   campusId: string,

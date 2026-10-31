@@ -82,7 +82,7 @@ test('HTTP explicit views derive user/campus/time from the authenticated server 
     return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({ now: () => now,
     getActiveMap: async () => ({ campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now,
       buildings: [{ id: 'h', name: 'H', floors: [{ id: 'f', name: 'Piso 1', pois: [] }] }] }),
@@ -124,7 +124,7 @@ test('the event writer exposes insert-only behavior and rejects undeclared types
   let inserted = 0;
   const dbMock = mock.method(Db.prototype, 'collection', () => ({ insertOne: async () => { inserted++; } }));
   try {
-    const { getMongoDb } = await import('../src/config/mongodb.js');
+    const { getMongoDB: getMongoDb } = await import('../src/database/mongodb/client.js');
     await appendActivityInteraction(getMongoDb(), { activityId: id, campusId, userId, type: 'JOINED', occurredAt: now, eventKey: 'test', provenance: 'LIVE' });
     await assert.rejects(appendActivityInteraction(getMongoDb(), { activityId: id, campusId, userId, type: 'OTHER' as any, occurredAt: now, eventKey: 'test2', provenance: 'LIVE' }), { status: 400 });
     assert.equal(inserted, 1);

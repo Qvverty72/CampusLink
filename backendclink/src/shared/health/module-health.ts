@@ -1,5 +1,5 @@
-import { env } from '../config/env.js';
-import type { DependencyChecks, ModuleHealth, ModuleName } from '../types/api.types.js';
+import { env } from '../../config/env.js';
+import type { DependencyChecks, ModuleHealth, ModuleName } from './health.types.js';
 
 // Agrupa sondas concurrentes y conserva brevemente también los fallos para limitar la carga de sondeo.
 /** Crea una sonda por módulo con caché breve y una sola ejecución simultánea. */

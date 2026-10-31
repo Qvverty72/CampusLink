@@ -1,8 +1,8 @@
 import type { PoolClient } from 'pg';
 import { notifyResourceRequest } from '../marketplace.notifications.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { ApiError } from '../../../services/api-response.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../../services/pagination.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
 import { digitalId, invalidDigital } from './elibrary.validation.js';

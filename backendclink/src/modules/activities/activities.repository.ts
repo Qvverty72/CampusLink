@@ -1,4 +1,4 @@
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import { visibleActivityFilter } from './activities.policy.js';
 import type { ActivityDocument, ActivityQuery } from './activities.types.js';
 

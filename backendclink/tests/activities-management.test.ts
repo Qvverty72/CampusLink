@@ -235,7 +235,7 @@ test('HTTP roster/delete require authentication and reject client campus overrid
     return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json());
   app.use('/activities', createActivitiesRouter({ ...deps(), findParticipants: async () => ({ page: 1, pageSize: 5, total: 0, rows: [] }),
     deleteActivity: async (_auth, activityId, revision) => ({ activityId, campusId, revision: revision + 1, deletedAt: now.toISOString() }) }));

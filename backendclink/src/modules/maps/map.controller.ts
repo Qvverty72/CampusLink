@@ -1,11 +1,11 @@
 import type { RequestHandler } from 'express';
 
-import { sendSuccess } from '../../services/apiResponse.js';
-import { getValidatedRequest } from '../../middleware/validateRequest.js';
+import { sendSuccess } from '../../shared/http/api-response.js';
+import { getValidatedRequest } from '../../shared/http/validate-request.js';
 import { getActiveMap, getAuthorizedActiveMap } from './map.service.js';
 import type { ActiveMapLookup } from './map.service.js';
 import type { ActiveMapRouteParams } from './map.validation.js';
-import { sendModuleHealth } from '../../services/health-response.js';
+import { sendModuleHealth } from '../../shared/health/health-response.js';
 import { getMapHealth } from './map.service.js';
 import type { AuthLocals } from '../auth/auth.types.js';
 

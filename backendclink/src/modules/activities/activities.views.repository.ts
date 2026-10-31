@@ -1,7 +1,7 @@
 import { MongoServerError, ObjectId } from 'mongodb';
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import { mongoClient } from '../../database/mongodb/client.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { ActivityDocument } from './activities.types.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
 import { toVisibleActivity, visibleActivityFilter } from './activities.policy.js';

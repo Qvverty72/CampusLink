@@ -1,6 +1,6 @@
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { getAuthorizedActiveMap, type ActiveMapLookup } from '../maps/map.service.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { hasActivityLocation, spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
 import { validActivityCreators } from './activities.references.service.js';

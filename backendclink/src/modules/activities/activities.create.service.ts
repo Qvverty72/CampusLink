@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { requireCampusCapability, accountCapabilities } from '../auth/auth.authorization.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';

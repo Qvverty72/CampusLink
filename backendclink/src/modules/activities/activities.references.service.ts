@@ -1,7 +1,7 @@
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import type { ActivityDependencies } from './activities.service.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 
 export const relationalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

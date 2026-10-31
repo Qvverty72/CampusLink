@@ -1,4 +1,4 @@
-import { createModuleHealthCheck } from '../../services/module-health.js';
+import { createModuleHealthCheck } from '../../shared/health/module-health.js';
 import { findOwnActivityReport, probeReportsDependencies, saveActivityReport } from './reports.repository.js';
 import type { ReportsHealth } from './reports.types.js';
 import type { ActivityReportReceipt, ActivityReportSnapshot, NewActivityReport, ReportActivityInput, ReportsDependencies } from './reports.types.js';
@@ -6,7 +6,7 @@ import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { spatialBuildings } from '../activities/activities.location.js';
 import { toVisibleActivity } from '../activities/activities.policy.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import { parseActivityReport } from './reports.validation.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
 import { validActivityCreators } from '../activities/activities.references.service.js';

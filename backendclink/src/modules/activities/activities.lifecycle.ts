@@ -1,5 +1,5 @@
 import type { Filter } from 'mongodb';
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import type { ActivityDocument } from './activities.types.js';
 
 /** Selecciona actividades vencidas sin depender de visibilidad o ubicación y respeta moderación/borrado. */

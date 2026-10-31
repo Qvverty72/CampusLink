@@ -1,7 +1,7 @@
 import { setServers } from 'node:dns/promises';
 import { Db, MongoClient } from 'mongodb';
 import { env } from '../../config/env.js';
-import { withDeadline } from '../../services/deadline.js';
+import { withDeadline } from '../../shared/async/deadline.js';
 
 // Reemplazo opcional del resolver de este proceso; no cambia la configuración de Windows o la red.
 // Sirve cuando el DNS de la red no resuelve las consultas SRV/TXT de Atlas.

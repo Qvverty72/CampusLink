@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ObjectId, type ClientSession, type Db } from 'mongodb';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { ActivityInteractionDocument, ActivityInteractionType } from './activities.types.js';
 
 export const ACTIVITY_INTERACTION_TYPES = ['VIEWED', 'JOINED', 'LEFT'] as const;

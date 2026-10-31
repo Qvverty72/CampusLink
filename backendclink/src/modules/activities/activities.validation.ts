@@ -1,4 +1,4 @@
-import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../types/api.js';
+import type { RequestParser, ValidationResult, ApiErrorDetail } from '../../shared/http/api.types.js';
 import type { ActivityQuery } from './activities.types.js';
 
 /** Acepta solo filtros espaciales; campus y visibilidad provienen de la política del servidor. */

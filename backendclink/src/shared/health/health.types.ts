@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ApiSuccessBody } from './api.js';
+import type { ApiErrorBody, ApiSuccessBody } from '../http/api.types.js';
 
 export type ApiSuccess<T> = ApiSuccessBody<T>;
 export type ApiErrorResponse = ApiErrorBody;

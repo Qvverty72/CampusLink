@@ -1,7 +1,7 @@
-import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { getProfileOverview } from './profile-overview.service.js';
-import { sendSuccess } from '../../services/apiResponse.js';
+import { sendSuccess } from '../../shared/http/api-response.js';
 import { getUsersHealthController } from './users.controller.js';
 import { getAcademicProfileController, getAcademicOptionsController, updateAcademicProfileController } from './users.controller.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';

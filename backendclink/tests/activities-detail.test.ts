@@ -259,7 +259,7 @@ test('HTTP detail and join require identity, reject overrides and return own sta
     return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   let own: ActivityParticipationDocument | null = null;
   let reads = 0; let writes = 0;
   const app = express(); app.use(express.json());

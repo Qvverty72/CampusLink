@@ -127,7 +127,7 @@ test('HTTP availability requires identity, rejects client campus/limit overrides
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const session = { withTransaction: async (operation: any) => operation() };
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: any) => operation(session));
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => ({

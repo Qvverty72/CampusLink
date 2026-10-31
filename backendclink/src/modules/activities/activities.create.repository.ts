@@ -1,6 +1,6 @@
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import { mongoClient } from '../../database/mongodb/client.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
 import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity, activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from './activities.policy.js';

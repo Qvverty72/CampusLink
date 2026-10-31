@@ -1,6 +1,6 @@
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
-import { ApiError } from '../../../services/api-response.js';
-import { createPaginatedResult } from '../../../services/pagination.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
 import { digitalAction, digitalHistoryPage, withDigitalTradeContext } from './elibrary.trades.service.js';
 import { digitalId, invalidDigital } from './elibrary.validation.js';
 import { digitalMembersEnabled, findDigitalTrade } from './elibrary.trades.repository.js';

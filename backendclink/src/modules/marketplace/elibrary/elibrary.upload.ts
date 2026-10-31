@@ -1,6 +1,6 @@
 import busboy from 'busboy';
 import type { Request } from 'express';
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import { DIGITAL_MAX_BYTES } from './elibrary.validation.js';
 import type { DigitalUpload } from './elibrary.types.js';
 

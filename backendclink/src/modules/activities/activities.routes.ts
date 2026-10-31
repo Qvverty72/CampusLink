@@ -1,9 +1,9 @@
-import { createPolicyRouter } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { getOwnActivities, type OwnActivityDependencies } from './activities.mine.service.js';
-import { sendSuccess } from '../../services/apiResponse.js';
+import { sendSuccess } from '../../shared/http/api-response.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
-import { validateRequest } from '../../middleware/validateRequest.js';
+import { validateRequest } from '../../shared/http/validate-request.js';
 import { createActivitiesController, createActivityDetailController, createActivityPublicationController, createActivitySeriesController, createActivitySeriesDetailController, createActivityEditController } from './activities.controller.js';
 import { activitySeriesParser, parseSeriesId } from './activities.series.validation.js';
 import { parseCreateActivity } from './activities.create.validation.js';

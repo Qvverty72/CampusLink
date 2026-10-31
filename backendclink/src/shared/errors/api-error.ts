@@ -3,7 +3,7 @@ import type {
   ApiErrorCodeForStatus,
   ApiErrorDetail,
   ApiErrorStatus,
-} from '../types/api.js';
+} from '../http/api.types.js';
 
 export interface ApiErrorOptions {
   details?: ApiErrorDetail[];

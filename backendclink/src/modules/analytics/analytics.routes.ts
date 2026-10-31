@@ -1,4 +1,4 @@
-import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { exportAnalyticalReportController, generateAnalyticalReportController, getAnalyticalReportController, getAnalyticsHealthController, getDashboardController, getDashboardOptionsController, listHistoricalReportsController, recordResourceViewController } from './analytics.controller.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';

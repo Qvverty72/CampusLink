@@ -1,5 +1,5 @@
-import { withDeadline } from '../services/deadline.js';
-import type { DependencyChecks } from '../types/api.types.js';
+import { withDeadline } from '../shared/async/deadline.js';
+import type { DependencyChecks } from '../shared/health/health.types.js';
 
 /** Ejecuta sondas en paralelo y convierte cada fallo en estado sin filtrar datos privados. */
 export async function inspectDependencies(probes: {

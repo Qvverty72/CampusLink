@@ -1,6 +1,6 @@
 import { inspectDependencies } from '../../../database/health.js';
 import { probeSupabaseTables } from '../../../database/supabase/health.js';
-import type { DependencyChecks } from '../../../types/api.types.js';
+import type { DependencyChecks } from '../../../shared/health/health.types.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import { createServerSupabaseClient } from '../../../database/supabase/client.js';
 import type { PoolClient } from 'pg';

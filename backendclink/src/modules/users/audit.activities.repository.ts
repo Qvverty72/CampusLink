@@ -1,5 +1,5 @@
 import { ObjectId, type Document } from 'mongodb';
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import type { ActivityDocument, ActivityInteractionDocument, ActivityParticipationDocument } from '../activities/activities.types.js';
 import type { ActivityChangeDocument } from '../activities/activities.edit.types.js';
 import type { AccessCampus, AuditDetail, AuditEntry, AuditOccurrences, AuditSearch } from './access.types.js';

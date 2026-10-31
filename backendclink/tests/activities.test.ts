@@ -157,7 +157,7 @@ test('repository pushes campus, publication, visibility, expiry and spatial filt
 test('HTTP route rejects missing identity and filter overrides, returns an envelope and no-store data', async () => {
   const originalFetch = globalThis.fetch;
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   let reads = 0;
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));

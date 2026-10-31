@@ -1,4 +1,4 @@
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import { parseMarketplaceRating } from '../marketplace.rating.js';
 import type { PhysicalgoodsCondition, PhysicalgoodsInput, PrincipalPhoto } from './physicalgoods.types.js';
 

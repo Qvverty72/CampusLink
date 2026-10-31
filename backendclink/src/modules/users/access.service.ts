@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { ApiError } from '../../services/api-response.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../services/pagination.js';
+import { ApiError } from '../../shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../../shared/pagination/pagination.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import { withAccessTransaction, type accessRepository } from './access.repository.js';
 import type { AccessProfile, AccessSnapshot, AccessUpdate, AccountStateUpdate, AccessCampus, AuditDetail, AuditEntry } from './access.types.js';

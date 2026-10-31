@@ -1,10 +1,10 @@
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import type { ActivityDocument } from './activities.types.js';
 import { getActivities, type ActivityDependencies } from './activities.service.js';
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import { visibleActivityFilter } from './activities.policy.js';
-import { parsePaginationQuery } from '../../services/pagination.js';
-import { ApiError } from '../../services/apiError.js';
+import { parsePaginationQuery } from '../../shared/pagination/pagination.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 
 export interface OwnActivityDependencies extends ActivityDependencies {
   findJoinedActivities?: (campusId: string, userId: string, now: Date) => Promise<ActivityDocument[]>;

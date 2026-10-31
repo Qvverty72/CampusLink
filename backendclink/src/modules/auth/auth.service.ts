@@ -1,6 +1,6 @@
-import { createModuleHealthCheck } from '../../services/module-health.js';
+import { createModuleHealthCheck } from '../../shared/health/module-health.js';
 import { findAuthPermissions, findAuthProfile, findAuthRoles, findAuthUser, findRegistrationCampuses, findRegistrationDomains, findServerAuthProfile, insertInstitutionalProfile, resendInstitutionalOtp, signUpInstitutionalUser, verifyInstitutionalOtp, probeAuthDependencies, signInAuthUser, requestPasswordRecovery, verifyPasswordRecovery, updateRecoveredPassword, closeRecoverySession } from './auth.repository.js';
-import { ApiError } from '../../services/api-response.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { AuthAssignment, AuthAssignmentRow, VerifiedAuthConnection } from './auth.types.js';
 import type { AuthHealth } from './auth.types.js';
 import type { AuthProfile, RegistrationInput, RegistrationOption, VerifiedIdentity } from './auth.types.js';

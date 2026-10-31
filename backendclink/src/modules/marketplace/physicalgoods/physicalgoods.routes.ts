@@ -1,4 +1,4 @@
-import { createPolicyRouter, publicEndpoint } from '../../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../../shared/http/endpoint-policy.js';
 import { json, Router } from 'express';
 import { createPhysicalgoodsController, getPhysicalgoodsHealthController, getPhysicalgoodsOptionsController, getPhysicalgoodsPhotoController } from './physicalgoods.controller.js';
 import { requireAuthentication } from '../../auth/auth.middleware.js';

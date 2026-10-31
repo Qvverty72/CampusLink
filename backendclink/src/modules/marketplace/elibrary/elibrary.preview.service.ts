@@ -1,5 +1,5 @@
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { ApiError } from '../../../services/api-response.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
 import { downloadDigitalOriginal, findDigitalFile, findDigitalResource } from './elibrary.repository.js';

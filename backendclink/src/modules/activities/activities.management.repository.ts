@@ -1,8 +1,8 @@
 import { ObjectId } from 'mongodb';
-import { getMongoDb } from '../../config/mongodb.js';
+import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import { mongoClient } from '../../database/mongodb/client.js';
 import { createServerSupabaseClient } from '../../database/supabase/client.js';
-import { ApiError } from '../../services/apiError.js';
+import { ApiError } from '../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../auth/auth.types.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
 import { requireResourceOwner } from '../auth/auth.authorization.js';

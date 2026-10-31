@@ -256,7 +256,7 @@ test('HTTP GET/DELETE require authentication, reject identity/state overrides an
   let withdrawals = 0;
   let ownActivity = false;
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json());
   app.use('/api/v1/activities', createActivitiesRouter({ getActiveMap: async () => map,
     findActivity: async () => activity({ endAt: joinedAt }), findParticipation: async () => own,

@@ -1,8 +1,8 @@
-import { createPolicyRouter } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter } from '../../shared/http/endpoint-policy.js';
 import type { Router, RequestHandler } from 'express';
 import { requireAuthentication } from '../auth/auth.middleware.js';
-import { ApiError } from '../../services/apiError.js';
-import { sendSuccess } from '../../services/apiResponse.js';
+import { ApiError } from '../../shared/errors/api-error.js';
+import { sendSuccess } from '../../shared/http/api-response.js';
 import { ownNotificationOperation } from './notifications.service.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

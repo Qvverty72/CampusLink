@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response } from 'express';
-import { env } from '../config/env.js';
-import { consumeRateLimit, MemoryRateLimitStore, type RateLimitStore } from '../services/rate-limit.js';
-import { redisRateLimitStore } from '../database/rate-limit.redis.js';
+import { env } from '../../config/env.js';
+import { consumeRateLimit, MemoryRateLimitStore, type RateLimitStore } from '../rate-limit/rate-limit.js';
+import { redisRateLimitStore } from '../../database/redis/rate-limit.redis.js';
 
 export function rateCategory(request: Pick<Request, 'method' | 'originalUrl'>): 'auth' | 'read' | 'write' {
   if (/^\/api\/v1\/auth\/(?:login|recover|register)(?:\/|\?|$)/i.test(request.originalUrl)) return 'auth';

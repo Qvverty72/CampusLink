@@ -2,7 +2,7 @@ import type {
   PaginationMeta,
   PaginationParams,
   ValidationResult,
-} from '../types/api.js';
+} from '../http/api.types.js';
 
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_LIMIT = 20;
