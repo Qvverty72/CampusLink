@@ -3,7 +3,7 @@ import { after, before, mock, test } from 'node:test';
 import { Db, MongoClient, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
 import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE, toVisibleActivity } from '../src/modules/activities/activities.policy.js';

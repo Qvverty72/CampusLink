@@ -3,7 +3,7 @@ import { sendModuleHealth } from '../../../shared/health/health-response.js';
 import { getPhysicalgoodsHealth } from './physicalgoods.service.js';
 import { createPhysicalgoods, getPhysicalgoodsOptions, getPhysicalgoodsPhoto } from './physicalgoods.service.js';
 import { sendSuccess } from '../../../shared/http/api-response.js';
-import type { AuthLocals } from '../../auth/auth.types.js';
+import type { AuthLocals } from '../../auth/types/auth.types.js';
 import { addPhysicalgoodsImage, changePhysicalgoodsCategory, changePhysicalgoodsPrincipal, deletePhysicalgoodsImage, getPhysicalgoodsGallery, getPhysicalgoodsResources } from './physicalgoods.images.service.js';
 import { sendSuccess as sendEnvelope } from '../../../shared/http/api-response.js';
 import { updatePhysicalgoods, withdrawPhysicalgoods } from './physicalgoods.edit.service.js';

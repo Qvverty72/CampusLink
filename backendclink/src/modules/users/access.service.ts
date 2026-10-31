@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { ApiError } from '../../shared/errors/api-error.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../shared/pagination/pagination.js';
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { withAccessTransaction, type accessRepository } from './access.repository.js';
 import type { AccessProfile, AccessSnapshot, AccessUpdate, AccountStateUpdate, AccessCampus, AuditDetail, AuditEntry } from './access.types.js';
-import { requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
+import { requireActiveAccount, requireCampusCapability } from '../auth/domain/auth.authorization.js';
 import { auditSnapshot } from './audit.snapshot.js';
 import { auditReferenceRequests, auditReferences } from './audit.references.js';
 import { auditActor } from './audit.actor.js';

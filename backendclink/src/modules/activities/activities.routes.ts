@@ -2,7 +2,7 @@ import { createPolicyRouter } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { getOwnActivities, type OwnActivityDependencies } from './activities.mine.service.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
-import { requireAuthentication } from '../auth/auth.middleware.js';
+import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
 import { validateRequest } from '../../shared/http/validate-request.js';
 import { createActivitiesController, createActivityDetailController, createActivityPublicationController, createActivitySeriesController, createActivitySeriesDetailController, createActivityEditController } from './activities.controller.js';
 import { activitySeriesParser, parseSeriesId } from './activities.series.validation.js';

@@ -4,7 +4,7 @@ import { Db, MongoClient, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { editActivityParser } from '../src/modules/activities/activities.edit.validation.js';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument, ActivitySeriesDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityEditDependencies, EditActivityInput } from '../src/modules/activities/activities.edit.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';

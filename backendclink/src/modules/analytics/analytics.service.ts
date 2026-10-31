@@ -5,9 +5,9 @@ import { ANALYTICS_TIME_ZONE, dashboardIntervals } from './analytics.periods.js'
 import { createHash, randomUUID } from 'node:crypto';
 import { ApiError } from '../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { lockAccountContext } from '../auth/auth.repository.js';
-import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import { lockAccountContext } from '../auth/repositories/auth.repository.js';
+import { accountCapabilities, requireActiveAccount, requireCampusCapability } from '../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { countActivityInteractions, findAnalyticalReport, findAnalyticsResource, insertAnalyticalReport, insertResourceView, readAnalyticsPermissions, readDashboardMetrics, readDashboardOptions, readHistoricalReports, readReportAuthorEmail } from './analytics.repository.js';
 
 export const getAnalyticsHealth: () => Promise<AnalyticsHealth> =

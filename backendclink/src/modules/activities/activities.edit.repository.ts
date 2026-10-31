@@ -1,10 +1,10 @@
 import { ObjectId } from 'mongodb';
 import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import { mongoClient } from '../../database/mongodb/client.js';
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
 import { ApiError } from '../../shared/errors/api-error.js';
-import { accountCapabilities } from '../auth/auth.authorization.js';
+import { accountCapabilities } from '../auth/domain/auth.authorization.js';
 import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE } from './activities.policy.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityChangeDocument, ActivityEditResult, EditActivityInput } from './activities.edit.types.js';

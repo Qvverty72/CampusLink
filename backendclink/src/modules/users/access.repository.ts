@@ -1,6 +1,6 @@
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
 import type { AccessAccountProfile, AccessAssignment, AccessCampus, AccessCatalogItem, AccessConnection, AccessKind, AccessProfile, AccessSnapshot, AccountStateUpdate, PhysicalPublication } from './access.types.js';
-import type { AuthAssignment } from '../auth/auth.types.js';
+import type { AuthAssignment } from '../auth/types/auth.types.js';
 import type { AuditEntry, AuditDetail, AuditReferenceName, AuditReferenceRequest, AuditActorRow, AuditResponsibleProfile, AuditSearch } from './access.types.js';
 import { accessAuditKey, accessAuditPredicate } from './audit.access-groups.js';
 import { auditEditSummary, editAuditKey, publicationEditPredicate } from './audit.edit-groups.js';

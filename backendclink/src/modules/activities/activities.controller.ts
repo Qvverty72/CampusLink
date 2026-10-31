@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import type { AuthLocals } from '../auth/auth.types.js';
+import type { AuthLocals } from '../auth/types/auth.types.js';
 import { getValidatedRequest } from '../../shared/http/validate-request.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
 import { getActivities, type ActivityDependencies } from './activities.service.js';

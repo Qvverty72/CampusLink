@@ -3,8 +3,8 @@ import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
-import { requireResourceOwner } from '../../auth/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { requireResourceOwner } from '../../auth/domain/auth.authorization.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
 import { DIGITAL_MAX_BYTES, digitalId, validateDigitalFile } from './elibrary.validation.js';
 import { DIGITAL_BUCKET, digitalFileHasReference, downloadDigitalOriginal, findDigitalFile, findDigitalFileCandidates, findDigitalResource,

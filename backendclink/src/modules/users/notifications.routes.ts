@@ -1,6 +1,6 @@
 import { createPolicyRouter } from '../../shared/http/endpoint-policy.js';
 import type { Router, RequestHandler } from 'express';
-import { requireAuthentication } from '../auth/auth.middleware.js';
+import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
 import { ApiError } from '../../shared/errors/api-error.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
 import { ownNotificationOperation } from './notifications.service.js';

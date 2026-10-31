@@ -3,7 +3,7 @@ import { notifyResourceRequest } from '../marketplace.notifications.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
 import { digitalId, invalidDigital } from './elibrary.validation.js';
 import { findDigitalPublications, findDigitalResource, hasDigitalAcquisition, lockDigitalPersistence } from './elibrary.repository.js';

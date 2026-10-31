@@ -3,7 +3,7 @@ import { sendModuleHealth } from '../../shared/health/health-response.js';
 import { getReportsHealth, getOwnActivityReport, reportActivity } from './reports.service.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
 import { getValidatedRequest } from '../../shared/http/validate-request.js';
-import type { AuthLocals } from '../auth/auth.types.js';
+import type { AuthLocals } from '../auth/types/auth.types.js';
 import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
 import { getOwnPhysicalgoodsReport,reportPhysicalgoods } from './reports.physicalgoods.service.js';
 import { getOwnDigitalReport,reportDigitalResource } from './reports.elibrary.service.js';

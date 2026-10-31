@@ -3,7 +3,7 @@ import { sendModuleHealth } from '../../../shared/health/health-response.js';
 import { getElibraryHealth } from './elibrary.service.js';
 import { authorizeDigitalAccess, createDigitalPublication, getDigitalPublications } from './elibrary.service.js';
 import { sendSuccess } from '../../../shared/http/api-response.js';
-import type { AuthLocals } from '../../auth/auth.types.js';
+import type { AuthLocals } from '../../auth/types/auth.types.js';
 import { readDigitalUpload } from './elibrary.upload.js';
 import { addDigitalAttachment, getDigitalOriginal } from './elibrary.files.service.js';
 import { getDigitalAcademicCatalog, updateDigitalAcademics } from './elibrary.academics.service.js';

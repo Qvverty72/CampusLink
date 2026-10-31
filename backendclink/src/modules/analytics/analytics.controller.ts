@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { sendModuleHealth } from '../../shared/health/health-response.js';
 import { exportAnalyticalReport, generateAnalyticalReport, getAnalyticalReport, getAnalyticsHealth, getDashboard, getDashboardOptions, listHistoricalReports, recordResourceView } from './analytics.service.js';
-import type { AuthLocals } from '../auth/auth.types.js';
+import type { AuthLocals } from '../auth/types/auth.types.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
 import { ApiError } from '../../shared/errors/api-error.js';
 

@@ -1,26 +1,12 @@
-import { createModuleHealthCheck } from '../../shared/health/module-health.js';
-import { findAuthPermissions, findAuthProfile, findAuthRoles, findAuthUser, findRegistrationCampuses, findRegistrationDomains, findServerAuthProfile, insertInstitutionalProfile, resendInstitutionalOtp, signUpInstitutionalUser, verifyInstitutionalOtp, probeAuthDependencies, signInAuthUser, requestPasswordRecovery, verifyPasswordRecovery, updateRecoveredPassword, closeRecoverySession } from './auth.repository.js';
-import { ApiError } from '../../shared/errors/api-error.js';
-import type { AuthAssignment, AuthAssignmentRow, VerifiedAuthConnection } from './auth.types.js';
-import type { AuthHealth } from './auth.types.js';
-import type { AuthProfile, RegistrationInput, RegistrationOption, VerifiedIdentity } from './auth.types.js';
+import { credentials, registrationInput, emailRequest } from '../validators/auth.validation.js';
+import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
+import { findAuthPermissions, findAuthProfile, findAuthRoles, findAuthUser, findRegistrationCampuses, findRegistrationDomains, findServerAuthProfile, insertInstitutionalProfile, resendInstitutionalOtp, signUpInstitutionalUser, verifyInstitutionalOtp, probeAuthDependencies, signInAuthUser, requestPasswordRecovery, verifyPasswordRecovery, updateRecoveredPassword, closeRecoverySession } from '../repositories/auth.repository.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import type { AuthAssignment, AuthAssignmentRow, VerifiedAuthConnection } from '../types/auth.types.js';
+import type { AuthHealth } from '../types/auth.types.js';
+import type { AuthProfile, RegistrationOption, VerifiedIdentity } from '../types/auth.types.js';
 import type { User } from '@supabase/supabase-js';
-import { requireActiveAccount } from './auth.authorization.js';
-
-/** Valida el cuerpo estricto de inicio o recuperación, normaliza email y limita el código OTP. */
-function credentials(body: unknown, recovery = false) {
-  const invalid = () => new ApiError(400, 'VALIDATION_ERROR', 'Revisa el correo, la contraseña y el código cuando corresponda.');
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid();
-  const values = body as Record<string, unknown>;
-  const keys = recovery ? ['email', 'password', 'code'] : ['email', 'password'];
-  if (Object.keys(values).some(key => !keys.includes(key)) || keys.some(key => typeof values[key] !== 'string')) throw invalid();
-  const email = (values.email as string).trim().toLowerCase();
-  const password = values.password as string;
-  const code = recovery ? (values.code as string).trim() : '';
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password || password.length > 4096
-    || (recovery && !/^\d{6,10}$/.test(code))) throw invalid();
-  return { email, password, code };
-}
+import { requireActiveAccount } from '../domain/auth.authorization.js';
 
 /** Traduce errores del proveedor a estados públicos sin devolver mensajes internos. */
 function authFailure(error: { status?: number; code?: string }, recovery = false): ApiError {
@@ -86,7 +72,7 @@ export async function resetAccountPassword(body: unknown) {
 }
 
 // Conserva el contrato existente de `/me`; los servicios comparten la misma matriz de capacidades.
-export { accountCapabilities } from './auth.authorization.js';
+export { accountCapabilities } from '../domain/auth.authorization.js';
 
 function providerIdentity(user: User | null): VerifiedIdentity {
   if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'A valid access token is required');
@@ -113,23 +99,6 @@ export async function getRegistrationOptions(): Promise<RegistrationOption[]> {
   } catch {
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'El registro no está disponible.');
   }
-}
-
-/** Valida un cuerpo de registro cerrado y normaliza email, nombre y UUID del campus. */
-function registrationInput(body: unknown): RegistrationInput {
-  const invalid = () => new ApiError(400, 'INVALID_REGISTRATION', 'Revisa el correo, nombre, contraseña y campus.');
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid();
-  const values = body as Record<string, unknown>;
-  const keys = ['email', 'password', 'fullName', 'campusId'];
-  if (Object.keys(values).some(key => !keys.includes(key)) || keys.some(key => typeof values[key] !== 'string')) throw invalid();
-  const input = values as unknown as RegistrationInput;
-  const email = input.email.trim().toLowerCase();
-  const fullName = input.fullName.trim();
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    || !fullName || fullName.length > 200 || /[\u0000-\u001f\u007f]/.test(fullName)
-    || !input.password || input.password.length > 4096
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.campusId)) throw invalid();
-  return { email, fullName, password: input.password, campusId: input.campusId.toLowerCase() };
 }
 
 /**
@@ -167,19 +136,6 @@ export async function registerInstitutionalAccount(body: unknown) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo iniciar el registro.');
   }
-}
-
-/** Valida correo y, para confirmación, el formato del código enviado por Auth. */
-function emailRequest(body: unknown, withCode = false): { email: string; code?: string } {
-  const invalid = () => new ApiError(400, 'INVALID_VERIFICATION', 'Revisa el correo y el código de verificación.');
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid();
-  const values = body as Record<string, unknown>;
-  const keys = withCode ? ['email', 'code'] : ['email'];
-  if (Object.keys(values).some(key => !keys.includes(key)) || typeof values.email !== 'string') throw invalid();
-  const email = values.email.trim().toLowerCase();
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw invalid();
-  if (withCode && (typeof values.code !== 'string' || !/^\d{6,10}$/.test(values.code.trim()))) throw invalid();
-  return { email, code: typeof values.code === 'string' ? values.code.trim() : undefined };
 }
 
 /** Reenvía la confirmación para dominios admitidos y mantiene opaca la existencia de la cuenta. */

@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { withPhysicalgoodsHistory } from '../marketplace/physicalgoods/physicalgoods.history.service.js';
 import { DIGITAL_ACCESS_PROOF } from '../marketplace/elibrary/elibrary.repository.js';
 import { activityCounts } from '../marketplace/elibrary/elibrary.activity.repository.js';

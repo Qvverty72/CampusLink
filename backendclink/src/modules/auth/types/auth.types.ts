@@ -1,4 +1,4 @@
-import type { ModuleHealth } from '../../shared/health/health.types.js';
+import type { ModuleHealth } from '../../../shared/health/health.types.js';
 export type AuthHealth = ModuleHealth<'auth'>;
 /** Proyección del perfil institucional consultada desde PostgreSQL. */
 export interface AuthProfile {

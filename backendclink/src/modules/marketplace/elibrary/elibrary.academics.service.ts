@@ -1,7 +1,7 @@
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { authorizeDigitalAccess, currentDigitalContext } from './elibrary.service.js';
 import { findDigitalPublications, findDigitalResource, lockDigitalPersistence } from './elibrary.repository.js';
 import { auditDigitalAcademics, findDigitalAcademicCatalog, replaceDigitalAcademics } from './elibrary.academics.repository.js';

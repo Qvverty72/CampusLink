@@ -1,5 +1,5 @@
-import { ApiError } from '../../shared/errors/api-error.js';
-import type { AuthProfile, VerifiedAuthConnection } from './auth.types.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import type { AuthProfile, VerifiedAuthConnection } from '../types/auth.types.js';
 
 /** Exige que el perfil pertenezca al usuario y esté ACTIVA, sin marca de eliminación. */
 export function requireActiveAccount(profile: Pick<AuthProfile, 'id'> & { estado_cuenta: string; deleted_at: unknown }, userId: string) {

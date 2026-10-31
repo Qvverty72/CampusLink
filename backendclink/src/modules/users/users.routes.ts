@@ -4,7 +4,7 @@ import { getProfileOverview } from './profile-overview.service.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
 import { getUsersHealthController } from './users.controller.js';
 import { getAcademicProfileController, getAcademicOptionsController, updateAcademicProfileController } from './users.controller.js';
-import { requireAuthentication } from '../auth/auth.middleware.js';
+import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
 import { getAccessCampusesController, getAccessCatalogController, listAccessUsersController, getUserAccessController, updateUserAccessController, updateAccountStateController } from './access.controller.js';
 import { listAuditEntriesController, getAuditEntryController, getAuditImageController, getAuditParticipationController, getAuditOccurrencesController, getAuditEditsController } from './access.controller.js';
 import { createNotificationsRouter } from './notifications.routes.js';

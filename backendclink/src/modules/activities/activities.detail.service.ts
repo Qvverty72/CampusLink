@@ -1,4 +1,4 @@
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';
 import { ApiError } from '../../shared/errors/api-error.js';
 import { spatialBuildings } from './activities.location.js';
@@ -7,7 +7,7 @@ import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto } from './activities.types.js';
 import type { ActivityDocument, ActivityDto } from './activities.types.js';
 import type { ActivityParticipationDto } from './activities.types.js';
-import { requireCampusCapability } from '../auth/auth.authorization.js';
+import { requireCampusCapability } from '../auth/domain/auth.authorization.js';
 import { participationDto } from './activities.participation.js';
 import { validActivityCreators } from './activities.references.service.js';
 

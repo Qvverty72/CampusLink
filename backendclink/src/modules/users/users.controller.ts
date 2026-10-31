@@ -3,7 +3,7 @@ import { sendModuleHealth } from '../../shared/health/health-response.js';
 import { getUsersHealth } from './users.service.js';
 import { getAcademicProfile, getAcademicOptions, updateAcademicProfile } from './users.service.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
-import type { AuthLocals } from '../auth/auth.types.js';
+import type { AuthLocals } from '../auth/types/auth.types.js';
 
 type ProfileHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
 export const getAcademicProfileController: ProfileHandler = async (_request, response) => {

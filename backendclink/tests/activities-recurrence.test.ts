@@ -9,7 +9,7 @@ import { expandActivityRecurrence } from '../src/modules/activities/activities.r
 import { activitySeriesParser } from '../src/modules/activities/activities.series.validation.js';
 import { spatialBuildings } from '../src/modules/activities/activities.location.js';
 import { toVisibleActivity } from '../src/modules/activities/activities.policy.js';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument, ActivitySeriesDocument, CreateActivitySeriesInput, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';

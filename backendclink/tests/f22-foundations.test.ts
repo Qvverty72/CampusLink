@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { Db, MongoNetworkError, ObjectId } from 'mongodb';
 import express, { type Express } from 'express';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
 
@@ -176,7 +176,7 @@ test('[F2.2-10] endpoint without a policy denies 401/403 before executing its co
   const { createPolicyRouter, publicEndpoint } = await import('../src/shared/http/endpoint-policy.js');
   const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const router = createPolicyRouter(); let executions = 0;
-  const { requireAuthentication } = await import('../src/modules/auth/auth.middleware.js');
+  const { requireAuthentication } = await import('../src/modules/auth/middleware/auth.middleware.js');
   router.get('/forgotten', (_request, response) => { executions++; response.json({ leaked: true }); });
   router.route('/chained').get((_request, response) => { executions++; response.json({ leaked: true }); });
   router.get('/misordered', (_request, response) => { executions++; response.json({ leaked: true }); }, requireAuthentication);
@@ -201,7 +201,7 @@ test('[F2.2-10] endpoint without a policy denies 401/403 before executing its co
 test('[F2.2-10] every mounted endpoint explicitly declares public, verified identity or current account policy', async () => {
   const { createApiRouter } = await import('../src/routes/index.js');
   const { publicEndpoint } = await import('../src/shared/http/endpoint-policy.js');
-  const { requireAuthentication, requireVerifiedIdentity } = await import('../src/modules/auth/auth.middleware.js');
+  const { requireAuthentication, requireVerifiedIdentity } = await import('../src/modules/auth/middleware/auth.middleware.js');
   let total = 0;
   function inspect(router: ReturnType<typeof createApiRouter>) {
     for (const layer of router.stack) {

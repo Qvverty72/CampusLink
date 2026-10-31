@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import type { DigitalAcademicCatalog, DigitalAcademicOption, DigitalPublication } from './elibrary.types.js';
 
 /** La asignatura conserva un único UUID aunque forme parte de varias carreras. */

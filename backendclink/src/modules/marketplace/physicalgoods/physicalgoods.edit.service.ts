@@ -1,5 +1,5 @@
 import { ApiError } from '../../../shared/errors/api-error.js';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { editPhysicalgoods } from './physicalgoods.images.service.js';
 import { physicalgoodsId, parsePhysicalgoodsUpdate, parsePhysicalgoodsVersion } from './physicalgoods.validation.js';
 import { touchPhysicalgoods } from './physicalgoods.images.repository.js';

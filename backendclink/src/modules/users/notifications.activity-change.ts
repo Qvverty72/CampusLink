@@ -1,4 +1,4 @@
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import type { ActivityDependencies } from '../activities/activities.service.js';
 import type { ActivitySnapshot } from '../activities/activities.edit.types.js';
 import { getAuthorizedActiveMap } from '../maps/map.service.js';

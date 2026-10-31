@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import type { AuthLocals } from '../auth/auth.types.js';
+import type { AuthLocals } from '../auth/types/auth.types.js';
 import { sendSuccess } from '../../shared/http/api-response.js';
 import { getAccessCampuses, getAccessCatalog, listAccessUsers, getUserAccess, updateUserAccess, updateAccountState } from './access.service.js';
 import { listAuditEntries, getAuditEntry, getAuditImage, getAuditParticipation, getAuditOccurrences, getAuditEdits } from './access.service.js';

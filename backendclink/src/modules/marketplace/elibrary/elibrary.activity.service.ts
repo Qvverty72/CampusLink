@@ -1,7 +1,7 @@
 import {withPostgresTransaction} from '../../../database/supabase/postgres.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import {parsePaginationQuery} from '../../../shared/pagination/pagination.js';
-import type {VerifiedAuthConnection} from '../../auth/auth.types.js';
+import type {VerifiedAuthConnection} from '../../auth/types/auth.types.js';
 import {authorizeDigitalAccess,currentDigitalContext} from './elibrary.service.js';
 import {digitalAction,digitalTradeDto} from './elibrary.trades.service.js';
 import {digitalId} from './elibrary.validation.js';

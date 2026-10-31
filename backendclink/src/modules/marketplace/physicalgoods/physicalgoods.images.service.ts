@@ -3,8 +3,8 @@ import { notifyResourceUpdated } from '../marketplace.notifications.js';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
-import { requireCampusCapability } from '../../auth/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import type { PhysicalgoodsMediaRow } from './physicalgoods.types.js';
 import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgoodsId, PHYSICALGOODS_MAX_IMAGES } from './physicalgoods.validation.js';
 import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto,

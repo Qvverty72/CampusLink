@@ -1,7 +1,7 @@
 import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
-import { loginAccountController, recoverAccountController, resetAccountPasswordController, completeInstitutionalRegistrationController, confirmInstitutionalRegistrationController, getAuthHealthController, getAuthIdentityController, getRegistrationOptionsController, registerInstitutionalAccountController, resendInstitutionalConfirmationController } from './auth.controller.js';
-import { requireAuthentication, requireVerifiedIdentity } from './auth.middleware.js';
+import { loginAccountController, recoverAccountController, resetAccountPasswordController, completeInstitutionalRegistrationController, confirmInstitutionalRegistrationController, getAuthHealthController, getAuthIdentityController, getRegistrationOptionsController, registerInstitutionalAccountController, resendInstitutionalConfirmationController } from './controllers/auth.controller.js';
+import { requireAuthentication, requireVerifiedIdentity } from './middleware/auth.middleware.js';
 
 // Salud es un diagnóstico público optativo. `/me` requiere identidad y devuelve solo su contexto.
 export function createAuthRouter(diagnosticsEnabled: boolean): Router {

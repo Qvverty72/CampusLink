@@ -1,4 +1,4 @@
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import type { ActivityDocument } from './activities.types.js';
 import { getActivities, type ActivityDependencies } from './activities.service.js';
 import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';

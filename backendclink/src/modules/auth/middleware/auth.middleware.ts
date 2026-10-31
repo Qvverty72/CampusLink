@@ -1,7 +1,7 @@
 import type { Request, RequestHandler } from 'express';
-import { ApiError } from '../../shared/errors/api-error.js';
-import { verifyAuthConnection, verifyAuthIdentity } from './auth.service.js';
-import type { AuthLocals, IdentityLocals } from './auth.types.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { verifyAuthConnection, verifyAuthIdentity } from '../services/auth.service.js';
+import type { AuthLocals, IdentityLocals } from '../types/auth.types.js';
 
 function readAccessToken(request: Request): string {
   const header = request.headers.authorization;

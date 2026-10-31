@@ -4,7 +4,7 @@ import { probeMongoCollections } from '../../database/mongodb/health.js';
 import type { DependencyChecks } from '../../shared/health/health.types.js';
 import type { PoolClient } from 'pg';
 import type { AnalyticalReport, DashboardGrouping, DashboardOptions, DashboardQuery, DashboardScope, HistoricalReportsQuery, HistoricalReportSummary, ResourceAnalyticsEvent, SubjectDemand } from './analytics.types.js';
-import type { AuthAssignment } from '../auth/auth.types.js';
+import type { AuthAssignment } from '../auth/types/auth.types.js';
 import type { AnalyticsWindow } from './analytics.periods.js';
 import { ANALYTICS_TIME_ZONE } from './analytics.periods.js';
 

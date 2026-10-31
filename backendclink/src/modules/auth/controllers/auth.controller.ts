@@ -1,9 +1,9 @@
 import type { RequestHandler } from 'express';
-import { sendModuleHealth } from '../../shared/health/health-response.js';
-import { accountCapabilities, loginAccount, recoverAccount, resetAccountPassword, completeInstitutionalRegistration, confirmInstitutionalRegistration, getAuthHealth, getRegistrationOptions, registerInstitutionalAccount, resendInstitutionalConfirmation } from './auth.service.js';
-import { ApiError } from '../../shared/errors/api-error.js';
-import { sendSuccess } from '../../shared/http/api-response.js';
-import type { AuthLocals, IdentityLocals } from './auth.types.js';
+import { sendModuleHealth } from '../../../shared/health/health-response.js';
+import { accountCapabilities, loginAccount, recoverAccount, resetAccountPassword, completeInstitutionalRegistration, confirmInstitutionalRegistration, getAuthHealth, getRegistrationOptions, registerInstitutionalAccount, resendInstitutionalConfirmation } from '../services/auth.service.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { sendSuccess } from '../../../shared/http/api-response.js';
+import type { AuthLocals, IdentityLocals } from '../types/auth.types.js';
 
 export const loginAccountController: RequestHandler = async (request, response) => {
   response.setHeader('Cache-Control', 'no-store');

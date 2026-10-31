@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 
 /** Construye un snapshot estable de publicación e imágenes para auditoría, sin bytes ni rutas de Storage. */
 export async function physicalgoodsSnapshot(client: PoolClient, id: string) {

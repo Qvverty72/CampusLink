@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, mock, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { Pool } from 'pg';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 
 /**
  * Ejecuta el servicio y SQL reales contra PGlite; se reemplaza solo el transporte de Pool.

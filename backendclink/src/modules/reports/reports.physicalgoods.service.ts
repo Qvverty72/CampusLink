@@ -1,6 +1,6 @@
 import { ApiError } from '../../shared/errors/api-error.js';
-import { requireCampusCapability } from '../auth/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../auth/auth.types.js';
+import { requireCampusCapability } from '../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from '../marketplace/physicalgoods/physicalgoods.repository.js';
 import { findPhysicalgoodsMedia } from '../marketplace/physicalgoods/physicalgoods.images.repository.js';
 import { physicalgoodsSnapshot } from '../marketplace/physicalgoods/physicalgoods.history.repository.js';

@@ -4,7 +4,7 @@ import type { DependencyChecks } from '../../shared/health/health.types.js';
 import { createServerSupabaseClient } from '../../database/supabase/client.js';
 import type { AcademicOption, AcademicProfileRow, AcademicProfileTransaction, LockedAcademicProfile } from './users.types.js';
 import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import type { AuthAssignment } from '../auth/auth.types.js';
+import type { AuthAssignment } from '../auth/types/auth.types.js';
 
 export function findAcademicProfile(userId: string) {
   return createServerSupabaseClient().from('perfil_usuario')

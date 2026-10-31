@@ -7,7 +7,7 @@ import type { ActiveMapLookup } from './map.service.js';
 import type { ActiveMapRouteParams } from './map.validation.js';
 import { sendModuleHealth } from '../../shared/health/health-response.js';
 import { getMapHealth } from './map.service.js';
-import type { AuthLocals } from '../auth/auth.types.js';
+import type { AuthLocals } from '../auth/types/auth.types.js';
 
 /** Crea un controlador que usa parámetros ya validados y delega el permiso al servicio. */
 export function createGetActiveMapController(

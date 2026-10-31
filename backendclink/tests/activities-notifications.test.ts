@@ -7,7 +7,7 @@ import express from 'express';
 import { PGlite } from '@electric-sql/pglite';
 import { Db, ObjectId } from 'mongodb';
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { PendingActivityNotification } from '../src/modules/activities/activities.notifications.repository.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityChangeDocument } from '../src/modules/activities/activities.edit.types.js';

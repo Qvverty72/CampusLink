@@ -7,7 +7,7 @@ import express from 'express';
 import { PGlite } from '@electric-sql/pglite';
 import { ObjectId } from 'mongodb';
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
 import type { NewActivityReport, ReportsDependencies } from '../src/modules/reports/reports.types.js';

@@ -8,7 +8,7 @@ import { request as httpRequest } from 'node:http';
 import { Pool } from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), foreignInstitution = randomUUID(), campus = randomUUID(), sibling = randomUUID(), foreignCampus = randomUUID();

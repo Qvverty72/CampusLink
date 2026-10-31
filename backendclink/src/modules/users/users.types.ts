@@ -1,5 +1,5 @@
 import type { ModuleHealth } from '../../shared/health/health.types.js';
-import type { AuthAssignment, AuthProfile } from '../auth/auth.types.js';
+import type { AuthAssignment, AuthProfile } from '../auth/types/auth.types.js';
 
 export type UsersHealth = ModuleHealth<'users'>;
 

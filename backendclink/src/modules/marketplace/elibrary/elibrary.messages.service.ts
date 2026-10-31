@@ -1,4 +1,4 @@
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
 import { digitalAction, digitalHistoryPage, withDigitalTradeContext } from './elibrary.trades.service.js';

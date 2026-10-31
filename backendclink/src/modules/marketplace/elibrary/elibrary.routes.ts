@@ -2,7 +2,7 @@ import { createPolicyRouter, publicEndpoint } from '../../../shared/http/endpoin
 import type { Router } from 'express';
 import { getElibraryHealthController } from './elibrary.controller.js';
 import { createDigitalController, detailDigitalController, listDigitalController } from './elibrary.controller.js';
-import { requireAuthentication } from '../../auth/auth.middleware.js';
+import { requireAuthentication } from '../../auth/middleware/auth.middleware.js';
 import { addDigitalFileController, downloadDigitalFileController } from './elibrary.controller.js';
 import { digitalAcademicCatalogController, updateDigitalAcademicsController } from './elibrary.controller.js';
 import { digitalPreviewController } from './elibrary.controller.js';

@@ -1,12 +1,12 @@
-import { createPublicSupabaseClient, createServerSupabaseClient, createUserSupabaseClient, supabaseAuth } from '../../database/supabase/client.js';
-import type { AuthAssignmentRow, AuthProfile } from './auth.types.js';
-import { inspectDependencies } from '../../database/health.js';
-import { probeSupabaseTables } from '../../database/supabase/health.js';
-import type { DependencyChecks } from '../../shared/health/health.types.js';
-import type { NewAuthProfile, RegistrationCampusRow, RegistrationDomainRow, RegistrationInput } from './auth.types.js';
+import { createPublicSupabaseClient, createServerSupabaseClient, createUserSupabaseClient, supabaseAuth } from '../../../database/supabase/client.js';
+import type { AuthAssignmentRow, AuthProfile } from '../types/auth.types.js';
+import { inspectDependencies } from '../../../database/health.js';
+import { probeSupabaseTables } from '../../../database/supabase/health.js';
+import type { DependencyChecks } from '../../../shared/health/health.types.js';
+import type { NewAuthProfile, RegistrationCampusRow, RegistrationDomainRow, RegistrationInput } from '../types/auth.types.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PoolClient } from 'pg';
-import type { AuthAssignment } from './auth.types.js';
+import type { AuthAssignment } from '../types/auth.types.js';
 
 /** Bloqueo compartido con cambios de perfil, cuenta y concesiones de roles. */
 export async function lockAccountContext(client: PoolClient, userId: string) {

@@ -1,4 +1,4 @@
-import { accountCapabilities } from '../../auth/auth.authorization.js';
+import { accountCapabilities } from '../../auth/domain/auth.authorization.js';
 import { lockPhysicalgoodsPublisher,withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { findPhysicalgoodsReminderCandidates,insertPhysicalgoodsReminder,lockPhysicalgoodsReminder } from './physicalgoods.reminders.repository.js';
 

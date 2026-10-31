@@ -4,7 +4,7 @@ import { validateRequest } from '../../shared/http/validate-request.js';
 import { createGetActiveMapController, getMapHealthController } from './map.controller.js';
 import type { ActiveMapLookup } from './map.service.js';
 import { parseActiveMapParams } from './map.validation.js';
-import { requireAuthentication } from '../auth/auth.middleware.js';
+import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
 
 export interface MapRouterOptions {
   lookup?: ActiveMapLookup;

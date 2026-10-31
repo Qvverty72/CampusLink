@@ -1,6 +1,6 @@
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { notifyResourceUpdated } from '../marketplace.notifications.js';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { digitalAction,withDigitalTradeContext } from './elibrary.trades.service.js';
 import { parseDigitalInput,invalidDigital } from './elibrary.validation.js';
 import { findDigitalPublications } from './elibrary.repository.js';

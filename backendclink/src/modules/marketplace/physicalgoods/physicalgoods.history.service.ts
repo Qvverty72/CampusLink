@@ -1,8 +1,8 @@
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';
-import { requireCampusCapability } from '../../auth/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../../auth/auth.types.js';
+import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, signPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
 import { findOwnPhysicalgoods, findPhysicalgoodsImages, listOwnPhysicalgoods } from './physicalgoods.images.repository.js';
 import { physicalgoodsId } from './physicalgoods.validation.js';

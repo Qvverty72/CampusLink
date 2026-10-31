@@ -1,7 +1,7 @@
 import { createPolicyRouter, publicEndpoint } from '../../../shared/http/endpoint-policy.js';
 import { json, Router } from 'express';
 import { createPhysicalgoodsController, getPhysicalgoodsHealthController, getPhysicalgoodsOptionsController, getPhysicalgoodsPhotoController } from './physicalgoods.controller.js';
-import { requireAuthentication } from '../../auth/auth.middleware.js';
+import { requireAuthentication } from '../../auth/middleware/auth.middleware.js';
 import { addPhysicalgoodsImageController, changePhysicalgoodsCategoryController, changePhysicalgoodsPrincipalController, deletePhysicalgoodsImageController, getPhysicalgoodsGalleryController, getPhysicalgoodsResourcesController } from './physicalgoods.controller.js';
 import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from './physicalgoods.controller.js';
 import { createPhysicalgoodsRequestController, getPhysicalgoodsRequestOptionsController } from './physicalgoods.controller.js';

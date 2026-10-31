@@ -7,7 +7,7 @@ import type { Server } from 'node:http';
 import { Pool, type PoolClient } from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { Db, ObjectId } from 'mongodb';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), other = randomUUID(), foreign = randomUUID();
