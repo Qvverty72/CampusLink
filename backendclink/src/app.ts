@@ -8,11 +8,14 @@ import { notFoundHandler } from './middleware/error-handler.js';
 import { createApiRouter } from './routes/index.js';
 import type { ActiveMapLookup } from './modules/maps/map.service.js';
 import type { ActivityDependencies } from './modules/activities/activities.service.js';
+import { createRateLimits } from './middleware/rate-limit.js';
+import type { RateLimitStore } from './services/rate-limit.js';
 
 export interface AppDependencies {
   getActiveMap?: ActiveMapLookup;
   activities?: ActivityDependencies;
   diagnosticsEnabled?: boolean;
+  rateLimitStore?: RateLimitStore;
 }
 
 /**
@@ -23,7 +26,11 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   const app = express();
 
   app.use(helmet());
-  app.use(cors());
+  app.use(cors({ preflightContinue: true, exposedHeaders: ['Retry-After'] }));
+  const limits = createRateLimits(dependencies.rateLimitStore);
+  app.locals.rateLimitIdentity = limits.identity;
+  app.use('/api/v1', limits.origin);
+  app.options(/.*/, (_request, response) => { response.sendStatus(204); });
   const jsonParser = express.json();
   app.use((request, response, next) => {
     // Las publicaciones analizan sus cargas acotadas después de autenticar.

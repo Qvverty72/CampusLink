@@ -3,6 +3,7 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { closeMongoDB, connectMongoDB } from './database/mongodb/client.js';
 import { closePostgres } from './database/supabase/postgres.js';
+import { connectRateLimitRedis, closeRateLimitRedis } from './database/rate-limit.redis.js';
 import { getReadiness } from './services/readiness.js';
 import type { ApiReadiness } from './types/api.types.js';
 
@@ -13,9 +14,9 @@ interface BootstrapDependencies {
   listen: () => Promise<Server>;
 }
 const defaults: BootstrapDependencies = {
-  connect: connectMongoDB,
+  connect: async () => { await Promise.all([connectMongoDB(), connectRateLimitRedis()]); },
   verify: getReadiness,
-  close: async () => { await Promise.all([closeMongoDB(), closePostgres()]); },
+  close: async () => { await Promise.all([closeMongoDB(), closePostgres(), closeRateLimitRedis()]); },
   listen: () => new Promise((resolve, reject) => {
     const server = app.listen(env.port);
     server.once('error', reject);

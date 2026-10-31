@@ -28,7 +28,7 @@ let events: { campusId: string; userId?: string; occurredAt: Date; type: string;
 let readMetrics: typeof import('../src/modules/analytics/analytics.repository.js').readDashboardMetrics;
 
 before(async () => {
-  Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
+  Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', RATE_LIMIT_WRITE_MAX: '10000',
     SUPABASE_URL: 'https://dashboard-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
     SUPABASE_DB_URL: 'postgresql://postgres:simulated@dashboard-test.invalid/postgres' });
   await db.exec('CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY, email text);');

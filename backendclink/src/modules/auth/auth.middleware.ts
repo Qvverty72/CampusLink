@@ -18,6 +18,7 @@ export const requireVerifiedIdentity: RequestHandler<Record<string, string>, unk
     response.setHeader('Cache-Control', 'no-store');
     try {
       response.locals.identity = await verifyAuthIdentity(readAccessToken(request));
+      await request.app.locals.rateLimitIdentity?.(request, response, response.locals.identity.userId);
       next();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) response.setHeader('WWW-Authenticate', 'Bearer');
@@ -31,6 +32,7 @@ export const requireAuthentication: RequestHandler<Record<string, string>, unkno
     response.setHeader('Cache-Control', 'no-store');
     try {
       response.locals.auth = await verifyAuthConnection(readAccessToken(request));
+      await request.app.locals.rateLimitIdentity?.(request, response, response.locals.auth.userId);
       next();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {

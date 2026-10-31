@@ -9,9 +9,22 @@ services:
     environment:
       NODE_ENV: development
       PORT: "3000"
+      RATE_LIMIT_REDIS_URL: redis://rate-limit:6379
+    depends_on:
+      rate-limit:
+        condition: service_healthy
     ports:
       - "${HOST_PORT:-3000}:3000"
     init: true
     # HTTP drain and Mongo cleanup can each take DATABASE_TIMEOUT_MS.
     stop_grace_period: 130s
+    restart: unless-stopped
+  rate-limit:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped

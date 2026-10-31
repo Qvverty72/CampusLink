@@ -809,6 +809,40 @@ Las solicitudes físicas (recibo, opciones, Enviadas, Recibidas y detalle propio
 
 Galería pública autorizada e historial de publicación propia agregan `originalTerms` con el mismo formato, derivado exclusivamente del registro auditado de alta. Solo se exponen modalidad, monto y moneda; nunca snapshots completos. Las lecturas se realizan después de autorizar el recurso o los IDs de solicitudes y se agrupan para cada página. Un precio histórico no verificable es `null`, sin reemplazarlo por un precio posterior. No requiere migración, nuevas tablas, escritura histórica ni cambios digitales.
 
+## F2.2-09 - Rate limiting
+
+Rate limiting se monta antes del JSON/multipart. Origen/IP y UUID verificado tienen cuotas
+independientes; cambios de token, parámetros, ruta o cuerpo no cambian el UUID ni la cuota
+de su categoría. Las rutas públicas de login/registro/recuperación comparten cuota por IP.
+No se confía en X-Forwarded-For: Express conserva `trust proxy=false`. Tras un proxy real,
+configurar únicamente las redes confiables del despliegue; de lo contrario se comparte
+la cuota IP del proxy. CORS expone Retry-After y los preflight también consumen cuota.
+
+| Variable | Predeterminado | Uso |
+| --- | --- | --- |
+| RATE_LIMIT_REDIS_URL | vacío solo en development/test | Redis compartido, obligatorio en production |
+| RATE_LIMIT_WINDOW_SECONDS |60| Ventana fija en segundos |
+| RATE_LIMIT_AUTH_MAX |15| Login, registro y recuperación por origen |
+| RATE_LIMIT_READ_MAX |300| Lecturas por UUID verificado |
+| RATE_LIMIT_WRITE_MAX |60| Escrituras por UUID verificado |
+| RATE_LIMIT_ORIGIN_MAX |1200| Todas las solicitudes por IP |
+
+Redis ejecuta contador/expiración de forma atómica y proporciona el TTL común a las
+instancias. Las claves contienen hashes, nunca tokens/UUID/IP en claro; caducan al finalizar
+la ventana. Una cuota excedida retorna429 RATE_LIMITED con Retry-After en segundos; Redis
+no disponible retorna503. No hay fallback de producción a contadores locales. Development/test
+sin URL utilizan memoria acotada para una instancia. Docker Compose incorpora Redis privado,
+sin puerto publicado ni persistencia, con noeviction; todos los backend de un despliegue deben
+usar el mismo Redis. Reiniciar Redis reinicia las cuotas temporales. El bootstrap verifica
+la conexión Redis antes de abrir HTTP y la cierra durante el apagado.
+
+Pruebas nuevas: `tests/f22-rate-limit.test.ts`.
+Para incluir integración Redis real: definir F22_REDIS_TEST_URL con un Redis de pruebas y
+ejecutar `node --import tsx --test tests/f22-foundations.test.ts tests/f22-rate-limit.test.ts`.
+La suite normal omite únicamente los dos casos que requieren Redis externo. Los fixtures
+de dominio con muchas solicitudes elevan sus cuotas por configuración; los casos específicos
+de rate limiting usan umbrales pequeños y verifican el429 real.
+
 ## Referencias técnicas
 
 [Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).
