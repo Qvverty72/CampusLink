@@ -45,6 +45,16 @@ export function loadEnv(input: Environment) {
     throw new Error('HEALTH_DIAGNOSTICS_ENABLED must be true or false');
   }
   const supabaseDatabaseUrl = input.SUPABASE_DB_URL?.trim() || undefined;
+  const rateLimitRedisUrl = input.RATE_LIMIT_REDIS_URL?.trim() || undefined;
+  if (rateLimitRedisUrl) {
+    try {
+      const redisUrl = new URL(rateLimitRedisUrl);
+      if (!['redis:', 'rediss:'].includes(redisUrl.protocol) || !redisUrl.hostname) throw new Error();
+    } catch { throw new Error('RATE_LIMIT_REDIS_URL must be a Redis connection URL'); }
+  }
+  if (nodeEnv === 'production' && !rateLimitRedisUrl) {
+    throw new Error('RATE_LIMIT_REDIS_URL is required in production for shared rate limits');
+  }
   if (supabaseDatabaseUrl) {
     let databaseUrl: URL;
     try { databaseUrl = new URL(supabaseDatabaseUrl); } catch { throw new Error('SUPABASE_DB_URL must be a PostgreSQL connection URL'); }
@@ -70,6 +80,12 @@ export function loadEnv(input: Environment) {
     databaseTimeoutMs: integer(input, 'DATABASE_TIMEOUT_MS', 5000, 100, 60000),
     healthCacheTtlMs: integer(input, 'HEALTH_CACHE_TTL_MS', 5000, 0, 60000),
     healthDiagnosticsEnabled: nodeEnv === 'development' && diagnostics === 'true',
+    rateLimitRedisUrl,
+    rateLimitWindowSeconds: integer(input, 'RATE_LIMIT_WINDOW_SECONDS', 60, 1, 3600),
+    rateLimitAuthMax: integer(input, 'RATE_LIMIT_AUTH_MAX', 15, 1, 100000),
+    rateLimitReadMax: integer(input, 'RATE_LIMIT_READ_MAX', 300, 1, 100000),
+    rateLimitWriteMax: integer(input, 'RATE_LIMIT_WRITE_MAX', 60, 1, 100000),
+    rateLimitOriginMax: integer(input, 'RATE_LIMIT_ORIGIN_MAX', 1200, 1, 1000000),
   };
 }
 

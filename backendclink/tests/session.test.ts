@@ -31,7 +31,7 @@ function providerSession() {
 }
 
 before(async () => {
-  Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
+  Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', RATE_LIMIT_AUTH_MAX: '10000',
     SUPABASE_URL: 'https://session-test.invalid', SUPABASE_PUBLISHABLE_KEY: publicKey, SUPABASE_SECRET_KEY: 'sb_secret_server_only' });
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
