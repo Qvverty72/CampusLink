@@ -1,6 +1,6 @@
 import type { ModuleHealth } from '../../shared/health/health.types.js';
-import type { ActivityDto } from '../activities/activities.types.js';
-import type { ActivityDependencies } from '../activities/activities.service.js';
+import type { ActivityDto } from '../activities/types/activities.types.js';
+import type { ActivityDependencies } from '../activities/services/activities.service.js';
 
 export type ReportsHealth = ModuleHealth<'reports'>;
 

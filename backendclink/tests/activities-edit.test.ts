@@ -3,10 +3,10 @@ import { before, after, mock, test } from 'node:test';
 import { Db, MongoClient, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
-import { editActivityParser } from '../src/modules/activities/activities.edit.validation.js';
+import { editActivityParser } from '../src/modules/activities/validators/activities.edit.validation.js';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
-import type { ActivityDocument, ActivitySeriesDocument } from '../src/modules/activities/activities.types.js';
-import type { ActivityEditDependencies, EditActivityInput } from '../src/modules/activities/activities.edit.types.js';
+import type { ActivityDocument, ActivitySeriesDocument } from '../src/modules/activities/types/activities.types.js';
+import type { ActivityEditDependencies, EditActivityInput } from '../src/modules/activities/types/activities.edit.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { activityEditDraft, validateActivityEditDraft } from '../../frontendclink/src/features/activities/types/editing.js';
 
@@ -28,12 +28,12 @@ const body = () => ({ title: 'Editada', description: 'Descripción nueva', start
 const parsed = (value: unknown = body(), save = false): EditActivityInput => { const result = editActivityParser(save)(value); assert.equal(result.success, true);
   return (result as { data: EditActivityInput }).data; };
 const deps = (value: ActivityDocument): ActivityEditDependencies => ({ now: () => now, getActiveMap: async () => map, findEditable: async () => value });
-let preview: typeof import('../src/modules/activities/activities.edit.service.js').previewActivityEdit;
-let edit: typeof import('../src/modules/activities/activities.edit.service.js').editActivity;
+let preview: typeof import('../src/modules/activities/services/activities.edit.service.js').previewActivityEdit;
+let edit: typeof import('../src/modules/activities/services/activities.edit.service.js').editActivity;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', SUPABASE_URL: 'https://edit-test.invalid',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  ({ previewActivityEdit: preview, editActivity: edit } = await import('../src/modules/activities/activities.edit.service.js'));
+  ({ previewActivityEdit: preview, editActivity: edit } = await import('../src/modules/activities/services/activities.edit.service.js'));
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 
@@ -92,7 +92,7 @@ test('recurring edits plan only the selected instance and never read or alter ot
     assert.equal(result.changes[0].after.endAt.toISOString(), input.endAt.toISOString());
     assert.equal(JSON.stringify({ values, series }), original);
   }
-  const { getActivityDetail } = await import('../src/modules/activities/activities.detail.service.js');
+  const { getActivityDetail } = await import('../src/modules/activities/services/activities.detail.service.js');
   const detail = await getActivityDetail(publisher, current._id.toHexString(), {
     ...dependencies, findActivity: async () => current, findParticipation: async () => null,
   });
@@ -106,7 +106,7 @@ test('all roles reject legacy group edits before reading data, saving or opening
     getActiveMap: async () => { reads++; return map; }, findEditable: async () => { reads++; return current; },
     saveEdit: async () => { writes++; throw new Error('Must not save'); },
   };
-  const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
+  const { commitActivityEdit } = await import('../src/modules/activities/repositories/activities.edit.repository.js');
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async () => { throw new Error('Must not open a transaction'); });
   try {
     for (const context of [auth, publisher, { ...auth, roles: [{ id: 'admin', name: 'ADMINISTRADOR', campusId }] }]) {
@@ -155,7 +155,7 @@ test('edit and immutable history commit together; stale snapshot, location loss 
   });
   try {
     const input = parsed(), review = await preview(auth, id, input, deps(current));
-    const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
+    const { commitActivityEdit } = await import('../src/modules/activities/repositories/activities.edit.repository.js');
     const result = await commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now);
     assert.equal(result.updatedCount, 1); assert.equal(committed.length, 1);
     const history = committed[0].data[0].updateOne.update.$push.changeHistory;
@@ -197,7 +197,7 @@ test('a recurring edit atomically writes one selected history and notification, 
     } };
   });
   try {
-    const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
+    const { commitActivityEdit } = await import('../src/modules/activities/repositories/activities.edit.repository.js');
     const result = await commitActivityEdit(publisher, id, { ...input, previewHash: review.previewHash }, now);
     assert.equal(result.updatedCount, 1); assert.equal(committed.length, 1);
     const update = committed[0].updateOne.update;
@@ -240,7 +240,7 @@ test('reactivating an ended community publication shares the creation lock and r
     },
   }));
   try {
-    const { commitActivityEdit } = await import('../src/modules/activities/activities.edit.repository.js');
+    const { commitActivityEdit } = await import('../src/modules/activities/repositories/activities.edit.repository.js');
     await assert.rejects(commitActivityEdit(auth, id, { ...input, previewHash: review.previewHash }, now),
       { status: 409, message: 'Solo puedes tener activa una actividad comunitaria.' });
     assert.equal(writes, 0);
@@ -292,7 +292,7 @@ test('HTTP authenticated owner preview and PATCH enforce confirmation; shared de
     const saved = await originalFetch(url, { method: 'PATCH', headers, body: JSON.stringify({ ...body(), previewHash: review.previewHash }) }); assert.equal(saved.status, 200);
     assert.equal((await saved.json()).data.updatedCount, 1);
     const detail = (await (await originalFetch(url, { headers })).json()).data; assert.equal(detail.editing.revision, 0);
-    const { getActivityDetail } = await import('../src/modules/activities/activities.detail.service.js');
+    const { getActivityDetail } = await import('../src/modules/activities/services/activities.detail.service.js');
     assert.equal((await getActivityDetail({ ...auth, userId: other, profile: { ...auth.profile, id: other } }, id,
       { ...deps(value), findActivity: async () => value, findParticipation: async () => null, findOrganizer: async () => ({ name: 'Creador' }) })).editing, undefined);
   } finally { globalThis.fetch = originalFetch; await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }

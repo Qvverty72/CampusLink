@@ -3,7 +3,7 @@ import { after, before, mock, test } from 'node:test';
 import { Db, ObjectId } from 'mongodb';
 import { auditTimeline, compareAuditEntries } from '../src/modules/users/domain/audit.timeline.js';
 import type { AuditEntry, AccessCampus } from '../src/modules/users/types/access.types.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { auditLocationReferences } from '../src/modules/users/domain/audit.location.references.js';
 import { auditEditSummary } from '../src/modules/users/domain/audit.edit-groups.js';

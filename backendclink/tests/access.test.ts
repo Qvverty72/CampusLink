@@ -8,7 +8,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { Pool } from 'pg';
 import { ObjectId } from 'mongodb';
 import type { AuditEntry, AuditSearch } from '../src/modules/users/types/access.types.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;

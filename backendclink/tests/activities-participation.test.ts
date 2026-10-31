@@ -4,8 +4,8 @@ import { Db, MongoClient, MongoServerError, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
-import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
-import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
+import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/types/activities.types.js';
+import type { ActivityDependencies } from '../src/modules/activities/services/activities.service.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222';
@@ -32,13 +32,13 @@ const row = (status: 'JOINED' | 'LEFT'): ActivityParticipationDocument => ({
 });
 const map: CampusMapDocument = { campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now,
   buildings: [{ id: 'hbuilding', name: 'Edificio H', floors: [{ id: 'hbuilding_floor2', meshName: 'h_mesh', name: 'Piso 2', pois: [] }] }] };
-let service: typeof import('../src/modules/activities/activities.detail.service.js');
-let repository: typeof import('../src/modules/activities/activities.detail.repository.js');
+let service: typeof import('../src/modules/activities/services/activities.detail.service.js');
+let repository: typeof import('../src/modules/activities/repositories/activities.detail.repository.js');
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://participation-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  service = await import('../src/modules/activities/activities.detail.service.js');
-  repository = await import('../src/modules/activities/activities.detail.repository.js');
+  service = await import('../src/modules/activities/services/activities.detail.service.js');
+  repository = await import('../src/modules/activities/repositories/activities.detail.repository.js');
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 

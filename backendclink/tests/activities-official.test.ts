@@ -4,12 +4,12 @@ import { Db, MongoClient } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
-import type { ActivityDocument, ActivityParticipationDocument, CreateActivityInput } from '../src/modules/activities/activities.types.js';
-import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
+import type { ActivityDocument, ActivityParticipationDocument, CreateActivityInput } from '../src/modules/activities/types/activities.types.js';
+import type { ActivityDependencies } from '../src/modules/activities/services/activities.service.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
-import { parseCreateActivity } from '../src/modules/activities/activities.create.validation.js';
-import { spatialBuildings } from '../src/modules/activities/activities.location.js';
-import { toVisibleActivity } from '../src/modules/activities/activities.policy.js';
+import { parseCreateActivity } from '../src/modules/activities/validators/activities.create.validation.js';
+import { spatialBuildings } from '../src/modules/activities/domain/activities.location.js';
+import { toVisibleActivity } from '../src/modules/activities/domain/activities.policy.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222';
 const otherCampus = '33333333-3333-4333-8333-333333333333';
@@ -42,11 +42,11 @@ const dependencies = (persist: (value: ActivityDocument) => void): ActivityDepen
     persist(document); return toVisibleActivity(document, campusId, now, spatialBuildings(map))!;
   },
 });
-let createOfficialEvent: typeof import('../src/modules/activities/activities.create.service.js').createOfficialEvent;
+let createOfficialEvent: typeof import('../src/modules/activities/services/activities.create.service.js').createOfficialEvent;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://official-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  ({ createOfficialEvent } = await import('../src/modules/activities/activities.create.service.js'));
+  ({ createOfficialEvent } = await import('../src/modules/activities/services/activities.create.service.js'));
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 

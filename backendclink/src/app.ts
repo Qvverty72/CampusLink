@@ -7,7 +7,7 @@ import { apiErrorHandler } from './shared/http/error-handler.js';
 import { notFoundHandler } from './shared/http/error-handler.js';
 import { createApiRouter } from './routes/index.js';
 import type { ActiveMapLookup } from './modules/maps/services/map.service.js';
-import type { ActivityDependencies } from './modules/activities/activities.service.js';
+import type { ActivityDependencies } from './modules/activities/services/activities.service.js';
 import { createRateLimits } from './shared/http/rate-limit.middleware.js';
 import type { RateLimitStore } from './shared/rate-limit/rate-limit.js';
 

@@ -1,7 +1,7 @@
 import { createPolicyRouter, publicEndpoint } from '../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
 import { createActivitiesRouter } from '../modules/activities/activities.routes.js';
-import type { ActivityDependencies } from '../modules/activities/activities.service.js';
+import type { ActivityDependencies } from '../modules/activities/services/activities.service.js';
 import { env } from '../config/env.js';
 import { createAnalyticsRouter } from '../modules/analytics/analytics.routes.js';
 import { createAuthRouter } from '../modules/auth/auth.routes.js';

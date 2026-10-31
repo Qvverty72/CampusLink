@@ -4,12 +4,12 @@ import { Db, MongoClient, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
-import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
-import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
+import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/types/activities.types.js';
+import type { ActivityDependencies } from '../src/modules/activities/services/activities.service.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
-import { parseActivityDeletion, parseActivityParticipantsQuery } from '../src/modules/activities/activities.management.validation.js';
-import { toVisibleActivity } from '../src/modules/activities/activities.policy.js';
-import { spatialBuildings } from '../src/modules/activities/activities.location.js';
+import { parseActivityDeletion, parseActivityParticipantsQuery } from '../src/modules/activities/validators/activities.management.validation.js';
+import { toVisibleActivity } from '../src/modules/activities/domain/activities.policy.js';
+import { spatialBuildings } from '../src/modules/activities/domain/activities.location.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222';
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -27,13 +27,13 @@ const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
   participantCount: 7, createdAt: now, updatedAt: now, ...patch });
 const deps = (value = document()): ActivityDependencies => ({ getActiveMap: async () => map, now: () => now, findActivity: async () => value,
   findValidCreators: async () => new Map([[other, 'Organizador']]) });
-let service: typeof import('../src/modules/activities/activities.management.service.js');
-let repository: typeof import('../src/modules/activities/activities.management.repository.js');
+let service: typeof import('../src/modules/activities/services/activities.management.service.js');
+let repository: typeof import('../src/modules/activities/repositories/activities.management.repository.js');
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', SUPABASE_URL: 'https://management-test.invalid',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  service = await import('../src/modules/activities/activities.management.service.js');
-  repository = await import('../src/modules/activities/activities.management.repository.js');
+  service = await import('../src/modules/activities/services/activities.management.service.js');
+  repository = await import('../src/modules/activities/repositories/activities.management.repository.js');
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 

@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { Db, MongoNetworkError, ObjectId } from 'mongodb';
 import express, { type Express } from 'express';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 
 const campus = '22222222-2222-4222-8222-222222222222';
@@ -42,7 +42,7 @@ async function withServer(app: Express, run: (base: string) => Promise<void>) {
 }
 
 test('[F2.2-06] valid UUID references retain Mongo ObjectId; orphan/malformed/foreign references never enter the list', async () => {
-  const { getActivities } = await import('../src/modules/activities/activities.service.js');
+  const { getActivities } = await import('../src/modules/activities/services/activities.service.js');
   const valid = doc(), missing = doc({ createdByUserId: other }); let calls = 0;
   const result = await getActivities(auth(), {}, { ...dependencies,
     findActivities: async () => [valid, missing, doc({ createdByUserId: 'not-a-uuid' }), doc({ campusId: other })],
@@ -54,7 +54,7 @@ test('[F2.2-06] valid UUID references retain Mongo ObjectId; orphan/malformed/fo
 });
 
 test('[F2.2-06] orphan detail and join return 404 without a participation write', async () => {
-  const { getActivityDetail, joinActivity } = await import('../src/modules/activities/activities.detail.service.js');
+  const { getActivityDetail, joinActivity } = await import('../src/modules/activities/services/activities.detail.service.js');
   const value = doc(); let writes = 0, participationReads = 0;
   const deps = { ...dependencies, findActivity: async () => value, findValidCreators: async () => new Map<string, string>(),
     findParticipation: async () => { participationReads++; return null; }, registerParticipation: async () => { writes++; } };
@@ -64,7 +64,7 @@ test('[F2.2-06] orphan detail and join return 404 without a participation write'
 });
 
 test('[F2.2-06] orphan activities cannot receive new analytics interactions or reports by direct ID', async () => {
-  const { recordViewedActivity } = await import('../src/modules/activities/activities.detail.service.js');
+  const { recordViewedActivity } = await import('../src/modules/activities/services/activities.detail.service.js');
   const { reportActivity } = await import('../src/modules/reports/reports.service.js');
   const value = doc(); let writes = 0;
   const deps = { ...dependencies, findActivity: async () => value, findValidCreators: async () => new Map<string, string>(),
@@ -75,7 +75,7 @@ test('[F2.2-06] orphan activities cannot receive new analytics interactions or r
 });
 
 test('[F2.2-06] relational failure is 503 and never substitutes an empty success or partial Mongo write', async () => {
-  const { joinActivity } = await import('../src/modules/activities/activities.detail.service.js');
+  const { joinActivity } = await import('../src/modules/activities/services/activities.detail.service.js');
   const value = doc(); let writes = 0;
   await assert.rejects(joinActivity(auth(), value._id.toHexString(), { ...dependencies, findActivity: async () => value,
     findValidCreators: async () => { throw new Error('secret PostgreSQL DSN'); },
@@ -85,7 +85,7 @@ test('[F2.2-06] relational failure is 503 and never substitutes an empty success
 });
 
 test('[F2.2-06] actual reference repository checks active state/campus/deletion and batches repeated creators', async () => {
-  const { findValidActivityCreators } = await import('../src/modules/activities/activities.references.repository.js');
+  const { findValidActivityCreators } = await import('../src/modules/activities/repositories/activities.references.repository.js');
   const urls: URL[] = [];
   globalThis.fetch = async input => {
     const url = new URL(String(input)); urls.push(url);
@@ -104,8 +104,8 @@ test('[F2.2-06] actual reference repository checks active state/campus/deletion 
 });
 
 test('[F2.2-06] creator reference changes hide the next list and detail read without caching or deleting history', async () => {
-  const { getActivities } = await import('../src/modules/activities/activities.service.js');
-  const { getActivityDetail } = await import('../src/modules/activities/activities.detail.service.js');
+  const { getActivities } = await import('../src/modules/activities/services/activities.service.js');
+  const { getActivityDetail } = await import('../src/modules/activities/services/activities.detail.service.js');
   const value = doc(); const original = JSON.stringify(value); let current = true, reads = 0;
   const deps = { ...dependencies, findActivity: async () => value, findActivities: async () => [value],
     findValidCreators: async () => { reads++; return current ? new Map([[creator, 'Organizador']]) : new Map<string, string>(); } };
@@ -164,7 +164,7 @@ test('[F2.2-07] the same token immediately follows a changed PostgreSQL campus a
 });
 
 test('[F2.2-08] operational activity reads omit retired content without mutating its history or participations', async () => {
-  const { getActivities } = await import('../src/modules/activities/activities.service.js');
+  const { getActivities } = await import('../src/modules/activities/services/activities.service.js');
   const documents = [doc({ createdByUserId: userId }), doc({ deletedAt: now }), doc({ status: 'DELETED' }), doc({ visibility: 'HIDDEN' })];
   const original = structuredClone(documents.map(row => ({ ...row, _id: row._id.toHexString() })));
   const result = await getActivities(auth(), {}, { ...dependencies, findActivities: async () => documents });

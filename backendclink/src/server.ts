@@ -5,7 +5,7 @@ async function main(): Promise<void> {
   const { startApi, stopApi } = await import('./bootstrap.js');
   const { env } = await import('./config/env.js');
   const server = await startApi();
-  const { startActivityNotificationWorker } = await import('./modules/activities/activities.notifications.worker.js');
+  const { startActivityNotificationWorker } = await import('./modules/activities/workers/activities.notifications.worker.js');
   const stopNotifications = startActivityNotificationWorker();
   const { startPhysicalgoodsReminderWorker } = await import('./modules/marketplace/physicalgoods/physicalgoods.reminders.worker.js');
   const stopPhysicalgoodsReminders = startPhysicalgoodsReminderWorker();

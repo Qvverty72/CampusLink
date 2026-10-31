@@ -4,18 +4,18 @@ import { Db, MongoClient, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { legacyParticipationHistory } from '../src/database/mongodb/005_activity_participation_history.js';
-import { parseActivityView } from '../src/modules/activities/activities.validation.js';
-import { activityInteractionId, appendActivityInteraction } from '../src/modules/activities/activities.interactions.js';
+import { parseActivityView } from '../src/modules/activities/validators/activities.validation.js';
+import { activityInteractionId, appendActivityInteraction } from '../src/modules/activities/repositories/activities.interactions.js';
 import { activityOperationId } from '../../frontendclink/src/features/activities/types/interaction.js';
-import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
+import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/types/activities.types.js';
 const campusId = '22222222-2222-4222-8222-222222222222', userId = '11111111-1111-4111-8111-111111111111';
 const operationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', now = new Date('2099-01-01');
 const id = new ObjectId();
-let view: typeof import('../src/modules/activities/activities.views.repository.js').recordActivityView;
+let view: typeof import('../src/modules/activities/repositories/activities.views.repository.js').recordActivityView;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', SUPABASE_URL: 'https://interactions-test.invalid',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  ({ recordActivityView: view } = await import('../src/modules/activities/activities.views.repository.js'));
+  ({ recordActivityView: view } = await import('../src/modules/activities/repositories/activities.views.repository.js'));
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 

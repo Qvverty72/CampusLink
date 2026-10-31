@@ -5,7 +5,7 @@ import { withPostgresTransaction } from '../../../database/supabase/postgres.js'
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { countOwnUnreadNotifications, findOwnActivityChange, listOwnNotifications, updateOwnNotification, lockOwnNotificationAccount } from '../repositories/notifications.repository.js';
 import { getNotificationActivityChange } from './notifications.activity-change.js';
-import type { ActivityDependencies } from '../../activities/activities.service.js';
+import type { ActivityDependencies } from '../../activities/services/activities.service.js';
 
 export async function ownNotificationOperation(auth: VerifiedAuthConnection,
   input: { cursor?: string; id?: string; remove?: boolean; countOnly?: boolean; activityChange?: boolean },

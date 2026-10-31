@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import { after, before, mock, test } from 'node:test';
 import { Db, ObjectId } from 'mongodb';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
 
-let lifecycle: typeof import('../src/modules/activities/activities.lifecycle.js');
-let maintain: typeof import('../src/modules/activities/activities.notifications.worker.js').maintainActivities;
+let lifecycle: typeof import('../src/modules/activities/repositories/activities.lifecycle.js');
+let maintain: typeof import('../src/modules/activities/workers/activities.notifications.worker.js').maintainActivities;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', SUPABASE_URL: 'https://lifecycle-test.invalid',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  lifecycle = await import('../src/modules/activities/activities.lifecycle.js');
-  ({ maintainActivities: maintain } = await import('../src/modules/activities/activities.notifications.worker.js'));
+  lifecycle = await import('../src/modules/activities/repositories/activities.lifecycle.js');
+  ({ maintainActivities: maintain } = await import('../src/modules/activities/workers/activities.notifications.worker.js'));
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 const now = new Date('2099-01-05T13:00:00Z');

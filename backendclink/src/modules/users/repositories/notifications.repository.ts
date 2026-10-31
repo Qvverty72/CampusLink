@@ -7,7 +7,7 @@ export async function lockOwnNotificationAccount(client: PoolClient, userId: str
   return profile.rows.length === 1;
 }
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import type { PendingActivityNotification } from '../../activities/activities.notifications.repository.js';
+import type { PendingActivityNotification } from '../../activities/types/activities.notifications.types.js';
 import type { ActivityNotificationDto, NotificationPage, UserNotificationDto } from '../types/notifications.types.js';
 
 const reasonLabels = { DATES_CHANGED: 'fechas', LOCATION_CHANGED: 'ubicación', CONTENT_CHANGED: 'información' };
