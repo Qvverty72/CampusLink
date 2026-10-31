@@ -1,14 +1,14 @@
 import type { PoolClient } from 'pg';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';
-import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, signPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
-import { findOwnPhysicalgoods, findPhysicalgoodsImages, listOwnPhysicalgoods } from './physicalgoods.images.repository.js';
-import { physicalgoodsId } from './physicalgoods.validation.js';
-import type { PhysicalgoodsOwnRow } from './physicalgoods.types.js';
-import { findActivePhysicalgoodsTransaction } from './physicalgoods.transactions.repository.js';
-import {findPhysicalgoodsOriginalTerms} from './physicalgoods.price-history.repository.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../../../../shared/pagination/pagination.js';
+import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, signPrincipalPhoto, withPhysicalgoodsTransaction } from '../repositories/physicalgoods.repository.js';
+import { findOwnPhysicalgoods, findPhysicalgoodsImages, listOwnPhysicalgoods } from '../repositories/physicalgoods.images.repository.js';
+import { physicalgoodsId } from '../validators/physicalgoods.validation.js';
+import type { PhysicalgoodsOwnRow } from '../types/physicalgoods.types.js';
+import { findActivePhysicalgoodsTransaction } from '../repositories/physicalgoods.transactions.repository.js';
+import {findPhysicalgoodsOriginalTerms} from '../repositories/physicalgoods.price-history.repository.js';
 
 /** Revalida cuenta y contexto vigente; cada consulta histórica debe filtrar propiedad o participación. */
 export async function withPhysicalgoodsHistory<T>(auth:VerifiedAuthConnection,operation:(client:PoolClient,current:VerifiedAuthConnection)=>Promise<T>) {

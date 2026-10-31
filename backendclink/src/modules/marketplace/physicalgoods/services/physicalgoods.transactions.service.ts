@@ -1,22 +1,22 @@
 import type { PoolClient } from 'pg';
-import { assertMarketplaceRatingEligible } from '../marketplace.rating.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult,parsePaginationQuery } from '../../../shared/pagination/pagination.js';
-import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
-import { parsePhysicalgoodsCoordination,parsePhysicalgoodsEmptyAction,parsePhysicalgoodsRating,physicalgoodsId } from './physicalgoods.validation.js';
-import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
-import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
-import { closePendingPhysicalgoodsRequests, updatePhysicalgoodsRequestStatus } from './physicalgoods.requests.repository.js';
+import { assertMarketplaceRatingEligible } from '../../domain/marketplace.rating.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult,parsePaginationQuery } from '../../../../shared/pagination/pagination.js';
+import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from '../repositories/physicalgoods.repository.js';
+import { parsePhysicalgoodsCoordination,parsePhysicalgoodsEmptyAction,parsePhysicalgoodsRating,physicalgoodsId } from '../validators/physicalgoods.validation.js';
+import { touchPhysicalgoods } from '../repositories/physicalgoods.images.repository.js';
+import { auditPhysicalgoods, physicalgoodsSnapshot } from '../repositories/physicalgoods.history.repository.js';
+import { closePendingPhysicalgoodsRequests, updatePhysicalgoodsRequestStatus } from '../repositories/physicalgoods.requests.repository.js';
 import { findPhysicalgoodsTransaction, insertPhysicalgoodsConfirmation, lockPhysicalgoodsTransactionResource,
   physicalgoodsConfirmations,setPhysicalgoodsPublicationStatus,updatePhysicalgoodsTransactionStatus,
-  findPhysicalgoodsRating,insertPhysicalgoodsRating,listOwnPhysicalgoodsTransactions,countOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from './physicalgoods.transactions.repository.js';
+  findPhysicalgoodsRating,insertPhysicalgoodsRating,listOwnPhysicalgoodsTransactions,countOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from '../repositories/physicalgoods.transactions.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
-import type { PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
-import { findActiveMapByCampusId } from '../../maps/repositories/map.repository.js';
-import { spatialBuildings } from '../../maps/domain/map.location.js';
-import {findPhysicalgoodsRequestTerms} from './physicalgoods.price-history.repository.js';
+import type { PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionRow } from '../types/physicalgoods.types.js';
+import { findActiveMapByCampusId } from '../../../maps/repositories/map.repository.js';
+import { spatialBuildings } from '../../../maps/domain/map.location.js';
+import {findPhysicalgoodsRequestTerms} from '../repositories/physicalgoods.price-history.repository.js';
 
 /** Revalida identidad y participación; solo detalle/mensajes habilitan lectura histórica de otro campus. */
 async function transactionContext<T>(auth: VerifiedAuthConnection, publicationId: unknown, transactionId: unknown,

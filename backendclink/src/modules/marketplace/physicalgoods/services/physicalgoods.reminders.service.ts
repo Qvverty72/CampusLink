@@ -1,6 +1,6 @@
-import { accountCapabilities } from '../../auth/domain/auth.authorization.js';
-import { lockPhysicalgoodsPublisher,withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
-import { findPhysicalgoodsReminderCandidates,insertPhysicalgoodsReminder,lockPhysicalgoodsReminder } from './physicalgoods.reminders.repository.js';
+import { accountCapabilities } from '../../../auth/domain/auth.authorization.js';
+import { lockPhysicalgoodsPublisher,withPhysicalgoodsTransaction } from '../repositories/physicalgoods.repository.js';
+import { findPhysicalgoodsReminderCandidates,insertPhysicalgoodsReminder,lockPhysicalgoodsReminder } from '../repositories/physicalgoods.reminders.repository.js';
 
 /** Una entrega por transacción: comparte locks con edición/retirada/cierre y registra generación sin modificar la publicación. */
 export async function dispatchPhysicalgoodsReminders(stopped=()=>false) {

@@ -1,4 +1,4 @@
-import { ApiError } from '../../shared/errors/api-error.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 /** Regla única para valoraciones físicas y digitales, sin dependencia de su persistencia o campus. */
 export function parseMarketplaceRating(body:unknown):number {
   const invalid=(field:string,message:string):never=>{throw new ApiError(400,'VALIDATION_ERROR',message,{details:[{field,message}]});};

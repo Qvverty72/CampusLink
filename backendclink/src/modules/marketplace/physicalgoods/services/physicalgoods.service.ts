@@ -1,15 +1,15 @@
-import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
-import { probePhysicalgoodsDependencies } from './physicalgoods.repository.js';
-import type { PhysicalgoodsHealth } from './physicalgoods.types.js';
+import { createModuleHealthCheck } from '../../../../shared/health/module-health.js';
+import { probePhysicalgoodsDependencies } from '../repositories/physicalgoods.repository.js';
+import type { PhysicalgoodsHealth } from '../types/physicalgoods.types.js';
 import { randomUUID } from 'node:crypto';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import type { PhysicalgoodsCatalog, PhysicalgoodsCreated } from './physicalgoods.types.js';
-import { parsePhysicalgoods, physicalgoodsId } from './physicalgoods.validation.js';
-import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import type { PhysicalgoodsCatalog, PhysicalgoodsCreated } from '../types/physicalgoods.types.js';
+import { parsePhysicalgoods, physicalgoodsId } from '../validators/physicalgoods.validation.js';
+import { auditPhysicalgoods, physicalgoodsSnapshot } from '../repositories/physicalgoods.history.repository.js';
 import { findPhysicalgoodsCatalog, findPrincipalPhoto, insertPhysicalgoods, lockPhysicalgoodsPublisher,
-  PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
+  PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from '../repositories/physicalgoods.repository.js';
 
 const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'No se pudo publicar el recurso. Inténtalo nuevamente.');
 async function dependency<T>(operation: () => Promise<T>) {

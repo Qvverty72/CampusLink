@@ -1,4 +1,4 @@
-import { dispatchPhysicalgoodsReminders } from './physicalgoods.reminders.service.js';
+import { dispatchPhysicalgoodsReminders } from '../services/physicalgoods.reminders.service.js';
 
 /** Sigue el patrón de mantenimiento existente: tanda al iniciar, sin solapamiento y cierre que espera la ejecución. */
 export function startPhysicalgoodsReminderWorker(dispatch=dispatchPhysicalgoodsReminders):()=>Promise<void> {

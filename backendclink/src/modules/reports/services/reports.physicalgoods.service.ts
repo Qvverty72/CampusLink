@@ -1,14 +1,14 @@
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from '../../marketplace/physicalgoods/physicalgoods.repository.js';
-import { findPhysicalgoodsMedia } from '../../marketplace/physicalgoods/physicalgoods.images.repository.js';
-import { physicalgoodsSnapshot } from '../../marketplace/physicalgoods/physicalgoods.history.repository.js';
+import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from '../../marketplace/physicalgoods/repositories/physicalgoods.repository.js';
+import { findPhysicalgoodsMedia } from '../../marketplace/physicalgoods/repositories/physicalgoods.images.repository.js';
+import { physicalgoodsSnapshot } from '../../marketplace/physicalgoods/repositories/physicalgoods.history.repository.js';
 import { findPhysicalgoodsTransaction, lockPhysicalgoodsTransactionResource, physicalgoodsConfirmations,
-  physicalgoodsTransactionDetail } from '../../marketplace/physicalgoods/physicalgoods.transactions.repository.js';
-import { physicalgoodsId } from '../../marketplace/physicalgoods/physicalgoods.validation.js';
+  physicalgoodsTransactionDetail } from '../../marketplace/physicalgoods/repositories/physicalgoods.transactions.repository.js';
+import { physicalgoodsId } from '../../marketplace/physicalgoods/validators/physicalgoods.validation.js';
 import { insertContentReport,selectOwnPublicationReport } from '../repositories/reports.repository.js';
-import {withPhysicalgoodsHistory} from '../../marketplace/physicalgoods/physicalgoods.history.service.js';
+import {withPhysicalgoodsHistory} from '../../marketplace/physicalgoods/services/physicalgoods.history.service.js';
 import { parseContentReport } from '../validators/reports.validation.js';
 import type { ContentReportInput, PhysicalgoodsReportReceipt } from '../types/reports.types.js';
 

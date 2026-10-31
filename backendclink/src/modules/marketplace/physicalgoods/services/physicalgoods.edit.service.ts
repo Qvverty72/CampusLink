@@ -1,9 +1,9 @@
-import { ApiError } from '../../../shared/errors/api-error.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
 import { editPhysicalgoods } from './physicalgoods.images.service.js';
-import { physicalgoodsId, parsePhysicalgoodsUpdate, parsePhysicalgoodsVersion } from './physicalgoods.validation.js';
-import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
-import { updatePhysicalgoodsContent, retirePhysicalgoods } from './physicalgoods.repository.js';
+import { physicalgoodsId, parsePhysicalgoodsUpdate, parsePhysicalgoodsVersion } from '../validators/physicalgoods.validation.js';
+import { touchPhysicalgoods } from '../repositories/physicalgoods.images.repository.js';
+import { updatePhysicalgoodsContent, retirePhysicalgoods } from '../repositories/physicalgoods.repository.js';
 
 async function dependency<T>(operation: () => Promise<T>) {
   try { return await operation(); } catch (error) {

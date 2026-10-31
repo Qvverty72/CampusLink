@@ -1,6 +1,6 @@
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { parseMarketplaceRating } from '../marketplace.rating.js';
-import type { PhysicalgoodsCondition, PhysicalgoodsInput, PrincipalPhoto } from './physicalgoods.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { parseMarketplaceRating } from '../../domain/marketplace.rating.js';
+import type { PhysicalgoodsCondition, PhysicalgoodsInput, PrincipalPhoto } from '../types/physicalgoods.types.js';
 
 export const PRINCIPAL_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const PHYSICALGOODS_MAX_IMAGES = 3;

@@ -1,10 +1,10 @@
-import { inspectDependencies } from '../../../database/health.js';
-import { probeSupabaseTables } from '../../../database/supabase/health.js';
-import type { DependencyChecks } from '../../../shared/health/health.types.js';
-import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
-import { createServerSupabaseClient } from '../../../database/supabase/client.js';
+import { inspectDependencies } from '../../../../database/health.js';
+import { probeSupabaseTables } from '../../../../database/supabase/health.js';
+import type { DependencyChecks } from '../../../../shared/health/health.types.js';
+import { withPostgresTransaction } from '../../../../database/supabase/postgres.js';
+import { createServerSupabaseClient } from '../../../../database/supabase/client.js';
 import type { PoolClient } from 'pg';
-import type { PhysicalgoodsCatalog, PhysicalgoodsCreated, PhysicalgoodsInput, PrincipalPhoto } from './physicalgoods.types.js';
+import type { PhysicalgoodsCatalog, PhysicalgoodsCreated, PhysicalgoodsInput, PrincipalPhoto } from '../types/physicalgoods.types.js';
 
 // Bucket privado existente en Storage; las rutas siempre las genera el servidor.
 export const PHYSICALGOODS_BUCKET = 'publication-images';
@@ -18,7 +18,7 @@ export async function retirePhysicalgoods(client: PoolClient, id: string) {
   await client.query('UPDATE public.publicacion_recurso SET deleted_at=clock_timestamp() WHERE id=$1', [id]);
 }
 
-export { lockAccountContext as lockPhysicalgoodsPublisher } from '../../auth/repositories/auth.repository.js';
+export { lockAccountContext as lockPhysicalgoodsPublisher } from '../../../auth/repositories/auth.repository.js';
 
 export async function findPhysicalgoodsCatalog(client: PoolClient, campusId: string): Promise<PhysicalgoodsCatalog> {
   const campus = (await client.query<NonNullable<PhysicalgoodsCatalog['campus']>>(

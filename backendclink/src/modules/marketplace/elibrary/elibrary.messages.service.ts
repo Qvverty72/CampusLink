@@ -4,7 +4,7 @@ import { createPaginatedResult } from '../../../shared/pagination/pagination.js'
 import { digitalAction, digitalHistoryPage, withDigitalTradeContext } from './elibrary.trades.service.js';
 import { digitalId, invalidDigital } from './elibrary.validation.js';
 import { digitalMembersEnabled, findDigitalTrade } from './elibrary.trades.repository.js';
-import { findResourceMessage, insertResourceCoordination, resourceCoordinationMessages, type ResourceMessageRow } from '../marketplace.messages.repository.js';
+import { findResourceMessage, insertResourceCoordination, resourceCoordinationMessages, type ResourceMessageRow } from '../repositories/marketplace.messages.repository.js';
 import type { DigitalTradeRow } from './elibrary.types.js';
 
 const messageDto = (row: ResourceMessageRow, trade: DigitalTradeRow) => ({

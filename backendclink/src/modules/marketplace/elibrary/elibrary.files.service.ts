@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { notifyResourceUpdated } from '../marketplace.notifications.js';
+import { notifyResourceUpdated } from '../repositories/marketplace.notifications.js';
 import type { PoolClient } from 'pg';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';

@@ -1,19 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { notifyResourceUpdated } from '../marketplace.notifications.js';
+import { notifyResourceUpdated } from '../../repositories/marketplace.notifications.js';
 import type { PoolClient } from 'pg';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
-import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import type { PhysicalgoodsMediaRow } from './physicalgoods.types.js';
-import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgoodsId, PHYSICALGOODS_MAX_IMAGES } from './physicalgoods.validation.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { createPaginatedResult } from '../../../../shared/pagination/pagination.js';
+import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import type { PhysicalgoodsMediaRow } from '../types/physicalgoods.types.js';
+import { parsePhysicalgoodsCategory, parsePhysicalgoodsPhotoUpload, physicalgoodsId, PHYSICALGOODS_MAX_IMAGES } from '../validators/physicalgoods.validation.js';
 import { lockPhysicalgoodsPublisher, PHYSICALGOODS_BUCKET, principalPhotoHasReference, removePrincipalPhoto,
-  signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
-import { parsePhysicalgoodsSearch } from './physicalgoods.search.validation.js';
-import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
-import {findPhysicalgoodsOriginalTerms} from './physicalgoods.price-history.repository.js';
+  signPhysicalgoodsSearchPhotos, signPrincipalPhoto, uploadPrincipalPhoto, withPhysicalgoodsTransaction } from '../repositories/physicalgoods.repository.js';
+import { parsePhysicalgoodsSearch } from '../validators/physicalgoods.search.validation.js';
+import { auditPhysicalgoods, physicalgoodsSnapshot } from '../repositories/physicalgoods.history.repository.js';
+import {findPhysicalgoodsOriginalTerms} from '../repositories/physicalgoods.price-history.repository.js';
 import { findPhysicalgoodsCategory, findPhysicalgoodsDetail, findPhysicalgoodsImages, findPhysicalgoodsMedia, findPhysicalgoodsOwnerReputation, insertPhysicalgoodsImage, listPhysicalgoodsMedia,
-  retirePhysicalgoodsImage, setPhysicalgoodsPrincipal, touchPhysicalgoods, updatePhysicalgoodsCategory } from './physicalgoods.images.repository.js';
+  retirePhysicalgoodsImage, setPhysicalgoodsPrincipal, touchPhysicalgoods, updatePhysicalgoodsCategory } from '../repositories/physicalgoods.images.repository.js';
 
 async function dependency<T>(operation: () => Promise<T>): Promise<T> {
   try { return await operation(); } catch (error) {

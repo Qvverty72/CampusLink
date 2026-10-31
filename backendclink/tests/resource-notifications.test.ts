@@ -8,7 +8,7 @@ const db = new PGlite();
 const campus = randomUUID(), sibling = randomUUID(), foreign = randomUUID(), institution = randomUUID();
 const owner = randomUUID(), requester = randomUUID(), other = randomUUID(), outsider = randomUUID(), inactive = randomUUID();
 const transaction = <T>(run: (client: PoolClient) => Promise<T>) => db.transaction(client => run(client as unknown as PoolClient));
-let events: typeof import('../src/modules/marketplace/marketplace.notifications.js');
+let events: typeof import('../src/modules/marketplace/repositories/marketplace.notifications.js');
 let inbox: typeof import('../src/modules/users/repositories/notifications.repository.js');
 before(async () => {
   Object.assign(process.env, { NODE_ENV:'test', MONGODB_URI:'mongodb://localhost:27017',
@@ -25,7 +25,7 @@ before(async () => {
   for (const [id,site,state] of [[owner,campus,'ACTIVA'],[requester,campus,'ACTIVA'],[other,sibling,'ACTIVA'],[outsider,foreign,'ACTIVA'],[inactive,campus,'SUSPENDIDA']]) {
     await db.query('INSERT INTO perfil_usuario VALUES($1,$2,$3,$4,null)',[id,site,site===foreign?foreign:institution,state]);
   }
-  events = await import('../src/modules/marketplace/marketplace.notifications.js');
+  events = await import('../src/modules/marketplace/repositories/marketplace.notifications.js');
   inbox = await import('../src/modules/users/repositories/notifications.repository.js');
 });
 after(async () => { await db.close(); });
@@ -91,7 +91,7 @@ test('coordination uses the existing row without an activity key and inbox delet
   const page=await transaction(client=>inbox.listOwnNotifications(client,requester,campus));assert.ok(page.items.some(row=>row.id===notice&&row.type==='COORDINACION_RECURSO'));
   assert.equal(await transaction(client=>inbox.updateOwnNotification(client,owner,campus,notice,true)),false);
   await transaction(client=>inbox.updateOwnNotification(client,requester,campus,notice,true));
-  const {physicalgoodsCoordinationMessages}=await import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.repository.js');
+  const {physicalgoodsCoordinationMessages}=await import('../src/modules/marketplace/physicalgoods/repositories/physicalgoods.transactions.repository.js');
   const messages=await transaction(client=>physicalgoodsCoordinationMessages(client,r.id,trade,[owner,requester],{page:1,limit:10,offset:0}));
   assert.equal(messages.length,1);assert.equal(messages[0].id,notice);
 });

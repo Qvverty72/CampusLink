@@ -1,6 +1,6 @@
 import { ApiError } from '../../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { assertMarketplaceRatingEligible,parseMarketplaceRating } from '../marketplace.rating.js';
+import { assertMarketplaceRatingEligible,parseMarketplaceRating } from '../domain/marketplace.rating.js';
 import { digitalId } from './elibrary.validation.js';
 import { withDigitalTradeContext } from './elibrary.trades.service.js';
 import { findDigitalTrade } from './elibrary.trades.repository.js';

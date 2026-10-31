@@ -1,24 +1,24 @@
 import type { PoolClient } from 'pg';
-import { notifyResourceRequest } from '../marketplace.notifications.js';
-import { ApiError } from '../../../shared/errors/api-error.js';
-import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
-import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
-import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from './physicalgoods.repository.js';
-import { findOwnPhysicalgoods,findPhysicalgoodsMedia } from './physicalgoods.images.repository.js';
-import { physicalgoodsId, parsePhysicalgoodsRequest, parsePhysicalgoodsDecision } from './physicalgoods.validation.js';
-import type { PhysicalgoodsMediaRow, PhysicalgoodsReceivedRow, PhysicalgoodsRequestRow } from './physicalgoods.types.js';
+import { notifyResourceRequest } from '../../repositories/marketplace.notifications.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import type { VerifiedAuthConnection } from '../../../auth/types/auth.types.js';
+import { requireCampusCapability } from '../../../auth/domain/auth.authorization.js';
+import { lockPhysicalgoodsPublisher, withPhysicalgoodsTransaction } from '../repositories/physicalgoods.repository.js';
+import { findOwnPhysicalgoods,findPhysicalgoodsMedia } from '../repositories/physicalgoods.images.repository.js';
+import { physicalgoodsId, parsePhysicalgoodsRequest, parsePhysicalgoodsDecision } from '../validators/physicalgoods.validation.js';
+import type { PhysicalgoodsMediaRow, PhysicalgoodsReceivedRow, PhysicalgoodsRequestRow } from '../types/physicalgoods.types.js';
 import { findActivePhysicalgoodsRequest, findPhysicalgoodsRequestMessage, insertPhysicalgoodsRequest, physicalgoodsRequestMessages,
   findOwnPhysicalgoodsRequest, findPhysicalgoodsRequest, updatePhysicalgoodsRequestStatus, listPhysicalgoodsRequests,
-  listReceivedRequestPublications,listReceivedRequestsForPublications,countPhysicalgoodsRequests } from './physicalgoods.requests.repository.js';
-import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setPhysicalgoodsPublicationStatus,countOwnPhysicalgoodsTransactions } from './physicalgoods.transactions.repository.js';
-import { touchPhysicalgoods } from './physicalgoods.images.repository.js';
-import { auditPhysicalgoods, physicalgoodsSnapshot } from './physicalgoods.history.repository.js';
-import { createPaginatedResult } from '../../../shared/pagination/pagination.js';
-import { parseResourceOperationId, resourceOperationKey } from '../../analytics/services/analytics.service.js';
-import { findResourceRequestOperation } from '../../analytics/repositories/analytics.repository.js';
+  listReceivedRequestPublications,listReceivedRequestsForPublications,countPhysicalgoodsRequests } from '../repositories/physicalgoods.requests.repository.js';
+import { hasActivePhysicalgoodsTransaction, insertPhysicalgoodsTransaction, setPhysicalgoodsPublicationStatus,countOwnPhysicalgoodsTransactions } from '../repositories/physicalgoods.transactions.repository.js';
+import { touchPhysicalgoods } from '../repositories/physicalgoods.images.repository.js';
+import { auditPhysicalgoods, physicalgoodsSnapshot } from '../repositories/physicalgoods.history.repository.js';
+import { createPaginatedResult } from '../../../../shared/pagination/pagination.js';
+import { parseResourceOperationId, resourceOperationKey } from '../../../analytics/services/analytics.service.js';
+import { findResourceRequestOperation } from '../../../analytics/repositories/analytics.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
-import {findOwnerRatings,type OwnerRatingSummary} from '../marketplace.ratings.repository.js';
-import {findPhysicalgoodsOriginalTermsBatch,findPhysicalgoodsRequestTerms,type PhysicalgoodsTerms} from './physicalgoods.price-history.repository.js';
+import {findOwnerRatings,type OwnerRatingSummary} from '../../repositories/marketplace.ratings.repository.js';
+import {findPhysicalgoodsOriginalTermsBatch,findPhysicalgoodsRequestTerms,type PhysicalgoodsTerms} from '../repositories/physicalgoods.price-history.repository.js';
 
 /** Reutiliza el orden de bloqueos de edición: perfil primero, publicación después. */
 async function requestContext<T>(auth: VerifiedAuthConnection, id: string,

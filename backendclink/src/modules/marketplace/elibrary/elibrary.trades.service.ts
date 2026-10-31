@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { notifyResourceRequest } from '../marketplace.notifications.js';
+import { notifyResourceRequest } from '../repositories/marketplace.notifications.js';
 import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
 import { ApiError } from '../../../shared/errors/api-error.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';

@@ -846,7 +846,7 @@ test('audit exposes ID plus current reference names without changing original ph
   await db.query("update perfil_usuario set nombre_completo='Camila actual',deleted_at=now() where id=$1",[user]);
   await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'Categoría actual')",[category]);
   await db.query("insert into recurso_fisico(publicacion_id,categoria_id,estado_uso) values($1,$2,'BUEN_ESTADO')",[publicationId,category]);
-  const {physicalgoodsSnapshot}=await import('../src/modules/marketplace/physicalgoods/physicalgoods.history.repository.js');
+  const {physicalgoodsSnapshot}=await import('../src/modules/marketplace/physicalgoods/repositories/physicalgoods.history.repository.js');
   const snapshot=await physicalgoodsSnapshot(db as never,publicationId);
   const id=await seedAudit(actor,publicationId,campus,null,snapshot);
   await db.query("update auditoria set entidad_tipo='publicacion_recurso',accion='OCULTAR_PUBLICACION' where id=$1",[id]);

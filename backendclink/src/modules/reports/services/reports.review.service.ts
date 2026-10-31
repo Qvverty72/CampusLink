@@ -10,7 +10,7 @@ import { digitalId } from '../../marketplace/elibrary/elibrary.validation.js';
 import { assertStoredDigitalFile } from '../../marketplace/elibrary/elibrary.files.service.js';
 import { downloadDigitalOriginal, findDigitalResource } from '../../marketplace/elibrary/elibrary.repository.js';
 import { findReportedDigitalFile, findReportedPhysicalImage, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution, readReportPeople } from '../repositories/reports.review.repository.js';
-import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../../marketplace/physicalgoods/physicalgoods.repository.js';
+import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../../marketplace/physicalgoods/repositories/physicalgoods.repository.js';
 import type { ReportEntityType, ReportStatus } from '../types/reports.types.js';
 
 const missing = () => new ApiError(404, 'NOT_FOUND', 'La denuncia o el archivo no está disponible en este campus.');

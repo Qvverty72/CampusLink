@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { PaginationParams } from '../../shared/http/api.types.js';
+import type { PaginationParams } from '../../../shared/http/api.types.js';
 
 export interface ResourceMessageRow {
   id: string; publicacion_id: string; transaccion_id: string; destinatario_id: string; mensaje: string; created_at: string;

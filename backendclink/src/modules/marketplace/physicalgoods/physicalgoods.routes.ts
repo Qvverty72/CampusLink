@@ -1,14 +1,14 @@
 import { createPolicyRouter, publicEndpoint } from '../../../shared/http/endpoint-policy.js';
 import { json, Router } from 'express';
-import { createPhysicalgoodsController, getPhysicalgoodsHealthController, getPhysicalgoodsOptionsController, getPhysicalgoodsPhotoController } from './physicalgoods.controller.js';
+import { createPhysicalgoodsController, getPhysicalgoodsHealthController, getPhysicalgoodsOptionsController, getPhysicalgoodsPhotoController } from './controllers/physicalgoods.controller.js';
 import { requireAuthentication } from '../../auth/middleware/auth.middleware.js';
-import { addPhysicalgoodsImageController, changePhysicalgoodsCategoryController, changePhysicalgoodsPrincipalController, deletePhysicalgoodsImageController, getPhysicalgoodsGalleryController, getPhysicalgoodsResourcesController } from './physicalgoods.controller.js';
-import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from './physicalgoods.controller.js';
-import { createPhysicalgoodsRequestController, getPhysicalgoodsRequestOptionsController } from './physicalgoods.controller.js';
-import { getReceivedPhysicalgoodsRequestsController, getSentPhysicalgoodsRequestsController, resolvePhysicalgoodsRequestController, confirmPhysicalgoodsTransactionController, cancelPhysicalgoodsTransactionController } from './physicalgoods.controller.js';
-import { getPhysicalgoodsTransactionController,getPhysicalgoodsCoordinationOptionsController,getPhysicalgoodsCoordinationMessagesController,sendPhysicalgoodsCoordinationController,ratePhysicalgoodsOwnerController } from './physicalgoods.controller.js';
-import { getOwnPhysicalgoodsController,getOwnPhysicalgoodsDetailController,getOwnPhysicalgoodsRequestController,getOwnPhysicalgoodsTransactionsController } from './physicalgoods.controller.js';
-import {getPhysicalgoodsRequestCountsController} from './physicalgoods.controller.js';
+import { addPhysicalgoodsImageController, changePhysicalgoodsCategoryController, changePhysicalgoodsPrincipalController, deletePhysicalgoodsImageController, getPhysicalgoodsGalleryController, getPhysicalgoodsResourcesController } from './controllers/physicalgoods.controller.js';
+import { updatePhysicalgoodsController, withdrawPhysicalgoodsController } from './controllers/physicalgoods.controller.js';
+import { createPhysicalgoodsRequestController, getPhysicalgoodsRequestOptionsController } from './controllers/physicalgoods.controller.js';
+import { getReceivedPhysicalgoodsRequestsController, getSentPhysicalgoodsRequestsController, resolvePhysicalgoodsRequestController, confirmPhysicalgoodsTransactionController, cancelPhysicalgoodsTransactionController } from './controllers/physicalgoods.controller.js';
+import { getPhysicalgoodsTransactionController,getPhysicalgoodsCoordinationOptionsController,getPhysicalgoodsCoordinationMessagesController,sendPhysicalgoodsCoordinationController,ratePhysicalgoodsOwnerController } from './controllers/physicalgoods.controller.js';
+import { getOwnPhysicalgoodsController,getOwnPhysicalgoodsDetailController,getOwnPhysicalgoodsRequestController,getOwnPhysicalgoodsTransactionsController } from './controllers/physicalgoods.controller.js';
+import {getPhysicalgoodsRequestCountsController} from './controllers/physicalgoods.controller.js';
 
 // Solo expone diagnósticos técnicos; las rutas de negocio requieren autenticación.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {

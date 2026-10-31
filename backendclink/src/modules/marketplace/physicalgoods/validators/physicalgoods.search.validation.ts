@@ -1,6 +1,6 @@
-import { ApiError } from '../../../shared/errors/api-error.js';
-import { parsePaginationQuery } from '../../../shared/pagination/pagination.js';
-import type { PhysicalgoodsCondition, PhysicalgoodsSearchFilters } from './physicalgoods.types.js';
+import { ApiError } from '../../../../shared/errors/api-error.js';
+import { parsePaginationQuery } from '../../../../shared/pagination/pagination.js';
+import type { PhysicalgoodsCondition, PhysicalgoodsSearchFilters } from '../types/physicalgoods.types.js';
 import { physicalgoodsId } from './physicalgoods.validation.js';
 
 const invalid = (field: string, message: string): never => {

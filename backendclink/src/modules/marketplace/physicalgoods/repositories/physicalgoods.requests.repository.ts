@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
-import type { PhysicalgoodsReceivedRow, PhysicalgoodsRequestRow } from './physicalgoods.types.js';
-import type { PaginationParams } from '../../../shared/http/api.types.js';
+import type { PhysicalgoodsReceivedRow, PhysicalgoodsRequestRow } from '../types/physicalgoods.types.js';
+import type { PaginationParams } from '../../../../shared/http/api.types.js';
 
 const projection = `id,publicacion_id,solicitante_id,codigo_mensaje,estado_solicitud,
   to_char(solicitada_en AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS solicitada_en`;

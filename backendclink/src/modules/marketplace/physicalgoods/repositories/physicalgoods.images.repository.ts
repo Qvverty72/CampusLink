@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
-import type { PaginationParams } from '../../../shared/http/api.types.js';
-import type { PhysicalgoodsDetailRow, PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsOwnRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from './physicalgoods.types.js';
+import type { PaginationParams } from '../../../../shared/http/api.types.js';
+import type { PhysicalgoodsDetailRow, PhysicalgoodsImageRow, PhysicalgoodsMediaRow, PhysicalgoodsOwnRow, PhysicalgoodsSearchFilters, PhysicalgoodsSearchRow, PrincipalPhoto } from '../types/physicalgoods.types.js';
 import { PHYSICALGOODS_BUCKET } from './physicalgoods.repository.js';
 
 const mediaProjection = `p.id,p.campus_id,p.propietario_id,p.titulo,p.descripcion,p.modalidad,p.precio,p.estado_publicacion,
