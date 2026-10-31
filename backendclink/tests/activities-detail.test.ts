@@ -125,9 +125,10 @@ test('participation uses only own record, honors LEFT and counts the creator wit
   }
 });
 
-test('missing organizer is explicit, unsafe banners are omitted and dependency failure does not fake participation', async () => {
-  const detail = await getActivityDetail(auth, id.toHexString(), { ...deps(document({ bannerUrl: 'javascript:alert(1)' })), findOrganizer: async () => null });
-  assert.equal(detail.organizer, null); assert.equal(detail.bannerUrl, undefined);
+test('orphan organizer hides operational detail, unsafe banners are omitted and dependency failure does not fake participation', async () => {
+  await assert.rejects(getActivityDetail(auth, id.toHexString(), { ...deps(), findOrganizer: async () => null }), { status: 404 });
+  const detail = await getActivityDetail(auth, id.toHexString(), deps(document({ bannerUrl: 'javascript:alert(1)' })));
+  assert.equal(detail.bannerUrl, undefined);
   await assert.rejects(getActivityDetail(auth, id.toHexString(), { ...deps(), findParticipation: async () => { throw new Error('Unavailable'); } }));
 });
 
@@ -155,10 +156,12 @@ test('repository queries isolate activity and own participation; organizer proje
   globalThis.fetch = async input => {
     const url = new URL(String(input));
     assert.equal(url.pathname, '/rest/v1/perfil_usuario');
-    assert.equal(url.searchParams.get('select'), 'nombre_completo');
-    assert.equal(url.searchParams.get('id'), 'eq.' + creatorId);
+    assert.equal(url.searchParams.get('select'), 'id,nombre_completo');
+    assert.equal(url.searchParams.get('id'), 'in.(' + creatorId + ')');
+    assert.equal(url.searchParams.get('campus_id'), 'eq.' + campusId);
+    assert.equal(url.searchParams.get('estado_cuenta'), 'eq.ACTIVA');
     assert.equal(url.searchParams.get('deleted_at'), 'is.null');
-    return Response.json({ nombre_completo: 'Nombre público' });
+    return Response.json([{ id: creatorId, nombre_completo: 'Nombre público' }]);
   };
   try {
     const repository = await import('../src/modules/activities/activities.detail.repository.js');
@@ -167,7 +170,7 @@ test('repository queries isolate activity and own participation; organizer proje
     assert.equal(captured[0].filter.campusId, campusId); assert.deepEqual(captured[0].filter._id, id);
     assert.equal(captured[0].filter.visibility, 'PUBLIC'); assert.deepEqual(captured[0].filter.endAt, { $gt: now });
     assert.deepEqual(captured[1], { name: 'activity_participation', filter: { campusId, activityId: id, userId } });
-    assert.deepEqual(await repository.findActivityOrganizer(creatorId), { name: 'Nombre público' });
+    assert.deepEqual(await repository.findActivityOrganizer(creatorId, campusId), { name: 'Nombre público' });
   } finally { dbMock.mock.restore(); globalThis.fetch = originalFetch; }
 });
 

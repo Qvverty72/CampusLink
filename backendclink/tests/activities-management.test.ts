@@ -25,7 +25,8 @@ const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
   title: 'Actividad', description: 'Grupo de estudio', type: 'COMMUNITY_ACTIVITY', status: 'ACTIVE', visibility: 'PUBLIC',
   startAt: new Date('2099-10-11T12:00:00Z'), endAt: new Date('2099-10-11T13:00:00Z'), location: { buildingKey: 'h', floorKey: 'h1' },
   participantCount: 7, createdAt: now, updatedAt: now, ...patch });
-const deps = (value = document()): ActivityDependencies => ({ getActiveMap: async () => map, now: () => now, findActivity: async () => value });
+const deps = (value = document()): ActivityDependencies => ({ getActiveMap: async () => map, now: () => now, findActivity: async () => value,
+  findValidCreators: async () => new Map([[other, 'Organizador']]) });
 let service: typeof import('../src/modules/activities/activities.management.service.js');
 let repository: typeof import('../src/modules/activities/activities.management.repository.js');
 before(async () => {

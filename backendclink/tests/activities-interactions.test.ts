@@ -84,6 +84,11 @@ test('HTTP explicit views derive user/campus/time from the authenticated server 
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
   const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({ now: () => now,
+    getActiveMap: async () => ({ campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now,
+      buildings: [{ id: 'h', name: 'H', floors: [{ id: 'f', name: 'Piso 1', pois: [] }] }] }),
+    findActivity: async () => ({ _id: id, campusId, createdByUserId: userId, title: 'Actividad', description: 'Descripción',
+      type: 'COMMUNITY_ACTIVITY', status: 'ACTIVE', visibility: 'PUBLIC', startAt: now, endAt: new Date('2099-01-02'),
+      createdAt: now, updatedAt: now, participantCount: 1, location: { buildingKey: 'h', floorKey: 'f' } }),
     recordView: async (campus, activityId, user, at, operation) => {
       calls++; assert.equal(campus, campusId); assert.equal(activityId, id.toHexString()); assert.equal(user, userId);
       assert.equal(at, now); assert.equal(operation, operationId);

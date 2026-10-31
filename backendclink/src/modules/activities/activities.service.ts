@@ -3,6 +3,7 @@ import { getAuthorizedActiveMap, type ActiveMapLookup } from '../maps/map.servic
 import { ApiError } from '../../services/apiError.js';
 import { hasActivityLocation, spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
+import { validActivityCreators } from './activities.references.service.js';
 import type { ActivityDocument, ActivityDto, ActivityParticipationDocument, ActivityParticipationDto, ActivityCreatorRecord, ActivityQuery, ActivitySeriesDocument, ActivityCreationOptions } from './activities.types.js';
 import type { ActivityParticipantsQuery, ActivityParticipantsRecords, ActivityDeletionResult } from './activities.types.js';
 
@@ -12,7 +13,8 @@ export interface ActivityDependencies {
   now?: () => Date;
   findActivity?: (campusId: string, activityId: string, now: Date) => Promise<ActivityDocument | null>;
   findParticipation?: (campusId: string, activityId: string, userId: string) => Promise<ActivityParticipationDocument | null>;
-  findOrganizer?: (userId: string) => Promise<{ name: string } | null>;
+  findOrganizer?: (userId: string, campusId: string) => Promise<{ name: string } | null>;
+  findValidCreators?: (campusId: string, userIds: string[]) => Promise<Map<string, string>>;
   registerParticipation?: (campusId: string, activityId: string, userId: string, now: Date, operationId?: string) => Promise<void>;
   recordView?: (campusId: string, activityId: string, userId: string, now: Date, operationId: string) => Promise<void>;
   findCreatedActivity?: (campusId: string, activityId: string, userId: string) => Promise<ActivityCreatorRecord | null>;
@@ -38,7 +40,10 @@ export async function getActivities(auth: VerifiedAuthConnection, query: Activit
   const now = dependencies.now?.() ?? new Date();
   const lookup = dependencies.findActivities ?? (await import('./activities.repository.js')).findVisibleActivities;
   const documents = await lookup(auth.campusId, query, now);
+  const creators = await validActivityCreators(auth, documents.filter(document =>
+    toVisibleActivity(document, auth.campusId, now, buildings, query)).map(document => document.createdByUserId), dependencies);
   const result = documents.flatMap((document): ActivityDto[] => {
+    if (!creators.has(document.createdByUserId)) return [];
     const activity = toVisibleActivity(document, auth.campusId, now, buildings, query);
     return activity ? [activity] : [];
   });

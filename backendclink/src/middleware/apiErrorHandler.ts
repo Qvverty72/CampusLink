@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler } from 'express';
+import { MongoError } from 'mongodb';
 
 import { ApiError } from '../services/apiError.js';
 import { sendApiError } from '../services/apiResponse.js';
@@ -44,6 +45,11 @@ export const apiErrorHandler: ErrorRequestHandler = (
 
   if (isPayloadTooLarge(error)) {
     sendApiError(response, 413, 'PAYLOAD_TOO_LARGE', 'Request body exceeds the size limit.');
+    return;
+  }
+
+  if (error instanceof MongoError) {
+    sendApiError(response, 503, 'DEPENDENCY_UNAVAILABLE', 'Service temporarily unavailable.');
     return;
   }
 

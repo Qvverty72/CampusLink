@@ -8,6 +8,7 @@ import { expandActivityRecurrence } from './activities.recurrence.js';
 import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
 import { parseRecurrenceRule } from './activities.series.validation.js';
+import { validActivityCreators } from './activities.references.service.js';
 import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto, ActivitySeriesDocument, ActivitySeriesDto, CreateActivitySeriesInput } from './activities.types.js';
 
@@ -54,7 +55,9 @@ export async function getActivitySeries(auth: VerifiedAuthConnection, seriesId: 
   }
   const now = dependencies.now?.() ?? new Date();
   const documents = await (dependencies.findSeriesOccurrences ?? repository!.findActivitySeriesOccurrences)(auth.campusId, seriesId, now);
+  const creators = await validActivityCreators(auth, documents.map(document => document.createdByUserId), dependencies);
   const occurrences = documents.flatMap(document => {
+    if (!creators.has(document.createdByUserId)) return [];
     if (document.seriesId?.toHexString?.() !== seriesId.toLowerCase() || document.type !== series.type
       || document.occurrenceCount !== series.occurrenceCount) return [];
     const dto = toVisibleActivity(document, auth.campusId, now, spatialBuildings(map)); return dto ? [dto] : [];

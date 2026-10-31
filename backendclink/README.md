@@ -809,6 +809,18 @@ Las solicitudes físicas (recibo, opciones, Enviadas, Recibidas y detalle propio
 
 Galería pública autorizada e historial de publicación propia agregan `originalTerms` con el mismo formato, derivado exclusivamente del registro auditado de alta. Solo se exponen modalidad, monto y moneda; nunca snapshots completos. Las lecturas se realizan después de autorizar el recurso o los IDs de solicitudes y se agrupan para cada página. Un precio histórico no verificable es `null`, sin reemplazarlo por un precio posterior. No requiere migración, nuevas tablas, escritura histórica ni cambios digitales.
 
+## F2.2-06 - Referencias PostgreSQL y MongoDB
+
+Los documentos Mongo conservan ObjectId propios y referencias UUID relacionales.
+Las actividades operacionales comprueban creadores ACTIVA/no eliminados en el campus
+de la consulta, en lotes de hasta100 UUID. Una referencia ausente, inactiva o ajena
+no expone la actividad; un fallo de PostgreSQL devuelve503, sin fingir un listado vacío.
+La identidad propia se toma del perfil vigente ya verificado por Auth en esa solicitud.
+Creación/edición conservan los guards existentes de cuenta/campus/propietario y mapa
+relacional activo. No hay una transacción distribuida: cada escritura Mongo mantiene
+su transacción existente; moderación conserva su decisión SQL durable y reanudable.
+Una pérdida de acuse no autoriza a inventar éxito ni a reintentar una creación automáticamente.
+
 ## Referencias técnicas
 
 [Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).
