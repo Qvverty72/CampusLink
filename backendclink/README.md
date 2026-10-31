@@ -809,6 +809,16 @@ Las solicitudes físicas (recibo, opciones, Enviadas, Recibidas y detalle propio
 
 Galería pública autorizada e historial de publicación propia agregan `originalTerms` con el mismo formato, derivado exclusivamente del registro auditado de alta. Solo se exponen modalidad, monto y moneda; nunca snapshots completos. Las lecturas se realizan después de autorizar el recurso o los IDs de solicitudes y se agrupan para cada página. Un precio histórico no verificable es `null`, sin reemplazarlo por un precio posterior. No requiere migración, nuevas tablas, escritura histórica ni cambios digitales.
 
+## F2.2-10 - Endpoints asegurados
+
+Todos los módulos usan `createPolicyRouter`. Cada endpoint declara primero `publicEndpoint`,
+`requireVerifiedIdentity` o `requireAuthentication`; los servicios siguen comprobando
+cuenta, campus, rol, permiso y propiedad. Una ruta sin declaración recibe401 sin sesión
+y403 con sesión válida, antes del controlador, también si la política se declaró después.
+La comprobación cubre los métodos HTTP de Express y `route().all`. `use` se reserva para middleware y montaje
+de routers; declarar endpoints con los métodos HTTP del router. Los diagnósticos públicos
+siguen restringidos a development con opt-in. OPTIONS corresponde al transporte CORS.
+
 ## Referencias técnicas
 
 [Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).

@@ -1,3 +1,4 @@
+import { createPolicyRouter, publicEndpoint } from '../../../middleware/endpoint-policy.js';
 import { json, Router } from 'express';
 import { createPhysicalgoodsController, getPhysicalgoodsHealthController, getPhysicalgoodsOptionsController, getPhysicalgoodsPhotoController } from './physicalgoods.controller.js';
 import { requireAuthentication } from '../../auth/auth.middleware.js';
@@ -11,8 +12,8 @@ import {getPhysicalgoodsRequestCountsController} from './physicalgoods.controlle
 
 // Solo expone diagnósticos técnicos; las rutas de negocio requieren autenticación.
 export function createPhysicalgoodsRouter(diagnosticsEnabled: boolean): Router {
-  const router = Router();
-  if (diagnosticsEnabled) router.get('/health', getPhysicalgoodsHealthController);
+  const router = createPolicyRouter();
+  if (diagnosticsEnabled) router.get('/health', publicEndpoint, getPhysicalgoodsHealthController);
   router.get('/options', requireAuthentication, getPhysicalgoodsOptionsController);
   router.get('/my-publications',requireAuthentication,getOwnPhysicalgoodsController);
   router.get('/transactions',requireAuthentication,getOwnPhysicalgoodsTransactionsController);

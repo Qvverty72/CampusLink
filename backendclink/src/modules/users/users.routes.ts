@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import type { Router } from 'express';
 import { getProfileOverview } from './profile-overview.service.js';
 import { sendSuccess } from '../../services/apiResponse.js';
 import { getUsersHealthController } from './users.controller.js';
@@ -10,12 +11,12 @@ import { createNotificationsRouter } from './notifications.routes.js';
 
 // Los diagnósticos son técnicos; las rutas de negocio verifican identidad y contexto.
 export function createUsersRouter(diagnosticsEnabled: boolean): Router {
-  const router = Router();
+  const router = createPolicyRouter();
   router.get('/me/overview', requireAuthentication, async (_request, response) => {
     sendSuccess(response, await getProfileOverview(response.locals.auth));
   });
   router.use('/me/notifications', createNotificationsRouter());
-  if (diagnosticsEnabled) router.get('/health', getUsersHealthController);
+  if (diagnosticsEnabled) router.get('/health', publicEndpoint, getUsersHealthController);
   router.get('/me/profile', requireAuthentication, getAcademicProfileController);
   router.get('/me/profile-options', requireAuthentication, getAcademicOptionsController);
   router.patch('/me/profile', requireAuthentication, updateAcademicProfileController);

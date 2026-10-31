@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import type { Router } from 'express';
 import { getReportsHealthController, getOwnActivityReportController, createActivityReportController, createPhysicalgoodsReportController } from './reports.controller.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
 import { validateRequest } from '../../middleware/validateRequest.js';
@@ -11,8 +12,8 @@ import { resolveReportController, listReportResolutionsController, getReportReso
 
 /** Todas las denuncias de contenido se registran en reports, con autorización propia del elemento. */
 export function createReportsRouter(diagnosticsEnabled: boolean, dependencies: ReportsDependencies = {}): Router {
-  const router = Router();
-  if (diagnosticsEnabled) router.get('/health', getReportsHealthController);
+  const router = createPolicyRouter();
+  if (diagnosticsEnabled) router.get('/health', publicEndpoint, getReportsHealthController);
   router.get('/campuses/:campusId', requireAuthentication, listReportReviewsController);
   router.get('/campuses/:campusId/resolutions', requireAuthentication, listReportResolutionsController);
   router.get('/campuses/:campusId/resolutions/:reportId', requireAuthentication,

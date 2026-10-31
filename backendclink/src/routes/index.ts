@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { createPolicyRouter, publicEndpoint } from '../middleware/endpoint-policy.js';
+import type { Router } from 'express';
 import { createActivitiesRouter } from '../modules/activities/activities.routes.js';
 import type { ActivityDependencies } from '../modules/activities/activities.service.js';
 import { env } from '../config/env.js';
@@ -25,17 +26,17 @@ export interface ApiRouterOptions {
  * Los diagnósticos detallados solo se habilitan en desarrollo, aun con una opción explícita.
  */
 export function createApiRouter(options: ApiRouterOptions = {}): Router {
-  const apiRouter = Router();
+  const apiRouter = createPolicyRouter();
   const diagnosticsEnabled = options.diagnosticsEnabled ?? env.healthDiagnosticsEnabled;
   // Una opción explícita tampoco habilita diagnósticos detallados fuera de desarrollo.
   const diagnostics = env.nodeEnv === 'development' && diagnosticsEnabled;
 
   // Conserva el contrato histórico de salud; las demás rutas usan sobres de respuesta.
-  apiRouter.get('/health', (_request, response) => {
+  apiRouter.get('/health', publicEndpoint, (_request, response) => {
     response.json({ status: 'ok' });
   });
 
-  if (diagnostics) apiRouter.get('/ready', async (_request, response) => {
+  if (diagnostics) apiRouter.get('/ready', publicEndpoint, async (_request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     const readiness = await getReadiness();
     if (readiness.status === 'unavailable') {

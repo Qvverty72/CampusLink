@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { createPolicyRouter } from '../../middleware/endpoint-policy.js';
+import type { Router } from 'express';
 import { getOwnActivities, type OwnActivityDependencies } from './activities.mine.service.js';
 import { sendSuccess } from '../../services/apiResponse.js';
 import { requireAuthentication } from '../auth/auth.middleware.js';
@@ -17,7 +18,7 @@ import { parseActivityParticipantsQuery, parseActivityDeletion } from './activit
 
 /** Registra lecturas y mutaciones de actividades con autenticación y validadores específicos por ruta. */
 export function createActivitiesRouter(dependencies: ActivityEditDependencies & OwnActivityDependencies = {}): Router {
-  const router = Router();
+  const router = createPolicyRouter();
   router.get('/mine/count', requireAuthentication, validateRequest({ query: parseEmptyActivityInput, body: parseEmptyActivityInput }), async (_request, response) => {
     const result = await getOwnActivities(response.locals.auth, { limit: '1' }, dependencies);
     sendSuccess(response, { campusId: result.campusId, total: result.total });
