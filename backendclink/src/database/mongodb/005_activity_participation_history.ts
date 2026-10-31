@@ -1,7 +1,7 @@
 import type { Db, MongoClient } from 'mongodb';
-import type { ActivityDocument, ActivityParticipationDocument } from '../../modules/activities/types/activities.types.js';
-import { appendActivityInteraction, hasActivityInteraction } from '../../modules/activities/repositories/activities.interactions.js';
-import { initialActivityParticipation } from '../../modules/activities/domain/activities.participation.js';
+import type { ActivityDocument, ActivityParticipationDocument } from '../../modules/activities/activities.types.js';
+import { appendActivityInteraction, hasActivityInteraction } from '../../modules/activities/activities.interactions.js';
+import { initialActivityParticipation } from '../../modules/activities/activities.participation.js';
 
 const uuidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$';
 const uuid = new RegExp(uuidPattern);

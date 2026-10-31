@@ -64,7 +64,8 @@ const dependencies = (documents: ActivityDocument[]) => ({ getActiveMap: async (
   findActivities: async (campus: string) => { assert.equal(campus, campusId); return documents; }, now: () => now });
 
 test('personal activity reads are server-scoped, paginated after validation and omit restricted series metadata', async () => {
-  const { getOwnActivities, joinedActivitiesPipeline } = await import('../src/modules/activities/services/activities.mine.service.js');
+  const { getOwnActivities } = await import('../src/modules/activities/services/activities.mine.service.js');
+  const { joinedActivitiesPipeline } = await import('../src/modules/activities/repositories/activities.mine.repository.js');
   const first = document(), second = document({ seriesId: new ObjectId(), occurrenceIndex: 1, occurrenceCount: 2, originalStartAt: now });
   let reads = 0;
   const deps = { ...dependencies([]), findJoinedActivities: async (campus: string, user: string) => {
