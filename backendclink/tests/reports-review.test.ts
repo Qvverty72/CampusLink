@@ -12,8 +12,8 @@ import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.type
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), other = randomUUID(), foreign = randomUUID();
 let auth: VerifiedAuthConnection, server: Server, base: string;
-let reviews: typeof import('../src/modules/reports/reports.review.service.js');
-let resolutions: typeof import('../src/modules/reports/reports.resolution.service.js');
+let reviews: typeof import('../src/modules/reports/services/reports.review.service.js');
+let resolutions: typeof import('../src/modules/reports/services/reports.resolution.service.js');
 let failSql = false;
 let failAudit = false, failMongo = false, mongoWrites = 0;
 let activity: Record<string, any> | null = null;
@@ -63,8 +63,8 @@ before(async () => {
     const kind = url.pathname.endsWith('/usuario_rol') ? 'rol' : 'permiso';
     return Response.json((kind === 'rol' ? auth.roles : auth.permissions).map(row => ({ campus_id: row.campusId, [kind]: { id: row.id, nombre: row.name } })));
   };
-  reviews = await import('../src/modules/reports/reports.review.service.js');
-  resolutions = await import('../src/modules/reports/reports.resolution.service.js');
+  reviews = await import('../src/modules/reports/services/reports.review.service.js');
+  resolutions = await import('../src/modules/reports/services/reports.resolution.service.js');
   mock.method(Db.prototype, 'collection', ((name: string) => {
     assert.equal(name, 'activities');
     return {

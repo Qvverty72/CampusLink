@@ -1,13 +1,13 @@
-import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { ApiError } from '../../shared/errors/api-error.js';
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
-import { hideReportedActivity } from '../activities/repositories/activities.management.repository.js';
+import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { digitalId } from '../../marketplace/elibrary/elibrary.validation.js';
+import { hideReportedActivity } from '../../activities/repositories/activities.management.repository.js';
 import { authorizedReview } from './reports.review.service.js';
-import { findReportReview, readReportBackground, readReportPeople } from './reports.review.repository.js';
-import { auditReportResolution, finishActivityReport, hideReportPublication, lockReportPublication, saveReportDecision } from './reports.resolution.repository.js';
-import { parseReportResolution } from './reports.validation.js';
-import type { ReportReviewDetail, ReportResolutionInput } from './reports.types.js';
+import { findReportReview, readReportBackground, readReportPeople } from '../repositories/reports.review.repository.js';
+import { auditReportResolution, finishActivityReport, hideReportPublication, lockReportPublication, saveReportDecision } from '../repositories/reports.resolution.repository.js';
+import { parseReportResolution } from '../validators/reports.validation.js';
+import type { ReportReviewDetail, ReportResolutionInput } from '../types/reports.types.js';
 
 const conflict = (message: string) => new ApiError(409, 'CONFLICT', message);
 

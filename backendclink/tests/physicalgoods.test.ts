@@ -34,7 +34,7 @@ let transactionsService: typeof import('../src/modules/marketplace/physicalgoods
 let historyService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
 let remindersService:typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
 let notificationsService:typeof import('../src/modules/users/services/notifications.service.js');
-let reportsService:typeof import('../src/modules/reports/reports.physicalgoods.service.js');
+let reportsService:typeof import('../src/modules/reports/services/reports.physicalgoods.service.js');
 let failTransactionInsert=false;
 let failRatingInsert=false,lostRatingCommit=false;
 let failReportInsert=false,lostReportCommit=false;
@@ -128,7 +128,7 @@ before(async () => {
   historyService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
   remindersService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
   notificationsService=await import('../src/modules/users/services/notifications.service.js');
-  reportsService=await import('../src/modules/reports/reports.physicalgoods.service.js');
+  reportsService=await import('../src/modules/reports/services/reports.physicalgoods.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));

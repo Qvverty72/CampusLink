@@ -1,13 +1,13 @@
-import { ApiError } from '../../shared/errors/api-error.js';
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
-import { digitalConfirmations,findDigitalTrade } from '../marketplace/elibrary/elibrary.trades.repository.js';
-import { withDigitalTradeContext } from '../marketplace/elibrary/elibrary.trades.service.js';
-import { findDigitalPublications } from '../marketplace/elibrary/elibrary.repository.js';
-import { insertContentReport,selectOwnPublicationReport } from './reports.repository.js';
-import { digitalReportSnapshot } from './reports.elibrary.repository.js';
-import { parseContentReport } from './reports.validation.js';
-import type { ContentReportInput } from './reports.types.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { digitalId } from '../../marketplace/elibrary/elibrary.validation.js';
+import { digitalConfirmations,findDigitalTrade } from '../../marketplace/elibrary/elibrary.trades.repository.js';
+import { withDigitalTradeContext } from '../../marketplace/elibrary/elibrary.trades.service.js';
+import { findDigitalPublications } from '../../marketplace/elibrary/elibrary.repository.js';
+import { insertContentReport,selectOwnPublicationReport } from '../repositories/reports.repository.js';
+import { digitalReportSnapshot } from '../repositories/reports.elibrary.repository.js';
+import { parseContentReport } from '../validators/reports.validation.js';
+import type { ContentReportInput } from '../types/reports.types.js';
 export async function reportDigitalResource(auth:VerifiedAuthConnection,rawId:unknown,rawTrade:unknown|null,raw:unknown) {
   const id=digitalId(rawId),tradeId=rawTrade===null?null:digitalId(rawTrade,'transactionId'),parsed=parseContentReport(raw);
   if(!parsed.success)throw new ApiError(400,'VALIDATION_ERROR','Revisa los datos de la denuncia.',{details:parsed.issues});

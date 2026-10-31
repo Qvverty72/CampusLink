@@ -65,7 +65,7 @@ test('[F2.2-06] orphan detail and join return 404 without a participation write'
 
 test('[F2.2-06] orphan activities cannot receive new analytics interactions or reports by direct ID', async () => {
   const { recordViewedActivity } = await import('../src/modules/activities/services/activities.detail.service.js');
-  const { reportActivity } = await import('../src/modules/reports/reports.service.js');
+  const { reportActivity } = await import('../src/modules/reports/services/reports.service.js');
   const value = doc(); let writes = 0;
   const deps = { ...dependencies, findActivity: async () => value, findValidCreators: async () => new Map<string, string>(),
     recordView: async () => { writes++; }, saveActivityReport: async () => { writes++; throw Error('Must not save'); } };

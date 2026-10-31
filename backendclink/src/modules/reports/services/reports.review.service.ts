@@ -1,17 +1,17 @@
 import type { PoolClient } from 'pg';
-import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import { ApiError } from '../../shared/errors/api-error.js';
-import { createPaginatedResult, parsePaginationQuery } from '../../shared/pagination/pagination.js';
-import { requireCampusCapability } from '../auth/domain/auth.authorization.js';
-import { lockAccountContext } from '../auth/repositories/auth.repository.js';
-import { accessRepository } from '../users/repositories/access.repository.js';
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
-import { assertStoredDigitalFile } from '../marketplace/elibrary/elibrary.files.service.js';
-import { downloadDigitalOriginal, findDigitalResource } from '../marketplace/elibrary/elibrary.repository.js';
-import { findReportedDigitalFile, findReportedPhysicalImage, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution, readReportPeople } from './reports.review.repository.js';
-import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../marketplace/physicalgoods/physicalgoods.repository.js';
-import type { ReportEntityType, ReportStatus } from './reports.types.js';
+import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { createPaginatedResult, parsePaginationQuery } from '../../../shared/pagination/pagination.js';
+import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
+import { lockAccountContext } from '../../auth/repositories/auth.repository.js';
+import { accessRepository } from '../../users/repositories/access.repository.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { digitalId } from '../../marketplace/elibrary/elibrary.validation.js';
+import { assertStoredDigitalFile } from '../../marketplace/elibrary/elibrary.files.service.js';
+import { downloadDigitalOriginal, findDigitalResource } from '../../marketplace/elibrary/elibrary.repository.js';
+import { findReportedDigitalFile, findReportedPhysicalImage, findReportReview, readReportBackground, readReportReviews, readReportResolutions, findReportResolution, readReportPeople } from '../repositories/reports.review.repository.js';
+import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../../marketplace/physicalgoods/physicalgoods.repository.js';
+import type { ReportEntityType, ReportStatus } from '../types/reports.types.js';
 
 const missing = () => new ApiError(404, 'NOT_FOUND', 'La denuncia o el archivo no está disponible en este campus.');
 

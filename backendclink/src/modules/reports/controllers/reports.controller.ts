@@ -1,15 +1,15 @@
 import type { RequestHandler } from 'express';
-import { sendModuleHealth } from '../../shared/health/health-response.js';
-import { getReportsHealth, getOwnActivityReport, reportActivity } from './reports.service.js';
-import { sendSuccess } from '../../shared/http/api-response.js';
-import { getValidatedRequest } from '../../shared/http/validate-request.js';
-import type { AuthLocals } from '../auth/types/auth.types.js';
-import type { ReportActivityInput, ReportsDependencies } from './reports.types.js';
-import { getOwnPhysicalgoodsReport,reportPhysicalgoods } from './reports.physicalgoods.service.js';
-import { getOwnDigitalReport,reportDigitalResource } from './reports.elibrary.service.js';
-import { getReportedImage, getReportedOriginal, getReportReview, listReportReviews, listReportResolutions, getReportResolution } from './reports.review.service.js';
-import { sendSuccess as sendEnvelope } from '../../shared/http/api-response.js';
-import { resolveReport } from './reports.resolution.service.js';
+import { sendModuleHealth } from '../../../shared/health/health-response.js';
+import { getReportsHealth, getOwnActivityReport, reportActivity } from '../services/reports.service.js';
+import { sendSuccess } from '../../../shared/http/api-response.js';
+import { getValidatedRequest } from '../../../shared/http/validate-request.js';
+import type { AuthLocals } from '../../auth/types/auth.types.js';
+import type { ReportActivityInput, ReportsDependencies } from '../types/reports.types.js';
+import { getOwnPhysicalgoodsReport,reportPhysicalgoods } from '../services/reports.physicalgoods.service.js';
+import { getOwnDigitalReport,reportDigitalResource } from '../services/reports.elibrary.service.js';
+import { getReportedImage, getReportedOriginal, getReportReview, listReportReviews, listReportResolutions, getReportResolution } from '../services/reports.review.service.js';
+import { sendSuccess as sendEnvelope } from '../../../shared/http/api-response.js';
+import { resolveReport } from '../services/reports.resolution.service.js';
 
 type ReviewHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
 export const getOwnPhysicalgoodsReportController:ReviewHandler=async(request,response)=>{sendSuccess(response,await getOwnPhysicalgoodsReport(response.locals.auth,request.params.publicationId));};

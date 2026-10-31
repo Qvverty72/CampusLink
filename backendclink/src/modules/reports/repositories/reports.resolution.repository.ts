@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { ReportReviewDetail } from './reports.types.js';
+import type { ReportReviewDetail } from '../types/reports.types.js';
 
 export async function saveReportDecision(client: PoolClient, report: ReportReviewDetail, actorId: string,
   justification: string, measure: 'OCULTAR' | 'NINGUNA', status: 'EN_REVISION' | 'RESUELTO' | 'DESESTIMADO') {

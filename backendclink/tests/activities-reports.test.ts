@@ -10,8 +10,8 @@ import type { PoolClient } from 'pg';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
-import type { NewActivityReport, ReportsDependencies } from '../src/modules/reports/reports.types.js';
-import { ACTIVITY_REPORT_REASON_CODES, parseActivityReport, parseContentReport } from '../src/modules/reports/reports.validation.js';
+import type { NewActivityReport, ReportsDependencies } from '../src/modules/reports/types/reports.types.js';
+import { ACTIVITY_REPORT_REASON_CODES, parseActivityReport, parseContentReport } from '../src/modules/reports/validators/reports.validation.js';
 import { ACTIVITY_REPORT_REASONS } from '../../frontendclink/src/features/activities/types/activityReport.js';
 
 const db = new PGlite();
@@ -33,10 +33,10 @@ const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
 });
 const transaction = async <T>(operation: (client: PoolClient) => Promise<T>): Promise<T> =>
   db.transaction(client => operation(client as unknown as PoolClient));
-let reportActivity: typeof import('../src/modules/reports/reports.service.js').reportActivity;
-let getOwnActivityReport: typeof import('../src/modules/reports/reports.service.js').getOwnActivityReport;
-let saveActivityReport: typeof import('../src/modules/reports/reports.repository.js').saveActivityReport;
-let findOwnActivityReport: typeof import('../src/modules/reports/reports.repository.js').findOwnActivityReport;
+let reportActivity: typeof import('../src/modules/reports/services/reports.service.js').reportActivity;
+let getOwnActivityReport: typeof import('../src/modules/reports/services/reports.service.js').getOwnActivityReport;
+let saveActivityReport: typeof import('../src/modules/reports/repositories/reports.repository.js').saveActivityReport;
+let findOwnActivityReport: typeof import('../src/modules/reports/repositories/reports.repository.js').findOwnActivityReport;
 const deps = (value = document(), requestedId = value._id.toHexString(), actor = auth): ReportsDependencies => ({ now: () => now,
   findValidCreators: async (campus, ids) => new Map((await db.query<{ id: string }>(
     `SELECT id FROM perfil_usuario WHERE campus_id=$1 AND estado_cuenta='ACTIVA' AND deleted_at IS NULL AND id=ANY($2::uuid[])`,
@@ -60,8 +60,8 @@ before(async () => {
   await db.query('INSERT INTO campus VALUES ($1),($2)', [campusId, otherCampus]);
   await db.query(`INSERT INTO perfil_usuario(id,campus_id,institucion_id,verificado_en,estado_cuenta)
     VALUES ($1,$2,$2,now(),'ACTIVA'),($3,$2,$2,now(),'ACTIVA')`, [userId, campusId, creatorId]);
-  ({ reportActivity, getOwnActivityReport } = await import('../src/modules/reports/reports.service.js'));
-  ({ saveActivityReport, findOwnActivityReport } = await import('../src/modules/reports/reports.repository.js'));
+  ({ reportActivity, getOwnActivityReport } = await import('../src/modules/reports/services/reports.service.js'));
+  ({ saveActivityReport, findOwnActivityReport } = await import('../src/modules/reports/repositories/reports.repository.js'));
 });
 beforeEach(async () => { await db.exec('DELETE FROM reporte_contenido'); });
 after(async () => { await db.close(); await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });

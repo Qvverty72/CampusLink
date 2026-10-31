@@ -1,5 +1,5 @@
-import type { RequestParser, ApiErrorDetail, ValidationResult } from '../../shared/http/api.types.js';
-import type { ContentReportInput, ReportResolutionInput } from './reports.types.js';
+import type { RequestParser, ApiErrorDetail, ValidationResult } from '../../../shared/http/api.types.js';
+import type { ContentReportInput, ReportResolutionInput } from '../types/reports.types.js';
 
 /** Contrato persistido en reporte_contenido.motivo; conservar códigos aunque cambien etiquetas. */
 export const ACTIVITY_REPORT_REASON_CODES = [
