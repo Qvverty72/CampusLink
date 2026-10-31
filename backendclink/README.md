@@ -809,6 +809,12 @@ Las solicitudes físicas (recibo, opciones, Enviadas, Recibidas y detalle propio
 
 Galería pública autorizada e historial de publicación propia agregan `originalTerms` con el mismo formato, derivado exclusivamente del registro auditado de alta. Solo se exponen modalidad, monto y moneda; nunca snapshots completos. Las lecturas se realizan después de autorizar el recurso o los IDs de solicitudes y se agrupan para cada página. Un precio histórico no verificable es `null`, sin reemplazarlo por un precio posterior. No requiere migración, nuevas tablas, escritura histórica ni cambios digitales.
 
+## F2.2-08 - Eliminacion logica y trazabilidad
+
+Se reutilizan y verifican los estados y marcas de eliminacion existentes. Las consultas operacionales omiten registros retirados; auditoria, analitica y lectores historicos autorizados conservan snapshots, transacciones, solicitudes, participaciones y derechos digitales adquiridos. Fallo de auditoria revierte los cambios SQL junto con la retirada. No se agregan tablas, triggers ni atributos.
+
+La regresion especifica de F2.2-08 esta en tests/f22-foundations.test.ts; las suites existentes de access, actividades, recursos, moderacion y analitica validan los productores y lectores historicos.
+
 ## Referencias técnicas
 
 [Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).
