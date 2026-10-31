@@ -38,6 +38,9 @@ let getOwnActivityReport: typeof import('../src/modules/reports/reports.service.
 let saveActivityReport: typeof import('../src/modules/reports/reports.repository.js').saveActivityReport;
 let findOwnActivityReport: typeof import('../src/modules/reports/reports.repository.js').findOwnActivityReport;
 const deps = (value = document(), requestedId = value._id.toHexString(), actor = auth): ReportsDependencies => ({ now: () => now,
+  findValidCreators: async (campus, ids) => new Map((await db.query<{ id: string }>(
+    `SELECT id FROM perfil_usuario WHERE campus_id=$1 AND estado_cuenta='ACTIVA' AND deleted_at IS NULL AND id=ANY($2::uuid[])`,
+    [campus, ids])).rows.map(row => [row.id, 'Organizador'])),
   getActiveMap: async campus => { assert.equal(campus, campusId); return map; },
   findActivity: async (campus, activityId) => { assert.equal(campus, campusId); assert.equal(activityId, requestedId); return value; },
   saveActivityReport: report => saveActivityReport(report, actor, transaction),

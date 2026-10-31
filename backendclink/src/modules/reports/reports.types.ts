@@ -62,7 +62,7 @@ export interface ActivityReportSnapshot extends ActivityDto {
 export interface NewActivityReport extends ReportActivityInput {
   activityId: string; campusId: string; userId: string; snapshot: ActivityReportSnapshot;
 }
-export interface ReportsDependencies extends Pick<ActivityDependencies, 'getActiveMap' | 'findActivity' | 'now'> {
+export interface ReportsDependencies extends Pick<ActivityDependencies, 'getActiveMap' | 'findActivity' | 'findValidCreators' | 'now'> {
   saveActivityReport?: (report: NewActivityReport) => Promise<ActivityReportReceipt>;
   findOwnActivityReport?: (userId: string, campusId: string, activityId: string) => Promise<ActivityReportReceipt | null>;
 }

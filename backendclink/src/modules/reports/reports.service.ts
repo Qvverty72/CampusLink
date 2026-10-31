@@ -9,6 +9,7 @@ import { toVisibleActivity } from '../activities/activities.policy.js';
 import { ApiError } from '../../services/apiError.js';
 import { parseActivityReport } from './reports.validation.js';
 import { requireCampusCapability } from '../auth/auth.authorization.js';
+import { validActivityCreators } from '../activities/activities.references.service.js';
 
 export const getReportsHealth: () => Promise<ReportsHealth> =
   createModuleHealthCheck('reports', probeReportsDependencies);
@@ -39,6 +40,8 @@ export async function reportActivity(auth: VerifiedAuthConnection, activityId: s
   const document = await find(auth.campusId, id, now);
   const visible = document && toVisibleActivity(document, auth.campusId, now, spatialBuildings(map));
   if (!visible || visible.id !== id) throw new ApiError(404, 'NOT_FOUND', 'Esta actividad ya no está disponible para denunciar.');
+  const creators = await validActivityCreators(auth, [document.createdByUserId], dependencies);
+  if (!creators.has(document.createdByUserId)) throw new ApiError(404, 'NOT_FOUND', 'Esta actividad ya no está disponible para denunciar.');
   // Conserva el contenido que vio quien denuncia; excluye participación, historial de cambios y avisos.
   const snapshot: ActivityReportSnapshot = { ...visible, visibility: 'PUBLIC', revision: document.editRevision ?? 0 };
   if (typeof document.createdByUserId === 'string' && /^[0-9a-f-]{36}$/i.test(document.createdByUserId)) snapshot.createdByUserId = document.createdByUserId;

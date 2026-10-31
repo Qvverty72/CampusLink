@@ -7,6 +7,7 @@ import type { DependencyChecks } from '../../types/api.types.js';
 
 import { getMongoDb } from '../../config/mongodb.js';
 import type { CampusMapDocument } from './map.types.js';
+import { ApiError } from '../../services/apiError.js';
 
 const CAMPUS_MAPS_COLLECTION = 'campus_maps';
 
@@ -38,6 +39,6 @@ export function probeMapDependencies(): Promise<DependencyChecks> {
 export async function isActiveCampus(campusId: string): Promise<boolean> {
   const { data, error } = await createServerSupabaseClient().from('campus')
     .select('id').eq('id', campusId).eq('activo', true).limit(1);
-  if (error) throw new Error('Unable to verify campus reference');
+  if (error) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Unable to verify campus reference');
   return Boolean(data?.length);
 }

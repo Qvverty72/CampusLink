@@ -1,7 +1,6 @@
 import { MongoServerError, ObjectId } from 'mongodb';
 import { getMongoDb } from '../../config/mongodb.js';
 import { mongoClient } from '../../database/mongodb/client.js';
-import { createServerSupabaseClient } from '../../database/supabase/client.js';
 import { ApiError } from '../../services/apiError.js';
 import type { CampusMapDocument } from '../maps/map.types.js';
 import { spatialBuildings } from './activities.location.js';
@@ -11,6 +10,7 @@ import { requireParticipationIndex } from './activities.participation-index.js';
 import { participationDto } from './activities.participation.js';
 import type { ActivityCreatorRecord, ActivityParticipationDto } from './activities.types.js';
 import { appendActivityInteraction, activityInteractionKey, hasActivityInteraction } from './activities.interactions.js';
+import { findValidActivityCreators } from './activities.references.repository.js';
 
 function requireParticipationCounters(current: ActivityParticipationDocument): void {
   if (!Number.isSafeInteger(current.joinCount) || current.joinCount! < 1 || current.joinCount! >= Number.MAX_SAFE_INTEGER
@@ -36,12 +36,9 @@ export function findCreatedActivity(campusId: string, activityId: string, userId
     { projection: { _id: 1, campusId: 1, createdByUserId: 1, createdAt: 1 } });
 }
 
-export async function findActivityOrganizer(userId: string): Promise<{ name: string } | null> {
-  const { data, error } = await createServerSupabaseClient().from('perfil_usuario')
-    .select('nombre_completo').eq('id', userId).is('deleted_at', null)
-    .maybeSingle<{ nombre_completo: string }>();
-  if (error) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Activity organizer lookup unavailable.');
-  return data?.nombre_completo?.trim() ? { name: data.nombre_completo.trim() } : null;
+export async function findActivityOrganizer(userId: string, campusId: string): Promise<{ name: string } | null> {
+  const name = (await findValidActivityCreators(campusId, [userId])).get(userId);
+  return name ? { name } : null;
 }
 
 /** La participación y el contador se confirman juntos; el índice único evita duplicar personas. */

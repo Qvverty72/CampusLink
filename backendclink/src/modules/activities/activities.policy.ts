@@ -1,6 +1,7 @@
 import type { Filter } from 'mongodb';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
 import type { ActivityDocument, ActivityDto, ActivityQuery } from './activities.types.js';
+import { relationalUuid } from './activities.references.service.js';
 
 export const COMMUNITY_ACTIVITY_LIMIT_MESSAGE = 'Solo puedes tener activa una actividad comunitaria.';
 
@@ -19,6 +20,7 @@ export function visibleActivityFilter(campusId: string, now: Date): Filter<Activ
 export function toVisibleActivity(document: ActivityDocument, campusId: string, now: Date,
   buildings: ReturnType<typeof spatialBuildings>, query: ActivityQuery = {}): ActivityDto | null {
   if (document.campusId !== campusId || document.status !== 'ACTIVE' || document.visibility !== 'PUBLIC'
+    || typeof document.createdByUserId !== 'string' || !relationalUuid.test(document.createdByUserId)
     || document.deletedAt != null
     || !['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'].includes(document.type)
     || !(document.startAt instanceof Date) || !(document.endAt instanceof Date)
