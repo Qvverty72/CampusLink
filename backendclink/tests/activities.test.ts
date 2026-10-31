@@ -3,11 +3,11 @@ import { after, before, test, mock } from 'node:test';
 import { Db, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { filterLocationActivities, selectActivityOccurrences, type Activity } from '../../frontendclink/src/features/activities/types/activity.js';
-import { parseActivityQuery } from '../src/modules/activities/activities.validation.js';
+import { parseActivityQuery } from '../src/modules/activities/validators/activities.validation.js';
 
 test('activity filters require a complete hierarchy and reject campus/policy overrides', () => {
   assert.equal(parseActivityQuery({}).success, true);
@@ -49,11 +49,11 @@ const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
   location: { buildingKey: 'cabin01', floorKey: 'floor-data-1' },
   participantCount: 1, createdAt: now, updatedAt: now, ...patch,
 });
-let getActivities: typeof import('../src/modules/activities/activities.service.js').getActivities;
+let getActivities: typeof import('../src/modules/activities/services/activities.service.js').getActivities;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://activities-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test' });
-  getActivities = (await import('../src/modules/activities/activities.service.js')).getActivities;
+  getActivities = (await import('../src/modules/activities/services/activities.service.js')).getActivities;
 });
 after(async () => {
   const { closeMongoDB } = await import('../src/database/mongodb/client.js');
@@ -64,7 +64,8 @@ const dependencies = (documents: ActivityDocument[]) => ({ getActiveMap: async (
   findActivities: async (campus: string) => { assert.equal(campus, campusId); return documents; }, now: () => now });
 
 test('personal activity reads are server-scoped, paginated after validation and omit restricted series metadata', async () => {
-  const { getOwnActivities, joinedActivitiesPipeline } = await import('../src/modules/activities/activities.mine.service.js');
+  const { getOwnActivities } = await import('../src/modules/activities/services/activities.mine.service.js');
+  const { joinedActivitiesPipeline } = await import('../src/modules/activities/repositories/activities.mine.repository.js');
   const first = document(), second = document({ seriesId: new ObjectId(), occurrenceIndex: 1, occurrenceCount: 2, originalStartAt: now });
   let reads = 0;
   const deps = { ...dependencies([]), findJoinedActivities: async (campus: string, user: string) => {
@@ -146,7 +147,7 @@ test('repository pushes campus, publication, visibility, expiry and spatial filt
     }; } };
   });
   try {
-    const { findVisibleActivities } = await import('../src/modules/activities/activities.repository.js');
+    const { findVisibleActivities } = await import('../src/modules/activities/repositories/activities.repository.js');
     await findVisibleActivities(campusId, { buildingKey: 'cabin01', floorKey: 'floor-data-1', poiKey: 'sala' }, now);
     assert.deepEqual(captured[0], { campusId, status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,
       type: { $in: ['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'] }, endAt: { $gt: now },
@@ -157,7 +158,7 @@ test('repository pushes campus, publication, visibility, expiry and spatial filt
 test('HTTP route rejects missing identity and filter overrides, returns an envelope and no-store data', async () => {
   const originalFetch = globalThis.fetch;
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   let reads = 0;
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));

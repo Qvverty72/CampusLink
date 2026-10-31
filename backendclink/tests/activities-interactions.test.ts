@@ -4,18 +4,18 @@ import { Db, MongoClient, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { legacyParticipationHistory } from '../src/database/mongodb/005_activity_participation_history.js';
-import { parseActivityView } from '../src/modules/activities/activities.validation.js';
-import { activityInteractionId, appendActivityInteraction } from '../src/modules/activities/activities.interactions.js';
+import { parseActivityView } from '../src/modules/activities/validators/activities.validation.js';
+import { activityInteractionId, appendActivityInteraction } from '../src/modules/activities/repositories/activities.interactions.js';
 import { activityOperationId } from '../../frontendclink/src/features/activities/types/interaction.js';
-import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
+import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/types/activities.types.js';
 const campusId = '22222222-2222-4222-8222-222222222222', userId = '11111111-1111-4111-8111-111111111111';
 const operationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', now = new Date('2099-01-01');
 const id = new ObjectId();
-let view: typeof import('../src/modules/activities/activities.views.repository.js').recordActivityView;
+let view: typeof import('../src/modules/activities/repositories/activities.views.repository.js').recordActivityView;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', SUPABASE_URL: 'https://interactions-test.invalid',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  ({ recordActivityView: view } = await import('../src/modules/activities/activities.views.repository.js'));
+  ({ recordActivityView: view } = await import('../src/modules/activities/repositories/activities.views.repository.js'));
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 
@@ -82,7 +82,7 @@ test('HTTP explicit views derive user/campus/time from the authenticated server 
     return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({ now: () => now,
     getActiveMap: async () => ({ campusId, status: 'ACTIVE', version: 1, createdAt: now, updatedAt: now,
       buildings: [{ id: 'h', name: 'H', floors: [{ id: 'f', name: 'Piso 1', pois: [] }] }] }),
@@ -114,7 +114,7 @@ test('metrics read the immutable event log with campus/time/type scope and repor
     return { toArray: async () => [{ _id: 'VIEWED', count: 8, legacy: 0 }, { _id: 'JOINED', count: 3, legacy: 1 }, { _id: 'LEFT', count: 1, legacy: 0 }] };
   } }));
   try {
-    const { countActivityInteractions } = await import('../src/modules/analytics/analytics.repository.js');
+  const { countActivityInteractions } = await import('../src/modules/analytics/repositories/analytics.activities.repository.js');
     assert.deepEqual(await countActivityInteractions(campusId, now, new Date('2100-01-01')), { viewed: 8, joined: 3, left: 1, legacyEvents: 1 });
     await assert.rejects(countActivityInteractions(campusId, now, now));
   } finally { dbMock.mock.restore(); }
@@ -124,7 +124,7 @@ test('the event writer exposes insert-only behavior and rejects undeclared types
   let inserted = 0;
   const dbMock = mock.method(Db.prototype, 'collection', () => ({ insertOne: async () => { inserted++; } }));
   try {
-    const { getMongoDb } = await import('../src/config/mongodb.js');
+    const { getMongoDB: getMongoDb } = await import('../src/database/mongodb/client.js');
     await appendActivityInteraction(getMongoDb(), { activityId: id, campusId, userId, type: 'JOINED', occurredAt: now, eventKey: 'test', provenance: 'LIVE' });
     await assert.rejects(appendActivityInteraction(getMongoDb(), { activityId: id, campusId, userId, type: 'OTHER' as any, occurredAt: now, eventKey: 'test2', provenance: 'LIVE' }), { status: 400 });
     assert.equal(inserted, 1);

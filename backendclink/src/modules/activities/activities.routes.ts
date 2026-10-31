@@ -1,31 +1,26 @@
-import { createPolicyRouter } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
-import { getOwnActivities, type OwnActivityDependencies } from './activities.mine.service.js';
-import { sendSuccess } from '../../services/apiResponse.js';
-import { requireAuthentication } from '../auth/auth.middleware.js';
-import { validateRequest } from '../../middleware/validateRequest.js';
-import { createActivitiesController, createActivityDetailController, createActivityPublicationController, createActivitySeriesController, createActivitySeriesDetailController, createActivityEditController } from './activities.controller.js';
-import { activitySeriesParser, parseSeriesId } from './activities.series.validation.js';
-import { parseCreateActivity } from './activities.create.validation.js';
-import { parseActivityQuery, parseActivityId, parseEmptyActivityInput, parseActivityView } from './activities.validation.js';
-import type { ActivityEditDependencies } from './activities.edit.types.js';
-import { editActivityParser } from './activities.edit.validation.js';
-import { createActivityParticipationController } from './activities.controller.js';
-import { createActivityParticipantsController, createActivityDeletionController } from './activities.controller.js';
-import { createCommunityActivityAvailabilityController } from './activities.controller.js';
-import { createActivityViewController } from './activities.controller.js';
-import { parseActivityParticipantsQuery, parseActivityDeletion } from './activities.management.validation.js';
+import type { OwnActivityDependencies } from './services/activities.mine.service.js';
+import { createOwnActivitiesController } from './controllers/activities.controller.js';
+import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
+import { validateRequest } from '../../shared/http/validate-request.js';
+import { createActivitiesController, createActivityDetailController, createActivityPublicationController, createActivitySeriesController, createActivitySeriesDetailController, createActivityEditController } from './controllers/activities.controller.js';
+import { activitySeriesParser, parseSeriesId } from './validators/activities.series.validation.js';
+import { parseCreateActivity } from './validators/activities.create.validation.js';
+import { parseActivityQuery, parseActivityId, parseEmptyActivityInput, parseActivityView } from './validators/activities.validation.js';
+import type { ActivityEditDependencies } from './types/activities.edit.types.js';
+import { editActivityParser } from './validators/activities.edit.validation.js';
+import { createActivityParticipationController } from './controllers/activities.controller.js';
+import { createActivityParticipantsController, createActivityDeletionController } from './controllers/activities.controller.js';
+import { createCommunityActivityAvailabilityController } from './controllers/activities.controller.js';
+import { createActivityViewController } from './controllers/activities.controller.js';
+import { parseActivityParticipantsQuery, parseActivityDeletion } from './validators/activities.management.validation.js';
 
 /** Registra lecturas y mutaciones de actividades con autenticación y validadores específicos por ruta. */
 export function createActivitiesRouter(dependencies: ActivityEditDependencies & OwnActivityDependencies = {}): Router {
   const router = createPolicyRouter();
-  router.get('/mine/count', requireAuthentication, validateRequest({ query: parseEmptyActivityInput, body: parseEmptyActivityInput }), async (_request, response) => {
-    const result = await getOwnActivities(response.locals.auth, { limit: '1' }, dependencies);
-    sendSuccess(response, { campusId: result.campusId, total: result.total });
-  });
-  router.get('/mine', requireAuthentication, async (request, response) => {
-    sendSuccess(response, await getOwnActivities(response.locals.auth, request.query, dependencies));
-  });
+  router.get('/mine/count', requireAuthentication, validateRequest({ query: parseEmptyActivityInput, body: parseEmptyActivityInput }), createOwnActivitiesController(dependencies, true));
+  router.get('/mine', requireAuthentication, createOwnActivitiesController(dependencies));
   router.post('/:activityId/interactions', requireAuthentication,
     validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseActivityView }), createActivityViewController(dependencies));
   router.get('/community/creation-availability', requireAuthentication,

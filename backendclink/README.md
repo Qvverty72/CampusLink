@@ -1,5 +1,14 @@
 # CampusLink Backend
 
+Arquitectura modular: [capas, módulos y dependencias reales](ARCHITECTURE.md),
+[diagrama Mermaid](architecture.mmd) y [registro del refactor](REFACTOR.md).
+Cada funcionalidad vive en `src/modules/`; rutas, controladores, servicios,
+repositorios, dominio y contratos se separan según su responsabilidad real.
+La infraestructura transversal está en `src/shared/`.
+
+Verificación adicional: `npm run check:architecture` comprueba imports de ejecución,
+ciclos y límites de capas sin cargar credenciales ni conectarse a las bases.
+
 Ciclo de vida de actividades: finalización automática y reactivación.
 Al llegar endAt, comunitarias/oficiales pasan a FINISHED en Mongo mediante el
 mantenimiento al arrancar y cada minuto, sin borrar documentos ni participaciones.
@@ -162,7 +171,7 @@ Referencias: [Compose: servicios y salud](https://docs.docker.com/reference/comp
 
 Cada módulo tiene <nombre>.routes.ts, <nombre>.controller.ts, <nombre>.service.ts, <nombre>.repository.ts y <nombre>.types.ts. maps conserva el prefijo histórico map.*. Los submódulos de marketplace siguen exactamente el mismo patrón.
 
-Flujo: routes → controller → service → repository → cliente compartido. Repository conoce las queries, service coordina el caso de uso y controller conoce HTTP. Imports .js mantienen compatibilidad NodeNext. Los helpers compartidos de respuesta y diagnóstico evitan siete implementaciones divergentes. Consulta [la documentación de services](src/services/readme.md) para conocer sus funciones y consumidores.
+Flujo: routes → controller → service → repository → cliente compartido. Repository conoce las queries, service coordina el caso de uso y controller conoce HTTP. Imports .js mantienen compatibilidad NodeNext. Los helpers compartidos de respuesta y diagnóstico evitan siete implementaciones divergentes. Consulta [la documentación de shared](src/shared/README.md) para conocer sus funciones y consumidores.
 
 | Módulo | Lecturas de su health |
 | --- | --- |

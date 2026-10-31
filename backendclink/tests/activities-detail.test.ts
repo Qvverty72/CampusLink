@@ -3,11 +3,11 @@ import { after, before, mock, test } from 'node:test';
 import { Db, MongoClient, MongoServerError, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
-import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
-import { parseActivityId, parseEmptyActivityInput } from '../src/modules/activities/activities.validation.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/types/activities.types.js';
+import type { ActivityDependencies } from '../src/modules/activities/services/activities.service.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
+import { parseActivityId, parseEmptyActivityInput } from '../src/modules/activities/validators/activities.validation.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222';
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -38,12 +38,12 @@ const deps = (value = document(), own: ActivityParticipationDocument | null = nu
     assert.equal(campus, campusId); assert.equal(activityId, id.toHexString()); assert.equal(user, userId); return own;
   },
 });
-let getActivityDetail: typeof import('../src/modules/activities/activities.detail.service.js').getActivityDetail;
-let joinActivity: typeof import('../src/modules/activities/activities.detail.service.js').joinActivity;
+let getActivityDetail: typeof import('../src/modules/activities/services/activities.detail.service.js').getActivityDetail;
+let joinActivity: typeof import('../src/modules/activities/services/activities.detail.service.js').joinActivity;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
     SUPABASE_URL: 'https://detail-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  ({ getActivityDetail, joinActivity } = await import('../src/modules/activities/activities.detail.service.js'));
+  ({ getActivityDetail, joinActivity } = await import('../src/modules/activities/services/activities.detail.service.js'));
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 
@@ -164,7 +164,7 @@ test('repository queries isolate activity and own participation; organizer proje
     return Response.json([{ id: creatorId, nombre_completo: 'Nombre público' }]);
   };
   try {
-    const repository = await import('../src/modules/activities/activities.detail.repository.js');
+    const repository = await import('../src/modules/activities/repositories/activities.detail.repository.js');
     await repository.findVisibleActivity(campusId, id.toHexString(), now);
     await repository.findOwnParticipation(campusId, id.toHexString(), userId);
     assert.equal(captured[0].filter.campusId, campusId); assert.deepEqual(captured[0].filter._id, id);
@@ -205,7 +205,7 @@ test('registration transaction preserves count on repeat and commits JOINED plus
     },
   });
   try {
-    const { registerActivityParticipation } = await import('../src/modules/activities/activities.detail.repository.js');
+    const { registerActivityParticipation } = await import('../src/modules/activities/repositories/activities.detail.repository.js');
     await registerActivityParticipation(campusId, id.toHexString(), userId, now);
     await registerActivityParticipation(campusId, id.toHexString(), userId, now);
     assert.equal(increments, 1);
@@ -227,7 +227,7 @@ test('registration refuses to write without a complete unique participation inde
     [{ key: { activityId: 1, userId: 1 }, unique: true, partialFilterExpression: { status: 'JOINED' } }]]) {
     const dbMock = mock.method(Db.prototype, 'collection', () => ({ indexes: async () => indexes }));
     try {
-      const { registerActivityParticipation } = await import('../src/modules/activities/activities.detail.repository.js');
+      const { registerActivityParticipation } = await import('../src/modules/activities/repositories/activities.detail.repository.js');
       await assert.rejects(registerActivityParticipation(campusId, id.toHexString(), userId, now), { status: 503 });
     } finally { dbMock.mock.restore(); }
   }
@@ -243,7 +243,7 @@ test('a duplicate-key registration race returns an existing JOINED state without
     findOne: async () => own,
   }));
   try {
-    const { registerActivityParticipation } = await import('../src/modules/activities/activities.detail.repository.js');
+    const { registerActivityParticipation } = await import('../src/modules/activities/repositories/activities.detail.repository.js');
     await registerActivityParticipation(campusId, id.toHexString(), userId, now);
     own = participation('LEFT');
     await assert.rejects(registerActivityParticipation(campusId, id.toHexString(), userId, now), { status: 409 });
@@ -259,7 +259,7 @@ test('HTTP detail and join require identity, reject overrides and return own sta
     return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   let own: ActivityParticipationDocument | null = null;
   let reads = 0; let writes = 0;
   const app = express(); app.use(express.json());

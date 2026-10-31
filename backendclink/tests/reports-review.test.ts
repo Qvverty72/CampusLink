@@ -7,13 +7,13 @@ import type { Server } from 'node:http';
 import { Pool, type PoolClient } from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { Db, ObjectId } from 'mongodb';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), other = randomUUID(), foreign = randomUUID();
 let auth: VerifiedAuthConnection, server: Server, base: string;
-let reviews: typeof import('../src/modules/reports/reports.review.service.js');
-let resolutions: typeof import('../src/modules/reports/reports.resolution.service.js');
+let reviews: typeof import('../src/modules/reports/services/reports.review.service.js');
+let resolutions: typeof import('../src/modules/reports/services/reports.resolution.service.js');
 let failSql = false;
 let failAudit = false, failMongo = false, mongoWrites = 0;
 let activity: Record<string, any> | null = null;
@@ -63,8 +63,8 @@ before(async () => {
     const kind = url.pathname.endsWith('/usuario_rol') ? 'rol' : 'permiso';
     return Response.json((kind === 'rol' ? auth.roles : auth.permissions).map(row => ({ campus_id: row.campusId, [kind]: { id: row.id, nombre: row.name } })));
   };
-  reviews = await import('../src/modules/reports/reports.review.service.js');
-  resolutions = await import('../src/modules/reports/reports.resolution.service.js');
+  reviews = await import('../src/modules/reports/services/reports.review.service.js');
+  resolutions = await import('../src/modules/reports/services/reports.resolution.service.js');
   mock.method(Db.prototype, 'collection', ((name: string) => {
     assert.equal(name, 'activities');
     return {
@@ -422,7 +422,7 @@ test('transaction report uses the actual publication relationship, preserves req
   const result = await resolveCase(fixture.id); assert.equal(result.currentPublication?.status, 'OCULTO');
   for (let i = 0; i < tables.length; i++) assert.deepEqual((await db.query(`SELECT * FROM ${tables[i]} ORDER BY id`)).rows, original[i].rows, tables[i]);
   const receiverAuth = { ...auth, userId: receiver, profile: { ...auth.profile, id: receiver } };
-  const { getDigitalOriginal } = await import('../src/modules/marketplace/elibrary/elibrary.files.service.js');
+  const { getDigitalOriginal } = await import('../src/modules/marketplace/elibrary/services/elibrary.files.service.js');
   const file = await getDigitalOriginal(receiverAuth, fixture.publicationId, fixture.fileId);
   assert.deepEqual(file.bytes, bytes);
 });

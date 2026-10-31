@@ -1,10 +1,10 @@
-import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
-import { validateRequest } from '../../middleware/validateRequest.js';
-import { createGetActiveMapController, getMapHealthController } from './map.controller.js';
-import type { ActiveMapLookup } from './map.service.js';
-import { parseActiveMapParams } from './map.validation.js';
-import { requireAuthentication } from '../auth/auth.middleware.js';
+import { validateRequest } from '../../shared/http/validate-request.js';
+import { createGetActiveMapController, getMapHealthController } from './controllers/map.controller.js';
+import type { ActiveMapLookup } from './services/map.service.js';
+import { parseActiveMapParams } from './validators/map.validation.js';
+import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
 
 export interface MapRouterOptions {
   lookup?: ActiveMapLookup;

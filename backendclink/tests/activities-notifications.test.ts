@@ -7,12 +7,12 @@ import express from 'express';
 import { PGlite } from '@electric-sql/pglite';
 import { Db, ObjectId } from 'mongodb';
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { PendingActivityNotification } from '../src/modules/activities/activities.notifications.repository.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { ActivityChangeDocument } from '../src/modules/activities/activities.edit.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
-import { publicationNotifications, changeNotification, groupedChangeNotification, occurrencePublicationNotification, participantsAtChange } from '../src/modules/activities/activities.notifications.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { PendingActivityNotification } from '../src/modules/activities/types/activities.notifications.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
+import type { ActivityChangeDocument } from '../src/modules/activities/types/activities.edit.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
+import { publicationNotifications, changeNotification, groupedChangeNotification, occurrencePublicationNotification, participantsAtChange } from '../src/modules/activities/domain/activities.notifications.js';
 
 const db = new PGlite();
 const campusId = randomUUID(), otherCampus = randomUUID(), userId = randomUUID(), second = randomUUID(), foreign = randomUUID();
@@ -28,9 +28,9 @@ const task = (type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED' = 'OFFICIAL_
   event: { key: `activity:${id.toHexString()}:${randomUUID()}`, type, title: 'Evento',
     reasons: type === 'ACTIVITY_CHANGED' ? ['DATES_CHANGED', 'LOCATION_CHANGED'] : [], occurredAt: now, status: 'PENDING' },
 });
-let sql: typeof import('../src/modules/users/notifications.repository.js');
-let operation: typeof import('../src/modules/users/notifications.service.js').ownNotificationOperation;
-let dispatch: typeof import('../src/modules/activities/activities.notifications.worker.js').dispatchActivityNotifications;
+let sql: typeof import('../src/modules/users/repositories/notifications.repository.js');
+let operation: typeof import('../src/modules/users/services/notifications.service.js').ownNotificationOperation;
+let dispatch: typeof import('../src/modules/activities/workers/activities.notifications.worker.js').dispatchActivityNotifications;
 const migration = () => readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql', 'utf8');
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
@@ -50,9 +50,9 @@ before(async () => {
     [foreign, otherCampus, 'ACTIVA', null], [suspended, campusId, 'SUSPENDIDA', null], [deleted, campusId, 'ACTIVA', now]]) {
     await db.query('INSERT INTO perfil_usuario VALUES ($1,$2,$3,$4)', [user, campus, state, date]);
   }
-  sql = await import('../src/modules/users/notifications.repository.js');
-  ({ ownNotificationOperation: operation } = await import('../src/modules/users/notifications.service.js'));
-  ({ dispatchActivityNotifications: dispatch } = await import('../src/modules/activities/activities.notifications.worker.js'));
+  sql = await import('../src/modules/users/repositories/notifications.repository.js');
+  ({ ownNotificationOperation: operation } = await import('../src/modules/users/services/notifications.service.js'));
+  ({ dispatchActivityNotifications: dispatch } = await import('../src/modules/activities/workers/activities.notifications.worker.js'));
 });
 after(async () => { await db.close(); await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 
@@ -237,7 +237,7 @@ test('Monday and Wednesday starts each notify once, with no early notice at Mond
     };
   });
   try {
-    const { enqueuePublishedOfficialOccurrences: enqueue } = await import('../src/modules/activities/activities.notifications.repository.js');
+    const { enqueuePublishedOfficialOccurrences: enqueue } = await import('../src/modules/activities/repositories/activities.notifications.repository.js');
     await enqueue(new Date(start.getTime() - 1)); assert.deepEqual(emitted, [], 'first future occurrence is not announced early');
     await enqueue(start); await enqueue(now); await enqueue(new Date(end.getTime() - 1));
     assert.deepEqual(emitted, [base._id.toHexString()], 'Monday start announces the first occurrence even after an old premature publication');
@@ -274,7 +274,7 @@ test('legacy pending recurring publications wait until actual start while change
     } };
   });
   try {
-    const { findPendingActivityNotifications: pending } = await import('../src/modules/activities/activities.notifications.repository.js');
+    const { findPendingActivityNotifications: pending } = await import('../src/modules/activities/repositories/activities.notifications.repository.js');
     const before = await pending(now);
     assert.deepEqual(before.map(row => row.event.key), [change.key, single.notificationEvents[0].key]);
     const atStart = await pending(start);
@@ -385,7 +385,7 @@ test('notification acknowledgement only marks its scoped event, retaining activi
     assert.equal(name, 'activities'); return { updateOne: async (filter: unknown, update: unknown) => { captured.push(filter, update); } };
   });
   try {
-    const event = task(); const { markNotificationDelivered } = await import('../src/modules/activities/activities.notifications.repository.js');
+    const event = task(); const { markNotificationDelivered } = await import('../src/modules/activities/repositories/activities.notifications.repository.js');
     await markNotificationDelivered(event);
     assert.deepEqual(captured[0], { _id: id, campusId, notificationEvents: { $elemMatch: { key: event.event.key, status: 'PENDING' } } });
     const update = captured[1] as { $set: Record<string, unknown> };
@@ -462,7 +462,7 @@ test('HTTP inbox/read/delete require identity, reject overrides and return own d
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
   const { createNotificationsRouter } = await import('../src/modules/users/notifications.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json());
   app.use('/api/v1/users/me/notifications', createNotificationsRouter((identity, input) => operation(identity, input, transaction))); app.use(apiErrorHandler);
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));

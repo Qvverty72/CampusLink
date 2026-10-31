@@ -1,0 +1,25 @@
+import type { RequestHandler } from 'express';
+import { sendModuleHealth } from '../../../shared/health/health-response.js';
+import { getUsersHealth } from '../services/users.service.js';
+import { getAcademicProfile, getAcademicOptions, updateAcademicProfile } from '../services/users.service.js';
+import { sendSuccess } from '../../../shared/http/api-response.js';
+import type { AuthLocals } from '../../auth/types/auth.types.js';
+import { getProfileOverview } from '../services/profile-overview.service.js';
+
+type ProfileHandler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, string>, AuthLocals>;
+export const getProfileOverviewController: ProfileHandler = async (_request, response) => {
+  sendSuccess(response, await getProfileOverview(response.locals.auth));
+};
+export const getAcademicProfileController: ProfileHandler = async (_request, response) => {
+  sendSuccess(response, await getAcademicProfile(response.locals.auth));
+};
+export const getAcademicOptionsController: ProfileHandler = async (_request, response) => {
+  sendSuccess(response, await getAcademicOptions(response.locals.auth));
+};
+export const updateAcademicProfileController: ProfileHandler = async (request, response) => {
+  sendSuccess(response, await updateAcademicProfile(response.locals.auth, request.body));
+};
+
+export const getUsersHealthController: RequestHandler = async (_request, response) => {
+  sendModuleHealth(response, await getUsersHealth());
+};

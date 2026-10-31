@@ -7,8 +7,8 @@ import type { Server } from 'node:http';
 import { PGlite } from '@electric-sql/pglite';
 import { Pool } from 'pg';
 import {Db} from 'mongodb';
-import type {CampusMapDocument} from '../src/modules/maps/map.types.js';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type {CampusMapDocument} from '../src/modules/maps/types/map.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), otherCampus = randomUUID();
@@ -17,24 +17,24 @@ const token = 'physicalgoods.test.token';
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jYpQAAAAASUVORK5CYII=';
 let auth: VerifiedAuthConnection, current: VerifiedAuthConnection;
 let server: Server, base: string;
-let create: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.service.js').createPhysicalgoods;
-let options: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.service.js').getPhysicalgoodsOptions;
-let photo: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.service.js').getPhysicalgoodsPhoto;
-let parse: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js').parsePhysicalgoods;
+let create: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.service.js').createPhysicalgoods;
+let options: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.service.js').getPhysicalgoodsOptions;
+let photo: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.service.js').getPhysicalgoodsPhoto;
+let parse: typeof import('../src/modules/marketplace/physicalgoods/validators/physicalgoods.validation.js').parsePhysicalgoods;
 let closePostgres: () => Promise<void>;
-let imagesService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.images.service.js');
+let imagesService: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.images.service.js');
 let storageCalls: { method: string; path: string; body?: unknown }[];
 let uploads: string[], removals: string[], signed: string[];
 let signedPaths: string[];
 let failSign = false;
 let failAudit = false;
-let editService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
-let requestsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
-let transactionsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
-let historyService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
-let remindersService:typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
-let notificationsService:typeof import('../src/modules/users/notifications.service.js');
-let reportsService:typeof import('../src/modules/reports/reports.physicalgoods.service.js');
+let editService: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.edit.service.js');
+let requestsService: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.requests.service.js');
+let transactionsService: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.transactions.service.js');
+let historyService: typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.history.service.js');
+let remindersService:typeof import('../src/modules/marketplace/physicalgoods/services/physicalgoods.reminders.service.js');
+let notificationsService:typeof import('../src/modules/users/services/notifications.service.js');
+let reportsService:typeof import('../src/modules/reports/services/reports.physicalgoods.service.js');
 let failTransactionInsert=false;
 let failRatingInsert=false,lostRatingCommit=false;
 let failReportInsert=false,lostReportCommit=false;
@@ -120,17 +120,17 @@ before(async () => {
     await onUpload?.();
     return failUpload ? Response.json({ statusCode: 500, error: 'failure', message: 'private details' }, { status: 500 }) : Response.json({ Key: url.pathname, Id: randomUUID() });
   };
-  const services = await import('../src/modules/marketplace/physicalgoods/physicalgoods.service.js');
-  imagesService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.images.service.js');
-  editService = await import('../src/modules/marketplace/physicalgoods/physicalgoods.edit.service.js');
-  requestsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.requests.service.js');
-  transactionsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
-  historyService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
-  remindersService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
-  notificationsService=await import('../src/modules/users/notifications.service.js');
-  reportsService=await import('../src/modules/reports/reports.physicalgoods.service.js');
+  const services = await import('../src/modules/marketplace/physicalgoods/services/physicalgoods.service.js');
+  imagesService = await import('../src/modules/marketplace/physicalgoods/services/physicalgoods.images.service.js');
+  editService = await import('../src/modules/marketplace/physicalgoods/services/physicalgoods.edit.service.js');
+  requestsService=await import('../src/modules/marketplace/physicalgoods/services/physicalgoods.requests.service.js');
+  transactionsService=await import('../src/modules/marketplace/physicalgoods/services/physicalgoods.transactions.service.js');
+  historyService=await import('../src/modules/marketplace/physicalgoods/services/physicalgoods.history.service.js');
+  remindersService=await import('../src/modules/marketplace/physicalgoods/services/physicalgoods.reminders.service.js');
+  notificationsService=await import('../src/modules/users/services/notifications.service.js');
+  reportsService=await import('../src/modules/reports/services/reports.physicalgoods.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
-  ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
+  ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/validators/physicalgoods.validation.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key,email text);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
@@ -817,13 +817,13 @@ test('publication, image and category histories preserve prior snapshots and exp
   const newCategory=randomUUID();await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'New category')",[newCategory]);await imagesService.changePhysicalgoodsCategory(auth,saved.id,{categoryId:newCategory});
   const history=await audits(saved.id);assert.equal(history.length,5);assert.equal(history[0].datos_despues.categoria_id,category);assert.equal(history[4].datos_despues.categoria_id,newCategory);
   assert.equal((history[0].datos_despues.images as unknown[]).length,1);assert.equal((history[1].datos_despues.images as unknown[]).length,2);
-  const {auditSnapshot}=await import('../src/modules/users/audit.snapshot.js');
+  const {auditSnapshot}=await import('../src/modules/users/domain/audit.snapshot.js');
   const projected=auditSnapshot({...history[4].datos_despues,password:'secret',images:[{id:second.id,orden:0,storage_path:'private',url:'secret'}]});
   assert.equal(projected?.categoria_id,newCategory);assert.equal(projected?.descripcion,'Funciona correctamente');assert.doesNotMatch(JSON.stringify(projected),/password|storage_path|secret/);
   const admin=await otherActor();await db.query("insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) select $1,id,$2 from rol where nombre='ADMINISTRADOR'",[admin.userId,campus]);
   const entry=(await db.query('select id from auditoria where entidad_id=$1 order by created_at desc,id desc limit 1',[saved.id])).rows[0];
   await db.query("update publicacion_recurso set descripcion='Live data changed',deleted_at=now() where id=$1",[saved.id]);
-  const {getAuditEntry}=await import('../src/modules/users/access.service.js');
+  const {getAuditEntry}=await import('../src/modules/users/services/access.service.js');
   const historical=await getAuditEntry(admin,campus,entry.id);assert.equal((historical.datos_despues as Record<string,unknown>).descripcion,'Funciona correctamente');
   await assert.rejects(getAuditEntry(auth,campus,entry.id),{status:403});await assert.rejects(getAuditEntry(admin,otherCampus,entry.id),{status:403});
 });
@@ -1144,7 +1144,7 @@ test('own publication tabs filter before pagination, prioritize actionable resou
 });
 
 test('profile overview counts own physical history across campuses and rejects stale or suspended accounts', async () => {
-  const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
+  const { getProfileOverview } = await import('../src/modules/users/services/profile-overview.service.js');
   const { saved, first, second, a } = await requestedPair();
   assert.deepEqual(await getProfileOverview(auth), { activePublications: 1, pendingRequests: 2, transactions: 0, acquiredResources: 0 });
   await resolveRequest(saved.id, a.id);
@@ -1165,7 +1165,7 @@ test('profile overview counts own physical history across campuses and rejects s
 const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',actor=auth)=>requestsService.resolvePhysicalgoodsRequest(actor,publicationId,requestId,{decision});
 
 test('request counters aggregate both inboxes across pages and follow acceptance, both confirmations and cancellation',async()=>{
-  const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
+  const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');
   const {saved,first,second,a}=await requestedPair(),extra=await create(auth,input());
   const c=await requestsService.createPhysicalgoodsRequest(first,extra.id,{messageCode:'ME_INTERESA'});
   assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3,pendingRequests:3,pendingTransactions:0});
@@ -1214,7 +1214,7 @@ test('HTTP request counters are authenticated, no-store, unfiltered and revalida
 const transactionRows=(publicationId:string)=>db.query('select * from transaccion_recurso where publicacion_id=$1 order by iniciada_en,id',[publicationId]);
 
 test('physical resource openings validate campus and keep one view per operation without gallery refresh signals',async()=>{
-  const saved=await create(auth,input()),viewer=await otherActor(),analytics=await import('../src/modules/analytics/analytics.service.js');
+  const saved=await create(auth,input()),viewer=await otherActor(),analytics=await import('../src/modules/analytics/services/analytics.service.js');
   await imagesService.getPhysicalgoodsGallery(viewer,saved.id);await imagesService.getPhysicalgoodsGallery(viewer,saved.id);
   assert.equal((await db.query('SELECT id FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
   const operationId=randomUUID();await Promise.all([analytics.recordResourceView(viewer,saved.id,{operationId}),analytics.recordResourceView(viewer,saved.id,{operationId})]);
@@ -1243,7 +1243,7 @@ test('physical transaction analytics retains reservation, first confirmation and
   await transactionsService.transitionPhysicalgoodsTransaction(auth,saved.id,id,{},'CONFIRMAR');
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
   await transactionsService.transitionPhysicalgoodsTransaction(first,saved.id,id,{},'CANCELAR');
-  const repository=await import('../src/modules/analytics/analytics.repository.js');
+  const repository=await import('../src/modules/analytics/repositories/analytics.repository.js');
   const read=async()=> (await repository.readResourceAnalyticsEvents(db as never,campus,'2000-01-01','2100-01-01')).filter(row=>row.transactionId===id);
   const events=await read();assert.deepEqual(events.map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION','TRANSACCION_CANCELADA']);
   assert.deepEqual(events.map(row=>row.userId),[auth.userId,auth.userId,first.userId]);
@@ -1834,7 +1834,7 @@ test('reminder HTTP inbox/read/delete retain no-store alongside own request noti
 });
 
 test('reminder worker waits for in-flight work on shutdown and logs sanitized failures without affecting activity delivery',async()=>{
-  const {startPhysicalgoodsReminderWorker}=await import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.worker.js');
+  const {startPhysicalgoodsReminderWorker}=await import('../src/modules/marketplace/physicalgoods/workers/physicalgoods.reminders.worker.js');
   let release!:()=>void,signal=()=>false,calls=0;
   const stop=startPhysicalgoodsReminderWorker(async stopped=>{calls++;signal=stopped!;await new Promise<void>(resolve=>{release=resolve;});return {delivered:0,failed:0};});
   assert.equal(calls,1);assert.equal(signal(),false);const shutdown=stop();assert.equal(signal(),true);release();await shutdown;assert.equal(calls,1);

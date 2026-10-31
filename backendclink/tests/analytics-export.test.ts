@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import ExcelJS from 'exceljs';
-import { renderReportExcel, renderReportPdf } from '../src/modules/analytics/analytics.export.js';
-import type { AnalyticalReport, DashboardMetrics } from '../src/modules/analytics/analytics.types.js';
+import { renderReportExcel, renderReportPdf } from '../src/modules/analytics/exports/analytics.export.js';
+import type { AnalyticalReport, DashboardMetrics } from '../src/modules/analytics/types/analytics.types.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { REPORT_KPIS, reportFilename } from '../src/modules/analytics/analytics.presentation.js';
+import { REPORT_KPIS, reportFilename } from '../src/modules/analytics/domain/analytics.presentation.js';
 
 function fixture(): AnalyticalReport {
   const scope = { institutionId: 'institution-id', institutionName: 'Institución histórica ÁÉÍÓÚ ñ Ω', campusId: null,

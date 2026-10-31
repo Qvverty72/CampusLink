@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PDFDocument, PDFHexString, PDFName, PDFString } from 'pdf-lib';
-import { DIGITAL_MAX_BYTES, validateDigitalFile } from '../src/modules/marketplace/elibrary/elibrary.validation.js';
-import { ApiError } from '../src/services/api-response.js';
+import { DIGITAL_MAX_BYTES, validateDigitalFile } from '../src/modules/marketplace/elibrary/validators/elibrary.validation.js';
+import { ApiError } from '../src/shared/errors/api-error.js';
 
 const upload = (bytes: Buffer) => ({ name: 'material.pdf', mimeType: 'application/pdf', bytes });
 test('generic, missing and alternate PDF MIME values are normalized only after validating real PDF bytes', async () => {
