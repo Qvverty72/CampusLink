@@ -809,6 +809,16 @@ Las solicitudes físicas (recibo, opciones, Enviadas, Recibidas y detalle propio
 
 Galería pública autorizada e historial de publicación propia agregan `originalTerms` con el mismo formato, derivado exclusivamente del registro auditado de alta. Solo se exponen modalidad, monto y moneda; nunca snapshots completos. Las lecturas se realizan después de autorizar el recurso o los IDs de solicitudes y se agrupan para cada página. Un precio histórico no verificable es `null`, sin reemplazarlo por un precio posterior. No requiere migración, nuevas tablas, escritura histórica ni cambios digitales.
 
+## F2.2-07 - Aislamiento por campus
+
+El campus sigue al perfil vigente del servidor. Los permisos administrativos delegados
+se aplican únicamente en las sedes concedidas. Según confirmación del usuario2026-10-30,
+ADMINISTRADOR conserva todas las capacidades de su campus; USUARIO_AUTORIZADO necesita
+cada permiso especializado por separado. Biblioteca digital entre campus de la misma
+institución e historial propio conservan sus autorizaciones existentes. Las consultas
+históricas/auditoría/analítica siguen separadas del catálogo operacional; las referencias
+vigentes nunca se usan para borrar ni reconstruir snapshots anteriores.
+
 ## Referencias técnicas
 
 [Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).
