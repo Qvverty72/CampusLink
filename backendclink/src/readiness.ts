@@ -4,7 +4,7 @@ import { getMapHealth } from './modules/maps/map.service.js';
 import { getElibraryHealth } from './modules/marketplace/elibrary/elibrary.service.js';
 import { getPhysicalgoodsHealth } from './modules/marketplace/physicalgoods/physicalgoods.service.js';
 import { getReportsHealth } from './modules/reports/reports.service.js';
-import { getUsersHealth } from './modules/users/users.service.js';
+import { getUsersHealth } from './modules/users/services/users.service.js';
 import type { ApiReadiness } from './shared/health/health.types.js';
 
 /** Agrega la salud de cada módulo; la API está lista solo cuando todos responden correctamente. */

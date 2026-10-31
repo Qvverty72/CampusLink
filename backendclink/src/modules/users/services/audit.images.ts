@@ -1,6 +1,6 @@
-import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../marketplace/physicalgoods/physicalgoods.repository.js';
-import { auditSnapshot } from './audit.snapshot.js';
-import type { AuditDetail } from './access.types.js';
+import { PHYSICALGOODS_BUCKET, signPrincipalPhoto } from '../../marketplace/physicalgoods/physicalgoods.repository.js';
+import { auditSnapshot } from '../domain/audit.snapshot.js';
+import type { AuditDetail } from '../types/access.types.js';
 
 /** La identidad de la foto sale exclusivamente de los snapshots saneados del registro autorizado. */
 export function auditContainsImage(entry: AuditDetail, imageId: string) {

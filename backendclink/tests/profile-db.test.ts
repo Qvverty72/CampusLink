@@ -15,7 +15,7 @@ const institution = randomUUID(), foreignInstitution = randomUUID();
 const campus = randomUUID(), nextCampus = randomUUID(), foreignCampus = randomUUID();
 const career = randomUUID(), secondCareer = randomUUID(), wrongCareer = randomUUID();
 const migration = () => readFile('src/database/supabase/migrations/f2_3_04_perfil_academico.sql', 'utf8');
-let updateAcademicProfile: typeof import('../src/modules/users/users.service.js').updateAcademicProfile;
+let updateAcademicProfile: typeof import('../src/modules/users/services/users.service.js').updateAcademicProfile;
 let closePostgres: () => Promise<void>;
 let releaseCount = 0;
 before(async () => {
@@ -27,7 +27,7 @@ before(async () => {
     query: (sql: string, values: unknown[] = []) => db.query(sql, values),
     release: () => { releaseCount++; },
   }));
-  ({ updateAcademicProfile } = await import('../src/modules/users/users.service.js'));
+  ({ updateAcademicProfile } = await import('../src/modules/users/services/users.service.js'));
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql as $$select null::uuid$$; grant usage on schema public to anon,authenticated,service_role;");
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');

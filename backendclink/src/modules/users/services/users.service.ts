@@ -1,11 +1,11 @@
-import { createModuleHealthCheck } from '../../shared/health/module-health.js';
-import { probeUsersDependencies } from './users.repository.js';
-import type { UsersHealth } from './users.types.js';
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import type { ProfileUpdate } from './users.types.js';
-import { requireCampusCapability, requireResourceOwner } from '../auth/domain/auth.authorization.js';
-import { ApiError } from '../../shared/errors/api-error.js';
-import { findAcademicProfile, findAcademicOptions, withAcademicProfileTransaction } from './users.repository.js';
+import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
+import { probeUsersDependencies } from '../repositories/users.repository.js';
+import type { UsersHealth } from '../types/users.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import type { ProfileUpdate } from '../types/users.types.js';
+import { requireCampusCapability, requireResourceOwner } from '../../auth/domain/auth.authorization.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import { findAcademicProfile, findAcademicOptions, withAcademicProfileTransaction } from '../repositories/users.repository.js';
 
 const unavailable = () => new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'El perfil académico no está disponible. Inténtalo nuevamente.');
 const invalid = (message: string) => new ApiError(400, 'VALIDATION_ERROR', message);

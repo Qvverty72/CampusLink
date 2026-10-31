@@ -1,10 +1,10 @@
-import { withPostgresTransaction } from '../../database/supabase/postgres.js';
-import type { AccessAccountProfile, AccessAssignment, AccessCampus, AccessCatalogItem, AccessConnection, AccessKind, AccessProfile, AccessSnapshot, AccountStateUpdate, PhysicalPublication } from './access.types.js';
-import type { AuthAssignment } from '../auth/types/auth.types.js';
-import type { AuditEntry, AuditDetail, AuditReferenceName, AuditReferenceRequest, AuditActorRow, AuditResponsibleProfile, AuditSearch } from './access.types.js';
-import { accessAuditKey, accessAuditPredicate } from './audit.access-groups.js';
-import { auditEditSummary, editAuditKey, publicationEditPredicate } from './audit.edit-groups.js';
-import { auditSnapshot } from './audit.snapshot.js';
+import { withPostgresTransaction } from '../../../database/supabase/postgres.js';
+import type { AccessAccountProfile, AccessAssignment, AccessCampus, AccessCatalogItem, AccessConnection, AccessKind, AccessProfile, AccessSnapshot, AccountStateUpdate, PhysicalPublication } from '../types/access.types.js';
+import type { AuthAssignment } from '../../auth/types/auth.types.js';
+import type { AuditEntry, AuditDetail, AuditReferenceName, AuditReferenceRequest, AuditActorRow, AuditResponsibleProfile, AuditSearch } from '../types/access.types.js';
+import { accessAuditKey, accessAuditPredicate } from '../domain/audit.access-groups.js';
+import { auditEditSummary, editAuditKey, publicationEditPredicate } from '../domain/audit.edit-groups.js';
+import { auditSnapshot } from '../domain/audit.snapshot.js';
 
 const auditColumns = `id,actor_usuario_id,institucion_id,campus_id,entidad_tipo,entidad_id,accion,
   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at`;

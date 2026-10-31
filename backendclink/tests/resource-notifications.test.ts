@@ -9,7 +9,7 @@ const campus = randomUUID(), sibling = randomUUID(), foreign = randomUUID(), ins
 const owner = randomUUID(), requester = randomUUID(), other = randomUUID(), outsider = randomUUID(), inactive = randomUUID();
 const transaction = <T>(run: (client: PoolClient) => Promise<T>) => db.transaction(client => run(client as unknown as PoolClient));
 let events: typeof import('../src/modules/marketplace/marketplace.notifications.js');
-let inbox: typeof import('../src/modules/users/notifications.repository.js');
+let inbox: typeof import('../src/modules/users/repositories/notifications.repository.js');
 before(async () => {
   Object.assign(process.env, { NODE_ENV:'test', MONGODB_URI:'mongodb://localhost:27017',
     SUPABASE_URL:'https://resource-test.invalid', SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test', SUPABASE_SECRET_KEY:'test' });
@@ -26,7 +26,7 @@ before(async () => {
     await db.query('INSERT INTO perfil_usuario VALUES($1,$2,$3,$4,null)',[id,site,site===foreign?foreign:institution,state]);
   }
   events = await import('../src/modules/marketplace/marketplace.notifications.js');
-  inbox = await import('../src/modules/users/notifications.repository.js');
+  inbox = await import('../src/modules/users/repositories/notifications.repository.js');
 });
 after(async () => { await db.close(); });
 async function resource(type='FISICO', users=[requester]) {

@@ -33,7 +33,7 @@ let requestsService: typeof import('../src/modules/marketplace/physicalgoods/phy
 let transactionsService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
 let historyService: typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
 let remindersService:typeof import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
-let notificationsService:typeof import('../src/modules/users/notifications.service.js');
+let notificationsService:typeof import('../src/modules/users/services/notifications.service.js');
 let reportsService:typeof import('../src/modules/reports/reports.physicalgoods.service.js');
 let failTransactionInsert=false;
 let failRatingInsert=false,lostRatingCommit=false;
@@ -127,7 +127,7 @@ before(async () => {
   transactionsService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.transactions.service.js');
   historyService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.history.service.js');
   remindersService=await import('../src/modules/marketplace/physicalgoods/physicalgoods.reminders.service.js');
-  notificationsService=await import('../src/modules/users/notifications.service.js');
+  notificationsService=await import('../src/modules/users/services/notifications.service.js');
   reportsService=await import('../src/modules/reports/reports.physicalgoods.service.js');
   create = services.createPhysicalgoods; options = services.getPhysicalgoodsOptions; photo = services.getPhysicalgoodsPhoto;
   ({ parsePhysicalgoods: parse } = await import('../src/modules/marketplace/physicalgoods/physicalgoods.validation.js'));
@@ -817,13 +817,13 @@ test('publication, image and category histories preserve prior snapshots and exp
   const newCategory=randomUUID();await db.query("insert into categoria_recurso_fisico(id,nombre) values($1,'New category')",[newCategory]);await imagesService.changePhysicalgoodsCategory(auth,saved.id,{categoryId:newCategory});
   const history=await audits(saved.id);assert.equal(history.length,5);assert.equal(history[0].datos_despues.categoria_id,category);assert.equal(history[4].datos_despues.categoria_id,newCategory);
   assert.equal((history[0].datos_despues.images as unknown[]).length,1);assert.equal((history[1].datos_despues.images as unknown[]).length,2);
-  const {auditSnapshot}=await import('../src/modules/users/audit.snapshot.js');
+  const {auditSnapshot}=await import('../src/modules/users/domain/audit.snapshot.js');
   const projected=auditSnapshot({...history[4].datos_despues,password:'secret',images:[{id:second.id,orden:0,storage_path:'private',url:'secret'}]});
   assert.equal(projected?.categoria_id,newCategory);assert.equal(projected?.descripcion,'Funciona correctamente');assert.doesNotMatch(JSON.stringify(projected),/password|storage_path|secret/);
   const admin=await otherActor();await db.query("insert into usuario_rol(perfil_usuario_id,rol_id,campus_id) select $1,id,$2 from rol where nombre='ADMINISTRADOR'",[admin.userId,campus]);
   const entry=(await db.query('select id from auditoria where entidad_id=$1 order by created_at desc,id desc limit 1',[saved.id])).rows[0];
   await db.query("update publicacion_recurso set descripcion='Live data changed',deleted_at=now() where id=$1",[saved.id]);
-  const {getAuditEntry}=await import('../src/modules/users/access.service.js');
+  const {getAuditEntry}=await import('../src/modules/users/services/access.service.js');
   const historical=await getAuditEntry(admin,campus,entry.id);assert.equal((historical.datos_despues as Record<string,unknown>).descripcion,'Funciona correctamente');
   await assert.rejects(getAuditEntry(auth,campus,entry.id),{status:403});await assert.rejects(getAuditEntry(admin,otherCampus,entry.id),{status:403});
 });
@@ -1144,7 +1144,7 @@ test('own publication tabs filter before pagination, prioritize actionable resou
 });
 
 test('profile overview counts own physical history across campuses and rejects stale or suspended accounts', async () => {
-  const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
+  const { getProfileOverview } = await import('../src/modules/users/services/profile-overview.service.js');
   const { saved, first, second, a } = await requestedPair();
   assert.deepEqual(await getProfileOverview(auth), { activePublications: 1, pendingRequests: 2, transactions: 0, acquiredResources: 0 });
   await resolveRequest(saved.id, a.id);
@@ -1165,7 +1165,7 @@ test('profile overview counts own physical history across campuses and rejects s
 const resolveRequest=(publicationId:string,requestId:string,decision='ACEPTAR',actor=auth)=>requestsService.resolvePhysicalgoodsRequest(actor,publicationId,requestId,{decision});
 
 test('request counters aggregate both inboxes across pages and follow acceptance, both confirmations and cancellation',async()=>{
-  const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
+  const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');
   const {saved,first,second,a}=await requestedPair(),extra=await create(auth,input());
   const c=await requestsService.createPhysicalgoodsRequest(first,extra.id,{messageCode:'ME_INTERESA'});
   assert.deepEqual(await requestsService.getPhysicalgoodsRequestCounts(auth,{}),{sentAccepted:0,receivedPending:3,pendingRequests:3,pendingTransactions:0});

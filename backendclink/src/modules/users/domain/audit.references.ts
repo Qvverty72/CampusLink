@@ -1,4 +1,4 @@
-import type { AuditEntry, AuditReference, AuditReferenceKind, AuditReferenceName, AuditReferenceRequest } from './access.types.js';
+import type { AuditEntry, AuditReference, AuditReferenceKind, AuditReferenceName, AuditReferenceRequest } from '../types/access.types.js';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const name = (value: unknown) => typeof value === 'string' && value.trim() ? value : null;

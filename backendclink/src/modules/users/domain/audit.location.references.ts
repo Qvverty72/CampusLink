@@ -1,5 +1,5 @@
-import type { CampusMapDocument } from '../maps/map.types.js';
-import type { AuditReference } from './access.types.js';
+import type { CampusMapDocument } from '../../maps/map.types.js';
+import type { AuditReference } from '../types/access.types.js';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const rows = (value: unknown) => Array.isArray(value) ? value.filter(record) : [];

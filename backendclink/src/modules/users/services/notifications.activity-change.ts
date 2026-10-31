@@ -1,11 +1,11 @@
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import type { ActivityDependencies } from '../activities/activities.service.js';
-import type { ActivitySnapshot } from '../activities/activities.edit.types.js';
-import { getAuthorizedActiveMap } from '../maps/map.service.js';
-import { resolveActivityLocation, spatialBuildings } from '../activities/activities.location.js';
-import { toVisibleActivity } from '../activities/activities.policy.js';
-import { ApiError } from '../../shared/errors/api-error.js';
-import type { NotificationActivityChangeDto, NotificationActivitySnapshot } from './notifications.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import type { ActivityDependencies } from '../../activities/activities.service.js';
+import type { ActivitySnapshot } from '../../activities/activities.edit.types.js';
+import { getAuthorizedActiveMap } from '../../maps/map.service.js';
+import { resolveActivityLocation, spatialBuildings } from '../../activities/activities.location.js';
+import { toVisibleActivity } from '../../activities/activities.policy.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
+import type { NotificationActivityChangeDto, NotificationActivitySnapshot } from '../types/notifications.types.js';
 
 /** Vincula un aviso autorizado al snapshot exacto, aunque existan ediciones posteriores. */
 export async function getNotificationActivityChange(auth: VerifiedAuthConnection, notificationId: string,
@@ -18,7 +18,7 @@ export async function getNotificationActivityChange(auth: VerifiedAuthConnection
   if ((!revision && !operation) || (revision && !Number.isSafeInteger(Number(revision[1])))) throw unavailable();
   const map = await getAuthorizedActiveMap(auth, auth.campusId, dependencies.getActiveMap);
   const buildings = spatialBuildings(map), now = dependencies.now?.() ?? new Date();
-  const find = dependencies.findActivity ?? (await import('../activities/activities.detail.repository.js')).findVisibleActivity;
+  const find = dependencies.findActivity ?? (await import('../../activities/activities.detail.repository.js')).findVisibleActivity;
   const document = await find(auth.campusId, id, now);
   if (!document || document._id?.toHexString?.() !== id || !toVisibleActivity(document, auth.campusId, now, buildings)) throw unavailable();
   const matches = (Array.isArray(document.changeHistory) ? document.changeHistory : []).filter(history => history?.campusId === auth.campusId

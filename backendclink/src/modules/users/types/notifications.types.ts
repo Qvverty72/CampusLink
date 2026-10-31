@@ -1,4 +1,4 @@
-import type { ActivityDto } from '../activities/activities.types.js';
+import type { ActivityDto } from '../../activities/activities.types.js';
 
 export interface ActivityNotificationDto {
   id: string;

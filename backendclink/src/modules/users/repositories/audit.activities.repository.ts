@@ -1,11 +1,11 @@
 import { ObjectId, type Document } from 'mongodb';
-import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
-import type { ActivityDocument, ActivityInteractionDocument, ActivityParticipationDocument } from '../activities/activities.types.js';
-import type { ActivityChangeDocument } from '../activities/activities.edit.types.js';
-import type { AccessCampus, AuditDetail, AuditEntry, AuditOccurrences, AuditSearch } from './access.types.js';
-import { findActiveMapByCampusId } from '../maps/map.repository.js';
-import { compareAuditEntries } from './audit.timeline.js';
-import { auditEditSummary } from './audit.edit-groups.js';
+import { getMongoDB as getMongoDb } from '../../../database/mongodb/client.js';
+import type { ActivityDocument, ActivityInteractionDocument, ActivityParticipationDocument } from '../../activities/activities.types.js';
+import type { ActivityChangeDocument } from '../../activities/activities.edit.types.js';
+import type { AccessCampus, AuditDetail, AuditEntry, AuditOccurrences, AuditSearch } from '../types/access.types.js';
+import { findActiveMapByCampusId } from '../../maps/map.repository.js';
+import { compareAuditEntries } from '../domain/audit.timeline.js';
+import { auditEditSummary } from '../domain/audit.edit-groups.js';
 
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
 const objectId = (value: unknown): value is ObjectId => value instanceof ObjectId;

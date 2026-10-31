@@ -1,20 +1,16 @@
 import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
-import { getProfileOverview } from './profile-overview.service.js';
-import { sendSuccess } from '../../shared/http/api-response.js';
-import { getUsersHealthController } from './users.controller.js';
-import { getAcademicProfileController, getAcademicOptionsController, updateAcademicProfileController } from './users.controller.js';
+import { getProfileOverviewController, getUsersHealthController } from './controllers/users.controller.js';
+import { getAcademicProfileController, getAcademicOptionsController, updateAcademicProfileController } from './controllers/users.controller.js';
 import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
-import { getAccessCampusesController, getAccessCatalogController, listAccessUsersController, getUserAccessController, updateUserAccessController, updateAccountStateController } from './access.controller.js';
-import { listAuditEntriesController, getAuditEntryController, getAuditImageController, getAuditParticipationController, getAuditOccurrencesController, getAuditEditsController } from './access.controller.js';
+import { getAccessCampusesController, getAccessCatalogController, listAccessUsersController, getUserAccessController, updateUserAccessController, updateAccountStateController } from './controllers/access.controller.js';
+import { listAuditEntriesController, getAuditEntryController, getAuditImageController, getAuditParticipationController, getAuditOccurrencesController, getAuditEditsController } from './controllers/access.controller.js';
 import { createNotificationsRouter } from './notifications.routes.js';
 
 // Los diagnósticos son técnicos; las rutas de negocio verifican identidad y contexto.
 export function createUsersRouter(diagnosticsEnabled: boolean): Router {
   const router = createPolicyRouter();
-  router.get('/me/overview', requireAuthentication, async (_request, response) => {
-    sendSuccess(response, await getProfileOverview(response.locals.auth));
-  });
+  router.get('/me/overview', requireAuthentication, getProfileOverviewController);
   router.use('/me/notifications', createNotificationsRouter());
   if (diagnosticsEnabled) router.get('/health', publicEndpoint, getUsersHealthController);
   router.get('/me/profile', requireAuthentication, getAcademicProfileController);

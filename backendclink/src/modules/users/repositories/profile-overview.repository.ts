@@ -1,17 +1,10 @@
 import type { PoolClient } from 'pg';
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import { withPhysicalgoodsHistory } from '../marketplace/physicalgoods/physicalgoods.history.service.js';
-import { DIGITAL_ACCESS_PROOF } from '../marketplace/elibrary/elibrary.repository.js';
-import { activityCounts } from '../marketplace/elibrary/elibrary.activity.repository.js';
-import { countPhysicalgoodsRequests } from '../marketplace/physicalgoods/physicalgoods.requests.repository.js';
-import { countOwnPhysicalgoodsTransactions } from '../marketplace/physicalgoods/physicalgoods.transactions.repository.js';
+import { DIGITAL_ACCESS_PROOF } from '../../marketplace/elibrary/elibrary.repository.js';
+import { activityCounts } from '../../marketplace/elibrary/elibrary.activity.repository.js';
+import { countPhysicalgoodsRequests } from '../../marketplace/physicalgoods/physicalgoods.requests.repository.js';
+import { countOwnPhysicalgoodsTransactions } from '../../marketplace/physicalgoods/physicalgoods.transactions.repository.js';
+import type { ProfileOverview } from '../types/profile-overview.types.js';
 
-export interface ProfileOverview {
-  activePublications: number;
-  pendingRequests: number;
-  transactions: number;
-  acquiredResources: number;
-}
 
 /** Totales completos, independientes de la primera página y de los stores del cliente. */
 export async function queryProfileOverview(client: PoolClient, userId: string, institutionId: string): Promise<ProfileOverview> {
@@ -32,9 +25,4 @@ export async function queryProfileOverview(client: PoolClient, userId: string, i
   const digital = await activityCounts(client,institutionId,userId);
   return {...result.rows[0],pendingRequests:physicalRequests.pendingRequests+digital.pendingRequests,
     transactions:physicalTransactions.active+digital.pendingTransactions};
-}
-
-export function getProfileOverview(auth: VerifiedAuthConnection) {
-  // Comparte la revalidación de cuenta, institución, campus y capacidades del historial.
-  return withPhysicalgoodsHistory(auth, (client, current) => queryProfileOverview(client, current.userId, current.profile.institucion_id));
 }

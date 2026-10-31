@@ -1,20 +1,20 @@
 import assert from 'node:assert/strict';
 import { after, before, mock, test } from 'node:test';
 import { Db, ObjectId } from 'mongodb';
-import { auditTimeline, compareAuditEntries } from '../src/modules/users/audit.timeline.js';
-import type { AuditEntry, AccessCampus } from '../src/modules/users/access.types.js';
+import { auditTimeline, compareAuditEntries } from '../src/modules/users/domain/audit.timeline.js';
+import type { AuditEntry, AccessCampus } from '../src/modules/users/types/access.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
-import { auditLocationReferences } from '../src/modules/users/audit.location.references.js';
-import { auditEditSummary } from '../src/modules/users/audit.edit-groups.js';
-import { auditSnapshot } from '../src/modules/users/audit.snapshot.js';
+import { auditLocationReferences } from '../src/modules/users/domain/audit.location.references.js';
+import { auditEditSummary } from '../src/modules/users/domain/audit.edit-groups.js';
+import { auditSnapshot } from '../src/modules/users/domain/audit.snapshot.js';
 
 const campus: AccessCampus = { id:'22222222-2222-4222-8222-222222222222',institucion_id:'33333333-3333-4333-8333-333333333333',nombre:'Campus',activo:true };
 const owner='11111111-1111-4111-8111-111111111111',id=new ObjectId('6ad94d868ef4abc14cd98feb');
-let repository: typeof import('../src/modules/users/audit.activities.repository.js');
+let repository: typeof import('../src/modules/users/repositories/audit.activities.repository.js');
 before(async()=>{
   Object.assign(process.env,{NODE_ENV:'test',MONGODB_URI:'mongodb://localhost:27017',SUPABASE_URL:'https://audit-activities.invalid',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test'});
-  repository=await import('../src/modules/users/audit.activities.repository.js');
+  repository=await import('../src/modules/users/repositories/audit.activities.repository.js');
 });
 after(async()=>{await (await import('../src/database/mongodb/client.js')).closeMongoDB()});
 const document=(patch:Partial<ActivityDocument>={}):ActivityDocument=>({_id:id,campusId:campus.id,createdByUserId:owner,title:'Actual',description:'Actual description',

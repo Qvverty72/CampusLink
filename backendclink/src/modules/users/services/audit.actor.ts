@@ -1,4 +1,4 @@
-import type { AuditActor, AuditActorRow } from './access.types.js';
+import type { AuditActor, AuditActorRow } from '../types/access.types.js';
 
 /** Describe asignaciones del responsable; nunca concede autorización ni infiere su perfil por la acción. */
 export function auditActor(row?: AuditActorRow): AuditActor {

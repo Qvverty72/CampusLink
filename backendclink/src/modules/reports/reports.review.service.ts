@@ -4,7 +4,7 @@ import { ApiError } from '../../shared/errors/api-error.js';
 import { createPaginatedResult, parsePaginationQuery } from '../../shared/pagination/pagination.js';
 import { requireCampusCapability } from '../auth/domain/auth.authorization.js';
 import { lockAccountContext } from '../auth/repositories/auth.repository.js';
-import { accessRepository } from '../users/access.repository.js';
+import { accessRepository } from '../users/repositories/access.repository.js';
 import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { digitalId } from '../marketplace/elibrary/elibrary.validation.js';
 import { assertStoredDigitalFile } from '../marketplace/elibrary/elibrary.files.service.js';

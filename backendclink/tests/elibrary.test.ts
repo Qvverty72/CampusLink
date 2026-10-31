@@ -417,7 +417,7 @@ async function acquisition(publicationId: string, receiverId: string, confirmati
 }
 
 test('profile overview counts only legitimate digital acquisitions and preserves withdrawn originals', async () => {
-  const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
+  const { getProfileOverview } = await import('../src/modules/users/services/profile-overview.service.js');
   const saved = await service.createDigitalPublication(auth, input(), file()), receiver = await peer(), other = await peer();
   const transactionId = await acquisition(saved.id, receiver.userId, 1);
   assert.equal((await getProfileOverview(receiver)).acquiredResources, 0);
@@ -433,7 +433,7 @@ test('profile overview counts only legitimate digital acquisitions and preserves
 });
 
 test('profile overview adds both domains once and separates received requests from accepted transactions',async()=>{
- const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
+ const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');
  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();
  await requestAndAccept(saved,receiver);await trades.createDigitalRequest(other,saved.id,{messageCode:'LIB_QA_INTERES'});
@@ -618,7 +618,7 @@ test('failed academic edit leaves previous sets and history intact; uncertain CO
   assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1', [saved.id])).rows.length, 2);
 });
 test('audit projection retains historical academic names/codes without arbitrary data or private paths', async () => {
-  const { auditSnapshot } = await import('../src/modules/users/audit.snapshot.js');
+  const { auditSnapshot } = await import('../src/modules/users/domain/audit.snapshot.js');
   assert.deepEqual(auditSnapshot({ careers: [{ id: 'c', name: 'Old career', code: 'C', secret: 'bad' }],
     subjects: [{ id: 's', name: 'Old subject', code: 'S', storage_path: 'private' }], bucket: 'private' }),
   { careers: [{ id: 'c', name: 'Old career', code: 'C' }], subjects: [{ id: 's', name: 'Old subject', code: 'S' }] });
@@ -723,7 +723,7 @@ test('digital free chat works across campuses with private authenticated HTTP an
 
 test('digital messages persist through HTTP and enter only the recipient inbox with a digital transaction target',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();
-  const {tradeId}=await requestAndAccept(saved,receiver),notifications=await import('../src/modules/users/notifications.service.js');
+  const {tradeId}=await requestAndAccept(saved,receiver),notifications=await import('../src/modules/users/services/notifications.service.js');
   const path=`/${saved.id}/transactions/${tradeId}/messages`,owner=auth;
   for(const [sender,recipient] of [[owner,receiver],[receiver,owner]]){
     const before=await notifications.ownNotificationOperation(recipient,{countOnly:true});assert.ok('unreadCount' in before);
@@ -793,7 +793,7 @@ test('PDF uploads with absent or generic browser MIME survive multipart and keep
 test('resource notifications connect digital requests, edits, files and acceptance across authorized institutional campuses',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();
   const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
-  const notifications=await import('../src/modules/users/notifications.service.js');
+  const notifications=await import('../src/modules/users/services/notifications.service.js');
   const own=async(actor:VerifiedAuthConnection)=>{const page=await notifications.ownNotificationOperation(actor,{});assert.ok('items' in page);return page.items;};
   const key=randomUUID();
   const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},key);
@@ -814,7 +814,7 @@ test('resource notifications connect digital requests, edits, files and acceptan
   assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE publicacion_id=$1',[saved.id])).rows.length,0);
 });
 test('digital activity counts and grouped resources cover all requests before pagination, with independent receiver trades',async()=>{
- const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
+ const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');
  const saved=await service.createDigitalPublication(auth,input(),file()),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
  const receivers=[];
  for(let i=0;i<11;i++){const receiver=await peer();receivers.push(receiver);await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});}
@@ -841,7 +841,7 @@ test('digital activity resource reads remain private and preserve original amoun
  current=structuredClone(auth);await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
  const finished=await (await get('/activity/transactions?tab=finished')).json();assert.equal(finished.meta.total,1);assert.equal(finished.data[0].amount,2500);
  assert.equal((await (await get('/activity/counts')).json()).data.pendingTransactions,0);
- const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');assert.equal((await getProfileOverview(auth)).transactions,0);assert.equal((await getProfileOverview(receiver)).transactions,0);
+ const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');assert.equal((await getProfileOverview(auth)).transactions,0);assert.equal((await getProfileOverview(receiver)).transactions,0);
 });
 test('digital activity validates query contracts, authorization and publication filters',async()=>{
  const saved=await service.createDigitalPublication(auth,input(),file());

@@ -28,8 +28,8 @@ const task = (type: 'OFFICIAL_EVENT_PUBLISHED' | 'ACTIVITY_CHANGED' = 'OFFICIAL_
   event: { key: `activity:${id.toHexString()}:${randomUUID()}`, type, title: 'Evento',
     reasons: type === 'ACTIVITY_CHANGED' ? ['DATES_CHANGED', 'LOCATION_CHANGED'] : [], occurredAt: now, status: 'PENDING' },
 });
-let sql: typeof import('../src/modules/users/notifications.repository.js');
-let operation: typeof import('../src/modules/users/notifications.service.js').ownNotificationOperation;
+let sql: typeof import('../src/modules/users/repositories/notifications.repository.js');
+let operation: typeof import('../src/modules/users/services/notifications.service.js').ownNotificationOperation;
 let dispatch: typeof import('../src/modules/activities/activities.notifications.worker.js').dispatchActivityNotifications;
 const migration = () => readFile('src/database/supabase/migrations/f2_6_08_notificaciones.sql', 'utf8');
 before(async () => {
@@ -50,8 +50,8 @@ before(async () => {
     [foreign, otherCampus, 'ACTIVA', null], [suspended, campusId, 'SUSPENDIDA', null], [deleted, campusId, 'ACTIVA', now]]) {
     await db.query('INSERT INTO perfil_usuario VALUES ($1,$2,$3,$4)', [user, campus, state, date]);
   }
-  sql = await import('../src/modules/users/notifications.repository.js');
-  ({ ownNotificationOperation: operation } = await import('../src/modules/users/notifications.service.js'));
+  sql = await import('../src/modules/users/repositories/notifications.repository.js');
+  ({ ownNotificationOperation: operation } = await import('../src/modules/users/services/notifications.service.js'));
   ({ dispatchActivityNotifications: dispatch } = await import('../src/modules/activities/activities.notifications.worker.js'));
 });
 after(async () => { await db.close(); await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });

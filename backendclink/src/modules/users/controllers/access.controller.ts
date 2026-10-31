@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
-import type { AuthLocals } from '../auth/types/auth.types.js';
-import { sendSuccess } from '../../shared/http/api-response.js';
-import { getAccessCampuses, getAccessCatalog, listAccessUsers, getUserAccess, updateUserAccess, updateAccountState } from './access.service.js';
-import { listAuditEntries, getAuditEntry, getAuditImage, getAuditParticipation, getAuditOccurrences, getAuditEdits } from './access.service.js';
+import type { AuthLocals } from '../../auth/types/auth.types.js';
+import { sendSuccess } from '../../../shared/http/api-response.js';
+import { getAccessCampuses, getAccessCatalog, listAccessUsers, getUserAccess, updateUserAccess, updateAccountState } from '../services/access.service.js';
+import { listAuditEntries, getAuditEntry, getAuditImage, getAuditParticipation, getAuditOccurrences, getAuditEdits } from '../services/access.service.js';
 
 type Handler = RequestHandler<Record<string, string>, unknown, unknown, Record<string, unknown>, AuthLocals>;
 export const getAccessCampusesController: Handler = async (_request, response) => {

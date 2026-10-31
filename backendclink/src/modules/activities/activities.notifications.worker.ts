@@ -1,6 +1,6 @@
 import { enqueuePublishedOfficialOccurrences, findPendingActivityNotifications, findNotificationParticipants, markNotificationDelivered,
   type PendingActivityNotification } from './activities.notifications.repository.js';
-import { deliverActivityNotification } from '../users/notifications.repository.js';
+import { deliverActivityNotification } from '../users/repositories/notifications.repository.js';
 import { finishEndedActivities } from './activities.lifecycle.js';
 
 export interface NotificationDeliveryDependencies {

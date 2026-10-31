@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
 import { Pool } from 'pg';
 import { ObjectId } from 'mongodb';
-import type { AuditEntry, AuditSearch } from '../src/modules/users/access.types.js';
+import type { AuditEntry, AuditSearch } from '../src/modules/users/types/access.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
 
@@ -68,13 +68,13 @@ before(async () => {
       from usuario_${kind} link join ${kind} cat on cat.id=link.${kind}_id where link.perfil_usuario_id=$1 and link.revocado_en is null`,[authUser])).rows);
   };
   const { createApp } = await import('../src/app.js');
-  const { auditImageStorage } = await import('../src/modules/users/audit.images.js');
+  const { auditImageStorage } = await import('../src/modules/users/services/audit.images.js');
   mock.method(auditImageStorage,'sign',async (path:string) => {
     imageSigns.push(path); if(imageFailure)throw Error('private Storage service key/path/token');
     return 'https://private-preview.invalid/image-'+imageSigns.length;
   });
-  const { activityAuditRepository, auditSeriesFilter, auditOccurrence } = await import('../src/modules/users/audit.activities.repository.js');
-  const { compareAuditEntries } = await import('../src/modules/users/audit.timeline.js');
+  const { activityAuditRepository, auditSeriesFilter, auditOccurrence } = await import('../src/modules/users/repositories/audit.activities.repository.js');
+  const { compareAuditEntries } = await import('../src/modules/users/domain/audit.timeline.js');
   const matchesSearch = (row:AuditEntry,search:AuditSearch) => (!search.contentName || row.entity_name?.toLowerCase().includes(search.contentName.toLowerCase())) &&
     (!search.userName || search.users?.some(user=>row.actor_usuario_id===user.id&&Date.parse(row.created_at)>=user.createdAt));
   mock.method(activityAuditRepository,'list',async (scope,limit,offset,action,from,before,search={}) => {
@@ -715,7 +715,7 @@ test('audit action filter applies before pagination and preserves campus authori
 
 test('audit action filter accepts existing actions and rejects unknown, repeated, nested or injected values', async () => {
   await fixture();
-  const {AUDIT_ACTIONS}=await import('../src/modules/users/access.types.js');
+  const {AUDIT_ACTIONS}=await import('../src/modules/users/types/access.types.js');
   for(const action of AUDIT_ACTIONS) assert.equal((await request(auditRoute()+'?action='+action)).status,200);
   for(const query of ['action=', 'action=UNKNOWN', 'action=asignar_rol', 'action=ASIGNAR_ROL&action=REVOCAR_ROL',
     'action[]=ASIGNAR_ROL', 'action[name]=ASIGNAR_ROL', 'action='+encodeURIComponent("ASIGNAR_ROL' OR 1=1 --")]) {
@@ -989,7 +989,7 @@ test('administrative timeline merges Mongo activities and SQL actions before pag
   for(const stamp of ['2026-10-27T12:00:00.000001Z','2026-10-27T11:00:00.000000Z']) {
     const id=await seedAudit(actor,user,scoped);pgIds.push(id);await db.query('update auditoria set created_at=$2::timestamptz where id=$1',[id,stamp]);
   }
-  const {activityAuditEntry,activityAuditId}=await import('../src/modules/users/audit.activities.repository.js');
+  const {activityAuditEntry,activityAuditId}=await import('../src/modules/users/repositories/audit.activities.repository.js');
   const value=auditActivity(user,scoped);
   const row=activityAuditEntry({id:activityAuditId(value._id,'created'),activityId:value._id,at:value.createdAt,actor:user,type:value.type,kind:'created',name:value.title},
     {id:scoped,institucion_id:institution,nombre:'Unified history',activo:true});
@@ -1017,7 +1017,7 @@ test('Mongo audit detail preserves activity changes, names/IDs and actor type af
     changedAt:new Date('2026-10-27T13:00:00Z'),before,after:{...before,title:'Título editado'},changedFields:['title'],notificationReasons:[]};
   value.changeHistory=[change,{...change,_id:new ObjectId(),revision:2,changedAt:value.deletedAt!,before:change.after,after:{...change.after,status:'DELETED',deletedAt:value.deletedAt!},changedFields:['status','deletedAt']}];
   mongoDocuments=[value];
-  const {activityAuditId}=await import('../src/modules/users/audit.activities.repository.js');
+  const {activityAuditId}=await import('../src/modules/users/repositories/audit.activities.repository.js');
   const creation=await auditDetail(activityAuditId(value._id,'created'));
   assert.equal(creation.accion,'PUBLICAR_EVENTO_OFICIAL');assert.equal(creation.activity.snapshotSource,'first_change');
   assert.equal(creation.datos_despues.titulo,'Título inicial');assert.equal(creation.actor.kind,'user');assert.equal(creation.actor.name,'Organizador');
@@ -1044,7 +1044,7 @@ test('activity audit location details return scoped building/floor/POI names and
     {id:'h',name:'Edificio H',isVisible:false,floors:[{id:'1',name:'Primer piso H',deletedAt:new Date(),pois:[{poiKey:'sala',name:'Sala H',isVisible:false}]}]},
     {id:'b',name:'Edificio B',floors:[{id:'1',name:'Primer piso B',pois:[{poiKey:'sala',name:'Sala B'}]}]},
   ]};
-  const {activityAuditId}=await import('../src/modules/users/audit.activities.repository.js');
+  const {activityAuditId}=await import('../src/modules/users/repositories/audit.activities.repository.js');
   const id=activityAuditId(value._id,'change:'+change._id.toHexString()),original=JSON.stringify(value);
   const result=await auditDetail(id);
   for(const [side,building,floor,poi] of [['datos_antes','Edificio H','Primer piso H','Sala H'],['datos_despues','Edificio B','Primer piso B','Sala B']]) {
@@ -1063,7 +1063,7 @@ test('activity audit location details return scoped building/floor/POI names and
 test('administrative participation is paginated, preserves repeat transitions and limits names to authorized campus/institution', async () => {
   const {user}=await fixture(),outside=await profile(otherCampus,'PRIVATE OTHER CAMPUS');
   const value=auditActivity(user,campus,{status:'DELETED',deletedAt:new Date('2026-10-28')});mongoDocuments=[value];
-  const {activityAuditId}=await import('../src/modules/users/audit.activities.repository.js');
+  const {activityAuditId}=await import('../src/modules/users/repositories/audit.activities.repository.js');
   const id=activityAuditId(value._id,'created'),path=auditRoute(id)+'/participation';
   participationEvents=[{id:'event3',userId:user,type:'JOINED',occurredAt:'2026-10-27T15:00:00Z',provenance:'LIVE'},
     {id:'event2',userId:user,type:'LEFT',occurredAt:'2026-10-27T14:00:00Z',provenance:'LIVE'},
@@ -1093,7 +1093,7 @@ test('Mongo audit and participation authorize before Mongo reads and do not sile
 
 test('recurring audit creation opens every occurrence with independent snapshots, IDs and participation, including past/hidden/deleted entries',async()=>{
   const {actor,user}=await fixture(),seriesId=new ObjectId();
-  const {activityAuditId}=await import('../src/modules/users/audit.activities.repository.js');
+  const {activityAuditId}=await import('../src/modules/users/repositories/audit.activities.repository.js');
   const values=Array.from({length:12},(_,index)=>auditActivity(user,campus,{seriesId,occurrenceIndex:index+1,type:'OFFICIAL_EVENT',
     title:'Fecha '+(index+1),status:index===0?'DELETED':index===1?'FINISHED':'ACTIVE',visibility:index===0?'HIDDEN':'PUBLIC',
     startAt:new Date(Date.UTC(2026,9,1+index,12)),endAt:new Date(Date.UTC(2026,9,1+index,13))}));
@@ -1123,7 +1123,7 @@ test('recurring audit creation opens every occurrence with independent snapshots
 
 test('administrative occurrences recheck campus/admin/account before Mongo and sanitize dependency failures',async()=>{
   const {actor,user}=await fixture(),value=auditActivity(user,campus,{seriesId:new ObjectId()});mongoDocuments=[value];
-  const {activityAuditId}=await import('../src/modules/users/audit.activities.repository.js');
+  const {activityAuditId}=await import('../src/modules/users/repositories/audit.activities.repository.js');
   const path=auditRoute(activityAuditId(value._id,'created'))+'/occurrences';
   const before=mongoReads;
   assert.equal((await request(path,undefined,'')).status,401);
@@ -1363,7 +1363,7 @@ test('access operations group before pagination, date/action filters and SQL/Mon
   }
   const mongo:AuditEntry={id:'activity:6ad94d868ef4abc14cd98feb:created',actor_usuario_id:actor,campus_id:scoped,institucion_id:institution,
     entidad_tipo:'actividad',entidad_id:'6ad94d868ef4abc14cd98feb',accion:'CREAR_ACTIVIDAD',created_at:'2026-10-27T12:13:30.000Z'};
-  mongoEntries=[mongo];const {compareAuditEntries}=await import('../src/modules/users/audit.timeline.js');
+  mongoEntries=[mongo];const {compareAuditEntries}=await import('../src/modules/users/domain/audit.timeline.js');
   const ordered=[...expected,mongo].sort((a,b)=>compareAuditEntries(a as AuditEntry,b as AuditEntry));const actual:string[]=[];
   for(const page of [1,2]){
     const result=await (await request(auditRoute(undefined,scoped)+`?limit=20&page=${page}`)).json();actual.push(...result.data.map((row:any)=>row.id));
@@ -1495,7 +1495,7 @@ test('activity edit chronology keeps one occurrence, excludes creation/deletion 
     revision:index+1,scope:'ONE' as const,changedAt:new Date(`2026-10-27T13:00:0${index}Z`),before:snapshot,after:{...snapshot,title:'Edicion '+index},changedFields:['title'],notificationReasons:[]}));
   const deletion={...changes[6],_id:new ObjectId(),revision:8,after:{...snapshot,status:'DELETED',deletedAt:value.deletedAt}};
   value.changeHistory=[...changes,deletion,{...changes[0],_id:new ObjectId(),activityId:new ObjectId()}];mongoDocuments=[value,auditActivity(actor)];
-  const {activityAuditId}=await import('../src/modules/users/audit.activities.repository.js'),id=activityAuditId(value._id,'change:'+changes[0]._id.toHexString());
+  const {activityAuditId}=await import('../src/modules/users/repositories/audit.activities.repository.js'),id=activityAuditId(value._id,'change:'+changes[0]._id.toHexString());
   const original=JSON.stringify(value),versions:any[]=[];
   assert.deepEqual((await auditDetail(id)).editGroup,{count:7});
   for(const page of [1,2]){

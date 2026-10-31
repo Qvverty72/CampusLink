@@ -1,4 +1,4 @@
-import type { AuditAccessGroup, AuditEntry } from './access.types.js';
+import type { AuditAccessGroup, AuditEntry } from '../types/access.types.js';
 
 export const ACCESS_AUDIT_ACTIONS = ['ASIGNAR_ROL', 'REVOCAR_ROL', 'ASIGNAR_PERMISO', 'REVOCAR_PERMISO'] as const;
 

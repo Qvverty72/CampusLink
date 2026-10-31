@@ -1,4 +1,4 @@
-import type { AuditEntry } from './access.types.js';
+import type { AuditEntry } from '../types/access.types.js';
 import { accessAuditKey } from './audit.access-groups.js';
 
 export const publicationEditPredicate = `accion='EDITAR_PUBLICACION'
