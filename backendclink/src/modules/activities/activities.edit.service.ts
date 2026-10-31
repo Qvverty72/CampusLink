@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { requireResourceOwner } from '../auth/domain/auth.authorization.js';
-import { getAuthorizedActiveMap } from '../maps/map.service.js';
+import { getAuthorizedActiveMap } from '../maps/services/map.service.js';
 import { ApiError } from '../../shared/errors/api-error.js';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
 import type { ActivityDocument } from './activities.types.js';

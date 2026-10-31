@@ -12,7 +12,7 @@ import { toVisibleActivity } from '../src/modules/activities/activities.policy.j
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument, ActivitySeriesDocument, CreateActivitySeriesInput, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { recurrenceDraftRule } from '../../frontendclink/src/features/activities/types/recurrence.js';
 
 /**

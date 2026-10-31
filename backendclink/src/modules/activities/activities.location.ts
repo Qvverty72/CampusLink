@@ -1,6 +1,6 @@
 import type { ActivityDocument, ActivityDto, ActivityQuery } from './activities.types.js';
-import type { SpatialBuilding } from '../maps/map.location.js';
-export { spatialBuildings } from '../maps/map.location.js';
+import type { SpatialBuilding } from '../maps/domain/map.location.js';
+export { spatialBuildings } from '../maps/domain/map.location.js';
 
 export function resolveActivityLocation(buildings: SpatialBuilding[], location: ActivityDocument['location']): ActivityDto['location'] | null {
   if (!location || typeof location.buildingKey !== 'string' || typeof location.floorKey !== 'string') return null;

@@ -4,7 +4,7 @@ import { mongoClient } from '../../database/mongodb/client.js';
 import { createServerSupabaseClient } from '../../database/supabase/client.js';
 import { ApiError } from '../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import type { CampusMapDocument } from '../maps/map.types.js';
+import type { CampusMapDocument } from '../maps/types/map.types.js';
 import { requireResourceOwner } from '../auth/domain/auth.authorization.js';
 import { getAvailableActivity } from './activities.detail.service.js';
 import { visibleActivityFilter, toVisibleActivity } from './activities.policy.js';

@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
 import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { requireCampusCapability } from '../auth/domain/auth.authorization.js';
-import { getAuthorizedActiveMap } from '../maps/map.service.js';
+import { getAuthorizedActiveMap } from '../maps/services/map.service.js';
 import { ApiError } from '../../shared/errors/api-error.js';
 import { prepareActivityDocument, createdActivityDetail } from './activities.create.service.js';
 import { expandActivityRecurrence } from './activities.recurrence.js';

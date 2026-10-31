@@ -1,7 +1,7 @@
 import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
 import type { ActivityDependencies } from '../../activities/activities.service.js';
 import type { ActivitySnapshot } from '../../activities/activities.edit.types.js';
-import { getAuthorizedActiveMap } from '../../maps/map.service.js';
+import { getAuthorizedActiveMap } from '../../maps/services/map.service.js';
 import { resolveActivityLocation, spatialBuildings } from '../../activities/activities.location.js';
 import { toVisibleActivity } from '../../activities/activities.policy.js';
 import { ApiError } from '../../../shared/errors/api-error.js';

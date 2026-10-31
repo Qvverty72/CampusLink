@@ -5,7 +5,7 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE, toVisibleActivity } from '../src/modules/activities/activities.policy.js';
 import { spatialBuildings } from '../src/modules/activities/activities.location.js';
 

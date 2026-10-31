@@ -7,7 +7,7 @@ import { editActivityParser } from '../src/modules/activities/activities.edit.va
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument, ActivitySeriesDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityEditDependencies, EditActivityInput } from '../src/modules/activities/activities.edit.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { activityEditDraft, validateActivityEditDraft } from '../../frontendclink/src/features/activities/types/editing.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222', userId = '11111111-1111-4111-8111-111111111111';

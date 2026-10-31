@@ -7,7 +7,7 @@ import type { Server } from 'node:http';
 import { PGlite } from '@electric-sql/pglite';
 import { Pool } from 'pg';
 import {Db} from 'mongodb';
-import type {CampusMapDocument} from '../src/modules/maps/map.types.js';
+import type {CampusMapDocument} from '../src/modules/maps/types/map.types.js';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;

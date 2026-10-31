@@ -13,7 +13,7 @@ import { createUsersRouter } from '../modules/users/users.routes.js';
 import { getReadiness } from '../readiness.js';
 import { sendError, sendSuccess } from '../shared/http/api-response.js';
 import { ApiError } from '../shared/errors/api-error.js';
-import type { ActiveMapLookup } from '../modules/maps/map.service.js';
+import type { ActiveMapLookup } from '../modules/maps/services/map.service.js';
 
 export interface ApiRouterOptions {
   getActiveMap?: ActiveMapLookup;

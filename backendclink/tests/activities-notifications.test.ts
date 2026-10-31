@@ -11,7 +11,7 @@ import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.type
 import type { PendingActivityNotification } from '../src/modules/activities/activities.notifications.repository.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityChangeDocument } from '../src/modules/activities/activities.edit.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { publicationNotifications, changeNotification, groupedChangeNotification, occurrencePublicationNotification, participantsAtChange } from '../src/modules/activities/activities.notifications.js';
 
 const db = new PGlite();

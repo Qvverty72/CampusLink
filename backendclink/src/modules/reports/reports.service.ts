@@ -3,7 +3,7 @@ import { findOwnActivityReport, probeReportsDependencies, saveActivityReport } f
 import type { ReportsHealth } from './reports.types.js';
 import type { ActivityReportReceipt, ActivityReportSnapshot, NewActivityReport, ReportActivityInput, ReportsDependencies } from './reports.types.js';
 import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import { getAuthorizedActiveMap } from '../maps/map.service.js';
+import { getAuthorizedActiveMap } from '../maps/services/map.service.js';
 import { spatialBuildings } from '../activities/activities.location.js';
 import { toVisibleActivity } from '../activities/activities.policy.js';
 import { ApiError } from '../../shared/errors/api-error.js';

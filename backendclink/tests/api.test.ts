@@ -8,7 +8,7 @@ import { ObjectId } from 'mongodb';
 
 import { apiErrorHandler } from '../src/shared/http/error-handler.js';
 import { getValidatedRequest, validateRequest } from '../src/shared/http/validate-request.js';
-import { parseActiveMapParams } from '../src/modules/maps/map.validation.js';
+import { parseActiveMapParams } from '../src/modules/maps/validators/map.validation.js';
 import { ApiError } from '../src/shared/errors/api-error.js';
 import { createPaginatedResult, parsePaginationQuery } from '../src/shared/pagination/pagination.js';
 import { sendSuccess } from '../src/shared/http/api-response.js';

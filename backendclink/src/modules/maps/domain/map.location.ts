@@ -1,4 +1,4 @@
-import type { CampusMapDocument } from './map.types.js';
+import type { CampusMapDocument } from '../types/map.types.js';
 
 interface SpatialPoi { poiKey: string; name: string; isVisible: boolean; deletedAt?: unknown }
 interface SpatialFloor { id: string; name: string; pois: SpatialPoi[]; deletedAt?: unknown; isVisible?: boolean }

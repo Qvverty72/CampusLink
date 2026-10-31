@@ -1,16 +1,16 @@
-import { createModuleHealthCheck } from '../../shared/health/module-health.js';
-import type { DependencyChecks } from '../../shared/health/health.types.js';
-import type { CampusMapDocument, MapHealth } from './map.types.js';
-import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
-import { requireCampusCapability } from '../auth/domain/auth.authorization.js';
-import { ApiError } from '../../shared/errors/api-error.js';
+import { createModuleHealthCheck } from '../../../shared/health/module-health.js';
+import type { DependencyChecks } from '../../../shared/health/health.types.js';
+import type { CampusMapDocument, MapHealth } from '../types/map.types.js';
+import type { VerifiedAuthConnection } from '../../auth/types/auth.types.js';
+import { requireCampusCapability } from '../../auth/domain/auth.authorization.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 
 export type ActiveMapLookup = (
   campusId: string,
 ) => Promise<CampusMapDocument | null>;
 
 async function probeMapDependencies(): Promise<DependencyChecks> {
-  const { probeMapDependencies: probe } = await import('./map.repository.js');
+  const { probeMapDependencies: probe } = await import('../repositories/map.repository.js');
   return probe();
 }
 
@@ -19,7 +19,7 @@ export const getMapHealth: () => Promise<MapHealth> = createModuleHealthCheck('m
 // Conserva el DTO del mapa activo y descarta referencias a campus inexistentes o inactivos.
 /** Busca un mapa ACTIVE solo después de confirmar que el campus de referencia sigue activo. */
 export async function getActiveMap(campusId: string) {
-  const { findActiveMapByCampusId, isActiveCampus } = await import('./map.repository.js');
+  const { findActiveMapByCampusId, isActiveCampus } = await import('../repositories/map.repository.js');
   if (!await isActiveCampus(campusId)) return null;
   return findActiveMapByCampusId(campusId);
 }

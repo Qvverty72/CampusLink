@@ -9,7 +9,7 @@ import { Pool } from 'pg';
 import { ObjectId } from 'mongodb';
 import type { AuditEntry, AuditSearch } from '../src/modules/users/types/access.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), campus = randomUUID(), otherCampus = randomUUID();

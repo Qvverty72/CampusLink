@@ -14,8 +14,8 @@ import { findPhysicalgoodsTransaction, insertPhysicalgoodsConfirmation, lockPhys
   findPhysicalgoodsRating,insertPhysicalgoodsRating,listOwnPhysicalgoodsTransactions,countOwnPhysicalgoodsTransactions,physicalgoodsTransactionDetail,physicalgoodsCoordinationMessages,insertPhysicalgoodsCoordination } from './physicalgoods.transactions.repository.js';
 import { physicalgoodsHistoryPagination, withPhysicalgoodsHistory } from './physicalgoods.history.service.js';
 import type { PhysicalgoodsCoordinationRow,PhysicalgoodsRatingRow,PhysicalgoodsTransactionRow } from './physicalgoods.types.js';
-import { findActiveMapByCampusId } from '../../maps/map.repository.js';
-import { spatialBuildings } from '../../maps/map.location.js';
+import { findActiveMapByCampusId } from '../../maps/repositories/map.repository.js';
+import { spatialBuildings } from '../../maps/domain/map.location.js';
 import {findPhysicalgoodsRequestTerms} from './physicalgoods.price-history.repository.js';
 
 /** Revalida identidad y participación; solo detalle/mensajes habilitan lectura histórica de otro campus. */

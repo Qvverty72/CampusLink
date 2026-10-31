@@ -24,5 +24,5 @@ export interface CampusMapDocument {
   communityActivityCreationRevision?: number;
 }
 
-import type { ModuleHealth } from '../../shared/health/health.types.js';
+import type { ModuleHealth } from '../../../shared/health/health.types.js';
 export type MapHealth = ModuleHealth<'maps'>;

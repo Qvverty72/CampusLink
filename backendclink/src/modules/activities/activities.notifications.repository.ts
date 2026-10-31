@@ -3,7 +3,7 @@ import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
 import type { ActivityDocument, ActivityParticipationDocument } from './activities.types.js';
 import type { ActivityNotificationEvent } from './activities.notifications.js';
 import { occurrencePublicationNotification } from './activities.notifications.js';
-import type { CampusMapDocument } from '../maps/map.types.js';
+import type { CampusMapDocument } from '../maps/types/map.types.js';
 import { spatialBuildings } from './activities.location.js';
 import { toVisibleActivity } from './activities.policy.js';
 

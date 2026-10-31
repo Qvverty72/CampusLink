@@ -1,13 +1,13 @@
 import type { WithId } from 'mongodb';
-import { inspectDependencies } from '../../database/health.js';
-import { probeSupabaseTables } from '../../database/supabase/health.js';
-import { createServerSupabaseClient } from '../../database/supabase/client.js';
-import { probeMongoCollections } from '../../database/mongodb/health.js';
-import type { DependencyChecks } from '../../shared/health/health.types.js';
+import { inspectDependencies } from '../../../database/health.js';
+import { probeSupabaseTables } from '../../../database/supabase/health.js';
+import { createServerSupabaseClient } from '../../../database/supabase/client.js';
+import { probeMongoCollections } from '../../../database/mongodb/health.js';
+import type { DependencyChecks } from '../../../shared/health/health.types.js';
 
-import { getMongoDB as getMongoDb } from '../../database/mongodb/client.js';
-import type { CampusMapDocument } from './map.types.js';
-import { ApiError } from '../../shared/errors/api-error.js';
+import { getMongoDB as getMongoDb } from '../../../database/mongodb/client.js';
+import type { CampusMapDocument } from '../types/map.types.js';
+import { ApiError } from '../../../shared/errors/api-error.js';
 
 const CAMPUS_MAPS_COLLECTION = 'campus_maps';
 

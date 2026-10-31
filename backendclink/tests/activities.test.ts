@@ -5,7 +5,7 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { filterLocationActivities, selectActivityOccurrences, type Activity } from '../../frontendclink/src/features/activities/types/activity.js';
 import { parseActivityQuery } from '../src/modules/activities/activities.validation.js';
 

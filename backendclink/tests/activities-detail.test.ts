@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
 import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { parseActivityId, parseEmptyActivityInput } from '../src/modules/activities/activities.validation.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222';

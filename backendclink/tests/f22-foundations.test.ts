@@ -6,7 +6,7 @@ import { Db, MongoNetworkError, ObjectId } from 'mongodb';
 import express, { type Express } from 'express';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 
 const campus = '22222222-2222-4222-8222-222222222222';
 const other = '33333333-3333-4333-8333-333333333333';
@@ -117,7 +117,7 @@ test('[F2.2-06] creator reference changes hide the next list and detail read wit
 });
 
 test('[F2.2-06] inactive relational campus blocks Mongo reads and provider failures remain unavailable', async () => {
-  const { getActiveMap } = await import('../src/modules/maps/map.service.js'); let reads = 0;
+  const { getActiveMap } = await import('../src/modules/maps/services/map.service.js'); let reads = 0;
   const collection = mock.method(Db.prototype, 'collection', () => ({ findOne: async () => { reads++; return map; } }));
   globalThis.fetch = async () => Response.json([]);
   try {
@@ -137,7 +137,7 @@ test('[F2.2-06] Mongo outage uses sanitized HTTP 503 without a false successful 
 });
 
 test('[F2.2-07] mismatched server campus cannot read a map even with an administrative grant', async () => {
-  const { getAuthorizedActiveMap } = await import('../src/modules/maps/map.service.js'); let reads = 0;
+  const { getAuthorizedActiveMap } = await import('../src/modules/maps/services/map.service.js'); let reads = 0;
   const context = auth(); context.profile.campus_id = other; context.roles = [{ id: creator, name: 'ADMINISTRADOR', campusId: campus }];
   await assert.rejects(getAuthorizedActiveMap(context, campus, async () => { reads++; return map; }), { status: 403 });
   assert.equal(reads, 0);

@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import { ApiError } from '../../shared/errors/api-error.js';
 import type { VerifiedAuthConnection } from '../auth/types/auth.types.js';
 import { requireCampusCapability, accountCapabilities } from '../auth/domain/auth.authorization.js';
-import { getAuthorizedActiveMap } from '../maps/map.service.js';
+import { getAuthorizedActiveMap } from '../maps/services/map.service.js';
 import { resolveActivityLocation, spatialBuildings } from './activities.location.js';
 import type { ActivityDependencies } from './activities.service.js';
 import type { ActivityDetailDto, ActivityDocument, ActivityType, CreateActivityInput } from './activities.types.js';

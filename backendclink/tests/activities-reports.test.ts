@@ -9,7 +9,7 @@ import { ObjectId } from 'mongodb';
 import type { PoolClient } from 'pg';
 import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import type { NewActivityReport, ReportsDependencies } from '../src/modules/reports/reports.types.js';
 import { ACTIVITY_REPORT_REASON_CODES, parseActivityReport, parseContentReport } from '../src/modules/reports/reports.validation.js';
 import { ACTIVITY_REPORT_REASONS } from '../../frontendclink/src/features/activities/types/activityReport.js';
