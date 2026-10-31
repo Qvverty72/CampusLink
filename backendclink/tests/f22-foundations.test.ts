@@ -136,3 +136,30 @@ test('[F2.2-06] Mongo outage uses sanitized HTTP 503 without a false successful 
   });
 });
 
+test('[F2.2-07] mismatched server campus cannot read a map even with an administrative grant', async () => {
+  const { getAuthorizedActiveMap } = await import('../src/modules/maps/map.service.js'); let reads = 0;
+  const context = auth(); context.profile.campus_id = other; context.roles = [{ id: creator, name: 'ADMINISTRADOR', campusId: campus }];
+  await assert.rejects(getAuthorizedActiveMap(context, campus, async () => { reads++; return map; }), { status: 403 });
+  assert.equal(reads, 0);
+});
+
+test('[F2.2-07] the same token immediately follows a changed PostgreSQL campus and rejects the previous route', async () => {
+  const { createApp } = await import('../src/app.js'); let current = campus; const reads: string[] = [];
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    if (url.pathname === '/auth/v1/user') return Response.json({ id: userId, email: 'qa@duocuc.cl', email_confirmed_at: now.toISOString() });
+    if (url.pathname.endsWith('/perfil_usuario')) return Response.json([{ ...auth().profile, campus_id: current }]);
+    return Response.json([]);
+  };
+  try { await withServer(createApp({ getActiveMap: async id => { reads.push(id); return { ...map, campusId: id }; } }), async base => {
+    const headers = { Authorization: 'Bearer unchanged.valid.token' };
+    const request = (id: string) => network(base + '/api/v1/maps/' + id + '/active', { headers });
+    assert.equal((await request(campus)).status, 200);
+    current = other;
+    assert.equal((await request(campus)).status, 403);
+    const response = await request(other); assert.equal(response.status, 200);
+    assert.equal((await response.json()).data.campusId, other);
+    assert.deepEqual(reads, [campus, other]);
+  }); } finally { globalThis.fetch = network; }
+});
+

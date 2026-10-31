@@ -26,7 +26,7 @@ export async function getActiveMap(campusId: string) {
 
 export async function getAuthorizedActiveMap(auth: VerifiedAuthConnection, campusId: string, lookup: ActiveMapLookup = getActiveMap) {
   // La consulta sigue el campus actual del perfil, incluso si el usuario se cambió de campus.
-  if (campusId.toLowerCase() !== auth.campusId) {
+  if (campusId.toLowerCase() !== auth.campusId || auth.profile.campus_id !== auth.campusId) {
     throw new ApiError(403, 'FORBIDDEN', 'Solo puedes consultar el mapa de tu campus vigente.');
   }
   requireCampusCapability(auth, auth.campusId, 'general');
