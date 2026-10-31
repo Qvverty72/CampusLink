@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { createPolicyRouter, publicEndpoint } from '../../../middleware/endpoint-policy.js';
+import type { Router } from 'express';
 import { getElibraryHealthController } from './elibrary.controller.js';
 import { createDigitalController, detailDigitalController, listDigitalController } from './elibrary.controller.js';
 import { requireAuthentication } from '../../auth/auth.middleware.js';
@@ -16,8 +17,8 @@ import { createDigitalRequestController, digitalRequestOptionsController, receiv
 
 // El cuerpo binario se analiza en controller después de verificar la identidad.
 export function createElibraryRouter(diagnosticsEnabled: boolean): Router {
-  const router = Router();
-  if (diagnosticsEnabled) router.get('/health', getElibraryHealthController);
+  const router = createPolicyRouter();
+  if (diagnosticsEnabled) router.get('/health', publicEndpoint, getElibraryHealthController);
   router.post('/', requireAuthentication, createDigitalController);
   router.get('/activity/counts',requireAuthentication,digitalActivityController('counts'));
   router.get('/activity/requests',requireAuthentication,digitalActivityController('requests'));

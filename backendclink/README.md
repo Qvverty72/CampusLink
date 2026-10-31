@@ -809,7 +809,7 @@ Las solicitudes físicas (recibo, opciones, Enviadas, Recibidas y detalle propio
 
 Galería pública autorizada e historial de publicación propia agregan `originalTerms` con el mismo formato, derivado exclusivamente del registro auditado de alta. Solo se exponen modalidad, monto y moneda; nunca snapshots completos. Las lecturas se realizan después de autorizar el recurso o los IDs de solicitudes y se agrupan para cada página. Un precio histórico no verificable es `null`, sin reemplazarlo por un precio posterior. No requiere migración, nuevas tablas, escritura histórica ni cambios digitales.
 
-## F2.2-06 - Referencias PostgreSQL y MongoDB
+## Cierre F2.2: referencias, campus, historia y protección HTTP
 
 Los documentos Mongo conservan ObjectId propios y referencias UUID relacionales.
 Las actividades operacionales comprueban creadores ACTIVA/no eliminados en el campus
@@ -821,8 +821,6 @@ relacional activo. No hay una transacción distribuida: cada escritura Mongo man
 su transacción existente; moderación conserva su decisión SQL durable y reanudable.
 Una pérdida de acuse no autoriza a inventar éxito ni a reintentar una creación automáticamente.
 
-## F2.2-07 - Aislamiento por campus
-
 El campus sigue al perfil vigente del servidor. Los permisos administrativos delegados
 se aplican únicamente en las sedes concedidas. Según confirmación del usuario2026-10-30,
 ADMINISTRADOR conserva todas las capacidades de su campus; USUARIO_AUTORIZADO necesita
@@ -831,13 +829,13 @@ institución e historial propio conservan sus autorizaciones existentes. Las con
 históricas/auditoría/analítica siguen separadas del catálogo operacional; las referencias
 vigentes nunca se usan para borrar ni reconstruir snapshots anteriores.
 
-## F2.2-08 - Eliminacion logica y trazabilidad
-
-Se reutilizan y verifican los estados y marcas de eliminacion existentes. Las consultas operacionales omiten registros retirados; auditoria, analitica y lectores historicos autorizados conservan snapshots, transacciones, solicitudes, participaciones y derechos digitales adquiridos. Fallo de auditoria revierte los cambios SQL junto con la retirada. No se agregan tablas, triggers ni atributos.
-
-La regresion especifica de F2.2-08 esta en tests/f22-foundations.test.ts; las suites existentes de access, actividades, recursos, moderacion y analitica validan los productores y lectores historicos.
-
-## F2.2-09 - Rate limiting
+Todos los módulos usan `createPolicyRouter`. Cada endpoint declara primero `publicEndpoint`,
+`requireVerifiedIdentity` o `requireAuthentication`; los servicios siguen comprobando
+cuenta, campus, rol, permiso y propiedad. Una ruta sin declaración recibe401 sin sesión
+y403 con sesión válida, antes del controlador, también si la política se declaró después.
+La comprobación cubre los métodos HTTP de Express y `route().all`. `use` se reserva para middleware y montaje
+de routers; declarar endpoints con los métodos HTTP del router. Los diagnósticos públicos
+siguen restringidos a development con opt-in. OPTIONS corresponde al transporte CORS.
 
 Rate limiting se monta antes del JSON/multipart. Origen/IP y UUID verificado tienen cuotas
 independientes; cambios de token, parámetros, ruta o cuerpo no cambian el UUID ni la cuota
@@ -864,7 +862,7 @@ sin puerto publicado ni persistencia, con noeviction; todos los backend de un de
 usar el mismo Redis. Reiniciar Redis reinicia las cuotas temporales. El bootstrap verifica
 la conexión Redis antes de abrir HTTP y la cierra durante el apagado.
 
-Pruebas nuevas: `tests/f22-rate-limit.test.ts`.
+Pruebas nuevas: `tests/f22-foundations.test.ts` y `tests/f22-rate-limit.test.ts`.
 Para incluir integración Redis real: definir F22_REDIS_TEST_URL con un Redis de pruebas y
 ejecutar `node --import tsx --test tests/f22-foundations.test.ts tests/f22-rate-limit.test.ts`.
 La suite normal omite únicamente los dos casos que requieren Redis externo. Los fixtures

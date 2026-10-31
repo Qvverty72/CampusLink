@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { createPolicyRouter, publicEndpoint } from '../../middleware/endpoint-policy.js';
+import type { Router } from 'express';
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { createGetActiveMapController, getMapHealthController } from './map.controller.js';
 import type { ActiveMapLookup } from './map.service.js';
@@ -12,10 +13,10 @@ export interface MapRouterOptions {
 
 /** Registra lectura del mapa activo y, si se habilitan, diagnósticos técnicos del módulo. */
 export function createMapRouter(options: MapRouterOptions = {}): Router {
-  const mapRouter = Router();
+  const mapRouter = createPolicyRouter();
 
   if (options.diagnosticsEnabled) {
-    mapRouter.get('/health', getMapHealthController);
+    mapRouter.get('/health', publicEndpoint, getMapHealthController);
   }
 
   mapRouter.get(

@@ -172,3 +172,46 @@ test('[F2.2-08] operational activity reads omit retired content without mutating
   assert.deepEqual(documents.map(row => ({ ...row, _id: row._id.toHexString() })), original);
 });
 
+test('[F2.2-10] endpoint without a policy denies 401/403 before executing its controller, including route().get', async () => {
+  const { createPolicyRouter, publicEndpoint } = await import('../src/middleware/endpoint-policy.js');
+  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const router = createPolicyRouter(); let executions = 0;
+  const { requireAuthentication } = await import('../src/modules/auth/auth.middleware.js');
+  router.get('/forgotten', (_request, response) => { executions++; response.json({ leaked: true }); });
+  router.route('/chained').get((_request, response) => { executions++; response.json({ leaked: true }); });
+  router.get('/misordered', (_request, response) => { executions++; response.json({ leaked: true }); }, requireAuthentication);
+  router.route('/all').all((_request, response) => { executions++; response.json({ leaked: true }); });
+  router.get('/public', publicEndpoint, (_request, response) => response.json({ public: true }));
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    if (url.pathname === '/auth/v1/user') return Response.json({ id: userId, email: 'qa@duocuc.cl', email_confirmed_at: now.toISOString() });
+    if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth().profile]);
+    return Response.json([]);
+  };
+  const app = express(); app.use(router); app.use(apiErrorHandler);
+  try { await withServer(app, async base => {
+    for (const path of ['/forgotten', '/chained', '/misordered', '/all']) {
+      assert.equal((await network(base + path)).status, 401);
+      assert.equal((await network(base + path, { headers: { Authorization: 'Bearer valid.test.token' } })).status, 403);
+    }
+    assert.equal((await network(base + '/public')).status, 200); assert.equal(executions, 0);
+  }); } finally { globalThis.fetch = network; }
+});
+
+test('[F2.2-10] every mounted endpoint explicitly declares public, verified identity or current account policy', async () => {
+  const { createApiRouter } = await import('../src/routes/index.js');
+  const { publicEndpoint } = await import('../src/middleware/endpoint-policy.js');
+  const { requireAuthentication, requireVerifiedIdentity } = await import('../src/modules/auth/auth.middleware.js');
+  let total = 0;
+  function inspect(router: ReturnType<typeof createApiRouter>) {
+    for (const layer of router.stack) {
+      if (layer.route) {
+        total++;
+        assert.ok(layer.route.stack.some((entry: { handle: unknown }) =>
+          [publicEndpoint, requireAuthentication, requireVerifiedIdentity].includes(entry.handle as typeof publicEndpoint)), layer.route.path);
+        assert.ok(!layer.route.stack.some((entry: { handle: { name: string } }) => entry.handle.name === 'denyUndefinedPolicy'), layer.route.path);
+      } else if (layer.handle.stack) inspect(layer.handle);
+    }
+  }
+  inspect(createApiRouter()); assert.ok(total > 100, String(total));
+});
