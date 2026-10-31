@@ -130,6 +130,8 @@ CampusLink sigue una arquitectura **Cliente-Servidor**, con separación entre pr
 
 El frontend no accede directamente a MongoDB. Los datos del mapa se solicitan mediante la API REST del backend.
 
+El backend también utiliza **Redis para el rate limiting**: conserva contadores temporales de solicitudes compartidos entre instancias. PostgreSQL y MongoDB mantienen los datos del dominio de CampusLink.
+
 ---
 
 # Tecnologías
@@ -161,6 +163,7 @@ Los módulos funcionales del frontend se organizan en `api`, `components`, `hook
 | TypeScript | Desarrollo tipado |
 | MongoDB Driver | Acceso a MongoDB |
 | Supabase JS | Integración con Supabase |
+| Redis 7 | Contadores compartidos para rate limiting (F2.2-09 / #56) |
 | Helmet | Cabeceras de seguridad |
 | CORS | Control de acceso HTTP |
 | Docker | Construcción y ejecución reproducible |
@@ -191,6 +194,7 @@ Para trabajar con el proyecto se recomienda:
 - Docker, opcional para el backend.
 - Acceso al proyecto de Supabase.
 - Acceso a MongoDB.
+- Redis para el rate limiting compartido; obligatorio en producción. Docker Compose lo inicia automáticamente.
 - Supabase CLI para administrar migraciones.
 - `mongosh` para tareas de configuración de MongoDB.
 
@@ -277,6 +281,14 @@ en:
 ```text
 http://localhost:3000
 ```
+
+### Redis para rate limiting
+
+`docker compose up --build` inicia el backend y el servicio privado `rate-limit` con Redis 7. El backend se conecta mediante `RATE_LIMIT_REDIS_URL=redis://rate-limit:6379`; Redis no publica un puerto al exterior.
+
+En producción se debe configurar `RATE_LIMIT_REDIS_URL`, y todas las instancias del backend deben usar el mismo Redis. En development/test, sin esa URL, los contadores se mantienen en memoria para una sola instancia.
+
+Redis almacena únicamente contadores temporales del límite de solicitudes. Las cuotas, ventanas y respuestas 429 con `Retry-After` se documentan en la [configuración del backend](backendclink/README.md).
 
 Para detenerlo:
 
