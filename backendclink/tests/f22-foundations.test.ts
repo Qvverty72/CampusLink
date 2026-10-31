@@ -163,3 +163,12 @@ test('[F2.2-07] the same token immediately follows a changed PostgreSQL campus a
   }); } finally { globalThis.fetch = network; }
 });
 
+test('[F2.2-08] operational activity reads omit retired content without mutating its history or participations', async () => {
+  const { getActivities } = await import('../src/modules/activities/activities.service.js');
+  const documents = [doc({ createdByUserId: userId }), doc({ deletedAt: now }), doc({ status: 'DELETED' }), doc({ visibility: 'HIDDEN' })];
+  const original = structuredClone(documents.map(row => ({ ...row, _id: row._id.toHexString() })));
+  const result = await getActivities(auth(), {}, { ...dependencies, findActivities: async () => documents });
+  assert.deepEqual(result.map(row => row.id), [documents[0]._id.toHexString()]);
+  assert.deepEqual(documents.map(row => ({ ...row, _id: row._id.toHexString() })), original);
+});
+

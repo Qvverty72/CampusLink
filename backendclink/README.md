@@ -831,6 +831,12 @@ institución e historial propio conservan sus autorizaciones existentes. Las con
 históricas/auditoría/analítica siguen separadas del catálogo operacional; las referencias
 vigentes nunca se usan para borrar ni reconstruir snapshots anteriores.
 
+## F2.2-08 - Eliminacion logica y trazabilidad
+
+Se reutilizan y verifican los estados y marcas de eliminacion existentes. Las consultas operacionales omiten registros retirados; auditoria, analitica y lectores historicos autorizados conservan snapshots, transacciones, solicitudes, participaciones y derechos digitales adquiridos. Fallo de auditoria revierte los cambios SQL junto con la retirada. No se agregan tablas, triggers ni atributos.
+
+La regresion especifica de F2.2-08 esta en tests/f22-foundations.test.ts; las suites existentes de access, actividades, recursos, moderacion y analitica validan los productores y lectores historicos.
+
 ## Referencias técnicas
 
 [Inicialización Supabase JS](https://supabase.com/docs/reference/javascript/initializing), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser), [Auth en React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) y [opciones de MongoDB Node](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).
