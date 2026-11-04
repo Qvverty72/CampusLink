@@ -3,13 +3,13 @@ import express from 'express';
 import helmet from 'helmet';
 import type { Express } from 'express';
 
-import { apiErrorHandler } from './middleware/apiErrorHandler.js';
-import { notFoundHandler } from './middleware/error-handler.js';
+import { apiErrorHandler } from './shared/http/error-handler.js';
+import { notFoundHandler } from './shared/http/error-handler.js';
 import { createApiRouter } from './routes/index.js';
-import type { ActiveMapLookup } from './modules/maps/map.service.js';
-import type { ActivityDependencies } from './modules/activities/activities.service.js';
-import { createRateLimits } from './middleware/rate-limit.js';
-import type { RateLimitStore } from './services/rate-limit.js';
+import type { ActiveMapLookup } from './modules/maps/services/map.service.js';
+import type { ActivityDependencies } from './modules/activities/services/activities.service.js';
+import { createRateLimits } from './shared/http/rate-limit.middleware.js';
+import type { RateLimitStore } from './shared/rate-limit/rate-limit.js';
 
 export interface AppDependencies {
   getActiveMap?: ActiveMapLookup;

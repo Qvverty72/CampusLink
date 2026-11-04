@@ -1,19 +1,19 @@
-import { createPolicyRouter, publicEndpoint } from '../../../middleware/endpoint-policy.js';
+import { createPolicyRouter, publicEndpoint } from '../../../shared/http/endpoint-policy.js';
 import type { Router } from 'express';
-import { getElibraryHealthController } from './elibrary.controller.js';
-import { createDigitalController, detailDigitalController, listDigitalController } from './elibrary.controller.js';
-import { requireAuthentication } from '../../auth/auth.middleware.js';
-import { addDigitalFileController, downloadDigitalFileController } from './elibrary.controller.js';
-import { digitalAcademicCatalogController, updateDigitalAcademicsController } from './elibrary.controller.js';
-import { digitalPreviewController } from './elibrary.controller.js';
-import { acquiredDigitalController,acquiredDigitalDetailController } from './elibrary.controller.js';
-import { ownedDigitalController,ownedDigitalDetailController,editDigitalController } from './elibrary.controller.js';
-import { recommendationsDigitalController } from './elibrary.controller.js';
-import { rateDigitalController } from './elibrary.controller.js';
-import {digitalActivityController} from './elibrary.controller.js';
-import { digitalMessagesController, sendDigitalMessageController } from './elibrary.controller.js';
+import { getElibraryHealthController } from './controllers/elibrary.controller.js';
+import { createDigitalController, detailDigitalController, listDigitalController } from './controllers/elibrary.controller.js';
+import { requireAuthentication } from '../../auth/middleware/auth.middleware.js';
+import { addDigitalFileController, downloadDigitalFileController } from './controllers/elibrary.controller.js';
+import { digitalAcademicCatalogController, updateDigitalAcademicsController } from './controllers/elibrary.controller.js';
+import { digitalPreviewController } from './controllers/elibrary.controller.js';
+import { acquiredDigitalController,acquiredDigitalDetailController } from './controllers/elibrary.controller.js';
+import { ownedDigitalController,ownedDigitalDetailController,editDigitalController } from './controllers/elibrary.controller.js';
+import { recommendationsDigitalController } from './controllers/elibrary.controller.js';
+import { rateDigitalController } from './controllers/elibrary.controller.js';
+import {digitalActivityController} from './controllers/elibrary.controller.js';
+import { digitalMessagesController, sendDigitalMessageController } from './controllers/elibrary.controller.js';
 import { createDigitalRequestController, digitalRequestOptionsController, receivedDigitalRequestsController, sentDigitalRequestsController,
-  resolveDigitalRequestController, detailDigitalTradeController, transitionDigitalTradeController } from './elibrary.controller.js';
+  resolveDigitalRequestController, detailDigitalTradeController, transitionDigitalTradeController } from './controllers/elibrary.controller.js';
 
 // El cuerpo binario se analiza en controller después de verificar la identidad.
 export function createElibraryRouter(diagnosticsEnabled: boolean): Router {

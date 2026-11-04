@@ -3,11 +3,11 @@ import { after, before, test, mock } from 'node:test';
 import { Db, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { filterLocationActivities, selectActivityOccurrences, type Activity } from '../../frontendclink/src/features/activities/types/activity.js';
-import { parseActivityQuery } from '../src/modules/activities/activities.validation.js';
+import { parseActivityQuery } from '../src/modules/activities/validators/activities.validation.js';
 
 test('activity filters require a complete hierarchy and reject campus/policy overrides', () => {
   assert.equal(parseActivityQuery({}).success, true);
@@ -49,11 +49,12 @@ const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
   location: { buildingKey: 'cabin01', floorKey: 'floor-data-1' },
   participantCount: 1, createdAt: now, updatedAt: now, ...patch,
 });
-let getActivities: typeof import('../src/modules/activities/activities.service.js').getActivities;
+let getActivities: typeof import('../src/modules/activities/services/activities.service.js').getActivities;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
-    SUPABASE_URL: 'https://activities-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test' });
-  getActivities = (await import('../src/modules/activities/activities.service.js')).getActivities;
+    SUPABASE_URL: 'https://activities-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
+    SUPABASE_SECRET_KEY: 'sb_secret_test' });
+  getActivities = (await import('../src/modules/activities/services/activities.service.js')).getActivities;
 });
 after(async () => {
   const { closeMongoDB } = await import('../src/database/mongodb/client.js');
@@ -64,7 +65,8 @@ const dependencies = (documents: ActivityDocument[]) => ({ getActiveMap: async (
   findActivities: async (campus: string) => { assert.equal(campus, campusId); return documents; }, now: () => now });
 
 test('personal activity reads are server-scoped, paginated after validation and omit restricted series metadata', async () => {
-  const { getOwnActivities, joinedActivitiesPipeline } = await import('../src/modules/activities/activities.mine.service.js');
+  const { getOwnActivities } = await import('../src/modules/activities/services/activities.mine.service.js');
+  const { joinedActivitiesPipeline } = await import('../src/modules/activities/repositories/activities.mine.repository.js');
   const first = document(), second = document({ seriesId: new ObjectId(), occurrenceIndex: 1, occurrenceCount: 2, originalStartAt: now });
   let reads = 0;
   const deps = { ...dependencies([]), findJoinedActivities: async (campus: string, user: string) => {
@@ -146,7 +148,7 @@ test('repository pushes campus, publication, visibility, expiry and spatial filt
     }; } };
   });
   try {
-    const { findVisibleActivities } = await import('../src/modules/activities/activities.repository.js');
+    const { findVisibleActivities } = await import('../src/modules/activities/repositories/activities.repository.js');
     await findVisibleActivities(campusId, { buildingKey: 'cabin01', floorKey: 'floor-data-1', poiKey: 'sala' }, now);
     assert.deepEqual(captured[0], { campusId, status: 'ACTIVE', visibility: 'PUBLIC', deletedAt: null,
       type: { $in: ['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'] }, endAt: { $gt: now },
@@ -154,10 +156,74 @@ test('repository pushes campus, publication, visibility, expiry and spatial filt
   } finally { dbMock.mock.restore(); }
 });
 
+test('map HTTP reads preserve creator references through Mongo projection and feed location counters', async () => {
+  const organizerId = '44444444-4444-4444-8444-444444444444';
+  const missingCreatorId = '55555555-5555-4555-8555-555555555555';
+  const own = document();
+  const official = document({ createdByUserId: organizerId, type: 'OFFICIAL_EVENT',
+    location: { buildingKey: 'cabin01', floorKey: 'floor-data-1', poiKey: 'sala' } });
+  const orphan = document({ createdByUserId: missingCreatorId });
+  let organizerActive = true;
+  let referenceReads = 0;
+  const originalFetch = globalThis.fetch;
+  const collection = mock.method(Db.prototype, 'collection', (name: string) => {
+    assert.equal(name, 'activities');
+    return { find: (_filter: unknown, options: { projection: Record<string, number> }) => ({
+      sort: () => ({ toArray: async () => [own, official, orphan].map(value =>
+        Object.fromEntries(Object.entries(value).filter(([field]) => options.projection[field] === 1))) }),
+    }) };
+  });
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    assert.equal(url.origin, 'https://activities-test.invalid');
+    if (url.pathname === '/auth/v1/user') return Response.json({ id: userId, email: 'test@duocuc.cl', email_confirmed_at: now.toISOString() });
+    if (url.pathname.endsWith('/perfil_usuario')) {
+      if (url.searchParams.get('id') === 'eq.' + userId) return Response.json([auth.profile]);
+      referenceReads++;
+      assert.equal(url.searchParams.get('campus_id'), 'eq.' + campusId);
+      assert.equal(url.searchParams.get('estado_cuenta'), 'eq.ACTIVA');
+      assert.equal(url.searchParams.get('deleted_at'), 'is.null');
+      return Response.json(organizerActive ? [{ id: organizerId, nombre_completo: 'Organizador' }] : []);
+    }
+    return Response.json([]);
+  };
+  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
+  const app = express();
+  app.use('/api/v1/activities', createActivitiesRouter({ getActiveMap: async () => map, now: () => now }));
+  app.use(apiErrorHandler);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v1/activities`;
+  const headers = { Authorization: 'Bearer activities.test.token' };
+  try {
+    const response = await originalFetch(url, { headers });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const activities: Activity[] = (await response.json()).data;
+    assert.deepEqual(activities.map(value => value.id), [own._id.toHexString(), official._id.toHexString()].sort());
+    assert.equal(referenceReads, 1);
+    assert.ok(activities.every(value => !('createdByUserId' in value)));
+    const visible = selectActivityOccurrences(activities, now.getTime());
+    const floor = filterLocationActivities(visible, { buildingKey: 'cabin01', floorKey: 'floor-data-1' }, now.getTime());
+    assert.equal(floor.filter(value => value.type === 'OFFICIAL_EVENT').length, 1);
+    assert.equal(floor.filter(value => value.type === 'COMMUNITY_ACTIVITY').length, 1);
+    const poi = await originalFetch(url + '?buildingKey=cabin01&floorKey=floor-data-1&poiKey=sala', { headers });
+    assert.deepEqual((await poi.json()).data.map((value: Activity) => value.id), [official._id.toHexString()]);
+    organizerActive = false;
+    const refreshed = await originalFetch(url, { headers });
+    assert.deepEqual((await refreshed.json()).data.map((value: Activity) => value.id), [own._id.toHexString()]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    collection.mock.restore();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
 test('HTTP route rejects missing identity and filter overrides, returns an envelope and no-store data', async () => {
   const originalFetch = globalThis.fetch;
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   let reads = 0;
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));

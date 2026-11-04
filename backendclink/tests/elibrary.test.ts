@@ -8,20 +8,20 @@ import { request as httpRequest } from 'node:http';
 import { Pool } from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
 
 const db = new PGlite(), originalFetch = globalThis.fetch;
 const institution = randomUUID(), foreignInstitution = randomUUID(), campus = randomUUID(), sibling = randomUUID(), foreignCampus = randomUUID();
 const token = 'digital.test.token';
 let current: VerifiedAuthConnection, auth: VerifiedAuthConnection, server: Server, base: string, pdf: Buffer;
 let closePostgres: () => Promise<void>;
-let service: typeof import('../src/modules/marketplace/elibrary/elibrary.service.js');
-let validation: typeof import('../src/modules/marketplace/elibrary/elibrary.validation.js');
+let service: typeof import('../src/modules/marketplace/elibrary/services/elibrary.service.js');
+let validation: typeof import('../src/modules/marketplace/elibrary/validators/elibrary.validation.js');
 let failUpload: boolean, failInsert: boolean, failRemove: boolean, failReference: boolean, lostCommit: boolean, failCommit: boolean;
 let publicBucket: boolean, missingBucket: boolean, smallBucket: boolean;
 let onUpload: (() => Promise<void>) | null;
 let onDownload: (() => Promise<void>) | null, failDownload = false, corruptDownload = false;
-let filesService: typeof import('../src/modules/marketplace/elibrary/elibrary.files.service.js');
+let filesService: typeof import('../src/modules/marketplace/elibrary/services/elibrary.files.service.js');
 let uploads: string[], removals: string[], storageCalls: string[], logs: unknown[][];
 let objects = new Map<string, Buffer>(), connectionLease = Promise.resolve();
 let barriers = 0;
@@ -86,9 +86,9 @@ before(async () => {
     await onUpload?.();
     return failUpload ? Response.json({ error: 'private failure' }, { status: 500 }) : Response.json({ Key: path, Id: randomUUID() });
   };
-  service = await import('../src/modules/marketplace/elibrary/elibrary.service.js');
-  filesService = await import('../src/modules/marketplace/elibrary/elibrary.files.service.js');
-  validation = await import('../src/modules/marketplace/elibrary/elibrary.validation.js');
+  service = await import('../src/modules/marketplace/elibrary/services/elibrary.service.js');
+  filesService = await import('../src/modules/marketplace/elibrary/services/elibrary.files.service.js');
+  validation = await import('../src/modules/marketplace/elibrary/validators/elibrary.validation.js');
   ({ closePostgres } = await import('../src/database/supabase/postgres.js'));
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create table auth.users(id uuid primary key);');
   const schema = await readFile('src/database/supabase/migrations/CampusLink_Schema.sql', 'utf8');
@@ -417,7 +417,7 @@ async function acquisition(publicationId: string, receiverId: string, confirmati
 }
 
 test('profile overview counts only legitimate digital acquisitions and preserves withdrawn originals', async () => {
-  const { getProfileOverview } = await import('../src/modules/users/profile-overview.service.js');
+  const { getProfileOverview } = await import('../src/modules/users/services/profile-overview.service.js');
   const saved = await service.createDigitalPublication(auth, input(), file()), receiver = await peer(), other = await peer();
   const transactionId = await acquisition(saved.id, receiver.userId, 1);
   assert.equal((await getProfileOverview(receiver)).acquiredResources, 0);
@@ -433,8 +433,8 @@ test('profile overview counts only legitimate digital acquisitions and preserves
 });
 
 test('profile overview adds both domains once and separates received requests from accepted transactions',async()=>{
- const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
- const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+ const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');
+ const trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();
  await requestAndAccept(saved,receiver);await trades.createDigitalRequest(other,saved.id,{messageCode:'LIB_QA_INTERES'});
  const physical=randomUUID(),category=randomUUID(),pending=randomUUID(),accepted=randomUUID(),transaction=randomUUID();
@@ -618,7 +618,7 @@ test('failed academic edit leaves previous sets and history intact; uncertain CO
   assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1', [saved.id])).rows.length, 2);
 });
 test('audit projection retains historical academic names/codes without arbitrary data or private paths', async () => {
-  const { auditSnapshot } = await import('../src/modules/users/audit.snapshot.js');
+  const { auditSnapshot } = await import('../src/modules/users/domain/audit.snapshot.js');
   assert.deepEqual(auditSnapshot({ careers: [{ id: 'c', name: 'Old career', code: 'C', secret: 'bad' }],
     subjects: [{ id: 's', name: 'Old subject', code: 'S', storage_path: 'private' }], bucket: 'private' }),
   { careers: [{ id: 'c', name: 'Old career', code: 'C' }], subjects: [{ id: 's', name: 'Old subject', code: 'S' }] });
@@ -680,7 +680,7 @@ test('preview falls back safely for short/scanned text and revalidates identity 
   const failure=await get(route);assert.equal(failure.status,503);assert.doesNotMatch(await failure.text(),/private|storage_path|password/);
 });
 test('preview worker concurrency is bounded and slots are released after extraction', async () => {
-  const {extractDigitalPreview}=await import('../src/modules/marketplace/elibrary/elibrary.preview.extractor.js');
+  const {extractDigitalPreview}=await import('../src/modules/marketplace/elibrary/files/elibrary.preview.extractor.js');
   const first=extractDigitalPreview(pdf), second=extractDigitalPreview(pdf);
   await assert.rejects(extractDigitalPreview(pdf),{status:503});await Promise.all([first,second]);
   assert.equal(await extractDigitalPreview(pdf),null);
@@ -688,7 +688,7 @@ test('preview worker concurrency is bounded and slots are released after extract
 
 const digitalJson=(path:string,method:string,body:unknown)=>originalFetch(base+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
 async function requestAndAccept(saved:{id:string},receiver:VerifiedAuthConnection) {
-  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
   const requested=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,requested.id,{decision:'ACEPTAR'});assert.ok(accepted.transactionId);return {trades,requested,accepted,tradeId:accepted.transactionId!};
 }
@@ -723,7 +723,7 @@ test('digital free chat works across campuses with private authenticated HTTP an
 
 test('digital messages persist through HTTP and enter only the recipient inbox with a digital transaction target',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();
-  const {tradeId}=await requestAndAccept(saved,receiver),notifications=await import('../src/modules/users/notifications.service.js');
+  const {tradeId}=await requestAndAccept(saved,receiver),notifications=await import('../src/modules/users/services/notifications.service.js');
   const path=`/${saved.id}/transactions/${tradeId}/messages`,owner=auth;
   for(const [sender,recipient] of [[owner,receiver],[receiver,owner]]){
     const before=await notifications.ownNotificationOperation(recipient,{countOnly:true});assert.ok('unreadCount' in before);
@@ -742,7 +742,7 @@ test('digital messages persist through HTTP and enter only the recipient inbox w
 });
 
 test('digital conversations paginate separately, retain removed notifications and become read-only after completion', async () => {
-  const chat = await import('../src/modules/marketplace/elibrary/elibrary.messages.service.js');
+  const chat = await import('../src/modules/marketplace/elibrary/services/elibrary.messages.service.js');
   const saved = await service.createDigitalPublication(auth,input(),file()), receiver = await peer(), other = await peer();
   const { tradeId, trades } = await requestAndAccept(saved,receiver), second = await requestAndAccept(saved,other);
   const receipts = [];
@@ -763,7 +763,7 @@ test('digital conversations paginate separately, retain removed notifications an
 });
 
 test('digital message keys prevent duplicates after lost acknowledgement and reject conflicting reuse', async () => {
-  const chat = await import('../src/modules/marketplace/elibrary/elibrary.messages.service.js');
+  const chat = await import('../src/modules/marketplace/elibrary/services/elibrary.messages.service.js');
   const saved = await service.createDigitalPublication(auth,input(),file()), receiver = await peer();
   const { tradeId, trades } = await requestAndAccept(saved,receiver), body = {text:'¿A qué hora puedes?',messageId:randomUUID()};
   lostCommit = true;
@@ -792,14 +792,14 @@ test('PDF uploads with absent or generic browser MIME survive multipart and keep
 });
 test('resource notifications connect digital requests, edits, files and acceptance across authorized institutional campuses',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer();
-  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
-  const notifications=await import('../src/modules/users/notifications.service.js');
+  const trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
+  const notifications=await import('../src/modules/users/services/notifications.service.js');
   const own=async(actor:VerifiedAuthConnection)=>{const page=await notifications.ownNotificationOperation(actor,{});assert.ok('items' in page);return page.items;};
   const key=randomUUID();
   const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},key);
   await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},key);
   assert.equal((await own(auth)).filter(row=>row.type==='RESOURCE_REQUEST_RECEIVED').length,1);
-  const {editDigitalPublication}=await import('../src/modules/marketplace/elibrary/elibrary.edit.service.js');
+  const {editDigitalPublication}=await import('../src/modules/marketplace/elibrary/services/elibrary.edit.service.js');
   const body={title:saved.title,description:'Contenido actualizado',modality:'VENTA',price:3000,updatedAt:saved.updatedAt};
   const updated=await editDigitalPublication(auth,saved.id,body);
   await editDigitalPublication(auth,saved.id,{...body,updatedAt:updated.updatedAt});
@@ -814,8 +814,8 @@ test('resource notifications connect digital requests, edits, files and acceptan
   assert.equal((await db.query('SELECT * FROM acceso_recurso_digital WHERE publicacion_id=$1',[saved.id])).rows.length,0);
 });
 test('digital activity counts and grouped resources cover all requests before pagination, with independent receiver trades',async()=>{
- const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');
- const saved=await service.createDigitalPublication(auth,input(),file()),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+ const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');
+ const saved=await service.createDigitalPublication(auth,input(),file()),trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
  const receivers=[];
  for(let i=0;i<11;i++){const receiver=await peer();receivers.push(receiver);await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});}
  current=structuredClone(auth);
@@ -841,7 +841,7 @@ test('digital activity resource reads remain private and preserve original amoun
  current=structuredClone(auth);await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
  const finished=await (await get('/activity/transactions?tab=finished')).json();assert.equal(finished.meta.total,1);assert.equal(finished.data[0].amount,2500);
  assert.equal((await (await get('/activity/counts')).json()).data.pendingTransactions,0);
- const {getProfileOverview}=await import('../src/modules/users/profile-overview.service.js');assert.equal((await getProfileOverview(auth)).transactions,0);assert.equal((await getProfileOverview(receiver)).transactions,0);
+ const {getProfileOverview}=await import('../src/modules/users/services/profile-overview.service.js');assert.equal((await getProfileOverview(auth)).transactions,0);assert.equal((await getProfileOverview(receiver)).transactions,0);
 });
 test('digital activity validates query contracts, authorization and publication filters',async()=>{
  const saved=await service.createDigitalPublication(auth,input(),file());
@@ -864,7 +864,7 @@ test('digital activity paginates six individual transactions and never splits a 
  assert.equal((await (await get('/activity/counts')).json()).data.pendingTransactions,6);
 });
 test('digital request, owner acceptance and both confirmations grant institutional cross-campus access for sale/donation',async()=>{
-  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
   for(const modality of ['VENTA','DONACION']) {
     const saved=await service.createDigitalPublication(auth,input({modality,price:modality==='VENTA'?2500:null}),file()),receiver=await peer();current=receiver;
     const options=await get('/'+saved.id+'/request-options');assert.equal(options.status,200);assert.equal((await options.json()).data.canRequest,true);
@@ -881,7 +881,7 @@ test('digital request, owner acceptance and both confirmations grant institution
   }
 });
 test('digital requests prevent simultaneous duplicates, self requests, spoofing and non-owner resolution',async()=>{
-  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer(),trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
   const results=await Promise.allSettled([trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'}),trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'})]);
   assert.equal(results.filter(row=>row.status==='fulfilled').length,1);assert.equal(results.filter(row=>row.status==='rejected'&&row.reason.status===409).length,1);
   const requested=(await trades.getDigitalRequests(receiver,{},false)).data[0];
@@ -970,7 +970,7 @@ test('digital owner edits and withdraws with audit/version while previous acquis
   assert.equal((await digitalJson('/'+saved.id,'DELETE',{updatedAt:after.updatedAt})).status,200);
   assert.equal((await db.query('SELECT * FROM auditoria WHERE entidad_id=$1',[saved.id])).rows.length,3);
   const event=(await db.query("SELECT datos_antes,datos_despues FROM auditoria WHERE entidad_id=$1 AND accion='RETIRAR_PUBLICACION'",[saved.id])).rows[0];assert.equal(event.datos_antes.deleted_at,null);assert.ok(event.datos_despues.deleted_at);
-  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');await assert.rejects(trades.createDigitalRequest(await peer(),saved.id,{messageCode:'LIB_QA_INTERES'}),{status:409});
+  const trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');await assert.rejects(trades.createDigitalRequest(await peer(),saved.id,{messageCode:'LIB_QA_INTERES'}),{status:409});
   assert.deepEqual((await filesService.getDigitalOriginal(receiver,saved.id,saved.files[0].id)).bytes,pdf);assert.equal(objects.size,1);
 });
 test('digital editor rejects privileged/non-owner inputs and rollback/uncertain COMMIT preserves recoverable history',async()=>{
@@ -999,7 +999,7 @@ test('explicit views feed recommendations once per opening, GETs never record vi
   const saved=await service.createDigitalPublication(auth,input({title:'Interes '+randomUUID()}),file()),receiver=await peer();current=receiver;
   await get('/'+saved.id);await get('/'+saved.id);
   assert.equal((await db.query('SELECT * FROM interaccion_recurso WHERE publicacion_id=$1',[saved.id])).rows.length,0);
-  const view=await import('../src/modules/analytics/analytics.service.js'),operationId=randomUUID();
+  const view=await import('../src/modules/analytics/services/analytics.service.js'),operationId=randomUUID();
   await view.recordResourceView(receiver,saved.id,{operationId});await view.recordResourceView(receiver,saved.id,{operationId});
   assert.equal((await db.query("SELECT * FROM interaccion_recurso WHERE perfil_usuario_id=$1 AND publicacion_id=$2 AND tipo_interaccion='VISTA'",[receiver.userId,saved.id])).rows.length,1);
   await digitalJson('/'+saved.id+'/requests','POST',{messageCode:'LIB_QA_INTERES'});
@@ -1027,7 +1027,7 @@ test('resource view HTTP validates scope and payload, deduplicates retries and p
 });
 
 test('request idempotency survives resolved requests and lost responses, without a second historical request',async()=>{
-  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
   const key=randomUUID(),body={messageCode:'LIB_QA_INTERES'};
   lostCommit=true;await assert.rejects(trades.createDigitalRequest(receiver,saved.id,body,key),{status:503});
   const first=await trades.createDigitalRequest(receiver,saved.id,body,key);
@@ -1041,8 +1041,8 @@ test('request idempotency survives resolved requests and lost responses, without
 });
 
 test('resource history separates views/requests/transitions and survives soft deletion and actor campus changes',async()=>{
-  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
-  const analytics=await import('../src/modules/analytics/analytics.service.js'),repository=await import('../src/modules/analytics/analytics.repository.js');
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
+  const analytics=await import('../src/modules/analytics/services/analytics.service.js'),repository=await import('../src/modules/analytics/repositories/analytics.repository.js');
   await analytics.recordResourceView(receiver,saved.id,{operationId:randomUUID()});
   const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'},randomUUID());
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'}),tradeId=accepted.transactionId!;
@@ -1060,12 +1060,12 @@ test('resource history separates views/requests/transitions and survives soft de
 });
 
 test('failed digital confirmation persists no transition and cancellation retains the confirmed intermediate event',async()=>{
-  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
   const request=await trades.createDigitalRequest(receiver,saved.id,{messageCode:'LIB_QA_INTERES'});
   const accepted=await trades.resolveDigitalRequest(auth,saved.id,request.id,{decision:'ACEPTAR'}),id=accepted.transactionId!;
   await trades.transitionDigitalTrade(auth,saved.id,id,{},'CONFIRMAR');failDigitalAccess=true;
   await assert.rejects(trades.transitionDigitalTrade(receiver,saved.id,id,{},'CONFIRMAR'),{status:503});failDigitalAccess=false;
-  const repository=await import('../src/modules/analytics/analytics.repository.js');
+  const repository=await import('../src/modules/analytics/repositories/analytics.repository.js');
   const read=async()=> (await repository.readResourceAnalyticsEvents(db as never,campus,'2000-01-01','2100-01-01')).filter(row=>row.transactionId===id);
   assert.deepEqual((await read()).map(row=>row.type),['TRANSACCION_RESERVADA','TRANSACCION_PENDIENTE_CONFIRMACION']);
   await trades.transitionDigitalTrade(receiver,saved.id,id,{},'CANCELAR');await trades.transitionDigitalTrade(receiver,saved.id,id,{},'CANCELAR');
@@ -1089,7 +1089,7 @@ test('received digital requests show requester owner ratings only from completed
   await db.query('INSERT INTO valoracion(transaccion_id,evaluador_id,evaluado_id,puntuacion) VALUES($1,$2,$3,5)',[tradeId,receiver.userId,auth.userId]);
   await db.query('UPDATE publicacion_recurso SET deleted_at=now() WHERE id=$1',[rated.id]);
   const owner=await peer(),resource=await service.createDigitalPublication(owner,input(),file());
-  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
   await trades.createDigitalRequest(auth,resource.id,{messageCode:'LIB_QA_INTERES'});
   await trades.createDigitalRequest(receiver,resource.id,{messageCode:'LIB_QA_INTERES'});
   current=owner;
@@ -1145,7 +1145,7 @@ test('digital owner card reads profile careers in institution and counts sales s
 
 test('digital rating shares physical rules: completed receiver only, integer 1..5, one immutable row under concurrency',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),receiver=await peer(),other=await peer();const {trades,tradeId}=await requestAndAccept(saved,receiver);
-  const rating=await import('../src/modules/marketplace/elibrary/elibrary.rating.service.js');
+  const rating=await import('../src/modules/marketplace/elibrary/services/elibrary.rating.service.js');
   await assert.rejects(rating.rateDigitalOwner(receiver,saved.id,tradeId,{score:5}),{status:409});
   await trades.transitionDigitalTrade(auth,saved.id,tradeId,{},'CONFIRMAR');await trades.transitionDigitalTrade(receiver,saved.id,tradeId,{},'CONFIRMAR');
   await assert.rejects(rating.rateDigitalOwner(auth,saved.id,tradeId,{score:5}),{status:403});await assert.rejects(rating.rateDigitalOwner(other,saved.id,tradeId,{score:5}),{status:404});
@@ -1347,7 +1347,7 @@ test('stored routes outside the canonical publication prefix or traversal paths 
 test('owned digital activity reports pending and valid completed agreements privately without exhausting the publication',async()=>{
   const saved=await service.createDigitalPublication(auth,input(),file()),first=await peer(),second=await peer(),third=await peer();
   await acquisition(saved.id,first.userId);await acquisition(saved.id,second.userId,1);
-  const trades=await import('../src/modules/marketplace/elibrary/elibrary.trades.service.js');
+  const trades=await import('../src/modules/marketplace/elibrary/services/elibrary.trades.service.js');
   const request=await trades.createDigitalRequest(third,saved.id,{messageCode:'LIB_QA_INTERES'});
   const read=async()=>{current=structuredClone(auth);const response=await get('/mine/'+saved.id);assert.equal(response.status,200);return (await response.json()).data;};
   let own=await read();assert.deepEqual(own.activity,{pendingRequests:1,completedAgreements:1});assert.equal(own.status,'DISPONIBLE');

@@ -3,10 +3,10 @@ import { after, before, beforeEach, mock, test } from 'node:test';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Db } from 'mongodb';
-import { accountCapabilities, requireCampusCapability, requireResourceOwner } from '../src/modules/auth/auth.authorization.js';
-import type { CampusCapability } from '../src/modules/auth/auth.authorization.js';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import { accountCapabilities, requireCampusCapability, requireResourceOwner } from '../src/modules/auth/domain/auth.authorization.js';
+import type { CampusCapability } from '../src/modules/auth/domain/auth.authorization.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 
 const userId='11111111-1111-4111-8111-111111111111',campus='22222222-2222-4222-8222-222222222222';
 const other='33333333-3333-4333-8333-333333333333', token='authorization.test.token', key='sb_secret_test';

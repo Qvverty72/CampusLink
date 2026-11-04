@@ -4,9 +4,9 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { Db, MongoNetworkError, ObjectId } from 'mongodb';
 import express, { type Express } from 'express';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 
 const campus = '22222222-2222-4222-8222-222222222222';
 const other = '33333333-3333-4333-8333-333333333333';
@@ -42,7 +42,7 @@ async function withServer(app: Express, run: (base: string) => Promise<void>) {
 }
 
 test('[F2.2-06] valid UUID references retain Mongo ObjectId; orphan/malformed/foreign references never enter the list', async () => {
-  const { getActivities } = await import('../src/modules/activities/activities.service.js');
+  const { getActivities } = await import('../src/modules/activities/services/activities.service.js');
   const valid = doc(), missing = doc({ createdByUserId: other }); let calls = 0;
   const result = await getActivities(auth(), {}, { ...dependencies,
     findActivities: async () => [valid, missing, doc({ createdByUserId: 'not-a-uuid' }), doc({ campusId: other })],
@@ -54,7 +54,7 @@ test('[F2.2-06] valid UUID references retain Mongo ObjectId; orphan/malformed/fo
 });
 
 test('[F2.2-06] orphan detail and join return 404 without a participation write', async () => {
-  const { getActivityDetail, joinActivity } = await import('../src/modules/activities/activities.detail.service.js');
+  const { getActivityDetail, joinActivity } = await import('../src/modules/activities/services/activities.detail.service.js');
   const value = doc(); let writes = 0, participationReads = 0;
   const deps = { ...dependencies, findActivity: async () => value, findValidCreators: async () => new Map<string, string>(),
     findParticipation: async () => { participationReads++; return null; }, registerParticipation: async () => { writes++; } };
@@ -64,8 +64,8 @@ test('[F2.2-06] orphan detail and join return 404 without a participation write'
 });
 
 test('[F2.2-06] orphan activities cannot receive new analytics interactions or reports by direct ID', async () => {
-  const { recordViewedActivity } = await import('../src/modules/activities/activities.detail.service.js');
-  const { reportActivity } = await import('../src/modules/reports/reports.service.js');
+  const { recordViewedActivity } = await import('../src/modules/activities/services/activities.detail.service.js');
+  const { reportActivity } = await import('../src/modules/reports/services/reports.service.js');
   const value = doc(); let writes = 0;
   const deps = { ...dependencies, findActivity: async () => value, findValidCreators: async () => new Map<string, string>(),
     recordView: async () => { writes++; }, saveActivityReport: async () => { writes++; throw Error('Must not save'); } };
@@ -75,7 +75,7 @@ test('[F2.2-06] orphan activities cannot receive new analytics interactions or r
 });
 
 test('[F2.2-06] relational failure is 503 and never substitutes an empty success or partial Mongo write', async () => {
-  const { joinActivity } = await import('../src/modules/activities/activities.detail.service.js');
+  const { joinActivity } = await import('../src/modules/activities/services/activities.detail.service.js');
   const value = doc(); let writes = 0;
   await assert.rejects(joinActivity(auth(), value._id.toHexString(), { ...dependencies, findActivity: async () => value,
     findValidCreators: async () => { throw new Error('secret PostgreSQL DSN'); },
@@ -85,7 +85,7 @@ test('[F2.2-06] relational failure is 503 and never substitutes an empty success
 });
 
 test('[F2.2-06] actual reference repository checks active state/campus/deletion and batches repeated creators', async () => {
-  const { findValidActivityCreators } = await import('../src/modules/activities/activities.references.repository.js');
+  const { findValidActivityCreators } = await import('../src/modules/activities/repositories/activities.references.repository.js');
   const urls: URL[] = [];
   globalThis.fetch = async input => {
     const url = new URL(String(input)); urls.push(url);
@@ -104,8 +104,8 @@ test('[F2.2-06] actual reference repository checks active state/campus/deletion 
 });
 
 test('[F2.2-06] creator reference changes hide the next list and detail read without caching or deleting history', async () => {
-  const { getActivities } = await import('../src/modules/activities/activities.service.js');
-  const { getActivityDetail } = await import('../src/modules/activities/activities.detail.service.js');
+  const { getActivities } = await import('../src/modules/activities/services/activities.service.js');
+  const { getActivityDetail } = await import('../src/modules/activities/services/activities.detail.service.js');
   const value = doc(); const original = JSON.stringify(value); let current = true, reads = 0;
   const deps = { ...dependencies, findActivity: async () => value, findActivities: async () => [value],
     findValidCreators: async () => { reads++; return current ? new Map([[creator, 'Organizador']]) : new Map<string, string>(); } };
@@ -117,7 +117,7 @@ test('[F2.2-06] creator reference changes hide the next list and detail read wit
 });
 
 test('[F2.2-06] inactive relational campus blocks Mongo reads and provider failures remain unavailable', async () => {
-  const { getActiveMap } = await import('../src/modules/maps/map.service.js'); let reads = 0;
+  const { getActiveMap } = await import('../src/modules/maps/services/map.service.js'); let reads = 0;
   const collection = mock.method(Db.prototype, 'collection', () => ({ findOne: async () => { reads++; return map; } }));
   globalThis.fetch = async () => Response.json([]);
   try {
@@ -128,7 +128,7 @@ test('[F2.2-06] inactive relational campus blocks Mongo reads and provider failu
 });
 
 test('[F2.2-06] Mongo outage uses sanitized HTTP 503 without a false successful acknowledgement', async () => {
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.get('/', () => { throw new MongoNetworkError('mongodb://private:password@host'); }); app.use(apiErrorHandler);
   await withServer(app, async base => {
     const response = await network(base); assert.equal(response.status, 503);
@@ -137,7 +137,7 @@ test('[F2.2-06] Mongo outage uses sanitized HTTP 503 without a false successful 
 });
 
 test('[F2.2-07] mismatched server campus cannot read a map even with an administrative grant', async () => {
-  const { getAuthorizedActiveMap } = await import('../src/modules/maps/map.service.js'); let reads = 0;
+  const { getAuthorizedActiveMap } = await import('../src/modules/maps/services/map.service.js'); let reads = 0;
   const context = auth(); context.profile.campus_id = other; context.roles = [{ id: creator, name: 'ADMINISTRADOR', campusId: campus }];
   await assert.rejects(getAuthorizedActiveMap(context, campus, async () => { reads++; return map; }), { status: 403 });
   assert.equal(reads, 0);
@@ -164,7 +164,7 @@ test('[F2.2-07] the same token immediately follows a changed PostgreSQL campus a
 });
 
 test('[F2.2-08] operational activity reads omit retired content without mutating its history or participations', async () => {
-  const { getActivities } = await import('../src/modules/activities/activities.service.js');
+  const { getActivities } = await import('../src/modules/activities/services/activities.service.js');
   const documents = [doc({ createdByUserId: userId }), doc({ deletedAt: now }), doc({ status: 'DELETED' }), doc({ visibility: 'HIDDEN' })];
   const original = structuredClone(documents.map(row => ({ ...row, _id: row._id.toHexString() })));
   const result = await getActivities(auth(), {}, { ...dependencies, findActivities: async () => documents });
@@ -173,10 +173,10 @@ test('[F2.2-08] operational activity reads omit retired content without mutating
 });
 
 test('[F2.2-10] endpoint without a policy denies 401/403 before executing its controller, including route().get', async () => {
-  const { createPolicyRouter, publicEndpoint } = await import('../src/middleware/endpoint-policy.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { createPolicyRouter, publicEndpoint } = await import('../src/shared/http/endpoint-policy.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const router = createPolicyRouter(); let executions = 0;
-  const { requireAuthentication } = await import('../src/modules/auth/auth.middleware.js');
+  const { requireAuthentication } = await import('../src/modules/auth/middleware/auth.middleware.js');
   router.get('/forgotten', (_request, response) => { executions++; response.json({ leaked: true }); });
   router.route('/chained').get((_request, response) => { executions++; response.json({ leaked: true }); });
   router.get('/misordered', (_request, response) => { executions++; response.json({ leaked: true }); }, requireAuthentication);
@@ -200,8 +200,8 @@ test('[F2.2-10] endpoint without a policy denies 401/403 before executing its co
 
 test('[F2.2-10] every mounted endpoint explicitly declares public, verified identity or current account policy', async () => {
   const { createApiRouter } = await import('../src/routes/index.js');
-  const { publicEndpoint } = await import('../src/middleware/endpoint-policy.js');
-  const { requireAuthentication, requireVerifiedIdentity } = await import('../src/modules/auth/auth.middleware.js');
+  const { publicEndpoint } = await import('../src/shared/http/endpoint-policy.js');
+  const { requireAuthentication, requireVerifiedIdentity } = await import('../src/modules/auth/middleware/auth.middleware.js');
   let total = 0;
   function inspect(router: ReturnType<typeof createApiRouter>) {
     for (const layer of router.stack) {

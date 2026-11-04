@@ -3,7 +3,7 @@ import { after, before, test } from 'node:test';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createClient } from 'redis';
-import { MemoryRateLimitStore, consumeRateLimit } from '../src/services/rate-limit.js';
+import { MemoryRateLimitStore, consumeRateLimit } from '../src/shared/rate-limit/rate-limit.js';
 
 const network = globalThis.fetch;
 const campus = '22222222-2222-4222-8222-222222222222';
@@ -102,7 +102,7 @@ test('[F2.2-09] CORS preflight consumes origin quota and exposes Retry-After on 
 test('[F2.2-09] real Redis serializes concurrent requests from two clients and shares its TTL', {
   skip: !process.env.F22_REDIS_TEST_URL,
 }, async () => {
-  const { consumeScript } = await import('../src/database/rate-limit.redis.js');
+  const { consumeScript } = await import('../src/database/redis/rate-limit.redis.js');
   const clients = [createClient({ url: process.env.F22_REDIS_TEST_URL }), createClient({ url: process.env.F22_REDIS_TEST_URL })];
   await Promise.all(clients.map(client => client.connect()));
   const key = 'campuslink:qa:' + crypto.randomUUID();
@@ -125,7 +125,7 @@ test('[F2.2-09] two HTTP application instances enforce the same Redis quota and 
   skip: !process.env.F22_REDIS_TEST_URL,
 }, async () => {
   const { env } = await import('../src/config/env.js');
-  const { closeRateLimitRedis, redisRateLimitStore } = await import('../src/database/rate-limit.redis.js');
+  const { closeRateLimitRedis, redisRateLimitStore } = await import('../src/database/redis/rate-limit.redis.js');
   const { createApp } = await import('../src/app.js');
   env.rateLimitRedisUrl = process.env.F22_REDIS_TEST_URL;
   const servers = [createApp({ rateLimitStore: redisRateLimitStore }).listen(0, '127.0.0.1'),

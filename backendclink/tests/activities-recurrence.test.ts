@@ -5,14 +5,14 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { expandActivityRecurrence } from '../src/modules/activities/activities.recurrence.js';
-import { activitySeriesParser } from '../src/modules/activities/activities.series.validation.js';
-import { spatialBuildings } from '../src/modules/activities/activities.location.js';
-import { toVisibleActivity } from '../src/modules/activities/activities.policy.js';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { ActivityDocument, ActivitySeriesDocument, CreateActivitySeriesInput, ActivityParticipationDocument } from '../src/modules/activities/activities.types.js';
-import type { ActivityDependencies } from '../src/modules/activities/activities.service.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
+import { expandActivityRecurrence } from '../src/modules/activities/domain/activities.recurrence.js';
+import { activitySeriesParser } from '../src/modules/activities/validators/activities.series.validation.js';
+import { spatialBuildings } from '../src/modules/activities/domain/activities.location.js';
+import { toVisibleActivity } from '../src/modules/activities/domain/activities.policy.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { ActivityDocument, ActivitySeriesDocument, CreateActivitySeriesInput, ActivityParticipationDocument } from '../src/modules/activities/types/activities.types.js';
+import type { ActivityDependencies } from '../src/modules/activities/services/activities.service.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
 import { recurrenceDraftRule } from '../../frontendclink/src/features/activities/types/recurrence.js';
 
 /**
@@ -37,13 +37,13 @@ function parsed(value: unknown = body(), publish = false): CreateActivitySeriesI
   const result = activitySeriesParser(publish)(value); assert.equal(result.success, true); return (result as { data: CreateActivitySeriesInput }).data;
 }
 const expand = (value: unknown) => expandActivityRecurrence(parsed(value), campusId, 'COMMUNITY_ACTIVITY', new Date('2026-01-01T00:00:00Z'));
-let previewActivitySeries: typeof import('../src/modules/activities/activities.series.service.js').previewActivitySeries;
-let createActivitySeries: typeof import('../src/modules/activities/activities.series.service.js').createActivitySeries;
-let getActivitySeries: typeof import('../src/modules/activities/activities.series.service.js').getActivitySeries;
+let previewActivitySeries: typeof import('../src/modules/activities/services/activities.series.service.js').previewActivitySeries;
+let createActivitySeries: typeof import('../src/modules/activities/services/activities.series.service.js').createActivitySeries;
+let getActivitySeries: typeof import('../src/modules/activities/services/activities.series.service.js').getActivitySeries;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', SUPABASE_URL: 'https://recurrence-test.invalid',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  ({ previewActivitySeries, createActivitySeries, getActivitySeries } = await import('../src/modules/activities/activities.series.service.js'));
+  ({ previewActivitySeries, createActivitySeries, getActivitySeries } = await import('../src/modules/activities/services/activities.series.service.js'));
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 const basicDeps = (): ActivityDependencies => ({ getActiveMap: async () => map, now: () => now });
@@ -318,7 +318,7 @@ test('joining one occurrence never registers or increments another occurrence in
   } };
   const preview = await previewActivitySeries(auth, parsed(), deps);
   await createActivitySeries(auth, parsed({ ...body(), previewHash: preview.previewHash }, true), deps);
-  const { joinActivity, getActivityDetail } = await import('../src/modules/activities/activities.detail.service.js');
+  const { joinActivity, getActivityDetail } = await import('../src/modules/activities/services/activities.detail.service.js');
   await joinActivity(visitor, documents[0]._id.toHexString(), deps);
   assert.equal(own.size, 1); assert.equal(documents[0].participantCount, 2); assert.equal(documents[1].participantCount, 1);
   assert.equal((await getActivityDetail(visitor, documents[1]._id.toHexString(), deps)).participation.status, 'NOT_JOINED');
@@ -345,7 +345,7 @@ test('HTTP recurrence requires current publication permission for the series bro
     if (url.pathname.endsWith('/usuario_permiso')) return Response.json(allowed ? [{ campus_id: campusId, permiso: { id: 'publish', nombre: 'PUBLICAR_EVENTO' } }] : []);
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
-  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js'); const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js'); const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const app = express(); app.use(express.json()); app.use('/api/v1/activities', createActivitiesRouter({ ...basicDeps(),
     createSeries: async (value, values) => { series = value; documents = values; return values.map(document => toVisibleActivity(document, campusId, now, spatialBuildings(map))!); },
     findSeries: async () => series, findSeriesOccurrences: async () => documents, findActivities: async () => documents,

@@ -3,9 +3,9 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { closeMongoDB, connectMongoDB } from './database/mongodb/client.js';
 import { closePostgres } from './database/supabase/postgres.js';
-import { connectRateLimitRedis, closeRateLimitRedis } from './database/rate-limit.redis.js';
-import { getReadiness } from './services/readiness.js';
-import type { ApiReadiness } from './types/api.types.js';
+import { connectRateLimitRedis, closeRateLimitRedis } from './database/redis/rate-limit.redis.js';
+import { getReadiness } from './readiness.js';
+import type { ApiReadiness } from './shared/health/health.types.js';
 
 interface BootstrapDependencies {
   connect: () => Promise<unknown>;

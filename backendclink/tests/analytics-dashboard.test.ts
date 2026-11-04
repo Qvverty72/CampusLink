@@ -25,7 +25,7 @@ let afterCalculation: (() => Promise<void>) | undefined;
 let afterSnapshotRead: (() => Promise<void>) | undefined;
 let statements: string[] = [];
 let events: { campusId: string; userId?: string; occurredAt: Date; type: string; provenance?: string }[] = [];
-let readMetrics: typeof import('../src/modules/analytics/analytics.repository.js').readDashboardMetrics;
+let readMetrics: typeof import('../src/modules/analytics/repositories/analytics.dashboard.repository.js').readDashboardMetrics;
 
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', RATE_LIMIT_WRITE_MAX: '10000',
@@ -97,7 +97,7 @@ before(async () => {
       FROM usuario_${kind} link JOIN ${kind} cat ON cat.id=link.${kind}_id
       WHERE link.perfil_usuario_id=$1 AND link.revocado_en IS NULL`, [viewer])).rows);
   };
-  ({ readDashboardMetrics: readMetrics } = await import('../src/modules/analytics/analytics.repository.js'));
+  ({ readDashboardMetrics: readMetrics } = await import('../src/modules/analytics/repositories/analytics.dashboard.repository.js'));
   const { createApp } = await import('../src/app.js');
   server = createApp().listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
   base = 'http://127.0.0.1:' + (server.address() as AddressInfo).port + '/api/v1/analytics/dashboard';
@@ -888,7 +888,7 @@ test('grouping and interval count are validated before metrics; SQL session time
 });
 
 test('Santiago DST days contain 23 or 25 hours with identical half-open event bounds in SQL and Mongo', async () => {
-  const { dashboardIntervals } = await import('../src/modules/analytics/analytics.periods.js');
+  const { dashboardIntervals } = await import('../src/modules/analytics/domain/analytics.periods.js');
   const id = await publication();
   for (const [date, from, until, hours] of [
     ['2026-09-06','2026-09-06T04:00:00.000Z','2026-09-07T03:00:00.000Z',23],

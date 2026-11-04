@@ -3,11 +3,11 @@ import { after, before, mock, test } from 'node:test';
 import { Db, MongoClient, ObjectId } from 'mongodb';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
-import type { VerifiedAuthConnection } from '../src/modules/auth/auth.types.js';
-import type { ActivityDocument } from '../src/modules/activities/activities.types.js';
-import type { CampusMapDocument } from '../src/modules/maps/map.types.js';
-import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE, toVisibleActivity } from '../src/modules/activities/activities.policy.js';
-import { spatialBuildings } from '../src/modules/activities/activities.location.js';
+import type { VerifiedAuthConnection } from '../src/modules/auth/types/auth.types.js';
+import type { ActivityDocument } from '../src/modules/activities/types/activities.types.js';
+import type { CampusMapDocument } from '../src/modules/maps/types/map.types.js';
+import { activeCommunityActivityFilter, COMMUNITY_ACTIVITY_LIMIT_MESSAGE, toVisibleActivity } from '../src/modules/activities/domain/activities.policy.js';
+import { spatialBuildings } from '../src/modules/activities/domain/activities.location.js';
 
 const campusId = '22222222-2222-4222-8222-222222222222', userId = '11111111-1111-4111-8111-111111111111';
 const other = '33333333-3333-4333-8333-333333333333', now = new Date('2099-01-01T00:00:00Z');
@@ -24,13 +24,13 @@ const input = { title: 'Actividad', description: 'Grupo de estudio', startAt: ne
 const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({ _id: new ObjectId(), ...input,
   campusId, createdByUserId: userId, type: 'COMMUNITY_ACTIVITY', status: 'ACTIVE', visibility: 'PUBLIC',
   participantCount: 1, createdAt: now, updatedAt: now, ...patch });
-let service: typeof import('../src/modules/activities/activities.create.service.js');
-let repository: typeof import('../src/modules/activities/activities.create.repository.js');
+let service: typeof import('../src/modules/activities/services/activities.create.service.js');
+let repository: typeof import('../src/modules/activities/repositories/activities.create.repository.js');
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017', SUPABASE_URL: 'https://community-limit-test.invalid',
     SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SECRET_KEY: 'server-test-key' });
-  service = await import('../src/modules/activities/activities.create.service.js');
-  repository = await import('../src/modules/activities/activities.create.repository.js');
+  service = await import('../src/modules/activities/services/activities.create.service.js');
+  repository = await import('../src/modules/activities/repositories/activities.create.repository.js');
 });
 after(async () => { await (await import('../src/database/mongodb/client.js')).closeMongoDB(); });
 
@@ -127,7 +127,7 @@ test('HTTP availability requires identity, rejects client campus/limit overrides
     if (url.pathname.endsWith('/perfil_usuario')) return Response.json([auth.profile]); return Response.json([]);
   };
   const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
-  const { apiErrorHandler } = await import('../src/middleware/apiErrorHandler.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
   const session = { withTransaction: async (operation: any) => operation() };
   const sessionMock = mock.method(MongoClient.prototype, 'withSession', async (operation: any) => operation(session));
   const dbMock = mock.method(Db.prototype, 'collection', (name: string) => ({
