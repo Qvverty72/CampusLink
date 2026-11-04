@@ -52,7 +52,8 @@ const document = (patch: Partial<ActivityDocument> = {}): ActivityDocument => ({
 let getActivities: typeof import('../src/modules/activities/services/activities.service.js').getActivities;
 before(async () => {
   Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: 'mongodb://localhost:27017',
-    SUPABASE_URL: 'https://activities-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test' });
+    SUPABASE_URL: 'https://activities-test.invalid', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test',
+    SUPABASE_SECRET_KEY: 'sb_secret_test' });
   getActivities = (await import('../src/modules/activities/services/activities.service.js')).getActivities;
 });
 after(async () => {
@@ -153,6 +154,70 @@ test('repository pushes campus, publication, visibility, expiry and spatial filt
       type: { $in: ['COMMUNITY_ACTIVITY', 'OFFICIAL_EVENT'] }, endAt: { $gt: now },
       'location.buildingKey': 'cabin01', 'location.floorKey': 'floor-data-1', 'location.poiKey': 'sala' });
   } finally { dbMock.mock.restore(); }
+});
+
+test('map HTTP reads preserve creator references through Mongo projection and feed location counters', async () => {
+  const organizerId = '44444444-4444-4444-8444-444444444444';
+  const missingCreatorId = '55555555-5555-4555-8555-555555555555';
+  const own = document();
+  const official = document({ createdByUserId: organizerId, type: 'OFFICIAL_EVENT',
+    location: { buildingKey: 'cabin01', floorKey: 'floor-data-1', poiKey: 'sala' } });
+  const orphan = document({ createdByUserId: missingCreatorId });
+  let organizerActive = true;
+  let referenceReads = 0;
+  const originalFetch = globalThis.fetch;
+  const collection = mock.method(Db.prototype, 'collection', (name: string) => {
+    assert.equal(name, 'activities');
+    return { find: (_filter: unknown, options: { projection: Record<string, number> }) => ({
+      sort: () => ({ toArray: async () => [own, official, orphan].map(value =>
+        Object.fromEntries(Object.entries(value).filter(([field]) => options.projection[field] === 1))) }),
+    }) };
+  });
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    assert.equal(url.origin, 'https://activities-test.invalid');
+    if (url.pathname === '/auth/v1/user') return Response.json({ id: userId, email: 'test@duocuc.cl', email_confirmed_at: now.toISOString() });
+    if (url.pathname.endsWith('/perfil_usuario')) {
+      if (url.searchParams.get('id') === 'eq.' + userId) return Response.json([auth.profile]);
+      referenceReads++;
+      assert.equal(url.searchParams.get('campus_id'), 'eq.' + campusId);
+      assert.equal(url.searchParams.get('estado_cuenta'), 'eq.ACTIVA');
+      assert.equal(url.searchParams.get('deleted_at'), 'is.null');
+      return Response.json(organizerActive ? [{ id: organizerId, nombre_completo: 'Organizador' }] : []);
+    }
+    return Response.json([]);
+  };
+  const { createActivitiesRouter } = await import('../src/modules/activities/activities.routes.js');
+  const { apiErrorHandler } = await import('../src/shared/http/error-handler.js');
+  const app = express();
+  app.use('/api/v1/activities', createActivitiesRouter({ getActiveMap: async () => map, now: () => now }));
+  app.use(apiErrorHandler);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v1/activities`;
+  const headers = { Authorization: 'Bearer activities.test.token' };
+  try {
+    const response = await originalFetch(url, { headers });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const activities: Activity[] = (await response.json()).data;
+    assert.deepEqual(activities.map(value => value.id), [own._id.toHexString(), official._id.toHexString()].sort());
+    assert.equal(referenceReads, 1);
+    assert.ok(activities.every(value => !('createdByUserId' in value)));
+    const visible = selectActivityOccurrences(activities, now.getTime());
+    const floor = filterLocationActivities(visible, { buildingKey: 'cabin01', floorKey: 'floor-data-1' }, now.getTime());
+    assert.equal(floor.filter(value => value.type === 'OFFICIAL_EVENT').length, 1);
+    assert.equal(floor.filter(value => value.type === 'COMMUNITY_ACTIVITY').length, 1);
+    const poi = await originalFetch(url + '?buildingKey=cabin01&floorKey=floor-data-1&poiKey=sala', { headers });
+    assert.deepEqual((await poi.json()).data.map((value: Activity) => value.id), [official._id.toHexString()]);
+    organizerActive = false;
+    const refreshed = await originalFetch(url, { headers });
+    assert.deepEqual((await refreshed.json()).data.map((value: Activity) => value.id), [own._id.toHexString()]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    collection.mock.restore();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });
 
 test('HTTP route rejects missing identity and filter overrides, returns an envelope and no-store data', async () => {
