@@ -1,32 +1,37 @@
+import { setServers } from 'node:dns/promises';
 import { Db, MongoClient } from 'mongodb';
-
 import { env } from '../../config/env.js';
+import { withDeadline } from '../../shared/async/deadline.js';
 
-// MongoClient administra internamente un pool. Mantener una sola instancia a nivel
-// de módulo evita crear una conexión nueva por cada request o repository.
-const client = new MongoClient(env.mongodbUri);
+// Reemplazo opcional del resolver de este proceso; no cambia la configuración de Windows o la red.
+// Sirve cuando el DNS de la red no resuelve las consultas SRV/TXT de Atlas.
+if (env.mongodbDnsServers.length) setServers(env.mongodbDnsServers);
 
-/**
- * Abre la conexión compartida y verifica que Atlas responda antes de iniciar HTTP.
- * El ping valida conectividad y permisos sobre la base configurada sin modificar datos.
- */
+// Un pool compartido por los repositorios, con límites para selección, conexión y operaciones.
+export const mongoClient = new MongoClient(env.mongodbUri, {
+  serverSelectionTimeoutMS: env.databaseTimeoutMs,
+  connectTimeoutMS: env.databaseTimeoutMs,
+  timeoutMS: env.databaseTimeoutMs,
+});
+/** Abre el cliente compartido y espera una respuesta de ping antes de declarar MongoDB disponible. */
 export async function connectMongoDB(): Promise<Db> {
-  await client.connect();
-  await client.db(env.mongodbDbName).command({ ping: 1 });
-
-  console.log(`MongoDB connected to database "${env.mongodbDbName}"`);
-  return client.db(env.mongodbDbName);
+  const attempt = mongoClient.connect();
+  try { await withDeadline(attempt); }
+  catch (error: unknown) {
+    console.error('MongoDB connection failed', {
+      errorType: error instanceof Error && /^[A-Za-z0-9_]{1,60}$/.test(error.name) ? error.name : 'ConnectionError',
+      phase: typeof error === 'object' && error !== null && 'syscall' in error && typeof error.syscall === 'string' && /^(querySrv|queryTxt|connect|getaddrinfo)$/.test(error.syscall) ? error.syscall : undefined,
+      code: typeof error === 'object' && error !== null && 'code' in error && (typeof error.code === 'number' || (typeof error.code === 'string' && /^[A-Z][A-Z0-9_]{0,30}$/.test(error.code))) ? error.code : undefined,
+    });
+    // Si una consulta SRV no cancelable termina tarde, cierra el pool que pudiera abrirse después.
+    void attempt.then(() => mongoClient.close()).catch(() => {});
+    throw new Error('MongoDB connection timed out or failed');
+  }
+  const db = getMongoDB();
+  await db.command({ ping: 1 }, { timeoutMS: env.databaseTimeoutMs });
+  return db;
 }
-
-/**
- * Entrega el handle de la base configurada sobre el MongoClient ya compartido.
- * Los repositories lo usan para seleccionar su colección, sin gestionar conexiones.
- */
-export function getMongoDB(): Db {
-  return client.db(env.mongodbDbName);
-}
-
-/** Libera el pool durante el apagado controlado del proceso. */
-export async function closeMongoDB(): Promise<void> {
-  await client.close();
-}
+/** Devuelve la base configurada a los repositorios que comparten este cliente. */
+export function getMongoDB(): Db { return mongoClient.db(env.mongodbDbName); }
+/** Cierra el cliente compartido respetando el límite de tiempo de dependencias. */
+export async function closeMongoDB(): Promise<void> { await withDeadline(mongoClient.close()); }

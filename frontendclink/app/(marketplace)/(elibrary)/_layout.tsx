@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Navigation for the digital library and its future resource flows. */
+/** Navegación de la biblioteca digital y sus flujos de recursos. */
 export default function ELibraryLayout() {
   return (
     <Stack

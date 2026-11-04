@@ -18,16 +18,16 @@ import { clampCameraPhi } from './cameraConfig';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/** Speed of programmatic camera animation */
+/** Velocidad de la animación programática de cámara. */
 const CAMERA_ANIM_SPEED = 4;
 
-/** Safety limit so an automatic camera transition can never hold input forever. */
+/** Límite para que una transición automática no bloquee la entrada indefinidamente. */
 const MAX_CAMERA_ANIMATION_SECONDS = 2;
 
-/** Inertia decay factor (0-1, lower = more friction) */
+/** Factor de pérdida de inercia entre frames; un valor menor aplica más fricción. */
 const DAMPING_FACTOR = 0.92;
 
-/** Initial camera overview parameters */
+/** Parámetros iniciales para encuadrar el campus completo. */
 const INITIAL = {
   theta: Math.PI / 4,
   phi: 0.85,
@@ -35,7 +35,7 @@ const INITIAL = {
   target: new THREE.Vector3(0.15, 0, 0.2),
 };
 
-/** Returns the equivalent target angle reached through the shortest rotation. */
+/** Devuelve el ángulo equivalente que requiere el giro más corto. */
 function getNearestEquivalentAngle(target: number, current: number): number {
   const shortestDelta = Math.atan2(
     Math.sin(target - current),
@@ -79,7 +79,7 @@ export function CameraController({ gestureState }: CameraControllerProps) {
   const animationElapsed = useRef(0);
   const previousSelectedBuilding = useRef<BuildingId | null>(null);
 
-  // ─── Animate to building when selected ──────────────────────────────────
+  // ─── Animación hacia el edificio seleccionado ─────────────────────────────
 
   useEffect(() => {
     const config = selectedBuilding
@@ -220,7 +220,7 @@ export function CameraController({ gestureState }: CameraControllerProps) {
         raycaster.current.setFromCamera(ndcVec.current, camera);
         const intersects = raycaster.current.intersectObjects(scene.children, true);
 
-        // Find the first intersected floor mesh
+        // Busca la primera intersección marcada como piso interactivo.
         const hit = intersects.find(
           (i) => i.object.userData && i.object.userData.isFloor
         );
@@ -230,10 +230,10 @@ export function CameraController({ gestureState }: CameraControllerProps) {
           const buildingId = hit.object.userData.buildingId as BuildingId;
 
           if (selectedBuilding === buildingId && isExploded) {
-            // Building already exploded → select this floor
+            // Si el edificio ya está desplegado, selecciona el piso tocado.
             selectFloor(meshName);
           } else if (!selectedBuilding) {
-            // No building selected → select this building
+            // Si no hay edificio seleccionado, inicia su selección.
             selectBuilding(buildingId);
           }
           // Si hay otro edificio activo se ignora el hit: primero debe cerrarse la

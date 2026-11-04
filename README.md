@@ -130,6 +130,8 @@ CampusLink sigue una arquitectura **Cliente-Servidor**, con separación entre pr
 
 El frontend no accede directamente a MongoDB. Los datos del mapa se solicitan mediante la API REST del backend.
 
+El backend también utiliza **Redis para el rate limiting**: conserva contadores temporales de solicitudes compartidos entre instancias. PostgreSQL y MongoDB mantienen los datos del dominio de CampusLink.
+
 ---
 
 # Tecnologías
@@ -150,6 +152,8 @@ El frontend no accede directamente a MongoDB. Los datos del mapa se solicitan me
 
 Actualmente el proyecto utiliza **Expo 57**, **React Native 0.86** y **React 19**.
 
+Los módulos funcionales del frontend se organizan en `api`, `components`, `hooks` y `types`, siguiendo `activities`. La [convención de estructura del frontend](frontendclink/src/features/README.md) describe las responsabilidades y los imports entre carpetas.
+
 ## Backend
 
 | Tecnología | Uso |
@@ -159,6 +163,7 @@ Actualmente el proyecto utiliza **Expo 57**, **React Native 0.86** y **React 19*
 | TypeScript | Desarrollo tipado |
 | MongoDB Driver | Acceso a MongoDB |
 | Supabase JS | Integración con Supabase |
+| Redis 7 | Contadores compartidos para rate limiting (F2.2-09 / #56) |
 | Helmet | Cabeceras de seguridad |
 | CORS | Control de acceso HTTP |
 | Docker | Construcción y ejecución reproducible |
@@ -182,13 +187,14 @@ El campus se modela mediante **Blender** y se exporta como **GLB**.
 
 Para trabajar con el proyecto se recomienda:
 
-- Node.js 22.
+- Node.js 22.13 o posterior en la rama 22 (también 24.3+ o 26+ para Expo SDK 58).
 - npm.
 - Git.
-- Expo Go o emulador Android/iOS.
+- Expo Go compatible con SDK 58 o emulador Android/iOS.
 - Docker, opcional para el backend.
 - Acceso al proyecto de Supabase.
 - Acceso a MongoDB.
+- Redis para el rate limiting compartido; obligatorio en producción. Docker Compose lo inicia automáticamente.
 - Supabase CLI para administrar migraciones.
 - `mongosh` para tareas de configuración de MongoDB.
 
@@ -209,7 +215,7 @@ cd CampusLink
 
 ```bash
 cd frontendclink
-npm install
+npm ci
 ```
 
 Crear `.env` a partir de `.env.example`.
@@ -226,6 +232,15 @@ Luego:
 ```bash
 npx expo start -c
 ```
+
+El frontend usa Expo SDK 58, React 19.3 y React Native 0.88. Si Metro estaba
+ejecutándose antes de actualizar dependencias, detenerlo y volver a iniciar con
+el comando anterior. En Windows, Metro puede bloquear los binarios de NativeWind
+durante `npm ci`.
+
+La web conserva salida `single` y rutas síncronas. Los insets web se aplican con
+CSS `env()` mediante `safeAreaInset`; en iOS/Android se conservan los valores
+nativos. El guardado compartido espera la escritura asíncrona antes de compartir.
 
 ### Probar desde un teléfono físico
 
@@ -266,6 +281,14 @@ en:
 ```text
 http://localhost:3000
 ```
+
+### Redis para rate limiting
+
+`docker compose up --build` inicia el backend y el servicio privado `rate-limit` con Redis 7. El backend se conecta mediante `RATE_LIMIT_REDIS_URL=redis://rate-limit:6379`; Redis no publica un puerto al exterior.
+
+En producción se debe configurar `RATE_LIMIT_REDIS_URL`, y todas las instancias del backend deben usar el mismo Redis. En development/test, sin esa URL, los contadores se mantienen en memoria para una sola instancia.
+
+Redis almacena únicamente contadores temporales del límite de solicitudes. Las cuotas, ventanas y respuestas 429 con `Retry-After` se documentan en la [configuración del backend](backendclink/README.md).
 
 Para detenerlo:
 

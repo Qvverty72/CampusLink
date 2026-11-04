@@ -1,0 +1,81 @@
+{
+  "mode": "built-in imagegen",
+  "date": "2026-10-10",
+  "images": [
+    {
+      "key": "hbuilding-floor1-auditorio",
+      "file": "hbuilding-floor1-auditorio.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university auditorium with rows of seats and a small stage. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "hbuilding-floor1-casino",
+      "file": "hbuilding-floor1-casino.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university dining hall with tables, chairs and a serving counter; casino means cafeteria in Chile, never gambling. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "hbuilding-floor2-biblioteca",
+      "file": "hbuilding-floor2-biblioteca.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university library with bookshelves and reading tables. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "hbuilding-floor4-cetecom",
+      "file": "hbuilding-floor4-cetecom.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a generic university service counter with a computer; unspecified Cetecom service, no invented organization signs. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "ebuilding-floor1-caja-de-pago",
+      "file": "ebuilding-floor1-caja-de-pago.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university payment counter with a payment terminal, no currency or readable financial information. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "fbuilding-floor1-capilla",
+      "file": "fbuilding-floor1-capilla.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a small serene university chapel with simple wooden benches and a discreet cross. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "fbuilding-floor2-casino",
+      "file": "fbuilding-floor2-casino.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university dining hall with tables and a serving area; Chilean cafeteria, never gambling. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "fbuilding-floor3-cetecom",
+      "file": "fbuilding-floor3-cetecom.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a generic university service desk with a computer; unspecified Cetecom service, no invented organization signs. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "fbuilding-floor3-central-de-apuntes",
+      "file": "fbuilding-floor3-central-de-apuntes.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university course notes counter with organized paper handouts and a printer. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "fbuilding-floor4-terraza",
+      "file": "fbuilding-floor4-terraza.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university rooftop terrace with outdoor tables, greenery and a safe railing. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "cabin03-floor2-ciit",
+      "file": "cabin03-floor2-ciit.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a generic university collaborative room with work tables and computers; CIIT acronym unspecified, no invented services or organization signs. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "cabin03-floor3-punto-estudiantil",
+      "file": "cabin03-floor3-punto-estudiantil.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a welcoming university student information point with a desk and notice board, no readable invented information. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "cabin03-floor3-radio",
+      "file": "cabin03-floor3-radio.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a small university radio studio with microphones, headphones and a sound mixing desk. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "gym-floor1-multicancha",
+      "file": "gym-floor1-multicancha.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a indoor university multi-sport court with basketball hoops and simple court markings. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    },
+    {
+      "key": "gym-floor1-sala-de-musculacion",
+      "file": "gym-floor1-sala-de-musculacion.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: temporary placeholder for a CampusLink university point-of-interest banner and gallery. Create ONE standalone opaque landscape 4:3 raster illustration of a university weight training room with dumbbells, exercise benches and weight machines. Clean polished soft 3D illustration, teal accents, warm wood and muted neutral colors, natural daylight. Keep the important subject in the central horizontal band, suitable for cover cropping in a short wide banner. No people, no logos, no real identifiable campus, no collage, no frame or app UI. Clearly illustrative demo content rather than an actual photograph. Small readable label near the upper right with exactly the Spanish text 'Imagen de ejemplo'."
+    }
+  ]
+}

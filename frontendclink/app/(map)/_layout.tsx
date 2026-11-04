@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Navigation dedicated to the 3D map and future location detail screens. */
+/** Navegación dedicada al mapa 3D y vistas de ubicación. */
 export default function MapLayout() {
   return (
     <Stack

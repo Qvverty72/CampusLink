@@ -1,0 +1,124 @@
+flowchart TB
+  Expo["Frontend Expo / Expo Router<br/>Screens, hooks y clientes API existentes"]
+  Entry["server.ts → bootstrap.ts<br/>Conexión, readiness, listen y cierre"]
+  App["app.ts: createApp<br/>Helmet, CORS y JSON diferido para uploads"]
+  Http["shared/http<br/>Cuota de origen, endpoint-policy<br/>auth.middleware y validación según ruta"]
+  Routes["routes/index.ts<br/>Montajes /api/v1 y health/ready"]
+  Error["shared/http/error-handler.ts<br/>ApiError, sanitización y Retry-After"]
+  Shared["shared<br/>Respuestas, paginación, health<br/>deadline y contratos HTTP"]
+  Limits["shared/rate-limit<br/>Cuotas IP / identidad verificada"]
+  RedisClient["database/redis/rate-limit.redis.ts"]
+  Redis[("Redis<br/>Contadores y TTL temporales compartidos")]
+  PG[("PostgreSQL / Supabase<br/>Perfiles, campus, grants, publicaciones<br/>solicitudes, transacciones, auditoría y reportes")]
+  Mongo[("MongoDB<br/>campus_maps, activities<br/>activity_participation, activity_interactions")]
+  Supabase["Supabase Auth / Data API / Storage<br/>Identidad, consultas y archivos privados"]
+  Clients["database/supabase + database/mongodb<br/>Clientes, pools, transacciones y sondas"]
+
+  Entry --> App
+  Expo -->|"HTTP: contratos vigentes /api/v1"| App
+  App --> Http --> Routes
+  App --> Error
+  Http --> Limits --> RedisClient --> Redis
+  Entry -->|"connect / verify / close"| Clients
+  Entry -->|"connect / close"| RedisClient
+  Clients --> PG
+  Clients --> Mongo
+  Clients --> Supabase
+  App -.-> Shared
+
+  subgraph Auth["auth"]
+    AR["auth.routes.ts"] --> AC["controllers/auth.controller.ts"]
+    AC --> AS["services/auth.service.ts<br/>validators/auth.validation.ts"]
+    AS --> AQ["repositories/auth.repository.ts"]
+    AM["types/auth.types.ts<br/>AuthProfile / VerifiedAuthConnection"]
+    AP["domain/auth.authorization.ts<br/>Cuenta, campus, capacidades y propiedad"]
+    AS -.-> AP
+    AQ -.-> AM
+  end
+  subgraph Users["users"]
+    UR["users.routes.ts / notifications.routes.ts"] --> UC["controllers<br/>users / access / notifications"]
+    UC --> US["services<br/>Perfil, accesos, auditoría, notificaciones"]
+    US --> UQ["repositories<br/>users / access / notifications<br/>audit.activities / profile-overview"]
+    UM["types<br/>Auth/account DTO, AuditDetail<br/>NotificationPage / ProfileOverview"]
+    UQ -.-> UM
+  end
+  subgraph Maps["maps"]
+    MR["map.routes.ts"] --> MC["controllers/map.controller.ts"]
+    MC --> MS["services/map.service.ts"]
+    MS --> MQ["repositories/map.repository.ts"]
+    MM["types/map.types.ts: CampusMapDocument<br/>domain/map.location.ts: SpatialBuilding"]
+    MQ -.-> MM
+  end
+  subgraph Activities["activities"]
+    VR["activities.routes.ts"] --> VC["controllers/activities.controller.ts"]
+    VC --> VS["services<br/>Consulta, creación, edición, series<br/>participación, referencias e historial propio"]
+    VS --> VQ["repositories<br/>Documentos, historial, participación<br/>interacciones, referencias y lifecycle"]
+    VM["types + domain<br/>ActivityDocument / ActivityParticipationDocument<br/>ActivityChangeDocument / ActivityEditPlanner<br/>Políticas, recurrencia y ubicación"]
+    VQ -.-> VM
+    VS -.-> VM
+    VW["workers/activities.notifications.worker.ts"] --> VQ
+    VQ -.->|"Callback de plan revalidado<br/>en la misma transacción"| VM
+  end
+  subgraph Physical["marketplace/physicalgoods"]
+    PR["physicalgoods.routes.ts"] --> PC["controllers/physicalgoods.controller.ts"]
+    PC --> PS["services<br/>Publicación, imágenes, edición, solicitudes<br/>transacciones, historial y recordatorios"]
+    PS --> PQ["repositories<br/>Publicaciones, medios, solicitudes<br/>transacciones, historial y recordatorios"]
+    PM["types/physicalgoods.types.ts<br/>PhysicalgoodsInput / PhysicalgoodsMediaRow<br/>PhysicalgoodsRequestRow / PhysicalgoodsTransactionRow"]
+    PQ -.-> PM
+    PW["workers/physicalgoods.reminders.worker.ts"] --> PS
+  end
+  subgraph Digital["marketplace/elibrary"]
+    DR["elibrary.routes.ts"] --> DC["controllers/elibrary.controller.ts"]
+    DC --> DS["services<br/>Publicación, archivos, búsquedas, acuerdos<br/>adquisiciones, recomendaciones, chat y valoración"]
+    DS --> DQ["repositories<br/>Recursos, académicos, acuerdos<br/>adquisiciones, recomendaciones y valoración"]
+    DM["types/elibrary.types.ts<br/>DigitalResourceRow / DigitalTradeRow<br/>DigitalStoredFile y contratos DTO"]
+    DQ -.-> DM
+    DU["middleware/elibrary.upload.ts<br/>Parser multipart acotado"]
+    DF["files/elibrary.preview.extractor.ts<br/>Worker aislado de extracción PDF"]
+    DC --> DU
+    DS --> DF
+  end
+  subgraph Analytics["analytics"]
+    NR["analytics.routes.ts"] --> NC["controllers/analytics.controller.ts"]
+    NC --> NS["services/analytics.service.ts<br/>domain: períodos y presentación"]
+    NS --> NQ["repositories<br/>analytics: eventos / reports: snapshots<br/>dashboard: SQL / activities: agregación Mongo"]
+    NM["types/analytics.types.ts<br/>DashboardData / AnalyticalReport<br/>ResourceAnalyticsEvent"]
+    NQ -.-> NM
+    NS --> NX["exports/analytics.export.ts + analytics.pdf.ts<br/>PDF y Excel de instantáneas guardadas"]
+  end
+  subgraph Reports["reports: denuncias de contenido"]
+    RR["reports.routes.ts"] --> RC["controllers/reports.controller.ts"]
+    RC --> RS["services<br/>Denuncia, revisión y resolución<br/>Físicos, digitales y actividades"]
+    RS --> RQ["repositories<br/>reports / review / resolution / elibrary"]
+    RM["types/reports.types.ts<br/>ContentReportReceipt / ReportReviewDetail<br/>ReportResolutionInput / ActivityReportSnapshot"]
+    RQ -.-> RM
+  end
+  Common["marketplace común<br/>domain/marketplace.rating.ts<br/>repositories: mensajes, valoración y notificaciones"]
+
+  Routes --> AR & UR & MR & VR & PR & DR & NR & RR
+  Http -->|"Identidad verificada por Supabase"| AS
+  AQ --> Clients
+  UQ --> Clients
+  MQ --> Clients
+  VQ --> Clients
+  PQ --> Clients
+  DQ --> Clients
+  NQ --> Clients
+  RQ --> Clients
+  Common --> Clients
+  Entry --> VW & PW
+
+  US -->|"API pública: historial y contadores"| PS & DQ
+  UQ -->|"API pública: contadores físicos/digitales"| PQ & DQ
+  US -->|"Lectura de cambios y mapa autorizado"| VQ & MS
+  UQ -->|"Mapa para auditoría"| MQ
+  VS -->|"Mapa y referencias de ubicación"| MS
+  VW -->|"users/public: entrega durable"| UQ
+  PS -->|"Punto de encuentro"| MQ
+  PS & DS -->|"Funciones públicas de operación/idempotencia"| NS & NQ
+  PS & DS & PQ --> Common
+  RS -->|"APIs públicas de contenido y evidencia"| PQ & PS & DQ & DS & VQ & VS & MS
+  RS -->|"Revalidación administrativa en transacción"| UQ
+  VS & US & MS & PS & DS & NS & RS --> AP
+
+  Note["Flechas continuas: llamadas/imports de ejecución agrupados.<br/>Flechas punteadas: modelos, contratos y políticas.<br/>Los modelos son tipos/documentos existentes, no clases ORM.<br/>La colaboración entre módulos usa public.ts, domain/types y middleware auth.<br/>Grafo real de archivos validado sin ciclos runtime."]

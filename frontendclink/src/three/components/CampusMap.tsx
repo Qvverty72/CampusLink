@@ -19,14 +19,14 @@ import { CampusModelScene } from '@/three/components/CampusModel';
 import { CameraController } from '@/three/controls/CameraController';
 import { clampCameraPhi } from '@/three/controls/cameraConfig';
 
-// ─── Camera Gesture State (shared between RN View and R3F Canvas via ref) ──────
+// ─── Estado de gestos de cámara, compartido por View nativa y Canvas mediante ref ──
 
 /** Estado mutable que conecta eventos de pantalla con el render loop de R3F. */
 export interface CameraGestureState {
-  // Spherical camera parameters
+  // Parámetros esféricos de cámara.
   theta: number;        // azimuthal angle (horizontal rotation around Y)
   phi: number;          // polar angle (from Y+ axis: 0=top, PI=bottom)
-  radius: number;       // distance from look-at target
+  radius: number;       // Distancia desde el punto al que mira la cámara.
   targetX: number;      // look-at target X
   targetY: number;      // look-at target Y
   targetZ: number;      // look-at target Z
@@ -43,7 +43,7 @@ export interface CameraGestureState {
   pinchStartDist: number;
   startRadius: number;
 
-  // Tap detection for mesh selection
+  // Detección de toques para seleccionar mallas.
   tapX: number;         // NDC x (-1 to 1)
   tapY: number;         // NDC y (-1 to 1)
   hasPendingTap: boolean;
@@ -63,6 +63,7 @@ const TAP_MAX_MOVEMENT = 8;   // px — threshold before a touch becomes a drag
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Calcula la distancia entre los dos primeros puntos de un gesto pinch. */
 function getTouchDistance(touches: { pageX: number; pageY: number }[]): number {
   if (touches.length < 2) return 0;
   const dx = touches[0].pageX - touches[1].pageX;
@@ -72,6 +73,7 @@ function getTouchDistance(touches: { pageX: number; pageY: number }[]): number {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
+/** Conecta gestos táctiles con la escena 3D sin enviar cada frame al estado React. */
 export function CampusMap() {
   // El layout permite traducir pageX/pageY del touch al rango NDC [-1, 1] que
   // espera THREE.Raycaster, independientemente del tamaño visible del Canvas.
@@ -80,7 +82,7 @@ export function CampusMap() {
   // Los movimientos continuos no son estado declarativo de UI. Una ref ofrece al
   // controlador el valor más reciente sin generar renders durante cada gesto.
   const gestureState = useRef<CameraGestureState>({
-    // Initial camera: overview of the full campus
+    // Cámara inicial: vista general del campus.
     theta: Math.PI / 4,
     phi: 0.85,
     radius: 0.8,
@@ -110,10 +112,10 @@ export function CampusMap() {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // Claim two-finger gestures immediately; leave one-finger taps to Canvas.
+        // Reclama de inmediato gestos de dos dedos; deja el toque simple para Canvas.
         onStartShouldSetPanResponder: (evt) => evt.nativeEvent.touches.length >= 2,
 
-        // Pinch gestures are immediate; rotation still waits for drag movement.
+        // El pinch se reconoce al instante; la rotación espera movimiento de arrastre.
         onMoveShouldSetPanResponder: (evt, gs) => {
           const isPinching = evt.nativeEvent.touches.length >= 2;
           if (
@@ -152,7 +154,7 @@ export function CampusMap() {
           if (touches.length >= 2) {
             // ── Pinch Zoom ──────────────────────────────────────────────
             if (gs.gestureType !== 'zoom') {
-              // Switched from rotate → zoom (user added a finger)
+              // Cambió de rotación a zoom porque se añadió otro dedo.
               gs.gestureType = 'zoom';
               gs.pinchStartDist = getTouchDistance(touches);
               gs.startRadius = gs.radius;
@@ -165,7 +167,7 @@ export function CampusMap() {
           } else if (touches.length === 1) {
             // ── Orbit Rotation ──────────────────────────────────────────
             if (gs.gestureType !== 'rotate') {
-              // Switched from zoom → rotate (user lifted a finger)
+              // Cambió de zoom a rotación porque se levantó un dedo.
               gs.gestureType = 'rotate';
               gs.lastTouchX = touches[0].pageX;
               gs.lastTouchY = touches[0].pageY;
@@ -175,7 +177,7 @@ export function CampusMap() {
             const nextPhi = gs.phi + dy * ROTATE_SENSITIVITY;
             gs.theta -= dx * ROTATE_SENSITIVITY;
             gs.phi = clampCameraPhi(nextPhi);
-            // Store velocity for inertia
+            // Guarda la velocidad para continuar con inercia al soltar.
             gs.velocityTheta = -dx * ROTATE_SENSITIVITY;
             gs.velocityPhi = gs.phi === nextPhi
               ? dy * ROTATE_SENSITIVITY * 0.5
@@ -201,6 +203,7 @@ export function CampusMap() {
   // La detección de tap permanece en la View nativa; la consulta geométrica se
   // difiere al siguiente frame, donde ya están disponibles camera y scene.
 
+  /** Guarda inicio, duración potencial y posición para distinguir toque de arrastre. */
   const handleTouchStart = useCallback((e: GestureResponderEvent) => {
     const touches = e.nativeEvent.touches as unknown as { pageX: number; pageY: number }[];
     const gs = gestureState.current;
@@ -216,6 +219,7 @@ export function CampusMap() {
     }
   }, []);
 
+  /** Convierte un toque corto e inmóvil a NDC para que el controlador haga raycast. */
   const handleTouchEnd = useCallback(() => {
     const gs = gestureState.current;
     const elapsed = Date.now() - gs.touchStartTime;
@@ -235,6 +239,7 @@ export function CampusMap() {
     gs.gestureType = 'none';
   }, []);
 
+  /** Conserva el rectángulo del contenedor usado para normalizar coordenadas de pantalla. */
   const handleLayout = useCallback((e: LayoutChangeEvent) => {
     layoutRef.current = e.nativeEvent.layout;
   }, []);

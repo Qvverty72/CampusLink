@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-/** Navigation for analytics dashboards and future metric detail screens. */
+/** Navegación de los paneles analíticos y sus vistas de detalle. */
 export default function AnalyticsLayout() {
   return (
     <Stack
@@ -8,7 +8,7 @@ export default function AnalyticsLayout() {
         gestureEnabled: false,
         headerShown: false,
         headerStyle: { backgroundColor: '#FFFFFF' },
-        headerTintColor: '#09243A',
+        headerTintColor: '#002E56',
         headerShadowVisible: false,
         contentStyle: { backgroundColor: '#F4F7F9' },
       }}

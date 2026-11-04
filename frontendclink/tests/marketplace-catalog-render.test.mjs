@@ -1,0 +1,116 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { renderCatalog } from './helpers/marketplace-render.mjs';
+
+function digitalDetailMarkup(options){
+ const{markup}=renderCatalog('digital',options),start=markup.indexOf('data-qa-modal-portal="true"');
+ assert.ok(start>=0,'El detalle digital debe estar dentro del modal');return markup.slice(start);
+}
+
+for (const screen of ['physical', 'digital']) {
+  test(`${screen}: portada real con Babel/NativeWind, navegación institucional y un solo acceso para publicar`, () => {
+    const { markup } = renderCatalog(screen);
+    assert.match(markup, screen === 'physical' ? /Recursos físicos de tu campus/ : /Apuntes y guías de todos los campus/);
+    assert.match(markup, screen === 'physical' ? /Mi actividad/ : /Mi biblioteca/);
+    assert.match(markup, /aria-label="Publicar un recurso"/);
+    assert.equal((markup.match(/aria-label="Publicar un recurso"/g) ?? []).length, 1);
+    assert.doesNotMatch(markup, /Actualizar recursos|Buscar recursos<|Mostrar filtros|Actualizar biblioteca/);
+    assert.match(markup, /aria-label="Navegación principal"/);
+    assert.match(markup, /aria-selected="true"/);
+    if (screen === 'digital') { assert.match(markup, /Recomendados para ti/); assert.match(markup, /Ya lo tienes/); }
+    else assert.match(markup, /Buen estado/);
+    const action=screen==='physical'?'Mi actividad':'Mi biblioteca';
+    const requestCounts={sentAccepted:7,receivedPending:9,pendingRequests:1,pendingTransactions:2};
+    assert.ok(renderCatalog(screen,{requestCounts}).markup.includes(`aria-label="${action}, 3 pendientes en Solicitudes y Transacciones"`));
+    const large=renderCatalog(screen,{width:320,requestCounts:{...requestCounts,pendingRequests:100}}).markup;
+    assert.ok(large.includes(`${action}, 102 pendientes en Solicitudes y Transacciones`));assert.match(large,/>99\+</);
+    const zero=renderCatalog(screen,{requestCounts:{...requestCounts,pendingRequests:0,pendingTransactions:0}}).markup;
+    assert.ok(zero.includes(`aria-label="${action}"`));assert.ok(!zero.includes(`${action},`));
+  });
+  test(`${screen}: carga con skeleton, error con reintento y vacío con siguiente acción`, () => {
+    const loading = renderCatalog(screen, { state: 'loading' }).markup;
+    assert.match(loading, /aria-label="Cargando recursos"/);
+    const error = renderCatalog(screen, { state: 'error' }).markup;
+    assert.match(error, /role="alert"/); assert.match(error, /Reintentar/);
+    assert.doesNotMatch(error, /Sin coincidencias/);
+    const empty = renderCatalog(screen, { state: 'empty' }).markup;
+    assert.match(empty, /Sin coincidencias/); assert.match(empty, /Limpiar filtros/);
+  });
+}
+
+test('physical detail renders gallery fallback, current status, public owner and contextual request CTA', () => {
+  const { markup } = renderCatalog('physical', { mode: 'detail' });
+  for (const text of ['Sin fotografías disponibles', 'Calculadora científica', 'Disponible', 'Buen estado', 'Camila González', 'Entrega en Campus de prueba', 'el pago se hace entre ustedes', 'Solicitar este recurso']) assert.ok(markup.includes(text), text);
+  assert.match(markup,/PUBLICADO POR/);assert.match(markup,/Ingeniería en Informática/);assert.match(markup,/Valoración del propietario: 4,6 de 5. 7 valoraciones/);assert.match(markup,/9 transacciones completadas/);assert.doesNotMatch(markup,/ventas completadas|acuerdos completados en Biblioteca/);
+  const unrated=renderCatalog('physical',{mode:'detail',variant:'unrated-owner'}).markup;assert.match(unrated,/Sin valoraciones todavía/);assert.match(unrated,/0 transacciones completadas/);
+  assert.doesNotMatch(markup, /Retirar imagen|Guardar categoría|Editar publicación/);
+  const reserved = renderCatalog('physical', { mode: 'detail', variant: 'reserved' }).markup;
+  assert.match(reserved, /Reservado/); assert.match(reserved, /no admite nuevas solicitudes/); assert.match(reserved, /aria-disabled="true"/);
+  const owner = renderCatalog('physical', { mode: 'detail', variant: 'own' }).markup;
+  assert.match(owner, /No puedes solicitar tu propia publicación/);
+});
+
+test('digital detail renders protected preview, academic metadata and real DTO owner figures without original download for a reader', () => {
+  const markup = digitalDetailMarkup({ mode: 'detail' });
+  assert.doesNotMatch(markup,/aria-label="Navegación principal"/);
+  for (const text of ['Vista previa protegida', 'Muestra limitada preparada por el servidor', 'Guía de cálculo integral', 'Ingeniería en Informática', 'Se desbloquea al completar el acuerdo', 'Camila González', '12 valoraciones', '16 transacciones completadas']) assert.ok(markup.includes(text), text);
+  assert.doesNotMatch(markup,/Entrega en|ventas completadas/);
+  assert.doesNotMatch(markup, /aria-label="Descargar/);
+  const acquired = renderCatalog('digital', { mode: 'detail', variant: 'acquired' }).markup;
+  assert.match(acquired, /Abrir en mis materiales/); assert.doesNotMatch(acquired, /Se desbloquea al completar/);
+  const fallback = renderCatalog('digital', { mode: 'detail', variant: 'preview-unavailable' }).markup;
+  assert.match(fallback, /no dispone de una muestra/); assert.match(fallback, /guia.pdf/);
+  assert.doesNotMatch(fallback, /Este recurso no admite nuevas solicitudes/);
+});
+
+test('opening a digital detail shows a skeleton and retry inside detail instead of flashing the catalog', () => {
+  assert.match(digitalDetailMarkup({ mode: 'detail', state: 'loading' }), /Cargando detalle del recurso/);
+  const error = digitalDetailMarkup({ mode: 'detail', state: 'error' });
+  assert.match(error, /Reintentar detalle/); assert.doesNotMatch(error, /Todos los recursos/);
+});
+
+for (const screen of ['physical', 'digital']) {
+  test(`${screen}: request form uses the resource summary and predefined radio messages without free text`, () => {
+    const markup = screen==='digital'?digitalDetailMarkup({mode:'request',width:320}):renderCatalog(screen,{mode:'request',width:320}).markup;
+    assert.match(markup, /Mensaje para el propietario/); assert.match(markup, /Enviar solicitud/);
+    assert.match(markup, /role="radiogroup"/); assert.match(markup, /aria-checked="true"/);
+    assert.match(markup, screen === 'physical' ? /Recurso físico · Mercado/ : /Recurso digital · Biblioteca/);
+    assert.doesNotMatch(markup, /<input|<textarea|Descargar archivo/);
+    if(screen==='digital')assert.doesNotMatch(markup,/aria-label="Navegación principal"/);
+  });
+  test(`${screen}: received inbox shows its current layout; failures do not show the empty state`, () => {
+    const { markup } = renderCatalog(screen, { mode: 'requests' });
+    if (screen === 'physical') {
+      assert.match(markup, /Ver 2 solicitudes de Calculadora científica/);
+      assert.doesNotMatch(markup, /Diego Pérez|Aceptar solicitud de|Rechazar solicitud de/);
+    } else { assert.match(markup, /Diego Pérez/); assert.match(markup, /Pendiente/); assert.match(markup, /Rechazar/); assert.match(markup, /Aceptar/); assert.match(markup, /propio acuerdo/); assert.doesNotMatch(markup, /reservado|Las demás esperan/); }
+    const loading = renderCatalog(screen, { mode: 'requests', state: 'loading' }).markup;
+    assert.match(loading, /Cargando solicitudes/); assert.doesNotMatch(loading, /Aún no hay solicitudes/);
+    const error = renderCatalog(screen, { mode: 'requests', state: 'error' }).markup;
+    assert.match(error, /role="alert"/); assert.match(error, /Reintentar consulta/); assert.doesNotMatch(error, /Aún no hay solicitudes/);
+    const empty = renderCatalog(screen, { mode: 'requests', state: 'empty' }).markup;
+    assert.match(empty, screen === 'physical' ? /No tienes solicitudes pendientes/ : /Aún no hay solicitudes recibidas/); assert.match(empty, /Actualizar solicitudes/);
+  });
+}
+
+
+for (const screen of ['physical', 'digital']) test(`${screen}: campos académicos editables sin segundo buscador y sugerencias solo después de escribir`,()=>{
+ const closed=renderCatalog(screen,{mode:'filters'}).markup;
+ assert.match(closed,/Buscar carrera para filtrar/);assert.match(closed,/Buscar asignatura para filtrar/);assert.doesNotMatch(closed,/Seleccionar carrera|Seleccionar asignatura|Opciones de carrera|Opciones de asignatura|Buscar por nombre o código/);
+ assert.equal((closed.match(/aria-expanded="false"/g)??[]).length,2);
+ const idle=renderCatalog(screen,{mode:'filters',variant:'careerId'}).markup;assert.doesNotMatch(idle,/Escribe el nombre o código|Opciones de carrera|Opciones de asignatura|Ingeniería en Informática|0 opciones/);
+ const searched=renderCatalog(screen,{mode:'filters',variant:'careerId',filterQuery:'informatica'}).markup;
+ assert.match(searched,/Buscar carrera para filtrar/);assert.match(searched,/Ingeniería en Informática/);assert.match(searched,/role="radiogroup"/);assert.doesNotMatch(searched,/Ingeniería en Administración/);
+ assert.equal((searched.match(/aria-expanded="true"/g)??[]).length,1);
+});
+
+test('filtros de Mercado expone categorías, condiciones reales, precios y publicaciones propias; Biblioteca solo académicos', () => {
+ const physical = renderCatalog('physical', { mode: 'filters', width: 320 }).markup;
+ for (const text of ['Categoría: Todas','Categoría: Apuntes','Categoría: Libros','Categoría: Calculadoras','Condición: Todas','Condición: Nuevo','Condición: Buen estado','Condición: Usado','Condición: Deteriorado','Precio mínimo','Precio máximo','Carrera y asignatura','Ver resultados']) assert.ok(physical.includes(text),text);
+ assert.doesNotMatch(physical,/Solo mis publicaciones disponibles|role="switch"/);
+ const filterCategories=[...physical.matchAll(/aria-label="Categoría: ([^"]+)"/g)].map(match=>match[1]);assert.equal(filterCategories.at(-1),'Otros');
+ const publication=renderCatalog('physical',{mode:'publish',variant:'categoryId'}).markup;
+ const publicationCategories=[...publication.matchAll(/aria-label="Categoría \*: ([^"]+)"/g)].map(match=>match[1]);assert.deepEqual(publicationCategories,['Material académico','Tecnología','Otros']);
+ const digital = renderCatalog('digital', { mode: 'filters', width: 320 }).markup;
+ assert.match(digital,/Carrera y asignatura/); assert.doesNotMatch(digital,/Categoría:|Condición:|Precio mínimo|Solo mis publicaciones/);
+});

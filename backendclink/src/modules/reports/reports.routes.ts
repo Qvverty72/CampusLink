@@ -1,0 +1,45 @@
+import { createPolicyRouter, publicEndpoint } from '../../shared/http/endpoint-policy.js';
+import type { Router } from 'express';
+import { getReportsHealthController, getOwnActivityReportController, createActivityReportController, createPhysicalgoodsReportController } from './controllers/reports.controller.js';
+import { requireAuthentication } from '../auth/middleware/auth.middleware.js';
+import { validateRequest } from '../../shared/http/validate-request.js';
+import { parseActivityId, parseEmptyActivityInput } from '../activities/public.js';
+import { parseActivityReport, parseContentReport } from './validators/reports.validation.js';
+import type { ReportsDependencies } from './types/reports.types.js';
+import { createDigitalReportController,getOwnPhysicalgoodsReportController,getOwnDigitalReportController } from './controllers/reports.controller.js';
+import { downloadReportedOriginalController, getReportedImageController, getReportReviewController, listReportReviewsController } from './controllers/reports.controller.js';
+import { resolveReportController, listReportResolutionsController, getReportResolutionController } from './controllers/reports.controller.js';
+
+/** Todas las denuncias de contenido se registran en reports, con autorización propia del elemento. */
+export function createReportsRouter(diagnosticsEnabled: boolean, dependencies: ReportsDependencies = {}): Router {
+  const router = createPolicyRouter();
+  if (diagnosticsEnabled) router.get('/health', publicEndpoint, getReportsHealthController);
+  router.get('/campuses/:campusId', requireAuthentication, listReportReviewsController);
+  router.get('/campuses/:campusId/resolutions', requireAuthentication, listReportResolutionsController);
+  router.get('/campuses/:campusId/resolutions/:reportId', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput }), getReportResolutionController);
+  router.post('/campuses/:campusId/:reportId/resolution', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput }), resolveReportController);
+  router.get('/campuses/:campusId/:reportId', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput }), getReportReviewController);
+  router.get('/campuses/:campusId/:reportId/files/:fileId', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput }), downloadReportedOriginalController);
+  router.get('/campuses/:campusId/:reportId/images/:imageId', requireAuthentication,
+    validateRequest({ query: parseEmptyActivityInput }), getReportedImageController);
+
+  router.get('/activities/:activityId/own', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseEmptyActivityInput }),
+    getOwnActivityReportController(dependencies));
+  router.post('/activities/:activityId', requireAuthentication,
+    validateRequest({ params: parseActivityId, query: parseEmptyActivityInput, body: parseActivityReport }),
+    createActivityReportController(dependencies));
+  router.get('/physicalgoods/:publicationId/own',requireAuthentication,validateRequest({query:parseEmptyActivityInput,body:parseEmptyActivityInput}),getOwnPhysicalgoodsReportController);
+  router.get('/elibrary/:publicationId/own',requireAuthentication,validateRequest({query:parseEmptyActivityInput,body:parseEmptyActivityInput}),getOwnDigitalReportController);
+  router.post('/physicalgoods/:publicationId',requireAuthentication,
+    validateRequest({query:parseEmptyActivityInput,body:parseContentReport}),createPhysicalgoodsReportController);
+  router.post('/physicalgoods/:publicationId/transactions/:transactionId',requireAuthentication,
+    validateRequest({query:parseEmptyActivityInput,body:parseContentReport}),createPhysicalgoodsReportController);
+  router.post('/elibrary/:publicationId',requireAuthentication,validateRequest({query:parseEmptyActivityInput,body:parseContentReport}),createDigitalReportController);
+  router.post('/elibrary/:publicationId/transactions/:transactionId',requireAuthentication,validateRequest({query:parseEmptyActivityInput,body:parseContentReport}),createDigitalReportController);
+  return router;
+}

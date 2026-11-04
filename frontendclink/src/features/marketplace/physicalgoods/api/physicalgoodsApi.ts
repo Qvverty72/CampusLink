@@ -1,0 +1,98 @@
+import { authenticatedEnvelopeRequest, authenticatedRequest, AuthApiError } from '@/lib/api/authenticated-request';
+import type { PublicationCreated, PublicationInput, PublicationOptions } from '../types/publication';
+import type { PhysicalgoodsGallery, PhysicalgoodsPage, PhysicalgoodsResource, PhysicalgoodsSearchFilters, PublicationPhoto } from '../types/publication';
+import type { PhysicalgoodsRequest, PhysicalgoodsRequestOptions } from '../types/publication';
+import type { PhysicalgoodsReceivedPage, PhysicalgoodsReceivedRequest,PhysicalgoodsRequestCounts } from '../types/publication';
+import type { PhysicalgoodsCoordinationMessage,PhysicalgoodsCoordinationOptions,PhysicalgoodsCoordinationPage,PhysicalgoodsTransaction,PhysicalgoodsTransactionTarget } from '../types/publication';
+import type { PhysicalgoodsOwnDetail,PhysicalgoodsOwnPublication,PhysicalgoodsOwnPage,PhysicalgoodsTransactionSummary,PhysicalgoodsTransactionsPage } from '../types/publication';
+import type {PhysicalgoodsRating,PhysicalgoodsPublicationsTab} from '../types/publication';
+
+const path = '/api/v1/marketplace/physicalgoods';
+/** Valida el UUID antes de incorporarlo a una ruta de publicación. */
+const resourcePath = (id: string) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Publicación inválida.');
+  return path + '/' + id;
+};
+const transactionPath = (target:PhysicalgoodsTransactionTarget) => {
+  resourcePath(target.transactionId);
+  return resourcePath(target.publicationId)+'/transactions/'+target.transactionId;
+};
+export const loadOwnPhysicalgoods=(page:number,signal:AbortSignal,tab?:PhysicalgoodsPublicationsTab)=>authenticatedEnvelopeRequest<PhysicalgoodsOwnPublication[],PhysicalgoodsOwnPage['meta']>(
+  path+'/my-publications',{signal},new URLSearchParams({page:String(page),limit:'10',...(tab?{tab}:{})}));
+export const loadOwnPhysicalgoodsDetail=(id:string,signal:AbortSignal)=>authenticatedRequest<PhysicalgoodsOwnDetail>(resourcePath(id)+'/history',{signal});
+export const loadOwnPhysicalgoodsTransactions=(page:number,signal:AbortSignal)=>authenticatedEnvelopeRequest<PhysicalgoodsTransactionSummary[],PhysicalgoodsTransactionsPage['meta']>(
+  path+'/transactions',{signal},new URLSearchParams({page:String(page),limit:'10'}));
+export const loadPhysicalgoodsTransactionsPage=(page:number,tab:import('../types/publication').PhysicalgoodsTransactionTab,signal:AbortSignal)=>authenticatedEnvelopeRequest<PhysicalgoodsTransactionSummary[],import('../types/publication').PhysicalgoodsTransactionsTabPage['meta']>(
+  path+'/transactions',{signal},new URLSearchParams({page:String(page),limit:'5',tab}));
+export const loadOwnPhysicalgoodsRequest=(id:string,requestId:string,signal:AbortSignal)=>{
+  resourcePath(requestId);
+  return authenticatedRequest<PhysicalgoodsReceivedRequest>(resourcePath(id)+'/requests/'+requestId,{signal});
+};
+export const loadPhysicalgoodsTransaction = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsTransaction>(transactionPath(target),{signal});
+export const ratePhysicalgoodsOwner=(target:PhysicalgoodsTransactionTarget,score:number,signal:AbortSignal)=>authenticatedRequest<PhysicalgoodsRating>(
+  transactionPath(target)+'/rating',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({score})});
+export const loadPhysicalgoodsCoordinationOptions = (target:PhysicalgoodsTransactionTarget,signal:AbortSignal) => authenticatedRequest<PhysicalgoodsCoordinationOptions>(transactionPath(target)+'/coordination-options',{signal});
+export const loadPhysicalgoodsCoordinationMessages = (target:PhysicalgoodsTransactionTarget,page:number,signal:AbortSignal) => authenticatedEnvelopeRequest<PhysicalgoodsCoordinationMessage[],PhysicalgoodsCoordinationPage['meta']>(
+  transactionPath(target)+'/messages',{signal},new URLSearchParams({page:String(page),limit:'10'}));
+export const changePhysicalgoodsTransaction = (target:PhysicalgoodsTransactionTarget,action:'confirm'|'cancel',signal:AbortSignal) => authenticatedRequest<{id:string;status:PhysicalgoodsTransaction['status']}>(
+  transactionPath(target)+'/'+action,{method:'POST',signal,headers:{'Content-Type':'application/json'},body:'{}'});
+export const sendPhysicalgoodsCoordination = (target:PhysicalgoodsTransactionTarget,buildingId:string,floorId:string,signal:AbortSignal,poiKey?:string) => authenticatedRequest<PhysicalgoodsCoordinationMessage>(
+  transactionPath(target)+'/messages',{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({buildingId,floorId,...(poiKey?{poiKey}:{})})});
+/** Construye filtros de búsqueda y consulta una página del campus autorizado. */
+export function loadPhysicalgoodsResources(filters: PhysicalgoodsSearchFilters, page: number, signal: AbortSignal): Promise<PhysicalgoodsPage> {
+  const query = new URLSearchParams({ page: String(page), limit: '10' });
+  for (const key of ['q', 'categoryId', 'modality', 'condition', 'careerId', 'subjectId', 'minPrice', 'maxPrice'] as const) {
+    const value = filters[key].trim();
+    if (value) query.set(key, ['minPrice', 'maxPrice'].includes(key) ? value.replace(',', '.') : value);
+  }
+  if (filters.mine) query.set('mine', 'true');
+  return authenticatedEnvelopeRequest<PhysicalgoodsResource[], PhysicalgoodsPage['meta']>(path, { signal }, query);
+}
+/** Carga la galería y los permisos de edición calculados por el backend. */
+export const loadPhysicalgoodsGallery = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsGallery>(resourcePath(id) + '/images', { signal });
+export const loadPhysicalgoodsRequestOptions = (id: string, signal: AbortSignal) => authenticatedRequest<PhysicalgoodsRequestOptions>(resourcePath(id) + '/request-options',{ signal });
+export const requestPhysicalgoods = (id: string, messageCode: string, signal: AbortSignal, key?:string) => authenticatedRequest<PhysicalgoodsRequest>(resourcePath(id) + '/requests',{
+  method:'POST',signal,headers:{ 'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{}) },body:JSON.stringify({ messageCode }),
+});
+export const loadPhysicalgoodsRequests = (page:number,received:boolean,signal:AbortSignal,publicationId?:string) => authenticatedEnvelopeRequest<PhysicalgoodsReceivedRequest[],PhysicalgoodsReceivedPage['meta']>(
+  path+(received?'/received-requests':'/sent-requests'),{signal},new URLSearchParams({page:String(page),limit:'10',...(received?{groupBy:'publication',...(publicationId?{publicationId}:{})}:{})}));
+export const loadPhysicalgoodsRequestCounts=(signal:AbortSignal)=>authenticatedRequest<PhysicalgoodsRequestCounts>(path+'/request-counts',{signal});
+export const resolvePhysicalgoodsRequest = (id:string,requestId:string,decision:'ACEPTAR'|'RECHAZAR',signal:AbortSignal) => {
+  resourcePath(requestId);
+  return authenticatedRequest(resourcePath(id)+'/requests/'+requestId,{method:'PATCH',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({decision})});
+};
+/** Edita campos de publicación con `updatedAt` para detectar escrituras concurrentes. */
+export const updatePhysicalgoods = (id: string, input: Pick<PublicationInput,'title'|'description'|'condition'|'modality'|'price'> & { updatedAt: string }, signal: AbortSignal) => authenticatedRequest(resourcePath(id), {
+  method: 'PATCH', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+});
+/** Solicita la baja lógica de la publicación con su versión temporal vigente. */
+export const withdrawPhysicalgoods = (id: string, updatedAt: string, signal: AbortSignal) => authenticatedRequest(resourcePath(id), {
+  method: 'DELETE', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updatedAt }),
+});
+/** Envía una fotografía adicional codificada; el backend valida y persiste el recurso. */
+export const addPhysicalgoodsPhoto = (id: string, photo: PublicationPhoto, signal: AbortSignal) => authenticatedRequest<{ id: string }>(resourcePath(id) + '/images', {
+  method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ photo: { name: photo.name, mimeType: photo.mimeType, base64: photo.base64 } }),
+});
+/** Cambia la imagen principal de la publicación. */
+export const choosePhysicalgoodsPrincipal = (id: string, imageId: string, signal: AbortSignal) => authenticatedRequest(resourcePath(id) + '/images/' + imageId + '/principal', { method: 'PATCH', signal });
+/** Retira una imagen de la galería mediante el endpoint autorizado. */
+export const retirePhysicalgoodsPhoto = (id: string, imageId: string, signal: AbortSignal) => authenticatedRequest(resourcePath(id) + '/images/' + imageId, { method: 'DELETE', signal });
+/** Asigna la categoría seleccionada a una publicación. */
+export const savePhysicalgoodsCategory = (id: string, categoryId: string, signal: AbortSignal) => authenticatedRequest(resourcePath(id) + '/category', {
+  method: 'PATCH', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ categoryId }),
+});
+/** Carga campus y catálogos permitidos para publicación y filtros. */
+export const loadPublicationOptions = (signal: AbortSignal) => authenticatedRequest<PublicationOptions>(path + '/options', { signal });
+/** Publica el recurso principal y transforma errores de validación conocidos en mensajes de UI. */
+export async function publishPhysicalgoods(input: PublicationInput, signal: AbortSignal) {
+  try {
+    return await authenticatedRequest<PublicationCreated>(path, { method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+  } catch (error) {
+    if (error instanceof AuthApiError && error.status === 400) throw new Error(error.serverMessage || 'Revisa los datos de la publicación.');
+    if (error instanceof AuthApiError && error.status === 413) throw new Error('La fotografía debe pesar como máximo 5 MB.');
+    if (error instanceof AuthApiError && error.status === 409) throw new Error('Tu campus cambió. Recarga el formulario antes de publicar.');
+    if (!(error instanceof AuthApiError) || error.status >= 500) throw new Error('No se pudo publicar el recurso. Revisa tu conexión e inténtalo nuevamente.');
+    throw error;
+  }
+}

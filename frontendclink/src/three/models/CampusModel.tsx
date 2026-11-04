@@ -13,7 +13,7 @@ import type { GLTF } from 'three-stdlib';
 export type GLTFResult = GLTF & {
   // El acceso por nombre permite resolver los `subMeshes` declarados en la
   // configuración sin generar una propiedad TypeScript por cada nodo del GLB.
-  nodes: Record<string, THREE.Mesh>;
+  nodes: Record<string, THREE.Object3D>;
   materials: Record<string, THREE.Material>;
 };
 
