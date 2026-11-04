@@ -85,7 +85,7 @@ test('audit dates include whole local days, allow open bounds and validate rever
 
 test('frontend and backend action options match the approved SQL constraint, with a readable label for every option',()=>{
   const frontend=load('../src/features/users/types/audit.ts');
-  const backend=load('../../backendclink/src/modules/users/access.types.ts');
+  const backend=load('../../backendclink/src/modules/users/types/access.types.ts');
   const migration=fs.readFileSync(new URL('../../backendclink/src/database/supabase/migrations/f2_4_05_edicion_fisica.sql',import.meta.url),'utf8');
   const constraint=migration.match(/CHECK \(accion IN \(([\s\S]*?)\)\)/)[1];
   const actions=[...constraint.matchAll(/'([A-Z_]+)'/g)].map(match=>match[1]).sort();
